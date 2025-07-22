@@ -54,14 +54,14 @@ pub enum TokenType {
 
 impl TokenType {
     pub fn from_keyword(keyword: &str) -> TokenType {
-        IDENTIFIERS
+        KEYWORDS
             .get(keyword)
             .unwrap_or(&TokenType::Identifier)
             .clone()
     }
 }
 
-static IDENTIFIERS: phf::Map<&'static str, TokenType> = phf_map! {
+static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "and" => TokenType::And,
     "class" => TokenType::Class,
     "else" => TokenType::Else,

@@ -1,3 +1,3 @@
 mod tokenizer;
 
-pub use tokenizer::{Token, TokenType, Tokenizer};
+pub use tokenizer::{SourceMap, Token, TokenType, Tokenizer};

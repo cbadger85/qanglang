@@ -182,7 +182,7 @@ pub struct Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    // Creates a new tokenizer for the source map.
+    /// Creates a new tokenizer for the source map.
     pub fn new(source_map: &'a SourceMap) -> Self {
         Self {
             source_map,
@@ -244,6 +244,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// returns true if the cursor is at the end of the source code.
     fn is_at_end(&self) -> bool {
         self.is_eof || self.location >= self.source_map.source.len()
     }
@@ -259,6 +260,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Creates a Token of a given type and adds its lexeme.
     fn make_token(&mut self, token_type: TokenType, start: usize) -> Option<Token> {
         let lexeme: String = self.source_map.source[start..self.location]
             .iter()
@@ -274,6 +276,7 @@ impl<'a> Tokenizer<'a> {
         })
     }
 
+    /// Adds an error token for tokenization errors.
     fn error_token(&self, message: &str) -> Option<Token> {
         Some(Token {
             token_type: TokenType::Error(message.to_string()),
@@ -283,6 +286,7 @@ impl<'a> Tokenizer<'a> {
         })
     }
 
+    /// Creates a string token.
     fn string(&mut self) -> Option<Token> {
         let start = self.location - 1;
 
@@ -330,6 +334,7 @@ impl<'a> Tokenizer<'a> {
         c
     }
 
+    /// Creates a number token.
     fn number(&mut self) -> Option<Token> {
         let start = self.location - 1; // Account for first digit
 
@@ -349,6 +354,7 @@ impl<'a> Tokenizer<'a> {
         self.make_token(TokenType::Number, start)
     }
 
+    /// Creates an identifier token.
     fn identifier(&mut self) -> Option<Token> {
         let start = self.location - 1;
 
@@ -364,6 +370,7 @@ impl<'a> Tokenizer<'a> {
         self.make_token(token_type, start)
     }
 
+    /// Creates a single line comment token.
     fn single_line_comment(&mut self) -> Option<Token> {
         let start = self.location - 2;
 
@@ -374,6 +381,7 @@ impl<'a> Tokenizer<'a> {
         self.make_token(TokenType::Comment, start)
     }
 
+    /// Creates a multi-line comment token.
     fn multi_line_comment(&mut self) -> Option<Token> {
         let start = self.location - 2;
 
@@ -386,7 +394,6 @@ impl<'a> Tokenizer<'a> {
             self.advance();
         }
 
-        // Add check for unterminated comment
         if self.is_at_end()
             && (self.source_map.source.get(self.location - 2) != Some(&'*')
                 || self.source_map.source.get(self.location - 1) != Some(&'/'))

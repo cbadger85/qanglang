@@ -88,22 +88,108 @@ pub struct Token {
     pub lexeme: String,
 }
 
-pub struct Tokenizer {
+pub struct SourceMap {
     source: Vec<char>,
+    line_indices: Vec<usize>,
+}
+
+impl SourceMap {
+    /// Creates a new source map from source code.
+    pub fn new(source: String) -> Self {
+        let chars: Vec<char> = source.chars().collect();
+        let mut line_indices = Vec::new();
+        let mut in_string = false;
+        let mut i = 0;
+
+        while i < chars.len() {
+            match chars[i] {
+                '"' if !in_string => {
+                    in_string = true;
+                }
+                '"' if in_string => {
+                    in_string = false;
+                }
+                '\\' if in_string => {
+                    // Skip escape sequence
+                    i += 1; // Skip the backslash
+                    if i < chars.len() {
+                        i += 1; // Skip the escaped character
+                        continue;
+                    }
+                }
+                '\n' if !in_string => {
+                    line_indices.push(i);
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+
+        Self {
+            source: chars,
+            line_indices,
+        }
+    }
+
+    /// Returns the source code as a vector of characters.
+    pub fn get_source(&self) -> &Vec<char> {
+        &self.source
+    }
+
+    /// Returns a specified line of source code as a vector of characters.
+    pub fn get_line(&self, line_number: u32) -> &[char] {
+        if line_number == 0 {
+            return &[];
+        }
+
+        let line_index = (line_number - 1) as usize;
+
+        let start = if line_number == 1 {
+            0
+        } else {
+            // Start after the previous newline
+            if let Some(&prev_newline_pos) = self.line_indices.get(line_index - 1) {
+                prev_newline_pos + 1
+            } else {
+                return &[];
+            }
+        };
+
+        let end = if let Some(&newline_pos) = self.line_indices.get(line_index) {
+            newline_pos // Stop at the newline (don't include it)
+        } else if line_index == self.line_indices.len() {
+            // Last line (no trailing newline)
+            self.source.len()
+        } else {
+            // Line doesn't exist
+            return &[];
+        };
+
+        if start <= end && end <= self.source.len() {
+            &self.source[start..end]
+        } else {
+            &[]
+        }
+    }
+}
+
+pub struct Tokenizer<'a> {
+    source_map: &'a SourceMap,
     line: u32,
     col: u32,
     location: usize,
-    eof_returned: bool,
+    is_eof: bool,
 }
 
-impl Tokenizer {
-    pub fn new(source: String) -> Self {
+impl<'a> Tokenizer<'a> {
+    // Creates a new tokenizer for the source map.
+    pub fn new(source_map: &'a SourceMap) -> Self {
         Self {
-            source: source.chars().collect(),
+            source_map,
             line: 1,
             col: 1,
             location: 0,
-            eof_returned: false,
+            is_eof: false,
         }
     }
 
@@ -113,7 +199,7 @@ impl Tokenizer {
             return '\0';
         }
 
-        let c = self.source[self.location];
+        let c = self.source_map.source[self.location];
         self.location += 1;
 
         if c == '\n' {
@@ -129,16 +215,16 @@ impl Tokenizer {
         if self.is_at_end() {
             '\0'
         } else {
-            self.source[self.location]
+            self.source_map.source[self.location]
         }
     }
 
     /// Peeks at the character after the next.
     fn peek_next(&self) -> char {
-        if self.location + 1 >= self.source.len() {
+        if self.location + 1 >= self.source_map.source.len() {
             '\0'
         } else {
-            self.source[self.location + 1]
+            self.source_map.source[self.location + 1]
         }
     }
 
@@ -159,7 +245,7 @@ impl Tokenizer {
     }
 
     fn is_at_end(&self) -> bool {
-        self.location >= self.source.len()
+        self.is_eof || self.location >= self.source_map.source.len()
     }
 
     /// Peeks at the next character. If it matches, advances the cursor.
@@ -174,7 +260,9 @@ impl Tokenizer {
     }
 
     fn make_token(&mut self, token_type: TokenType, start: usize) -> Option<Token> {
-        let lexeme: String = self.source[start..self.location].iter().collect();
+        let lexeme: String = self.source_map.source[start..self.location]
+            .iter()
+            .collect();
         let col = self.col;
         self.col += lexeme.len() as u32;
 
@@ -199,16 +287,38 @@ impl Tokenizer {
         let start = self.location - 1;
 
         while self.peek() != '"' && !self.is_at_end() {
-            self.advance();
+            if self.peek() == '\\' {
+                // Handle escape sequence
+                self.advance_in_string(); // consume backslash
+                if !self.is_at_end() {
+                    self.advance_in_string(); // consume escaped character
+                }
+            } else {
+                self.advance_in_string();
+            }
         }
 
         if self.is_at_end() {
             return self.error_token("Unterminated string.");
         }
 
-        self.advance();
-
+        self.advance(); // Consume closing quote (this one can affect line tracking)
         self.make_token(TokenType::String, start)
+    }
+
+    /// Advances cursor without treating characters as line breaks (for use in strings)
+    fn advance_in_string(&mut self) -> char {
+        if self.is_at_end() {
+            return '\0';
+        }
+
+        let c = self.source_map.source[self.location];
+        self.location += 1;
+
+        // Don't increment line/col for characters inside strings
+        // The column tracking will be handled in make_token
+
+        c
     }
 
     fn number(&mut self) -> Option<Token> {
@@ -237,7 +347,9 @@ impl Tokenizer {
             self.advance();
         }
 
-        let keyword: String = self.source[start..self.location].iter().collect();
+        let keyword: String = self.source_map.source[start..self.location]
+            .iter()
+            .collect();
         let token_type = TokenType::from_keyword(&keyword);
 
         self.make_token(token_type, start)
@@ -267,23 +379,19 @@ impl Tokenizer {
 
         self.make_token(TokenType::Comment, start)
     }
-
-    pub fn source(&self) -> &Vec<char> {
-        &self.source
-    }
 }
 
-impl Iterator for Tokenizer {
+impl<'a> Iterator for Tokenizer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
 
         if self.is_at_end() {
-            if self.eof_returned {
+            if self.is_eof {
                 return None;
             } else {
-                self.eof_returned = true;
+                self.is_eof = true;
                 return self.make_token(TokenType::Eof, 0);
             }
         }
@@ -357,7 +465,8 @@ mod tests {
     use super::*;
 
     fn tokenize_all(source: &str) -> Vec<Token> {
-        let tokenizer = Tokenizer::new(source.to_string());
+        let mut source_map = SourceMap::new(source.to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
         tokenizer.collect()
     }
 
@@ -522,6 +631,51 @@ mod tests {
             TokenType::Plus,
             TokenType::Identifier,
             TokenType::RightBrace,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_lambda_definition() {
+        let source = "var add = (a, b) -> { return a + b }";
+        let expected = vec![
+            TokenType::Var,
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::LeftParen,
+            TokenType::Identifier,
+            TokenType::Comma,
+            TokenType::Identifier,
+            TokenType::RightParen,
+            TokenType::Arrow,
+            TokenType::LeftBrace,
+            TokenType::Return,
+            TokenType::Identifier,
+            TokenType::Plus,
+            TokenType::Identifier,
+            TokenType::RightBrace,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_lambda_with_implicit_return_definition() {
+        let source = "var add = (a, b) -> a + b";
+        let expected = vec![
+            TokenType::Var,
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::LeftParen,
+            TokenType::Identifier,
+            TokenType::Comma,
+            TokenType::Identifier,
+            TokenType::RightParen,
+            TokenType::Arrow,
+            TokenType::Identifier,
+            TokenType::Plus,
+            TokenType::Identifier,
             TokenType::Eof,
         ];
         assert_token_types(source, &expected);
@@ -730,5 +884,169 @@ mod tests {
             TokenType::Eof,
         ];
         assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_get_line_single_line() {
+        let mut source_map = SourceMap::new("hello world".to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
+        tokenizer.for_each(drop);
+
+        let line1: String = source_map.get_line(1).iter().collect();
+        assert_eq!(line1, "hello world");
+
+        // Non-existent lines should return empty
+        assert_eq!(source_map.get_line(2).len(), 0);
+        assert_eq!(source_map.get_line(0).len(), 0);
+    }
+
+    #[test]
+    fn test_get_line_multiple_lines() {
+        let mut source_map = SourceMap::new("first line\nsecond line\nthird line".to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
+        tokenizer.for_each(drop);
+        let line1: String = source_map.get_line(1).iter().collect();
+        let line2: String = source_map.get_line(2).iter().collect();
+        let line3: String = source_map.get_line(3).iter().collect();
+
+        assert_eq!(line1, "first line");
+        assert_eq!(line2, "second line");
+        assert_eq!(line3, "third line");
+    }
+
+    #[test]
+    fn test_get_line_with_trailing_newline() {
+        let mut source_map = SourceMap::new("line one\nline two\n".to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
+        tokenizer.for_each(drop);
+
+        let line1: String = source_map.get_line(1).iter().collect();
+        let line2: String = source_map.get_line(2).iter().collect();
+
+        assert_eq!(line1, "line one");
+        assert_eq!(line2, "line two");
+
+        // Should not have a third line
+        assert_eq!(source_map.get_line(3).len(), 0);
+    }
+
+    #[test]
+    fn test_get_line_empty_lines() {
+        let mut source_map = SourceMap::new("first\n\nthird\n\n".to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
+        tokenizer.for_each(drop);
+
+        let line1: String = source_map.get_line(1).iter().collect();
+        let line2: String = source_map.get_line(2).iter().collect();
+        let line3: String = source_map.get_line(3).iter().collect();
+        let line4: String = source_map.get_line(4).iter().collect();
+
+        assert_eq!(line1, "first");
+        assert_eq!(line2, "");
+        assert_eq!(line3, "third");
+        assert_eq!(line4, "");
+    }
+
+    #[test]
+    fn test_get_line_single_newline() {
+        let mut source_map = SourceMap::new("\n".to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
+        tokenizer.for_each(drop);
+
+        let line1: String = source_map.get_line(1).iter().collect();
+        assert_eq!(line1, "");
+    }
+
+    #[test]
+    fn test_get_line_bounds_checking() {
+        let mut source_map = SourceMap::new("one\ntwo\nthree".to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
+        tokenizer.for_each(drop);
+
+        // Valid lines
+        assert!(!source_map.get_line(1).is_empty());
+        assert!(!source_map.get_line(2).is_empty());
+        assert!(!source_map.get_line(3).is_empty());
+
+        // Invalid lines
+        assert!(source_map.get_line(0).is_empty());
+        assert!(source_map.get_line(4).is_empty());
+        assert!(source_map.get_line(100).is_empty());
+    }
+
+    #[test]
+    fn test_get_line_with_complex_content() {
+        let mut source_map = SourceMap::new(
+            "fn main() {\n    var x = \"hello world\";\n    // comment\n}".to_string(),
+        );
+        let tokenizer = Tokenizer::new(&mut source_map);
+        tokenizer.for_each(drop);
+
+        let line1: String = source_map.get_line(1).iter().collect();
+        let line2: String = source_map.get_line(2).iter().collect();
+        let line3: String = source_map.get_line(3).iter().collect();
+        let line4: String = source_map.get_line(4).iter().collect();
+
+        assert_eq!(line1, "fn main() {");
+        assert_eq!(line2, "    var x = \"hello world\";");
+        assert_eq!(line3, "    // comment");
+        assert_eq!(line4, "}");
+    }
+
+    #[test]
+    fn test_get_line_error_reporting_use_case() {
+        // This test demonstrates how get_line would be used for error reporting
+        let mut source_map = SourceMap::new("var x = 5;\nvar y = ;\nvar z = 10;".to_string());
+        let tokenizer = Tokenizer::new(&mut source_map);
+        let tokens = tokenizer.collect::<Vec<Token>>();
+
+        // Find an error token (there should be one on line 2)
+        let error_token = tokens
+            .iter()
+            .find(|t| matches!(t.token_type, TokenType::Error(_)));
+
+        if let Some(token) = error_token {
+            let error_line: String = source_map.get_line(token.line).iter().collect();
+            assert_eq!(error_line, "var y = ;");
+            assert_eq!(token.line, 2);
+        }
+    }
+
+    #[test]
+    fn test_string_with_escaped_newline() {
+        assert_single_token("\"hello\\nworld\"", TokenType::String);
+
+        // The token should be on line 1, not line 2
+        let tokens = tokenize_all("\"hello\\nworld\"");
+        assert_eq!(tokens[0].line, 1);
+    }
+
+    #[test]
+    fn test_string_with_various_escapes() {
+        assert_single_token("\"hello\\tworld\\\"test\\\\path\"", TokenType::String);
+    }
+
+    #[test]
+    fn test_multiline_code_with_string_escapes() {
+        let source = "var msg = \"line 1\\nline 2\";\nvar x = 5;";
+        let tokens = tokenize_all(source);
+
+        // The string should be on line 1
+        assert_eq!(tokens[3].line, 1); // The string token
+        assert_eq!(tokens[3].token_type, TokenType::String);
+
+        // The var x should be on line 2
+        assert_eq!(tokens[5].line, 2); // The second 'var' token
+    }
+
+    #[test]
+    fn test_get_line_with_string_escapes() {
+        let source_map = SourceMap::new("var msg = \"hello\\nworld\";\nvar x = 5;".to_string());
+
+        let line1: String = source_map.get_line(1).iter().collect();
+        let line2: String = source_map.get_line(2).iter().collect();
+
+        assert_eq!(line1, "var msg = \"hello\\nworld\";");
+        assert_eq!(line2, "var x = 5;");
     }
 }

@@ -2,6 +2,7 @@ use phf::phf_map;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum TokenType {
+    EqualsEquals,       // ==
     Equals,             // =
     Bang,               // !
     BangEquals,         // !=
@@ -94,7 +95,6 @@ pub struct SourceMap {
 }
 
 impl SourceMap {
-    /// Creates a new source map from source code.
     pub fn new(source: String) -> Self {
         let chars: Vec<char> = source.chars().collect();
         let mut line_indices = Vec::new();
@@ -440,6 +440,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     self.make_token(TokenType::Greater, start)
                 }
             }
+            '=' if self.match_char('=') => self.make_token(TokenType::EqualsEquals, start),
             '=' => self.make_token(TokenType::Equals, start),
             '-' => {
                 if self.match_char('>') {
@@ -895,8 +896,7 @@ mod tests {
             TokenType::Identifier,
             TokenType::Or,
             TokenType::Identifier,
-            TokenType::Equals, // Note: you don't have == as a separate token
-            TokenType::Equals,
+            TokenType::EqualsEquals,
             TokenType::Identifier,
             TokenType::RightParen,
             TokenType::Eof,
@@ -913,7 +913,6 @@ mod tests {
         let line1: String = source_map.get_line(1).iter().collect();
         assert_eq!(line1, "hello world");
 
-        // Non-existent lines should return empty
         assert_eq!(source_map.get_line(2).len(), 0);
         assert_eq!(source_map.get_line(0).len(), 0);
     }
@@ -943,8 +942,6 @@ mod tests {
 
         assert_eq!(line1, "line one");
         assert_eq!(line2, "line two");
-
-        // Should not have a third line
         assert_eq!(source_map.get_line(3).len(), 0);
     }
 
@@ -1013,12 +1010,10 @@ mod tests {
 
     #[test]
     fn test_get_line_error_reporting_use_case() {
-        // This test demonstrates how get_line would be used for error reporting
         let source_map = SourceMap::new("var x = 5;\nvar y = ;\nvar z = 10;".to_string());
         let tokenizer = Tokenizer::new(&source_map);
         let tokens = tokenizer.collect::<Vec<Token>>();
 
-        // Find an error token (there should be one on line 2)
         let error_token = tokens
             .iter()
             .find(|t| matches!(t.token_type, TokenType::Error(_)));
@@ -1034,7 +1029,6 @@ mod tests {
     fn test_string_with_escaped_newline() {
         assert_single_token("\"hello\\nworld\"", TokenType::String);
 
-        // The token should be on line 1, not line 2
         let tokens = tokenize_all("\"hello\\nworld\"");
         assert_eq!(tokens[0].line, 1);
     }
@@ -1049,12 +1043,9 @@ mod tests {
         let source = "var msg = \"line 1\\nline 2\";\nvar x = 5;";
         let tokens = tokenize_all(source);
 
-        // The string should be on line 1
-        assert_eq!(tokens[3].line, 1); // The string token
+        assert_eq!(tokens[3].line, 1);
         assert_eq!(tokens[3].token_type, TokenType::String);
-
-        // The var x should be on line 2
-        assert_eq!(tokens[5].line, 2); // The second 'var' token
+        assert_eq!(tokens[5].line, 2);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use phf::phf_map;
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum TokenType {
     Equals,             // =
     Bang,               // !
@@ -10,7 +10,7 @@ pub enum TokenType {
     GreaterEquals,      // >=
     Comma,              // ,
     Dot,                // .
-    Arrow,              // =>
+    Arrow,              // ->
     Colon,              // :
     Question,           // ?
     Plus,               // +
@@ -20,8 +20,8 @@ pub enum TokenType {
     Modulo,             // %
     Semicolon,          // ;
     Greater,            // >
-    LeftParen,          // )
-    RightParen,         // (
+    LeftParen,          // ()
+    RightParen,         // )
     LeftBrace,          // {
     RightBrace,         // }
     LeftSquareBracket,  // [
@@ -61,51 +61,49 @@ impl TokenType {
 }
 
 static IDENTIFIERS: phf::Map<&'static str, TokenType> = phf_map! {
-    "continue" => TokenType::Continue,
     "and" => TokenType::And,
     "class" => TokenType::Class,
     "else" => TokenType::Else,
     "false" => TokenType::False,
+    "for" => TokenType::For,
+    "continue" => TokenType::Continue,
     "true" => TokenType::True,
     "var" => TokenType::Var,
     "while" => TokenType::While,
     "fn" => TokenType::Fn,
-    "if" => TokenType::False,
+    "if" => TokenType::If,
     "nil" => TokenType::Nil,
-    "or" => TokenType::False,
+    "or" => TokenType::Or,
     "break" => TokenType::Break,
     "super" => TokenType::Super,
     "this" => TokenType::This,
+    "return" => TokenType::Return,
 };
 
+#[derive(PartialEq, Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
     pub line: u32,
     pub col: u32,
-    location: usize,
-    length: usize,
-}
-
-impl Token {
-    pub fn lexeme<'a>(&self, source: &'a str) -> &'a str {
-        &source[self.location..self.location + self.length]
-    }
+    pub lexeme: String,
 }
 
 pub struct Tokenizer {
-    source: String,
+    source: Vec<char>,
     line: u32,
     col: u32,
     location: usize,
+    eof_returned: bool,
 }
 
 impl Tokenizer {
     pub fn new(source: String) -> Self {
         Self {
-            source,
+            source: source.chars().collect(),
             line: 1,
             col: 1,
             location: 0,
+            eof_returned: false,
         }
     }
 
@@ -114,9 +112,14 @@ impl Tokenizer {
         if self.is_at_end() {
             return '\0';
         }
-        let c = self.source.chars().nth(self.location).unwrap_or('\0');
-        self.location += c.len_utf8(); // Handle UTF-8 properly
-        self.col += 1;
+
+        let c = self.source[self.location];
+        self.location += 1;
+
+        if c == '\n' {
+            self.line += 1;
+            self.col = 1;
+        }
 
         c
     }
@@ -126,16 +129,16 @@ impl Tokenizer {
         if self.is_at_end() {
             '\0'
         } else {
-            self.source.chars().nth(self.location).unwrap_or('\0')
+            self.source[self.location]
         }
     }
 
     /// Peeks at the character after the next.
     fn peek_next(&self) -> char {
-        if self.is_at_end() {
+        if self.location + 1 >= self.source.len() {
             '\0'
         } else {
-            self.source.chars().nth(self.location + 1).unwrap_or('\0')
+            self.source[self.location + 1]
         }
     }
 
@@ -148,7 +151,6 @@ impl Tokenizer {
                     self.advance();
                 }
                 '\n' => {
-                    self.line += 1;
                     self.advance();
                 }
                 _ => break,
@@ -166,18 +168,21 @@ impl Tokenizer {
             false
         } else {
             self.location += expected.len_utf8();
-            self.col += 1;
+            // self.advance();
             true
         }
     }
 
-    fn make_token(&self, token_type: TokenType, length: usize) -> Option<Token> {
+    fn make_token(&mut self, token_type: TokenType, start: usize) -> Option<Token> {
+        let lexeme: String = self.source[start..self.location].iter().collect();
+        let col = self.col;
+        self.col += lexeme.len() as u32;
+
         Some(Token {
             token_type,
             line: self.line,
-            col: self.col,
-            length,
-            location: self.location,
+            col,
+            lexeme,
         })
     }
 
@@ -186,79 +191,84 @@ impl Tokenizer {
             token_type: TokenType::Error(message.to_string()),
             line: self.line,
             col: self.col,
-            length: 1,
-            location: self.location,
+            lexeme: "".to_string(),
         })
     }
 
     fn string(&mut self) -> Option<Token> {
-        let mut length = 0;
+        let start = self.location - 1;
 
-        while !self.match_char('"') {
-            length += 1;
+        while self.peek() != '"' && !self.is_at_end() {
+            self.advance();
         }
 
-        self.make_token(TokenType::String, length)
+        if self.is_at_end() {
+            return self.error_token("Unterminated string.");
+        }
+
+        self.advance();
+
+        self.make_token(TokenType::String, start)
     }
 
     fn number(&mut self) -> Option<Token> {
-        let mut length = 0;
+        let start = self.location - 1; // Account for first digit
+
         while self.peek().is_ascii_digit() {
-            length += 1;
             self.advance();
         }
 
         // Look for fractional part
         if self.peek() == '.' && self.peek_next().is_ascii_digit() {
-            // Consume the '.'
-            self.advance();
-            length += 1;
+            self.advance(); // Consume the '.'
 
             while self.peek().is_ascii_digit() {
                 self.advance();
-                length += 1;
             }
         }
 
-        self.make_token(TokenType::Number, length)
+        self.make_token(TokenType::Number, start)
     }
 
     fn identifier(&mut self) -> Option<Token> {
-        let mut length = 0;
+        let start = self.location - 1;
+
         while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
-            length += 1;
             self.advance();
         }
 
-        let keyword = &self.source[self.location..(self.location + length)];
-        let token_type = TokenType::from_keyword(keyword);
-        return self.make_token(token_type, length);
+        let keyword: String = self.source[start..self.location].iter().collect();
+        let token_type = TokenType::from_keyword(&keyword);
+
+        self.make_token(token_type, start)
     }
 
     fn single_line_comment(&mut self) -> Option<Token> {
-        let mut length = 0;
-        while !self.match_char('\n') && !self.is_at_end() {
-            length += 1;
+        let start = self.location - 2;
+
+        while self.peek() != '\n' && !self.is_at_end() {
             self.advance();
         }
 
-        self.make_token(TokenType::Comment, length)
+        self.make_token(TokenType::Comment, start)
     }
 
     fn multi_line_commment(&mut self) -> Option<Token> {
-        let mut length = 0;
-        while self.peek() != '*' && self.peek_next() != '/' && !self.is_at_end() {
-            length += 1;
+        let start = self.location - 2;
+
+        while !self.is_at_end() {
+            if self.peek() == '*' && self.peek_next() == '/' {
+                self.advance(); // consume *
+                self.advance(); // consume /
+                break;
+            }
             self.advance();
         }
 
-        self.advance();
-        self.advance();
-
-        self.make_token(TokenType::Comment, length)
+        self.make_token(TokenType::Comment, start)
     }
 
-    pub fn source(&self) -> &str {
+    pub fn source(&self) -> &Vec<char> {
         &self.source
     }
 }
@@ -270,72 +280,455 @@ impl Iterator for Tokenizer {
         self.skip_whitespace();
 
         if self.is_at_end() {
-            return self.make_token(TokenType::Eof, 0);
+            if self.eof_returned {
+                return None;
+            } else {
+                self.eof_returned = true;
+                return self.make_token(TokenType::Eof, 0);
+            }
         }
 
+        let start = self.location;
         let c = self.advance();
 
         match c {
-            '(' => self.make_token(TokenType::LeftParen, 1),
-            ')' => self.make_token(TokenType::RightParen, 1),
+            '(' => self.make_token(TokenType::LeftParen, start),
+            ')' => self.make_token(TokenType::RightParen, start),
             '!' => {
                 if self.match_char('=') {
-                    self.advance();
-                    self.make_token(TokenType::BangEquals, 2)
+                    self.make_token(TokenType::BangEquals, start)
                 } else {
-                    self.make_token(TokenType::Bang, 1)
+                    self.make_token(TokenType::Bang, start)
                 }
             }
             '<' => {
                 if self.match_char('=') {
-                    self.advance();
-                    self.make_token(TokenType::LessEquals, 2)
+                    self.make_token(TokenType::LessEquals, start)
                 } else {
-                    self.make_token(TokenType::Less, 1)
+                    self.make_token(TokenType::Less, start)
                 }
             }
             '>' => {
                 if self.match_char('=') {
-                    self.advance();
-                    self.make_token(TokenType::GreaterEquals, 2)
+                    self.make_token(TokenType::GreaterEquals, start)
                 } else {
-                    self.make_token(TokenType::Greater, 1)
+                    self.make_token(TokenType::Greater, start)
                 }
             }
-            '=' => self.make_token(TokenType::Equals, 1),
+            '=' => self.make_token(TokenType::Equals, start),
             '-' => {
                 if self.match_char('>') {
-                    self.advance();
-                    self.make_token(TokenType::Arrow, 2)
+                    self.make_token(TokenType::Arrow, start)
                 } else {
-                    self.make_token(TokenType::Minus, 1)
+                    self.make_token(TokenType::Minus, start)
                 }
             }
-            '*' => self.make_token(TokenType::Star, 1),
-            '+' => self.make_token(TokenType::Plus, 1),
+            '*' => self.make_token(TokenType::Star, start),
+            '+' => self.make_token(TokenType::Plus, start),
             '/' => {
                 if self.match_char('/') {
                     self.single_line_comment()
                 } else if self.match_char('*') {
                     self.multi_line_commment()
                 } else {
-                    self.make_token(TokenType::Slash, 1)
+                    self.make_token(TokenType::Slash, start)
                 }
             }
-            '%' => self.make_token(TokenType::Modulo, 1),
-            '.' => self.make_token(TokenType::Dot, 1),
-            ',' => self.make_token(TokenType::Comma, 1),
-            ':' => self.make_token(TokenType::Colon, 1),
-            '?' => self.make_token(TokenType::Question, 1),
-            ';' => self.make_token(TokenType::Semicolon, 1),
-            '{' => self.make_token(TokenType::LeftBrace, 1),
-            '}' => self.make_token(TokenType::RightBrace, 1),
-            '[' => self.make_token(TokenType::RightSquareBracket, 1),
-            ']' => self.make_token(TokenType::LeftSquareBracket, 1),
+            '%' => self.make_token(TokenType::Modulo, start),
+            '.' => self.make_token(TokenType::Dot, start),
+            ',' => self.make_token(TokenType::Comma, start),
+            ':' => self.make_token(TokenType::Colon, start),
+            '?' => self.make_token(TokenType::Question, start),
+            ';' => self.make_token(TokenType::Semicolon, start),
+            '{' => self.make_token(TokenType::LeftBrace, start),
+            '}' => self.make_token(TokenType::RightBrace, start),
+            '[' => self.make_token(TokenType::LeftSquareBracket, start),
+            ']' => self.make_token(TokenType::RightSquareBracket, start),
             '"' => self.string(),
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
             _ => self.error_token("Unexpected character."),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tokenize_all(source: &str) -> Vec<Token> {
+        let tokenizer = Tokenizer::new(source.to_string());
+        tokenizer.collect()
+    }
+
+    fn assert_token_types(source: &str, expected: &[TokenType]) {
+        let tokens = tokenize_all(source);
+        let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type).collect();
+        assert_eq!(actual, expected);
+    }
+
+    fn assert_single_token(source: &str, expected: TokenType) {
+        assert_token_types(source, &[expected, TokenType::Eof]);
+    }
+
+    #[test]
+    fn test_empty_input() {
+        assert_token_types("", &[TokenType::Eof]);
+    }
+
+    #[test]
+    fn test_whitespace_only() {
+        assert_token_types("   \n  \t\r  ", &[TokenType::Eof]);
+    }
+
+    #[test]
+    fn test_single_character_tokens() {
+        assert_single_token("(", TokenType::LeftParen);
+        assert_single_token(")", TokenType::RightParen);
+        assert_single_token("{", TokenType::LeftBrace);
+        assert_single_token("}", TokenType::RightBrace);
+        assert_single_token("[", TokenType::LeftSquareBracket);
+        assert_single_token("]", TokenType::RightSquareBracket);
+        assert_single_token(",", TokenType::Comma);
+        assert_single_token(".", TokenType::Dot);
+        assert_single_token(":", TokenType::Colon);
+        assert_single_token("?", TokenType::Question);
+        assert_single_token("+", TokenType::Plus);
+        assert_single_token("-", TokenType::Minus);
+        assert_single_token("*", TokenType::Star);
+        assert_single_token("/", TokenType::Slash);
+        assert_single_token("%", TokenType::Modulo);
+        assert_single_token(";", TokenType::Semicolon);
+        assert_single_token("=", TokenType::Equals);
+        assert_single_token("!", TokenType::Bang);
+        assert_single_token("<", TokenType::Less);
+        assert_single_token(">", TokenType::Greater);
+    }
+
+    #[test]
+    fn test_two_character_tokens() {
+        assert_single_token("!=", TokenType::BangEquals);
+        assert_single_token("<=", TokenType::LessEquals);
+        assert_single_token(">=", TokenType::GreaterEquals);
+        assert_single_token("->", TokenType::Arrow);
+    }
+
+    #[test]
+    fn test_keywords() {
+        assert_single_token("and", TokenType::And);
+        assert_single_token("class", TokenType::Class);
+        assert_single_token("else", TokenType::Else);
+        assert_single_token("false", TokenType::False);
+        assert_single_token("for", TokenType::For);
+        assert_single_token("fn", TokenType::Fn);
+        assert_single_token("if", TokenType::If);
+        assert_single_token("nil", TokenType::Nil);
+        assert_single_token("or", TokenType::Or);
+        assert_single_token("return", TokenType::Return);
+        assert_single_token("super", TokenType::Super);
+        assert_single_token("this", TokenType::This);
+        assert_single_token("true", TokenType::True);
+        assert_single_token("var", TokenType::Var);
+        assert_single_token("while", TokenType::While);
+        assert_single_token("break", TokenType::Break);
+        assert_single_token("continue", TokenType::Continue);
+    }
+
+    #[test]
+    fn test_identifiers() {
+        assert_single_token("hello", TokenType::Identifier);
+        assert_single_token("_underscore", TokenType::Identifier);
+        assert_single_token("with123numbers", TokenType::Identifier);
+        assert_single_token("_", TokenType::Identifier);
+        assert_single_token("CamelCase", TokenType::Identifier);
+    }
+
+    #[test]
+    fn test_numbers() {
+        assert_single_token("123", TokenType::Number);
+        assert_single_token("0", TokenType::Number);
+        assert_single_token("123.456", TokenType::Number);
+        assert_single_token("0.5", TokenType::Number);
+        assert_single_token("999.0", TokenType::Number);
+    }
+
+    #[test]
+    fn test_strings() {
+        assert_single_token("\"hello\"", TokenType::String);
+        assert_single_token("\"\"", TokenType::String);
+        assert_single_token("\"hello world\"", TokenType::String);
+        assert_single_token("\"with spaces and 123 numbers\"", TokenType::String);
+    }
+
+    #[test]
+    fn test_unterminated_string() {
+        let tokens = tokenize_all("\"unterminated");
+        assert_eq!(tokens.len(), 2);
+        match &tokens[0].token_type {
+            TokenType::Error(msg) => assert_eq!(msg, "Unterminated string."),
+            _ => panic!("Expected error token"),
+        }
+    }
+
+    #[test]
+    fn test_single_line_comments() {
+        assert_single_token("// this is a comment", TokenType::Comment);
+        assert_single_token("//no space", TokenType::Comment);
+
+        // Comment followed by newline should only tokenize the comment
+        let tokens = tokenize_all("// comment\n");
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].token_type, TokenType::Comment);
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_multi_line_comments() {
+        assert_single_token("/* this is a comment */", TokenType::Comment);
+        assert_single_token("/*no spaces*/", TokenType::Comment);
+        assert_single_token("/* multi\nline\ncomment */", TokenType::Comment);
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let source = "var x = 123 + 456.789;";
+        let expected = vec![
+            TokenType::Var,
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::Number,
+            TokenType::Plus,
+            TokenType::Number,
+            TokenType::Semicolon,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_function_definition() {
+        let source = "fn add(a, b) { return a + b }";
+        let expected = vec![
+            TokenType::Fn,
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::Identifier,
+            TokenType::Comma,
+            TokenType::Identifier,
+            TokenType::RightParen,
+            TokenType::LeftBrace,
+            TokenType::Return,
+            TokenType::Identifier,
+            TokenType::Plus,
+            TokenType::Identifier,
+            TokenType::RightBrace,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_conditional_with_comparison() {
+        let source = "if x >= 10 and x <= 100";
+        let expected = vec![
+            TokenType::If,
+            TokenType::Identifier,
+            TokenType::GreaterEquals,
+            TokenType::Number,
+            TokenType::And,
+            TokenType::Identifier,
+            TokenType::LessEquals,
+            TokenType::Number,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_array_access() {
+        let source = "array[index]";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::LeftSquareBracket,
+            TokenType::Identifier,
+            TokenType::RightSquareBracket,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_object_access() {
+        let source = "object.property";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::Dot,
+            TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_ternary_operator() {
+        let source = "condition ? true : false";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::Question,
+            TokenType::True,
+            TokenType::Colon,
+            TokenType::False,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_lexeme_extraction() {
+        let source = "hello world 123";
+        let tokens = tokenize_all(source);
+
+        assert_eq!(tokens[0].lexeme, "hello");
+        assert_eq!(tokens[1].lexeme, "world");
+        assert_eq!(tokens[2].lexeme, "123");
+    }
+
+    #[test]
+    fn test_line_and_column_tracking() {
+        let source = "first\nsecond line";
+        let tokens = tokenize_all(source);
+
+        assert_eq!(tokens[0].line, 1);
+        assert_eq!(tokens[0].col, 1);
+        assert_eq!(tokens[1].line, 2);
+        assert_eq!(tokens[1].col, 1);
+        assert_eq!(tokens[2].line, 2);
+        assert_eq!(tokens[2].col, 8);
+    }
+
+    #[test]
+    fn test_mixed_content_with_comments() {
+        let source = "var x = 5; // variable declaration\n/* block comment */ y = 10;";
+        let expected = vec![
+            TokenType::Var,
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::Number,
+            TokenType::Semicolon,
+            TokenType::Comment,
+            TokenType::Comment,
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::Number,
+            TokenType::Semicolon,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_unexpected_character() {
+        let tokens = tokenize_all("@");
+        assert_eq!(tokens.len(), 2);
+        match &tokens[0].token_type {
+            TokenType::Error(msg) => assert_eq!(msg, "Unexpected character."),
+            _ => panic!("Expected error token"),
+        }
+    }
+
+    #[test]
+    fn test_class_definition() {
+        let source = "class MyClass { fn method() { return this.value; } }";
+        let expected = vec![
+            TokenType::Class,
+            TokenType::Identifier,
+            TokenType::LeftBrace,
+            TokenType::Fn,
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::RightParen,
+            TokenType::LeftBrace,
+            TokenType::Return,
+            TokenType::This,
+            TokenType::Dot,
+            TokenType::Identifier,
+            TokenType::Semicolon,
+            TokenType::RightBrace,
+            TokenType::RightBrace,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_loop_constructs() {
+        let source = "for i in array { if condition { break; } else { continue; } }";
+        let expected = vec![
+            TokenType::For,
+            TokenType::Identifier,
+            TokenType::Identifier, // "in" is not a keyword in your tokenizer
+            TokenType::Identifier,
+            TokenType::LeftBrace,
+            TokenType::If,
+            TokenType::Identifier,
+            TokenType::LeftBrace,
+            TokenType::Break,
+            TokenType::Semicolon,
+            TokenType::RightBrace,
+            TokenType::Else,
+            TokenType::LeftBrace,
+            TokenType::Continue,
+            TokenType::Semicolon,
+            TokenType::RightBrace,
+            TokenType::RightBrace,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_arithmetic_expressions() {
+        let source = "result = a + b - c * d / e % f";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::Identifier,
+            TokenType::Plus,
+            TokenType::Identifier,
+            TokenType::Minus,
+            TokenType::Identifier,
+            TokenType::Star,
+            TokenType::Identifier,
+            TokenType::Slash,
+            TokenType::Identifier,
+            TokenType::Modulo,
+            TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_boolean_expressions() {
+        let source = "result = !condition and (x != y or z == w)";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::Bang,
+            TokenType::Identifier,
+            TokenType::And,
+            TokenType::LeftParen,
+            TokenType::Identifier,
+            TokenType::BangEquals,
+            TokenType::Identifier,
+            TokenType::Or,
+            TokenType::Identifier,
+            TokenType::Equals, // Note: you don't have == as a separate token
+            TokenType::Equals,
+            TokenType::Identifier,
+            TokenType::RightParen,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
     }
 }

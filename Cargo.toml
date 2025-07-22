@@ -3,4 +3,14 @@ name = "qanglang"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[lib]
+name = "qanglang"
+path = "src/lib.rs"
+
+
 [dependencies]
+phf = { version = "0.11.3", features = ["macros"]}

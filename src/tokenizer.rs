@@ -288,10 +288,19 @@ impl<'a> Tokenizer<'a> {
 
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\\' {
-                // Handle escape sequence
                 self.advance_in_string(); // consume backslash
                 if !self.is_at_end() {
-                    self.advance_in_string(); // consume escaped character
+                    let escaped = self.peek();
+                    match escaped {
+                        'n' | 't' | 'r' | '\\' | '"' | '\'' | '0' => {
+                            self.advance_in_string(); // valid escape
+                        }
+                        _ => {
+                            // Invalid escape sequence - you could return an error here
+                            return self
+                                .error_token(&format!("Invalid escape sequence: \\{}", escaped));
+                        }
+                    }
                 }
             } else {
                 self.advance_in_string();
@@ -365,7 +374,7 @@ impl<'a> Tokenizer<'a> {
         self.make_token(TokenType::Comment, start)
     }
 
-    fn multi_line_commment(&mut self) -> Option<Token> {
+    fn multi_line_comment(&mut self) -> Option<Token> {
         let start = self.location - 2;
 
         while !self.is_at_end() {
@@ -375,6 +384,14 @@ impl<'a> Tokenizer<'a> {
                 break;
             }
             self.advance();
+        }
+
+        // Add check for unterminated comment
+        if self.is_at_end()
+            && (self.source_map.source.get(self.location - 2) != Some(&'*')
+                || self.source_map.source.get(self.location - 1) != Some(&'/'))
+        {
+            return self.error_token("Unterminated comment.");
         }
 
         self.make_token(TokenType::Comment, start)
@@ -437,12 +454,13 @@ impl<'a> Iterator for Tokenizer<'a> {
                 if self.match_char('/') {
                     self.single_line_comment()
                 } else if self.match_char('*') {
-                    self.multi_line_commment()
+                    self.multi_line_comment()
                 } else {
                     self.make_token(TokenType::Slash, start)
                 }
             }
             '%' => self.make_token(TokenType::Modulo, start),
+            '.' if self.peek().is_ascii_digit() => self.number(),
             '.' => self.make_token(TokenType::Dot, start),
             ',' => self.make_token(TokenType::Comma, start),
             ':' => self.make_token(TokenType::Colon, start),
@@ -465,8 +483,8 @@ mod tests {
     use super::*;
 
     fn tokenize_all(source: &str) -> Vec<Token> {
-        let mut source_map = SourceMap::new(source.to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new(source.to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.collect()
     }
 
@@ -888,8 +906,8 @@ mod tests {
 
     #[test]
     fn test_get_line_single_line() {
-        let mut source_map = SourceMap::new("hello world".to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new("hello world".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -902,8 +920,8 @@ mod tests {
 
     #[test]
     fn test_get_line_multiple_lines() {
-        let mut source_map = SourceMap::new("first line\nsecond line\nthird line".to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new("first line\nsecond line\nthird line".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.for_each(drop);
         let line1: String = source_map.get_line(1).iter().collect();
         let line2: String = source_map.get_line(2).iter().collect();
@@ -916,8 +934,8 @@ mod tests {
 
     #[test]
     fn test_get_line_with_trailing_newline() {
-        let mut source_map = SourceMap::new("line one\nline two\n".to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new("line one\nline two\n".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -932,8 +950,8 @@ mod tests {
 
     #[test]
     fn test_get_line_empty_lines() {
-        let mut source_map = SourceMap::new("first\n\nthird\n\n".to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new("first\n\nthird\n\n".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -949,8 +967,8 @@ mod tests {
 
     #[test]
     fn test_get_line_single_newline() {
-        let mut source_map = SourceMap::new("\n".to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new("\n".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -959,8 +977,8 @@ mod tests {
 
     #[test]
     fn test_get_line_bounds_checking() {
-        let mut source_map = SourceMap::new("one\ntwo\nthree".to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new("one\ntwo\nthree".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.for_each(drop);
 
         // Valid lines
@@ -976,10 +994,10 @@ mod tests {
 
     #[test]
     fn test_get_line_with_complex_content() {
-        let mut source_map = SourceMap::new(
+        let source_map = SourceMap::new(
             "fn main() {\n    var x = \"hello world\";\n    // comment\n}".to_string(),
         );
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let tokenizer = Tokenizer::new(&source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -996,8 +1014,8 @@ mod tests {
     #[test]
     fn test_get_line_error_reporting_use_case() {
         // This test demonstrates how get_line would be used for error reporting
-        let mut source_map = SourceMap::new("var x = 5;\nvar y = ;\nvar z = 10;".to_string());
-        let tokenizer = Tokenizer::new(&mut source_map);
+        let source_map = SourceMap::new("var x = 5;\nvar y = ;\nvar z = 10;".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
         let tokens = tokenizer.collect::<Vec<Token>>();
 
         // Find an error token (there should be one on line 2)
@@ -1048,5 +1066,41 @@ mod tests {
 
         assert_eq!(line1, "var msg = \"hello\\nworld\";");
         assert_eq!(line2, "var x = 5;");
+    }
+
+    #[test]
+    fn test_invalid_escape_sequences() {
+        let source = "\"hello\\qworld\"";
+        let tokens = tokenize_all(source);
+
+        println!("{:?}", tokens);
+        assert!(matches!(tokens[0].token_type, TokenType::Error(_)));
+    }
+
+    #[test]
+    fn test_unterminated_multiline_comment() {
+        let tokens = tokenize_all("/* unterminated comment");
+        assert!(matches!(tokens[0].token_type, TokenType::Error(_)));
+    }
+
+    #[test]
+    fn test_nested_quotes_in_strings() {
+        assert_single_token("\"He said \\\"hello\\\"\"", TokenType::String);
+    }
+
+    #[test]
+    fn test_empty_string() {
+        assert_single_token("\"\"", TokenType::String);
+    }
+
+    #[test]
+    fn test_unicode_in_strings() {
+        assert_single_token("\"café 🦀\"", TokenType::String);
+    }
+
+    #[test]
+    fn test_decimal_point_numbers() {
+        assert_single_token(".5", TokenType::Number);
+        assert_single_token(".123", TokenType::Number);
     }
 }

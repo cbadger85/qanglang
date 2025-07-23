@@ -77,7 +77,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>statement</td>
       <td>=</td>
-      <td>exprStmt | block | ifStmt | whileStmt | forStmt | breakStmt | continueStmt | returnStmt</td>
+      <td>exprStmt | block | ifStmt | whileStmt | forStmt | breakStmt | continueStmt | returnStmt | tryStmt</td>
       <td>;</td>
     </tr>
       <tr>
@@ -127,7 +127,25 @@ An embedded scripting language written in Rust 🦀
       <td>=</td>
       <td>"continue" ";"</td>
       <td>;</td>
-    </tr>   
+    </tr>
+    <tr>
+      <td>throwStmt</td>
+      <td>=</td>
+      <td>"throw" expression? ";"</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>tryStmt</td>
+      <td>=</td>
+      <td>"try" block catchFinally</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>catchFinally</td>
+      <td>=</td>
+      <td>"catch" ( "(" IDENTIFIER ")" )? block ( "finally" block )? | "finally" block</td>
+      <td>;</td>
+    </tr> 
     <tr>
       <td>expression</td>
       <td>=</td>

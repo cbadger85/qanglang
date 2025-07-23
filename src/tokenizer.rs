@@ -50,6 +50,10 @@ pub enum TokenType {
     Continue,           // continue
     OptionalChaining,   // .?
     Pipe,               // |>
+    Throw,              // throw
+    Try,                // try
+    Catch,              // catch
+    Finally,            // finalyy
     Error(String),      // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -81,6 +85,10 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "super" => TokenType::Super,
     "this" => TokenType::This,
     "return" => TokenType::Return,
+    "throw" => TokenType::Throw,
+    "try" => TokenType::Try,
+    "catch" => TokenType::Catch,
+    "finally" => TokenType::Finally,
 };
 
 #[derive(PartialEq, Clone, Debug)]
@@ -1171,6 +1179,42 @@ mod tests {
             TokenType::Identifier,
             TokenType::OptionalChaining,
             TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_throw_try_catch_finally() {
+        let source = "try { \n throw Error(); \n } catch (err) { \n println(err); \n } finally { \n println(\"moving along\"); }";
+        let expected = vec![
+            TokenType::Try,
+            TokenType::LeftBrace,
+            TokenType::Throw,
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::RightParen,
+            TokenType::Semicolon,
+            TokenType::RightBrace,
+            TokenType::Catch,
+            TokenType::LeftParen,
+            TokenType::Identifier,
+            TokenType::RightParen,
+            TokenType::LeftBrace,
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::Identifier,
+            TokenType::RightParen,
+            TokenType::Semicolon,
+            TokenType::RightBrace,
+            TokenType::Finally,
+            TokenType::LeftBrace,
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::String,
+            TokenType::RightParen,
+            TokenType::Semicolon,
+            TokenType::RightBrace,
             TokenType::Eof,
         ];
         assert_token_types(source, &expected);

@@ -233,7 +233,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>arrayLiteral</td>
       <td>=</td>
-      <td>"[" (expression ("," expression)*)? "]"</td>
+      <td>"[" ( expression ( "," expression )* )? "]"</td>
       <td>;</td>
     </tr>
   </tbody>

@@ -77,7 +77,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>statement</td>
       <td>=</td>
-      <td>exprStmt | block | ifStmt | whileStmt | forStmt | breakStmt | continueStmt | returnStmt | tryStmt</td>
+      <td>exprStmt | block | ifStmt | whileStmt | forStmt | breakStmt | continueStmt | returnStmt | throwStmt | tryStmt</td>
       <td>;</td>
     </tr>
       <tr>
@@ -155,7 +155,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>assignment</td>
       <td>=</td>
-      <td>( call "." IDENTIFIER | IDENTIFIER) = assignment | pipe</td>
+      <td>( call "." IDENTIFIER | IDENTIFIER) "=" assignment | pipe</td>
       <td>;</td>
     </tr>
     <tr>
@@ -227,7 +227,13 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>primary</td>
       <td>=</td>
-      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" "." IDENTIFIER | lambda</td>
+      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" "." IDENTIFIER | lambda | arrayLiteral</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>arrayLiteral</td>
+      <td>=</td>
+      <td>"[" (expression ("," expression)*)? "]"</td>
       <td>;</td>
     </tr>
   </tbody>

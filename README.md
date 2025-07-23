@@ -2,12 +2,9 @@
 
 An embedded scripting language.
 
-## EBNF
+## Grammar Definition
 
 <table>
-  <caption>
-  Grammar for QangLang
-  </caption>
   <thead>
   <thead/>
   <tbody>
@@ -140,7 +137,13 @@ An embedded scripting language.
     <tr>
       <td>assignment</td>
       <td>=</td>
-      <td>( call "." IDENTIFIER | IDENTIFIER) = assignment | ternary</td>
+      <td>( call "." IDENTIFIER | IDENTIFIER) = assignment | pipe</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>pipe</td>
+      <td>=</td>
+      <td>ternary ( "|>" pipe )?</td>
       <td>;</td>
     </tr>
     <tr>
@@ -206,7 +209,8 @@ An embedded scripting language.
     <tr>
       <td>primary</td>
       <td>=</td>
-      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" "." IDENTIFIER</td>
+      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" "." IDENTIFIER | lambda</td>
+      <td>;</td>
     </tr>
   </tbody>
 </table>

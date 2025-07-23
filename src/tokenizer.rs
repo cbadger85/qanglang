@@ -49,6 +49,7 @@ pub enum TokenType {
     Break,              // break
     Continue,           // continue
     OptionalChaining,   // .?
+    Pipe,               // |>
     Error(String),      // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -492,9 +493,10 @@ impl<'a> Iterator for Tokenizer<'a> {
             '[' => self.make_token(TokenType::LeftSquareBracket, start),
             ']' => self.make_token(TokenType::RightSquareBracket, start),
             '"' => self.string(),
+            '|' if self.match_char('>') => self.make_token(TokenType::Pipe, start),
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
-            _ => self.error_token("Unexpected character."),
+            _ => self.error_token(format!("Unexpected character: {}", c).as_str()),
         }
     }
 }
@@ -902,6 +904,20 @@ mod tests {
             TokenType::Slash,
             TokenType::Identifier,
             TokenType::Modulo,
+            TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_pipe_operator() {
+        let source = "foo() |> bar";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::RightParen,
+            TokenType::Pipe,
             TokenType::Identifier,
             TokenType::Eof,
         ];

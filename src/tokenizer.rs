@@ -503,18 +503,22 @@ impl<'a> Iterator for Tokenizer<'a> {
 mod tests {
     use super::*;
 
-    fn tokenize_all(source: &str) -> Vec<Token> {
-        let source_map = SourceMap::new(source.to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+    /// Tokenizes all source code in the given SourceMap and returns a vector of Tokens.
+    fn tokenize_all(source_map: &SourceMap) -> Vec<Token> {
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.collect()
     }
 
+    /// Asserts that the token types produced from tokenizing the source string match the expected types.
     fn assert_token_types(source: &str, expected: &[TokenType]) {
-        let tokens = tokenize_all(source);
+        let source_map = &SourceMap::new(source.to_string());
+        let tokens = tokenize_all(source_map);
         let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type).collect();
         assert_eq!(actual, expected);
     }
 
+    /// Asserts that a single token of the expected type is produced from tokenizing the source string,
+    /// followed by an EOF token.
     fn assert_single_token(source: &str, expected: TokenType) {
         assert_token_types(source, &[expected, TokenType::Eof]);
     }
@@ -610,7 +614,8 @@ mod tests {
 
     #[test]
     fn test_unterminated_string() {
-        let tokens = tokenize_all("\"unterminated");
+        let source_map = &SourceMap::new("\"unterminated".to_string());
+        let tokens = tokenize_all(source_map);
         assert_eq!(tokens.len(), 2);
         match &tokens[0].token_type {
             TokenType::Error(msg) => assert_eq!(msg, "Unterminated string."),
@@ -623,8 +628,9 @@ mod tests {
         assert_single_token("// this is a comment", TokenType::Comment);
         assert_single_token("//no space", TokenType::Comment);
 
+        let source_map = &SourceMap::new("// comment\n".to_string());
+        let tokens = tokenize_all(source_map);
         // Comment followed by newline should only tokenize the comment
-        let tokens = tokenize_all("// comment\n");
         assert_eq!(tokens.len(), 2);
         assert_eq!(tokens[0].token_type, TokenType::Comment);
         assert_eq!(tokens[1].token_type, TokenType::Eof);
@@ -778,27 +784,25 @@ mod tests {
 
     #[test]
     fn test_lexeme_extraction() {
-        let source = "hello world 123";
-        let source_map = SourceMap::new(source.to_string());
-        let tokens = tokenize_all(source);
+        let source_map = &SourceMap::new("hello world 123".to_string());
+        let tokens = tokenize_all(source_map);
 
-        assert_eq!(tokens[0].lexeme(&source_map), "hello");
-        assert_eq!(tokens[1].lexeme(&source_map), "world");
-        assert_eq!(tokens[2].lexeme(&source_map), "123");
+        assert_eq!(tokens[0].lexeme(source_map), "hello");
+        assert_eq!(tokens[1].lexeme(source_map), "world");
+        assert_eq!(tokens[2].lexeme(source_map), "123");
     }
 
     #[test]
     fn test_line_and_column_tracking() {
-        let source = "first\nsecond line";
-        let source_map = SourceMap::new(source.to_string());
-        let tokens = tokenize_all(source);
+        let source_map = &SourceMap::new("first\nsecond line".to_string());
+        let tokens = tokenize_all(source_map);
 
-        assert_eq!(tokens[0].line(&source_map), 1);
-        assert_eq!(tokens[0].col(&source_map), 1);
-        assert_eq!(tokens[1].line(&source_map), 2);
-        assert_eq!(tokens[1].col(&source_map), 1);
-        assert_eq!(tokens[2].line(&source_map), 2);
-        assert_eq!(tokens[2].col(&source_map), 8);
+        assert_eq!(tokens[0].line(source_map), 1);
+        assert_eq!(tokens[0].col(source_map), 1);
+        assert_eq!(tokens[1].line(source_map), 2);
+        assert_eq!(tokens[1].col(source_map), 1);
+        assert_eq!(tokens[2].line(source_map), 2);
+        assert_eq!(tokens[2].col(source_map), 8);
     }
 
     #[test]
@@ -823,7 +827,8 @@ mod tests {
 
     #[test]
     fn test_unexpected_character() {
-        let tokens = tokenize_all("@");
+        let source_map = &SourceMap::new("@".to_string());
+        let tokens = tokenize_all(source_map);
         assert_eq!(tokens.len(), 2);
         match &tokens[0].token_type {
             TokenType::Error(msg) => assert_eq!(msg, "Unexpected character."),
@@ -928,8 +933,8 @@ mod tests {
 
     #[test]
     fn test_get_line_single_line() {
-        let source_map = SourceMap::new("hello world".to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+        let source_map = &SourceMap::new("hello world".to_string());
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -941,8 +946,8 @@ mod tests {
 
     #[test]
     fn test_get_line_multiple_lines() {
-        let source_map = SourceMap::new("first line\nsecond line\nthird line".to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+        let source_map = &SourceMap::new("first line\nsecond line\nthird line".to_string());
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.for_each(drop);
         let line1: String = source_map.get_line(1).iter().collect();
         let line2: String = source_map.get_line(2).iter().collect();
@@ -955,8 +960,8 @@ mod tests {
 
     #[test]
     fn test_get_line_with_trailing_newline() {
-        let source_map = SourceMap::new("line one\nline two\n".to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+        let source_map = &SourceMap::new("line one\nline two\n".to_string());
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -969,8 +974,8 @@ mod tests {
 
     #[test]
     fn test_get_line_empty_lines() {
-        let source_map = SourceMap::new("first\n\nthird\n\n".to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+        let source_map = &SourceMap::new("first\n\nthird\n\n".to_string());
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -986,8 +991,8 @@ mod tests {
 
     #[test]
     fn test_get_line_single_newline() {
-        let source_map = SourceMap::new("\n".to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+        let source_map = &SourceMap::new("\n".to_string());
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -996,8 +1001,8 @@ mod tests {
 
     #[test]
     fn test_get_line_bounds_checking() {
-        let source_map = SourceMap::new("one\ntwo\nthree".to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+        let source_map = &SourceMap::new("one\ntwo\nthree".to_string());
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.for_each(drop);
 
         // Valid lines
@@ -1013,10 +1018,10 @@ mod tests {
 
     #[test]
     fn test_get_line_with_complex_content() {
-        let source_map = SourceMap::new(
+        let source_map = &SourceMap::new(
             "fn main() {\n    var x = \"hello world\";\n    // comment\n}".to_string(),
         );
-        let tokenizer = Tokenizer::new(&source_map);
+        let tokenizer = Tokenizer::new(source_map);
         tokenizer.for_each(drop);
 
         let line1: String = source_map.get_line(1).iter().collect();
@@ -1032,8 +1037,8 @@ mod tests {
 
     #[test]
     fn test_get_line_error_reporting_use_case() {
-        let source_map = SourceMap::new("var x = 5;\nvar y = ;\nvar z = 10;".to_string());
-        let tokenizer = Tokenizer::new(&source_map);
+        let source_map = &SourceMap::new("var x = 5;\nvar y = ;\nvar z = 10;".to_string());
+        let tokenizer = Tokenizer::new(source_map);
         let tokens = tokenizer.collect::<Vec<Token>>();
 
         let error_token = tokens
@@ -1041,12 +1046,9 @@ mod tests {
             .find(|t| matches!(t.token_type, TokenType::Error(_)));
 
         if let Some(token) = error_token {
-            let error_line: String = source_map
-                .get_line(token.line(&source_map))
-                .iter()
-                .collect();
+            let error_line: String = source_map.get_line(token.line(source_map)).iter().collect();
             assert_eq!(error_line, "var y = ;");
-            assert_eq!(token.line(&source_map), 2);
+            assert_eq!(token.line(source_map), 2);
         }
     }
 
@@ -1054,10 +1056,9 @@ mod tests {
     fn test_string_with_escaped_newline() {
         assert_single_token("\"hello\\nworld\"", TokenType::String);
 
-        let source = "\"hello\\nworld\"";
-        let source_map = SourceMap::new(source.to_string());
-        let tokens = tokenize_all(source);
-        assert_eq!((tokens[0].line(&source_map)), 1);
+        let source_map: &SourceMap = &SourceMap::new("\"hello\\nworld\"".to_string());
+        let tokens = tokenize_all(source_map);
+        assert_eq!((tokens[0].line(source_map)), 1);
     }
 
     #[test]
@@ -1067,13 +1068,12 @@ mod tests {
 
     #[test]
     fn test_multiline_code_with_string_escapes() {
-        let source = "var msg = \"line 1\\nline 2\";\nvar x = 5;";
-        let source_map = SourceMap::new(source.to_string());
-        let tokens = tokenize_all(source);
+        let source_map = &SourceMap::new("var msg = \"line 1\\nline 2\";\nvar x = 5;".to_string());
+        let tokens = tokenize_all(source_map);
 
-        assert_eq!(tokens[3].line(&source_map), 1);
+        assert_eq!(tokens[3].line(source_map), 1);
         assert_eq!(tokens[3].token_type, TokenType::String);
-        assert_eq!(tokens[5].line(&source_map), 2);
+        assert_eq!(tokens[5].line(source_map), 2);
     }
 
     #[test]
@@ -1089,8 +1089,8 @@ mod tests {
 
     #[test]
     fn test_invalid_escape_sequences() {
-        let source = "\"hello\\qworld\"";
-        let tokens = tokenize_all(source);
+        let source_map = &SourceMap::new("\"hello\\qworld\"".to_string());
+        let tokens = tokenize_all(source_map);
 
         println!("{:?}", tokens);
         assert!(matches!(tokens[0].token_type, TokenType::Error(_)));
@@ -1098,7 +1098,8 @@ mod tests {
 
     #[test]
     fn test_unterminated_multiline_comment() {
-        let tokens = tokenize_all("/* unterminated comment");
+        let source_map = &SourceMap::new("/* unterminated comment".to_string());
+        let tokens = tokenize_all(source_map);
         assert!(matches!(tokens[0].token_type, TokenType::Error(_)));
     }
 

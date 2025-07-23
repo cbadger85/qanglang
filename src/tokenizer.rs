@@ -48,6 +48,7 @@ pub enum TokenType {
     While,              // while
     Break,              // break
     Continue,           // continue
+    OptionalChaining,   // .?
     Error(String),      // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -300,7 +301,6 @@ impl<'a> Tokenizer<'a> {
                             self.advance_in_string(); // valid escape
                         }
                         _ => {
-                            // Invalid escape sequence - you could return an error here
                             return self
                                 .error_token(&format!("Invalid escape sequence: \\{}", escaped));
                         }
@@ -315,7 +315,7 @@ impl<'a> Tokenizer<'a> {
             return self.error_token("Unterminated string.");
         }
 
-        self.advance(); // Consume closing quote (this one can affect line tracking)
+        self.advance(); // Consume closing quote 
         self.make_token(TokenType::String, start)
     }
 
@@ -426,48 +426,23 @@ impl<'a> Iterator for Tokenizer<'a> {
         match c {
             '(' => self.make_token(TokenType::LeftParen, start),
             ')' => self.make_token(TokenType::RightParen, start),
-            '!' => {
-                if self.match_char('=') {
-                    self.make_token(TokenType::BangEquals, start)
-                } else {
-                    self.make_token(TokenType::Bang, start)
-                }
-            }
-            '<' => {
-                if self.match_char('=') {
-                    self.make_token(TokenType::LessEquals, start)
-                } else {
-                    self.make_token(TokenType::Less, start)
-                }
-            }
-            '>' => {
-                if self.match_char('=') {
-                    self.make_token(TokenType::GreaterEquals, start)
-                } else {
-                    self.make_token(TokenType::Greater, start)
-                }
-            }
+            '!' if self.match_char('=') => self.make_token(TokenType::BangEquals, start),
+            '!' => self.make_token(TokenType::Bang, start),
+            '<' if self.match_char('=') => self.make_token(TokenType::LessEquals, start),
+            '<' => self.make_token(TokenType::Less, start),
+            '>' if self.match_char('=') => self.make_token(TokenType::GreaterEquals, start),
+            '>' => self.make_token(TokenType::Greater, start),
             '=' if self.match_char('=') => self.make_token(TokenType::EqualsEquals, start),
             '=' => self.make_token(TokenType::Equals, start),
-            '-' => {
-                if self.match_char('>') {
-                    self.make_token(TokenType::Arrow, start)
-                } else {
-                    self.make_token(TokenType::Minus, start)
-                }
-            }
+            '-' if self.match_char('>') => self.make_token(TokenType::Arrow, start),
+            '-' => self.make_token(TokenType::Minus, start),
             '*' => self.make_token(TokenType::Star, start),
             '+' => self.make_token(TokenType::Plus, start),
-            '/' => {
-                if self.match_char('/') {
-                    self.single_line_comment()
-                } else if self.match_char('*') {
-                    self.multi_line_comment()
-                } else {
-                    self.make_token(TokenType::Slash, start)
-                }
-            }
+            '/' if self.match_char('/') => self.single_line_comment(),
+            '/' if self.match_char('*') => self.multi_line_comment(),
+            '/' => self.make_token(TokenType::Slash, start),
             '%' => self.make_token(TokenType::Modulo, start),
+            '.' if self.match_char('?') => self.make_token(TokenType::OptionalChaining, start),
             '.' if self.peek().is_ascii_digit() => self.number(),
             '.' => self.make_token(TokenType::Dot, start),
             ',' => self.make_token(TokenType::Comma, start),
@@ -1100,5 +1075,126 @@ mod tests {
     fn test_decimal_point_numbers() {
         assert_single_token(".5", TokenType::Number);
         assert_single_token(".123", TokenType::Number);
+    }
+
+    #[test]
+    fn test_optional_chaining_operator() {
+        // First, you'll need to add this to your TokenType enum:
+        // OptionalChaining,    // .?
+
+        assert_single_token(".?", TokenType::OptionalChaining);
+    }
+
+    #[test]
+    fn test_optional_chaining_in_expressions() {
+        let source = "user.?name";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_chained_optional_access() {
+        let source = "user.?profile.?avatar.?url";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_mixed_optional_and_regular_chaining() {
+        let source = "user.name.?nickname";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::Dot,
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_optional_chaining_with_method_calls() {
+        let source = "user.?getName()";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::RightParen,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_optional_chaining_with_array_access() {
+        let source = "users.?[0].?name";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::LeftSquareBracket,
+            TokenType::Number,
+            TokenType::RightSquareBracket,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_distinguish_dot_question_from_optional_chaining() {
+        // Make sure ". ?" (with space) is different from ".?"
+        let source = "condition ? user.name : nil";
+        let expected = vec![
+            TokenType::Identifier,
+            TokenType::Question,
+            TokenType::Identifier,
+            TokenType::Dot,
+            TokenType::Identifier,
+            TokenType::Colon,
+            TokenType::Nil,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_optional_chaining_in_complex_expression() {
+        let source = "var result = api.?getData().?result.?value or \"default\";";
+        let expected = vec![
+            TokenType::Var,
+            TokenType::Identifier,
+            TokenType::Equals,
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::LeftParen,
+            TokenType::RightParen,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::OptionalChaining,
+            TokenType::Identifier,
+            TokenType::Or,
+            TokenType::String,
+            TokenType::Semicolon,
+            TokenType::Eof,
+        ];
+        assert_token_types(source, &expected);
     }
 }

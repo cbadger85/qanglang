@@ -504,7 +504,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             '|' if self.match_char('>') => self.make_token(TokenType::Pipe, start),
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
-            _ => self.error_token(format!("Unexpected character: {}", c).as_str()),
+            _ => self.error_token(format!("Unexpected character: '{}'.", c).as_str()),
         }
     }
 }
@@ -841,7 +841,7 @@ mod tests {
         let tokens = tokenize_all(source_map);
         assert_eq!(tokens.len(), 2);
         match &tokens[0].token_type {
-            TokenType::Error(msg) => assert_eq!(msg, "Unexpected character."),
+            TokenType::Error(msg) => assert_eq!(msg, "Unexpected character: '@'."),
             _ => panic!("Expected error token"),
         }
     }

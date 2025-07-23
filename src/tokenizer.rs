@@ -85,9 +85,22 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
 #[derive(PartialEq, Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
-    pub line: u32,
-    pub col: u32,
-    pub lexeme: String,
+    start: usize,
+    end: usize,
+}
+
+impl Token {
+    pub fn lexeme(&self, source_map: &SourceMap) -> String {
+        source_map.source[self.start..self.end].iter().collect()
+    }
+
+    pub fn line(&self, source_map: &SourceMap) -> u32 {
+        source_map.get_line_number(self.start)
+    }
+
+    pub fn col(&self, source_map: &SourceMap) -> u32 {
+        source_map.get_column_number(self.start)
+    }
 }
 
 pub struct SourceMap {
@@ -171,6 +184,37 @@ impl SourceMap {
         } else {
             &[]
         }
+    }
+
+    /// Returns the line number (1-based) for a given position in the source
+    pub fn get_line_number(&self, position: usize) -> u32 {
+        if position >= self.source.len() {
+            return (self.line_indices.len() + 1) as u32;
+        }
+
+        // Binary search to find which line this position belongs to
+        match self.line_indices.binary_search(&position) {
+            Ok(index) => (index + 1) as u32,  // Exact match on newline
+            Err(index) => (index + 1) as u32, // Position is between line_indices[index-1] and line_indices[index]
+        }
+    }
+    /// Returns the column number (1-based) for a given position in the source
+    pub fn get_column_number(&self, position: usize) -> u32 {
+        if position >= self.source.len() {
+            return 1;
+        }
+        let line_number = self.get_line_number(position);
+        let line_start = if line_number == 1 {
+            0
+        } else {
+            let line_index = (line_number - 2) as usize;
+            if let Some(&newline_pos) = self.line_indices.get(line_index) {
+                newline_pos + 1
+            } else {
+                0
+            }
+        };
+        (position - line_start + 1) as u32
     }
 }
 
@@ -263,17 +307,12 @@ impl<'a> Tokenizer<'a> {
 
     /// Creates a Token of a given type and adds its lexeme.
     fn make_token(&mut self, token_type: TokenType, start: usize) -> Option<Token> {
-        let lexeme: String = self.source_map.source[start..self.location]
-            .iter()
-            .collect();
-        let col = self.col;
-        self.col += lexeme.len() as u32;
+        let end = self.location;
 
         Some(Token {
             token_type,
-            line: self.line,
-            col,
-            lexeme,
+            start,
+            end,
         })
     }
 
@@ -281,9 +320,8 @@ impl<'a> Tokenizer<'a> {
     fn error_token(&self, message: &str) -> Option<Token> {
         Some(Token {
             token_type: TokenType::Error(message.to_string()),
-            line: self.line,
-            col: self.col,
-            lexeme: "".to_string(),
+            start: self.location,
+            end: self.location,
         })
     }
 
@@ -741,24 +779,26 @@ mod tests {
     #[test]
     fn test_lexeme_extraction() {
         let source = "hello world 123";
+        let source_map = SourceMap::new(source.to_string());
         let tokens = tokenize_all(source);
 
-        assert_eq!(tokens[0].lexeme, "hello");
-        assert_eq!(tokens[1].lexeme, "world");
-        assert_eq!(tokens[2].lexeme, "123");
+        assert_eq!(tokens[0].lexeme(&source_map), "hello");
+        assert_eq!(tokens[1].lexeme(&source_map), "world");
+        assert_eq!(tokens[2].lexeme(&source_map), "123");
     }
 
     #[test]
     fn test_line_and_column_tracking() {
         let source = "first\nsecond line";
+        let source_map = SourceMap::new(source.to_string());
         let tokens = tokenize_all(source);
 
-        assert_eq!(tokens[0].line, 1);
-        assert_eq!(tokens[0].col, 1);
-        assert_eq!(tokens[1].line, 2);
-        assert_eq!(tokens[1].col, 1);
-        assert_eq!(tokens[2].line, 2);
-        assert_eq!(tokens[2].col, 8);
+        assert_eq!(tokens[0].line(&source_map), 1);
+        assert_eq!(tokens[0].col(&source_map), 1);
+        assert_eq!(tokens[1].line(&source_map), 2);
+        assert_eq!(tokens[1].col(&source_map), 1);
+        assert_eq!(tokens[2].line(&source_map), 2);
+        assert_eq!(tokens[2].col(&source_map), 8);
     }
 
     #[test]
@@ -1001,9 +1041,12 @@ mod tests {
             .find(|t| matches!(t.token_type, TokenType::Error(_)));
 
         if let Some(token) = error_token {
-            let error_line: String = source_map.get_line(token.line).iter().collect();
+            let error_line: String = source_map
+                .get_line(token.line(&source_map))
+                .iter()
+                .collect();
             assert_eq!(error_line, "var y = ;");
-            assert_eq!(token.line, 2);
+            assert_eq!(token.line(&source_map), 2);
         }
     }
 
@@ -1011,8 +1054,10 @@ mod tests {
     fn test_string_with_escaped_newline() {
         assert_single_token("\"hello\\nworld\"", TokenType::String);
 
-        let tokens = tokenize_all("\"hello\\nworld\"");
-        assert_eq!(tokens[0].line, 1);
+        let source = "\"hello\\nworld\"";
+        let source_map = SourceMap::new(source.to_string());
+        let tokens = tokenize_all(source);
+        assert_eq!((tokens[0].line(&source_map)), 1);
     }
 
     #[test]
@@ -1023,11 +1068,12 @@ mod tests {
     #[test]
     fn test_multiline_code_with_string_escapes() {
         let source = "var msg = \"line 1\\nline 2\";\nvar x = 5;";
+        let source_map = SourceMap::new(source.to_string());
         let tokens = tokenize_all(source);
 
-        assert_eq!(tokens[3].line, 1);
+        assert_eq!(tokens[3].line(&source_map), 1);
         assert_eq!(tokens[3].token_type, TokenType::String);
-        assert_eq!(tokens[5].line, 2);
+        assert_eq!(tokens[5].line(&source_map), 2);
     }
 
     #[test]

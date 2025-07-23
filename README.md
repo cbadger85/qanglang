@@ -1,6 +1,6 @@
 # QangLang
 
-An embedded scripting language.
+An embedded scripting language written in Rust 🦀
 
 ## Grammar Definition
 

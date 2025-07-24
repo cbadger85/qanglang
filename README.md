@@ -227,7 +227,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>primary</td>
       <td>=</td>
-      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" "." IDENTIFIER | lambda | arrayLiteral</td>
+      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral</td>
       <td>;</td>
     </tr>
     <tr>

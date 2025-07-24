@@ -94,15 +94,14 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
 #[derive(PartialEq, Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
-    start: usize,
-    end: usize,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl Token {
     pub fn lexeme(&self, source_map: &SourceMap) -> String {
         source_map.source[self.start..self.end].iter().collect()
     }
-
     pub fn line(&self, source_map: &SourceMap) -> u32 {
         source_map.get_line_number(self.start)
     }

@@ -206,6 +206,7 @@ impl SourceMap {
             Err(index) => (index + 1) as u32, // Position is between line_indices[index-1] and line_indices[index]
         }
     }
+
     /// Returns the column number (1-based) for a given position in the source
     pub fn get_column_number(&self, position: usize) -> u32 {
         if position >= self.source.len() {

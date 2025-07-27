@@ -30,7 +30,7 @@ impl SourceSpan {
 /// Root AST node representing a complete program
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub declarations: Vec<Declaration>,
+    pub decls: Vec<Declaration>,
     pub span: SourceSpan,
 }
 
@@ -180,14 +180,14 @@ impl Statement {
 /// Expression statement: expression ;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExpressionStatement {
-    pub expression: Expression,
+    pub expr: Expression,
     pub span: SourceSpan,
 }
 
 /// Block statement: { declaration* }
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockStatement {
-    pub declarations: Vec<Declaration>,
+    pub decls: Vec<Declaration>,
     pub span: SourceSpan,
 }
 
@@ -601,7 +601,7 @@ pub struct Identifier {
 /// Grouping expression: ( expression )
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroupingExpression {
-    pub expression: Box<Expression>,
+    pub expr: Box<Expression>,
     pub span: SourceSpan,
 }
 
@@ -614,8 +614,8 @@ pub struct ArrayLiteral {
 
 /// Utility functions for working with the AST
 impl Program {
-    pub fn new(declarations: Vec<Declaration>, span: SourceSpan) -> Self {
-        Self { declarations, span }
+    pub fn new(decls: Vec<Declaration>, span: SourceSpan) -> Self {
+        Self { decls, span }
     }
 }
 

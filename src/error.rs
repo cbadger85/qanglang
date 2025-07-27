@@ -1,5 +1,6 @@
+use crate::SourceMap;
 use crate::ast::SourceSpan;
-use crate::tokenizer::{SourceMap, Token};
+use crate::tokenizer::Token;
 use std::fmt;
 
 /// Represents different types of errors that can occur during language processing
@@ -279,7 +280,7 @@ impl<'a> ErrorReporter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tokenizer::SourceMap;
+    use crate::SourceMap;
 
     #[test]
     fn test_error_reporter_basic_functionality() {

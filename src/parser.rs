@@ -1,17 +1,15 @@
-use std::iter::Peekable;
-
 use crate::{
-    Declaration, Expression, ExpressionStatement, Identifier, Program, QangError, QangResult,
-    SourceSpan, VariableDeclaration,
+    AssignmentExpression, Declaration, Expression, ExpressionStatement, Identifier, Program,
+    QangError, QangResult, SourceMap, SourceSpan, VariableDeclaration,
     error::ErrorReporter,
-    tokenizer::{SourceMap, Token, TokenType, Tokenizer},
+    tokenizer::{Token, TokenType, Tokenizer},
 };
 
 type ParseResult<T> = Result<T, QangError>;
 
 pub struct Parser<'a> {
     source_map: &'a SourceMap,
-    tokens: Peekable<Tokenizer<'a>>,
+    tokens: Tokenizer<'a>,
     previous_token: Option<Token>,
     current_token: Option<Token>,
     errors: ErrorReporter<'a>,
@@ -19,27 +17,16 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(source_map: &'a SourceMap) -> Self {
-        Self {
+        let mut parser = Self {
             source_map,
-            tokens: Tokenizer::new(source_map).peekable(),
+            tokens: Tokenizer::new(source_map),
             previous_token: None,
             current_token: None,
             errors: ErrorReporter::new(source_map),
-        }
-    }
+        };
 
-    pub fn parse(&mut self) -> QangResult<Program> {
-        let mut program = Program::new(
-            Vec::new(),
-            SourceSpan::new(0, self.source_map.get_source().len() - 1),
-        );
-
-        if self.errors.has_errors() {
-            let errors = self.errors.into_errors();
-            Err(errors)
-        } else {
-            Ok(program)
-        }
+        parser.advance();
+        parser
     }
 
     fn advance(&mut self) {
@@ -61,6 +48,10 @@ impl<'a> Parser<'a> {
             .map(SourceSpan::from_token)
             .unwrap_or_default();
 
+        if !self.is_at_end() {
+            self.advance();
+        }
+
         return Err(QangError::parse_error(message, span));
     }
 
@@ -74,7 +65,7 @@ impl<'a> Parser<'a> {
         true
     }
 
-    fn check(&mut self, token_type: TokenType) -> bool {
+    fn check(&self, token_type: TokenType) -> bool {
         self.current_token
             .as_ref()
             .map(|t| t.token_type == token_type)
@@ -140,23 +131,30 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expression(&mut self) -> ParseResult<Expression> {
-        expression_parser::parse(self, expression_parser::Precedence::Assignment)
+    fn is_at_end(&self) -> bool {
+        self.check(TokenType::Eof)
     }
 
-    fn expression_statement(&mut self) -> ParseResult<ExpressionStatement> {
-        let expression = self.expression()?;
+    pub fn parse(&mut self) -> QangResult<Program> {
+        let start_span = self.get_current_span();
+        let mut decls = Vec::new();
 
-        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+        while !self.is_at_end() {
+            if let Some(decl) = self.declaration() {
+                decls.push(decl);
+            }
+        }
 
-        let semicolon_span = self.get_previous_span();
+        let end_span = self.get_current_span();
 
-        let expression_span = expression.span();
+        let program = Program::new(decls, SourceSpan::combine(start_span, end_span));
 
-        Ok(ExpressionStatement {
-            expression,
-            span: SourceSpan::combine(expression_span, semicolon_span),
-        })
+        if self.errors.has_errors() {
+            let errors = self.errors.into_errors();
+            Err(errors)
+        } else {
+            Ok(program)
+        }
     }
 
     fn declaration(&mut self) -> Option<Declaration> {
@@ -167,8 +165,9 @@ impl<'a> Parser<'a> {
         };
 
         match result {
-            Ok(declaration) => Some(declaration),
-            Err(_) => {
+            Ok(decl) => Some(decl),
+            Err(error) => {
+                self.errors.report_error(error);
                 self.synchronize();
                 None
             }
@@ -185,31 +184,12 @@ impl<'a> Parser<'a> {
             .as_ref()
             .map(|t| t.lexeme(&self.source_map))
             .unwrap();
-        let identifer = Identifier::new(name, identifier_span);
+        let identifier = Identifier::new(name, identifier_span);
 
-        let var_declaration = if self.match_token(TokenType::Equals) {
-            let equals_span = self.get_previous_span();
-            let expression = self.expression()?;
-
-            let span = SourceSpan::combine(
-                var_span,
-                SourceSpan::combine(
-                    SourceSpan::combine(identifier_span, equals_span),
-                    expression.span(),
-                ),
-            );
-
-            Ok(Declaration::Variable(VariableDeclaration {
-                name: identifer,
-                initializer: Some(expression),
-                span,
-            }))
+        let initializer = if self.match_token(TokenType::Equals) {
+            Some(self.expression()?)
         } else {
-            Ok(Declaration::Variable(VariableDeclaration {
-                name: identifer,
-                initializer: None,
-                span: identifier_span,
-            }))
+            None
         };
 
         self.consume(
@@ -217,7 +197,14 @@ impl<'a> Parser<'a> {
             "Expect ';' after variable declaration",
         )?;
 
-        var_declaration
+        let semicolon_span = self.get_previous_span();
+        let span = SourceSpan::combine(var_span, semicolon_span);
+
+        Ok(Declaration::Variable(VariableDeclaration {
+            name: identifier,
+            initializer,
+            span,
+        }))
     }
 
     fn statement(&mut self) -> ParseResult<Declaration> {
@@ -226,14 +213,56 @@ impl<'a> Parser<'a> {
             expression_statement,
         )))
     }
+
+    fn expression_statement(&mut self) -> ParseResult<ExpressionStatement> {
+        let expr = self.expression()?;
+
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+
+        let semicolon_span = self.get_previous_span();
+
+        let expression_span = expr.span();
+
+        Ok(ExpressionStatement {
+            expr,
+            span: SourceSpan::combine(expression_span, semicolon_span),
+        })
+    }
+
+    fn expression(&mut self) -> ParseResult<Expression> {
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> ParseResult<crate::Expression> {
+        let expr = expression_parser::parse(self, expression_parser::Precedence::Ternary)?;
+
+        if self.match_token(TokenType::Equals) {
+            let value = Box::new(self.expression()?);
+            let span = SourceSpan::combine(expr.span(), value.span());
+
+            match expr {
+                crate::Expression::Primary(crate::PrimaryExpression::Identifier(id)) => {
+                    Ok(crate::Expression::Assignment(AssignmentExpression {
+                        target: crate::AssignmentTarget::Identifier(id),
+                        value,
+                        span,
+                    }))
+                }
+                // TODO: Handle property assignments
+                _ => Err(crate::QangError::parse_error(
+                    "Invalid assignemnt target",
+                    span,
+                )),
+            }
+        } else {
+            Ok(expr)
+        }
+    }
 }
 
 mod expression_parser {
-    use crate::{
-        AssignmentExpression, Expression, Identifier, QangError, SourceSpan, StringLiteral,
-        parser::{self, ParseResult},
-        tokenizer,
-    };
+    use super::*;
+    use crate::tokenizer;
 
     #[derive(Debug, PartialEq, PartialOrd)]
     #[repr(u8)]
@@ -278,11 +307,10 @@ mod expression_parser {
         }
     }
 
-    type PrefixParseFn = fn(&mut parser::Parser) -> parser::ParseResult<crate::Expression>;
-    type InfixParseFn =
-        fn(&mut parser::Parser, crate::Expression) -> parser::ParseResult<crate::Expression>;
+    type PrefixParseFn = fn(&mut Parser) -> ParseResult<crate::Expression>;
+    type InfixParseFn = fn(&mut Parser, crate::Expression) -> ParseResult<crate::Expression>;
 
-    fn number(parser: &mut parser::Parser) -> parser::ParseResult<crate::Expression> {
+    fn number(parser: &mut Parser) -> ParseResult<crate::Expression> {
         let token = parser
             .previous_token
             .as_ref()
@@ -300,17 +328,17 @@ mod expression_parser {
         ))
     }
 
-    fn grouping(parser: &mut parser::Parser) -> parser::ParseResult<crate::Expression> {
-        let expression = parser.expression()?;
+    fn grouping(parser: &mut Parser) -> ParseResult<crate::Expression> {
+        let expr = parser.expression()?;
         parser.consume(
             tokenizer::TokenType::RightParen,
             "Expect ')' after expression.",
         )?;
 
-        Ok(expression)
+        Ok(expr)
     }
 
-    fn unary(parser: &mut parser::Parser) -> parser::ParseResult<crate::Expression> {
+    fn unary(parser: &mut Parser) -> ParseResult<crate::Expression> {
         let operand = Box::new(parser.expression()?);
         let token = parser
             .previous_token
@@ -336,13 +364,13 @@ mod expression_parser {
         }
     }
 
-    fn literal(parser: &mut parser::Parser) -> parser::ParseResult<crate::Expression> {
+    fn literal(parser: &mut Parser) -> ParseResult<crate::Expression> {
         let token = parser
             .previous_token
             .as_ref()
             .expect("Missing previous token.");
 
-        let span = SourceSpan::from_token(token);
+        let span = crate::SourceSpan::from_token(token);
 
         match token.token_type {
             tokenizer::TokenType::False => Ok(crate::Expression::Primary(
@@ -354,11 +382,11 @@ mod expression_parser {
             tokenizer::TokenType::Nil => Ok(crate::Expression::Primary(
                 crate::PrimaryExpression::Nil(crate::NilLiteral { span }),
             )),
-            _ => Err(QangError::parse_error("Unknown literal.", span)),
+            _ => Err(crate::QangError::parse_error("Unknown literal.", span)),
         }
     }
 
-    fn string(parser: &mut parser::Parser) -> parser::ParseResult<crate::Expression> {
+    fn string(parser: &mut Parser) -> ParseResult<crate::Expression> {
         let token = parser
             .previous_token
             .as_ref()
@@ -366,17 +394,14 @@ mod expression_parser {
 
         let value = token.lexeme(&parser.source_map);
 
-        let span = SourceSpan::from_token(token);
+        let span = crate::SourceSpan::from_token(token);
 
         Ok(crate::Expression::Primary(
-            crate::PrimaryExpression::String(StringLiteral { value, span }),
+            crate::PrimaryExpression::String(crate::StringLiteral { value, span }),
         ))
     }
 
-    fn binary(
-        parser: &mut parser::Parser,
-        left: crate::Expression,
-    ) -> parser::ParseResult<crate::Expression> {
+    fn binary(parser: &mut Parser, left: crate::Expression) -> ParseResult<crate::Expression> {
         let token = parser
             .previous_token
             .as_ref()
@@ -384,7 +409,7 @@ mod expression_parser {
         let span_start = left.span().start;
         let token_type = token.token_type.clone();
 
-        let rule = get_rule(&token_type).expect("Expected rule for token type.");
+        let rule = get_rule(&token_type);
 
         let precedence: Precedence = (rule.precedence as u8 + 1).into();
 
@@ -490,40 +515,18 @@ mod expression_parser {
         }
     }
 
-    fn variable(parser: &mut parser::Parser) -> ParseResult<crate::Expression> {
-        // TODO validate the assignment target is valid.
+    fn identifier(parser: &mut Parser) -> ParseResult<crate::Expression> {
         let token = parser
             .previous_token
             .as_ref()
             .expect("Missing previous token.");
-        let identifier_span = SourceSpan::from_token(token);
-        let precedence = get_rule(&token.token_type)
-            .map(|t| t.precedence)
-            .unwrap_or(Precedence::None);
-        let is_assignable = precedence <= Precedence::Assignment;
-
+        let span = crate::SourceSpan::from_token(token);
         let name = token.lexeme(&parser.source_map);
-        let identifier = Identifier::new(name, identifier_span);
+        let identifier = crate::Identifier::new(name, span);
 
-        if parser.match_token(tokenizer::TokenType::Equals) && is_assignable {
-            let value = parser.expression()?;
-            let equals_span = parser.get_previous_span();
-
-            let span = SourceSpan::combine(
-                SourceSpan::combine(identifier_span, equals_span),
-                value.span(),
-            );
-
-            Ok(crate::Expression::Assignment(AssignmentExpression {
-                value: Box::new(value),
-                target: crate::AssignmentTarget::Identifier(identifier),
-                span,
-            }))
-        } else {
-            Ok(crate::Expression::Primary(
-                crate::PrimaryExpression::Identifier(identifier),
-            ))
-        }
+        Ok(crate::Expression::Primary(
+            crate::PrimaryExpression::Identifier(identifier),
+        ))
     }
 
     struct ParseRule {
@@ -542,130 +545,131 @@ mod expression_parser {
         }
     }
 
-    const fn get_rule(token_type: &tokenizer::TokenType) -> Option<ParseRule> {
+    const fn get_rule(token_type: &tokenizer::TokenType) -> ParseRule {
         match token_type {
-            tokenizer::TokenType::Number => Some(ParseRule {
+            tokenizer::TokenType::Number => ParseRule {
                 infix: None,
                 prefix: Some(number),
                 precedence: Precedence::None,
-            }),
-            tokenizer::TokenType::LeftParen => Some(ParseRule {
+            },
+            tokenizer::TokenType::LeftParen => ParseRule {
                 prefix: Some(grouping),
                 infix: None,
                 precedence: Precedence::None,
-            }),
-            tokenizer::TokenType::Minus => Some(ParseRule {
+            },
+            tokenizer::TokenType::Minus => ParseRule {
                 prefix: Some(unary),
                 infix: Some(binary),
                 precedence: Precedence::Term,
-            }),
-            tokenizer::TokenType::Plus => Some(ParseRule {
+            },
+            tokenizer::TokenType::Plus => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Term,
-            }),
-            tokenizer::TokenType::Star => Some(ParseRule {
+            },
+            tokenizer::TokenType::Star => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Factor,
-            }),
-            tokenizer::TokenType::Slash => Some(ParseRule {
+            },
+            tokenizer::TokenType::Slash => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Factor,
-            }),
-            tokenizer::TokenType::Modulo => Some(ParseRule {
+            },
+            tokenizer::TokenType::Modulo => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Factor,
-            }),
-            tokenizer::TokenType::Greater => Some(ParseRule {
+            },
+            tokenizer::TokenType::Greater => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Comparison,
-            }),
-            tokenizer::TokenType::GreaterEquals => Some(ParseRule {
+            },
+            tokenizer::TokenType::GreaterEquals => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Comparison,
-            }),
-            tokenizer::TokenType::Less => Some(ParseRule {
+            },
+            tokenizer::TokenType::Less => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Comparison,
-            }),
-            tokenizer::TokenType::LessEquals => Some(ParseRule {
+            },
+            tokenizer::TokenType::LessEquals => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Comparison,
-            }),
-            tokenizer::TokenType::EqualsEquals => Some(ParseRule {
+            },
+            tokenizer::TokenType::EqualsEquals => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Equality,
-            }),
-            tokenizer::TokenType::BangEquals => Some(ParseRule {
+            },
+            tokenizer::TokenType::BangEquals => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Equality,
-            }),
-            tokenizer::TokenType::And => Some(ParseRule {
+            },
+            tokenizer::TokenType::And => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::And,
-            }),
-            tokenizer::TokenType::Or => Some(ParseRule {
+            },
+            tokenizer::TokenType::Or => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Or,
-            }),
-            tokenizer::TokenType::False => Some(ParseRule {
+            },
+            tokenizer::TokenType::False => ParseRule {
                 prefix: Some(literal),
                 infix: None,
                 precedence: Precedence::None,
-            }),
-            tokenizer::TokenType::True => Some(ParseRule {
+            },
+            tokenizer::TokenType::True => ParseRule {
                 prefix: Some(literal),
                 infix: None,
                 precedence: Precedence::None,
-            }),
-            tokenizer::TokenType::Nil => Some(ParseRule {
+            },
+            tokenizer::TokenType::Nil => ParseRule {
                 prefix: Some(literal),
                 infix: None,
                 precedence: Precedence::None,
-            }),
-            tokenizer::TokenType::Bang => Some(ParseRule {
+            },
+            tokenizer::TokenType::Bang => ParseRule {
                 prefix: Some(unary),
                 infix: None,
                 precedence: Precedence::None,
-            }),
-            tokenizer::TokenType::String => Some(ParseRule {
+            },
+            tokenizer::TokenType::String => ParseRule {
                 prefix: Some(string),
                 infix: None,
                 precedence: Precedence::None,
-            }),
-            tokenizer::TokenType::Identifier => Some(ParseRule {
-                prefix: Some(variable),
+            },
+            tokenizer::TokenType::Identifier => ParseRule {
+                prefix: Some(identifier),
                 infix: None,
                 precedence: Precedence::None,
-            }),
-            _ => None,
+            },
+            _ => ParseRule {
+                prefix: None,
+                infix: None,
+                precedence: Precedence::None,
+            },
         }
     }
 
-    pub fn parse(
-        parser: &mut parser::Parser,
-        precedence: Precedence,
-    ) -> parser::ParseResult<crate::Expression> {
+    pub fn parse(parser: &mut Parser, precedence: Precedence) -> ParseResult<crate::Expression> {
         parser.advance();
 
         let prefix_rule = parser
             .previous_token
             .as_ref()
-            .and_then(|t| get_rule(&t.token_type))
+            .map(|t| get_rule(&t.token_type))
             .and_then(|r| r.prefix);
 
-        let mut expression = match prefix_rule {
+        let mut expr = match prefix_rule {
             Some(rule) => rule(parser)?,
             None => {
                 let span = parser
@@ -679,15 +683,12 @@ mod expression_parser {
         };
 
         while let Some(current_token) = &parser.current_token {
-            if let Some(rule) = get_rule(&current_token.token_type) {
-                if precedence <= rule.precedence {
-                    parser.advance();
+            let rule = get_rule(&current_token.token_type);
+            if precedence <= rule.precedence {
+                parser.advance();
 
-                    if let Some(infix_rule) = rule.infix {
-                        expression = infix_rule(parser, expression)?;
-                    } else {
-                        break;
-                    }
+                if let Some(infix_rule) = rule.infix {
+                    expr = infix_rule(parser, expr)?;
                 } else {
                     break;
                 }
@@ -696,6 +697,6 @@ mod expression_parser {
             }
         }
 
-        Ok(expression)
+        Ok(expr)
     }
 }

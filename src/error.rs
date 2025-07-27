@@ -54,7 +54,7 @@ impl fmt::Display for QangError {
 impl std::error::Error for QangError {}
 
 /// Collection of errors
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct QangErrors(pub Vec<QangError>);
 
 impl QangErrors {
@@ -79,7 +79,7 @@ impl QangErrors {
     }
 
     pub fn all(&self) -> &[QangError] {
-        return &self.0;
+        &self.0
     }
 
     pub fn take(&mut self) -> QangErrors {
@@ -142,7 +142,7 @@ impl<'a> ErrorReporter<'a> {
 
     /// Report an error at a specific token
     pub fn report_at_token(&mut self, kind: ErrorKind, message: String, token: Option<&Token>) {
-        let span = token.map(|t| SourceSpan::from_token(t)).unwrap_or_default();
+        let span = token.map(SourceSpan::from_token).unwrap_or_default();
         self.report(kind, message, span);
     }
 
@@ -272,7 +272,7 @@ impl<'a> ErrorReporter<'a> {
     }
 
     /// Convert accumulated errors into QangErrors for returning as a result
-    pub fn into_errors(&mut self) -> QangErrors {
+    pub fn take_errors(&mut self) -> QangErrors {
         self.errors.take()
     }
 }

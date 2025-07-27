@@ -1,8 +1,11 @@
+use std::collections::VecDeque;
+
 use phf::phf_map;
 
 use crate::SourceMap;
 
-#[derive(PartialEq, Clone, Debug, Eq, Hash)]
+#[derive(PartialEq, Clone, Debug, Copy)]
+#[repr(u8)]
 pub enum TokenType {
     EqualsEquals,       // ==
     Equals,             // =
@@ -56,16 +59,13 @@ pub enum TokenType {
     Try,                // try
     Catch,              // catch
     Finally,            // finalyy
-    Error(String),      // use when an error occurs during tokenization
+    Error,              // use when an error occurs during tokenization
     Eof,                // EoF
 }
 
 impl TokenType {
     pub fn from_keyword(keyword: &str) -> TokenType {
-        KEYWORDS
-            .get(keyword)
-            .unwrap_or(&TokenType::Identifier)
-            .clone()
+        *KEYWORDS.get(keyword).unwrap_or(&TokenType::Identifier)
     }
 }
 
@@ -98,6 +98,7 @@ pub struct Token {
     pub token_type: TokenType,
     pub start: usize,
     pub end: usize,
+    pub error_message: Option<String>,
 }
 
 impl Token {
@@ -122,6 +123,7 @@ pub struct Tokenizer<'a> {
     col: u32,
     location: usize,
     is_eof: bool,
+    lookahead_buffer: VecDeque<Token>,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -133,6 +135,83 @@ impl<'a> Tokenizer<'a> {
             col: 1,
             location: 0,
             is_eof: false,
+            lookahead_buffer: VecDeque::new(),
+        }
+    }
+
+    /// Peek at the nth token ahead (0 = next token, 1 = token after that, etc.)
+    pub fn peek_ahead(&mut self, n: usize) -> Option<&Token> {
+        // Fill buffer until we have enough tokens
+        while self.lookahead_buffer.len() <= n {
+            if let Some(token) = self.next_token() {
+                self.lookahead_buffer.push_back(token);
+            } else {
+                break;
+            }
+        }
+        self.lookahead_buffer.get(n)
+    }
+
+    /// Convenience method for peek (peek_ahead(0))
+    pub fn peek(&mut self) -> Option<&Token> {
+        self.peek_ahead(0)
+    }
+
+    /// Convenience method for peek_next (peek_ahead(1))
+    pub fn peek_next(&mut self) -> Option<&Token> {
+        self.peek_ahead(1)
+    }
+
+    fn next_token(&mut self) -> Option<Token> {
+        self.skip_whitespace();
+
+        if self.is_at_end() {
+            if self.is_eof {
+                return None;
+            } else {
+                self.is_eof = true;
+                return self.make_token(TokenType::Eof, 0);
+            }
+        }
+
+        let start = self.location;
+        let c = self.advance();
+
+        match c {
+            '(' => self.make_token(TokenType::LeftParen, start),
+            ')' => self.make_token(TokenType::RightParen, start),
+            '!' if self.match_char('=') => self.make_token(TokenType::BangEquals, start),
+            '!' => self.make_token(TokenType::Bang, start),
+            '<' if self.match_char('=') => self.make_token(TokenType::LessEquals, start),
+            '<' => self.make_token(TokenType::Less, start),
+            '>' if self.match_char('=') => self.make_token(TokenType::GreaterEquals, start),
+            '>' => self.make_token(TokenType::Greater, start),
+            '=' if self.match_char('=') => self.make_token(TokenType::EqualsEquals, start),
+            '=' => self.make_token(TokenType::Equals, start),
+            '-' if self.match_char('>') => self.make_token(TokenType::Arrow, start),
+            '-' => self.make_token(TokenType::Minus, start),
+            '*' => self.make_token(TokenType::Star, start),
+            '+' => self.make_token(TokenType::Plus, start),
+            '/' if self.match_char('/') => self.single_line_comment(),
+            '/' if self.match_char('*') => self.multi_line_comment(),
+            '/' => self.make_token(TokenType::Slash, start),
+            '%' => self.make_token(TokenType::Modulo, start),
+            '.' if self.match_char('?') => self.make_token(TokenType::OptionalChaining, start),
+            '.' if self.peek_char().is_ascii_digit() => self.number(),
+            '.' => self.make_token(TokenType::Dot, start),
+            ',' => self.make_token(TokenType::Comma, start),
+            ':' => self.make_token(TokenType::Colon, start),
+            '?' => self.make_token(TokenType::Question, start),
+            ';' => self.make_token(TokenType::Semicolon, start),
+            '{' => self.make_token(TokenType::LeftBrace, start),
+            '}' => self.make_token(TokenType::RightBrace, start),
+            '[' => self.make_token(TokenType::LeftSquareBracket, start),
+            ']' => self.make_token(TokenType::RightSquareBracket, start),
+            '"' => self.string(),
+            '|' if self.match_char('>') => self.make_token(TokenType::Pipe, start),
+            c if c.is_ascii_digit() => self.number(),
+            c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
+            _ => self.error_token(format!("Unexpected character: '{}'.", c).as_str()),
         }
     }
 
@@ -154,7 +233,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     // Peeks at the next character.
-    fn peek(&self) -> char {
+    fn peek_char(&self) -> char {
         if self.is_at_end() {
             '\0'
         } else {
@@ -163,7 +242,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Peeks at the character after the next.
-    fn peek_next(&self) -> char {
+    fn peek_next_char(&self) -> char {
         if self.location + 1 >= self.source_map.get_source().len() {
             '\0'
         } else {
@@ -174,7 +253,7 @@ impl<'a> Tokenizer<'a> {
     /// Moves the cursor through whitespace.
     fn skip_whitespace(&mut self) {
         loop {
-            match self.peek() {
+            match self.peek_char() {
                 ' ' | '\r' | '\t' => {
                     self.col += 1;
                     self.advance();
@@ -194,7 +273,7 @@ impl<'a> Tokenizer<'a> {
 
     /// Peeks at the next character. If it matches, advances the cursor.
     fn match_char(&mut self, expected: char) -> bool {
-        if self.is_at_end() || self.peek() != expected {
+        if self.is_at_end() || self.peek_char() != expected {
             false
         } else {
             self.location += expected.len_utf8();
@@ -211,15 +290,17 @@ impl<'a> Tokenizer<'a> {
             token_type,
             start,
             end,
+            error_message: None,
         })
     }
 
     /// Adds an error token for tokenization errors.
     fn error_token(&self, message: &str) -> Option<Token> {
         Some(Token {
-            token_type: TokenType::Error(message.to_string()),
+            token_type: TokenType::Error,
             start: self.location,
             end: self.location,
+            error_message: Some(message.to_string()),
         })
     }
 
@@ -227,11 +308,11 @@ impl<'a> Tokenizer<'a> {
     fn string(&mut self) -> Option<Token> {
         let start = self.location - 1;
 
-        while self.peek() != '"' && !self.is_at_end() {
-            if self.peek() == '\\' {
+        while self.peek_char() != '"' && !self.is_at_end() {
+            if self.peek_char() == '\\' {
                 self.advance_in_string(); // consume backslash
                 if !self.is_at_end() {
-                    let escaped = self.peek();
+                    let escaped = self.peek_char();
                     match escaped {
                         'n' | 't' | 'r' | '\\' | '"' | '\'' | '0' => {
                             self.advance_in_string(); // valid escape
@@ -274,15 +355,15 @@ impl<'a> Tokenizer<'a> {
     fn number(&mut self) -> Option<Token> {
         let start = self.location - 1; // Account for first digit
 
-        while self.peek().is_ascii_digit() {
+        while self.peek_char().is_ascii_digit() {
             self.advance();
         }
 
         // Look for fractional part
-        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
+        if self.peek_char() == '.' && self.peek_next_char().is_ascii_digit() {
             self.advance(); // Consume the '.'
 
-            while self.peek().is_ascii_digit() {
+            while self.peek_char().is_ascii_digit() {
                 self.advance();
             }
         }
@@ -294,7 +375,7 @@ impl<'a> Tokenizer<'a> {
     fn identifier(&mut self) -> Option<Token> {
         let start = self.location - 1;
 
-        while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
+        while self.peek_char().is_ascii_alphanumeric() || self.peek_char() == '_' {
             self.advance();
         }
 
@@ -310,7 +391,7 @@ impl<'a> Tokenizer<'a> {
     fn single_line_comment(&mut self) -> Option<Token> {
         let start = self.location - 2;
 
-        while self.peek() != '\n' && !self.is_at_end() {
+        while self.peek_char() != '\n' && !self.is_at_end() {
             self.advance();
         }
 
@@ -322,7 +403,7 @@ impl<'a> Tokenizer<'a> {
         let start = self.location - 2;
 
         while !self.is_at_end() {
-            if self.peek() == '*' && self.peek_next() == '/' {
+            if self.peek_char() == '*' && self.peek_next_char() == '/' {
                 self.advance(); // consume *
                 self.advance(); // consume /
                 break;
@@ -345,55 +426,10 @@ impl<'a> Iterator for Tokenizer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.skip_whitespace();
-
-        if self.is_at_end() {
-            if self.is_eof {
-                return None;
-            } else {
-                self.is_eof = true;
-                return self.make_token(TokenType::Eof, 0);
-            }
-        }
-
-        let start = self.location;
-        let c = self.advance();
-
-        match c {
-            '(' => self.make_token(TokenType::LeftParen, start),
-            ')' => self.make_token(TokenType::RightParen, start),
-            '!' if self.match_char('=') => self.make_token(TokenType::BangEquals, start),
-            '!' => self.make_token(TokenType::Bang, start),
-            '<' if self.match_char('=') => self.make_token(TokenType::LessEquals, start),
-            '<' => self.make_token(TokenType::Less, start),
-            '>' if self.match_char('=') => self.make_token(TokenType::GreaterEquals, start),
-            '>' => self.make_token(TokenType::Greater, start),
-            '=' if self.match_char('=') => self.make_token(TokenType::EqualsEquals, start),
-            '=' => self.make_token(TokenType::Equals, start),
-            '-' if self.match_char('>') => self.make_token(TokenType::Arrow, start),
-            '-' => self.make_token(TokenType::Minus, start),
-            '*' => self.make_token(TokenType::Star, start),
-            '+' => self.make_token(TokenType::Plus, start),
-            '/' if self.match_char('/') => self.single_line_comment(),
-            '/' if self.match_char('*') => self.multi_line_comment(),
-            '/' => self.make_token(TokenType::Slash, start),
-            '%' => self.make_token(TokenType::Modulo, start),
-            '.' if self.match_char('?') => self.make_token(TokenType::OptionalChaining, start),
-            '.' if self.peek().is_ascii_digit() => self.number(),
-            '.' => self.make_token(TokenType::Dot, start),
-            ',' => self.make_token(TokenType::Comma, start),
-            ':' => self.make_token(TokenType::Colon, start),
-            '?' => self.make_token(TokenType::Question, start),
-            ';' => self.make_token(TokenType::Semicolon, start),
-            '{' => self.make_token(TokenType::LeftBrace, start),
-            '}' => self.make_token(TokenType::RightBrace, start),
-            '[' => self.make_token(TokenType::LeftSquareBracket, start),
-            ']' => self.make_token(TokenType::RightSquareBracket, start),
-            '"' => self.string(),
-            '|' if self.match_char('>') => self.make_token(TokenType::Pipe, start),
-            c if c.is_ascii_digit() => self.number(),
-            c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
-            _ => self.error_token(format!("Unexpected character: '{}'.", c).as_str()),
+        if let Some(token) = self.lookahead_buffer.pop_front() {
+            Some(token)
+        } else {
+            self.next_token()
         }
     }
 }
@@ -517,7 +553,12 @@ mod tests {
         let tokens = tokenize_all(source_map);
         assert_eq!(tokens.len(), 2);
         match &tokens[0].token_type {
-            TokenType::Error(msg) => assert_eq!(msg, "Unterminated string."),
+            TokenType::Error => {
+                assert_eq!(
+                    tokens[0].error_message.as_ref().unwrap(),
+                    "Unterminated string."
+                )
+            }
             _ => panic!("Expected error token"),
         }
     }
@@ -730,7 +771,10 @@ mod tests {
         let tokens = tokenize_all(source_map);
         assert_eq!(tokens.len(), 2);
         match &tokens[0].token_type {
-            TokenType::Error(msg) => assert_eq!(msg, "Unexpected character: '@'."),
+            TokenType::Error => assert_eq!(
+                tokens[0].error_message.as_ref().unwrap(),
+                "Unexpected character: '@'."
+            ),
             _ => panic!("Expected error token"),
         }
     }
@@ -956,7 +1000,7 @@ mod tests {
 
         let error_token = tokens
             .iter()
-            .find(|t| matches!(t.token_type, TokenType::Error(_)));
+            .find(|t| matches!(t.token_type, TokenType::Error));
 
         if let Some(token) = error_token {
             let error_line: String = source_map.get_line(token.line(source_map)).iter().collect();
@@ -1006,14 +1050,14 @@ mod tests {
         let tokens = tokenize_all(source_map);
 
         println!("{:?}", tokens);
-        assert!(matches!(tokens[0].token_type, TokenType::Error(_)));
+        assert!(matches!(tokens[0].token_type, TokenType::Error));
     }
 
     #[test]
     fn test_unterminated_multiline_comment() {
         let source_map = &SourceMap::new("/* unterminated comment".to_string());
         let tokens = tokenize_all(source_map);
-        assert!(matches!(tokens[0].token_type, TokenType::Error(_)));
+        assert!(matches!(tokens[0].token_type, TokenType::Error));
     }
 
     #[test]
@@ -1192,5 +1236,370 @@ mod tests {
             TokenType::Eof,
         ];
         assert_token_types(source, &expected);
+    }
+
+    #[test]
+    fn test_peek_ahead_basic() {
+        let source_map = SourceMap::new("hello world 123".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        // Test peek_ahead without consuming
+        assert_eq!(
+            tokenizer.peek_ahead(0).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(1).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().token_type,
+            TokenType::Number
+        );
+        assert_eq!(tokenizer.peek_ahead(3).unwrap().token_type, TokenType::Eof);
+
+        // Verify we haven't consumed anything
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Identifier);
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Identifier);
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Number);
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_peek_ahead_out_of_bounds() {
+        let source_map = SourceMap::new("x".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        // Test peeking beyond available tokens
+        assert_eq!(
+            tokenizer.peek_ahead(0).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(tokenizer.peek_ahead(1).unwrap().token_type, TokenType::Eof);
+        assert!(tokenizer.peek_ahead(2).is_none());
+        assert!(tokenizer.peek_ahead(10).is_none());
+    }
+
+    #[test]
+    fn test_peek_convenience_methods() {
+        let source_map = SourceMap::new("a + b".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        // Test peek() and peek_next() convenience methods
+        assert_eq!(tokenizer.peek().unwrap().token_type, TokenType::Identifier);
+        assert_eq!(tokenizer.peek_next().unwrap().token_type, TokenType::Plus);
+
+        // Verify they're equivalent to peek_ahead
+        assert_eq!(
+            tokenizer.peek().unwrap().token_type.clone(),
+            tokenizer.peek_ahead(0).unwrap().token_type
+        );
+        assert_eq!(
+            tokenizer.peek_next().unwrap().token_type.clone(),
+            tokenizer.peek_ahead(1).unwrap().token_type
+        );
+    }
+
+    #[test]
+    fn test_mixed_peek_and_consume() {
+        let source_map = SourceMap::new("var x = 5;".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        // Peek ahead
+        assert_eq!(tokenizer.peek_ahead(0).unwrap().token_type, TokenType::Var);
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().token_type,
+            TokenType::Equals
+        );
+
+        // Consume one token
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Var);
+
+        // Peek should now show next tokens
+        assert_eq!(tokenizer.peek().unwrap().token_type, TokenType::Identifier);
+        assert_eq!(
+            tokenizer.peek_ahead(1).unwrap().token_type,
+            TokenType::Equals
+        );
+
+        // Consume the rest
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Identifier);
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Equals);
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Number);
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Semicolon);
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Eof);
+        assert!(tokenizer.next().is_none());
+    }
+
+    #[test]
+    fn test_iterator_consistency_with_buffer() {
+        let source_map = SourceMap::new("fn test() { return 42; }".to_string());
+        let tokenizer = Tokenizer::new(&source_map);
+
+        // Collect tokens using iterator
+        let tokens_via_iterator: Vec<Token> = tokenizer.collect();
+
+        // Reset and collect using peek_ahead
+        let mut tokenizer2 = Tokenizer::new(&source_map);
+        let mut tokens_via_peek = Vec::new();
+        let mut i = 0;
+        while let Some(token) = tokenizer2.peek_ahead(i) {
+            tokens_via_peek.push(token.clone());
+            i += 1;
+        }
+
+        // Should be identical
+        assert_eq!(tokens_via_iterator.len(), tokens_via_peek.len());
+        for (iter_token, peek_token) in tokens_via_iterator.iter().zip(tokens_via_peek.iter()) {
+            assert_eq!(iter_token.token_type, peek_token.token_type);
+            assert_eq!(iter_token.start, peek_token.start);
+            assert_eq!(iter_token.end, peek_token.end);
+        }
+    }
+
+    #[test]
+    fn test_lambda_detection_patterns() {
+        // Test empty lambda: () ->
+        let source_map = SourceMap::new("() -> 42".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        assert_eq!(
+            tokenizer.peek_ahead(0).unwrap().token_type,
+            TokenType::LeftParen
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(1).unwrap().token_type,
+            TokenType::RightParen
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().token_type,
+            TokenType::Arrow
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(3).unwrap().token_type,
+            TokenType::Number
+        );
+
+        // Test single param lambda: (x) ->
+        let source_map2 = SourceMap::new("(x) -> x + 1".to_string());
+        let mut tokenizer2 = Tokenizer::new(&source_map2);
+
+        assert_eq!(
+            tokenizer2.peek_ahead(0).unwrap().token_type,
+            TokenType::LeftParen
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(1).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(2).unwrap().token_type,
+            TokenType::RightParen
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(3).unwrap().token_type,
+            TokenType::Arrow
+        );
+
+        // Test multi param lambda: (a, b) ->
+        let source_map3 = SourceMap::new("(a, b) -> a + b".to_string());
+        let mut tokenizer3 = Tokenizer::new(&source_map3);
+
+        assert_eq!(
+            tokenizer3.peek_ahead(0).unwrap().token_type,
+            TokenType::LeftParen
+        );
+        assert_eq!(
+            tokenizer3.peek_ahead(1).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer3.peek_ahead(2).unwrap().token_type,
+            TokenType::Comma
+        );
+        assert_eq!(
+            tokenizer3.peek_ahead(3).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer3.peek_ahead(4).unwrap().token_type,
+            TokenType::RightParen
+        );
+        assert_eq!(
+            tokenizer3.peek_ahead(5).unwrap().token_type,
+            TokenType::Arrow
+        );
+    }
+
+    #[test]
+    fn test_distinguish_lambda_from_grouping() {
+        // Test grouping: (x + y)
+        let source_map = SourceMap::new("(x + y)".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        assert_eq!(
+            tokenizer.peek_ahead(0).unwrap().token_type,
+            TokenType::LeftParen
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(1).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(tokenizer.peek_ahead(2).unwrap().token_type, TokenType::Plus);
+        assert_eq!(
+            tokenizer.peek_ahead(3).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(4).unwrap().token_type,
+            TokenType::RightParen
+        );
+        // No arrow after closing paren
+        assert_eq!(tokenizer.peek_ahead(5).unwrap().token_type, TokenType::Eof);
+
+        // Test method call: func(x, y)
+        let source_map2 = SourceMap::new("func(x, y)".to_string());
+        let mut tokenizer2 = Tokenizer::new(&source_map2);
+
+        assert_eq!(
+            tokenizer2.peek_ahead(0).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(1).unwrap().token_type,
+            TokenType::LeftParen
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(2).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(3).unwrap().token_type,
+            TokenType::Comma
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(4).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer2.peek_ahead(5).unwrap().token_type,
+            TokenType::RightParen
+        );
+        // No arrow after closing paren
+        assert_eq!(tokenizer2.peek_ahead(6).unwrap().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_peek_ahead_with_complex_tokens() {
+        let source_map = SourceMap::new("\"hello world\" >= 123.45 != true".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        assert_eq!(
+            tokenizer.peek_ahead(0).unwrap().token_type,
+            TokenType::String
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(1).unwrap().token_type,
+            TokenType::GreaterEquals
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().token_type,
+            TokenType::Number
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(3).unwrap().token_type,
+            TokenType::BangEquals
+        );
+        assert_eq!(tokenizer.peek_ahead(4).unwrap().token_type, TokenType::True);
+        assert_eq!(tokenizer.peek_ahead(5).unwrap().token_type, TokenType::Eof);
+
+        // Verify lexemes are correct
+        assert_eq!(
+            tokenizer.peek_ahead(0).unwrap().lexeme(&source_map),
+            "\"hello world\""
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().lexeme(&source_map),
+            "123.45"
+        );
+    }
+
+    #[test]
+    fn test_peek_ahead_with_comments() {
+        let source_map = SourceMap::new("var x // comment\n= 5;".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        assert_eq!(tokenizer.peek_ahead(0).unwrap().token_type, TokenType::Var);
+        assert_eq!(
+            tokenizer.peek_ahead(1).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().token_type,
+            TokenType::Comment
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(3).unwrap().token_type,
+            TokenType::Equals
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(4).unwrap().token_type,
+            TokenType::Number
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(5).unwrap().token_type,
+            TokenType::Semicolon
+        );
+    }
+
+    #[test]
+    fn test_empty_source_peek_ahead() {
+        let source_map = SourceMap::new("".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        assert_eq!(tokenizer.peek_ahead(0).unwrap().token_type, TokenType::Eof);
+        assert!(tokenizer.peek_ahead(1).is_none());
+
+        // Iterator should also work correctly
+        assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Eof);
+        assert!(tokenizer.next().is_none());
+    }
+
+    #[test]
+    fn test_peek_ahead_buffer_reuse() {
+        let source_map = SourceMap::new("a b c d e".to_string());
+        let mut tokenizer = Tokenizer::new(&source_map);
+
+        // Peek far ahead multiple times
+        assert_eq!(
+            tokenizer.peek_ahead(4).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().token_type,
+            TokenType::Identifier
+        );
+        assert_eq!(
+            tokenizer.peek_ahead(4).unwrap().token_type,
+            TokenType::Identifier
+        );
+
+        // Consume some tokens
+        tokenizer.next(); // consume 'a'
+        tokenizer.next(); // consume 'b'
+
+        // Peek should still work correctly
+        assert_eq!(
+            tokenizer.peek_ahead(0).unwrap().token_type,
+            TokenType::Identifier
+        ); // 'c'
+        assert_eq!(
+            tokenizer.peek_ahead(1).unwrap().token_type,
+            TokenType::Identifier
+        ); // 'd'
+        assert_eq!(
+            tokenizer.peek_ahead(2).unwrap().token_type,
+            TokenType::Identifier
+        ); // 'e'
     }
 }

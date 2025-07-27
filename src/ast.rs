@@ -30,35 +30,35 @@ impl SourceSpan {
 /// Root AST node representing a complete program
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub decls: Vec<Declaration>,
+    pub decls: Vec<Decl>,
     pub span: SourceSpan,
 }
 
 /// Top-level declarations in the program
 #[derive(Debug, Clone, PartialEq)]
-pub enum Declaration {
-    Class(ClassDeclaration),
-    Function(FunctionDeclaration),
-    Lambda(LambdaDeclaration),
-    Variable(VariableDeclaration),
-    Statement(Statement),
+pub enum Decl {
+    Class(ClassDecl),
+    Function(FunctionDecl),
+    Lambda(LambdaDecl),
+    Variable(VariableDecl),
+    Stmt(Stmt),
 }
 
-impl Declaration {
+impl Decl {
     pub fn span(&self) -> &SourceSpan {
         match self {
-            Declaration::Class(decl) => &decl.span,
-            Declaration::Function(decl) => &decl.span,
-            Declaration::Lambda(decl) => &decl.span,
-            Declaration::Variable(decl) => &decl.span,
-            Declaration::Statement(stmt) => stmt.span(),
+            Decl::Class(decl) => &decl.span,
+            Decl::Function(decl) => &decl.span,
+            Decl::Lambda(decl) => &decl.span,
+            Decl::Variable(decl) => &decl.span,
+            Decl::Stmt(stmt) => stmt.span(),
         }
     }
 }
 
 /// Class declaration: class IDENTIFIER ( : IDENTIFIER )? { classMember* }
 #[derive(Debug, Clone, PartialEq)]
-pub struct ClassDeclaration {
+pub struct ClassDecl {
     pub name: Identifier,
     pub superclass: Option<Identifier>,
     pub members: Vec<ClassMember>,
@@ -68,8 +68,8 @@ pub struct ClassDeclaration {
 /// Members that can appear inside a class
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClassMember {
-    Method(FunctionExpression),
-    Field(FieldDeclaration),
+    Method(FunctionExpr),
+    Field(FieldDecl),
 }
 
 impl ClassMember {
@@ -83,39 +83,39 @@ impl ClassMember {
 
 /// Field declaration: IDENTIFIER ( = expression )? ;
 #[derive(Debug, Clone, PartialEq)]
-pub struct FieldDeclaration {
+pub struct FieldDecl {
     pub name: Identifier,
-    pub initializer: Option<Expression>,
+    pub initializer: Option<Expr>,
     pub span: SourceSpan,
 }
 
 /// Function declaration: fn function
 #[derive(Debug, Clone, PartialEq)]
-pub struct FunctionDeclaration {
-    pub function: FunctionExpression,
+pub struct FunctionDecl {
+    pub function: FunctionExpr,
     pub span: SourceSpan,
 }
 
 /// Function expression: IDENTIFIER ( parameters? ) block
 #[derive(Debug, Clone, PartialEq)]
-pub struct FunctionExpression {
+pub struct FunctionExpr {
     pub name: Identifier,
     pub parameters: Vec<Identifier>,
-    pub body: BlockStatement,
+    pub body: BlockStmt,
     pub span: SourceSpan,
 }
 
 /// Lambda declaration: var IDENTIFIER = lambda
 #[derive(Debug, Clone, PartialEq)]
-pub struct LambdaDeclaration {
+pub struct LambdaDecl {
     pub name: Identifier,
-    pub lambda: LambdaExpression,
+    pub lambda: LambdaExpr,
     pub span: SourceSpan,
 }
 
 /// Lambda expression: ( parameters? ) -> ( block | expression )
 #[derive(Debug, Clone, PartialEq)]
-pub struct LambdaExpression {
+pub struct LambdaExpr {
     pub parameters: Vec<Identifier>,
     pub body: Box<LambdaBody>,
     pub span: SourceSpan,
@@ -124,148 +124,148 @@ pub struct LambdaExpression {
 /// Body of a lambda can be either a block or a single expression
 #[derive(Debug, Clone, PartialEq)]
 pub enum LambdaBody {
-    Block(BlockStatement),
-    Expression(Box<Expression>),
+    Block(BlockStmt),
+    Expr(Box<Expr>),
 }
 
 impl LambdaBody {
     pub fn span(&self) -> SourceSpan {
         match self {
             LambdaBody::Block(block) => block.span,
-            LambdaBody::Expression(expr) => expr.span(),
+            LambdaBody::Expr(expr) => expr.span(),
         }
     }
 }
 
 /// Variable declaration: var IDENTIFIER ( = expression )? ;
 #[derive(Debug, Clone, PartialEq)]
-pub struct VariableDeclaration {
+pub struct VariableDecl {
     pub name: Identifier,
-    pub initializer: Option<Expression>,
+    pub initializer: Option<Expr>,
     pub span: SourceSpan,
 }
 
 /// All possible statements
 #[derive(Debug, Clone, PartialEq)]
-pub enum Statement {
-    Expression(ExpressionStatement),
-    Block(BlockStatement),
-    If(IfStatement),
-    While(WhileStatement),
-    For(ForStatement),
-    Break(BreakStatement),
-    Continue(ContinueStatement),
-    Return(ReturnStatement),
-    Throw(ThrowStatement),
-    Try(TryStatement),
+pub enum Stmt {
+    Expr(ExprStmt),
+    Block(BlockStmt),
+    If(IfStmt),
+    While(WhileStmt),
+    For(ForStmt),
+    Break(BreakStmt),
+    Continue(ContinueStmt),
+    Return(ReturnStmt),
+    Throw(ThrowStmt),
+    Try(TryStmt),
 }
 
-impl Statement {
+impl Stmt {
     pub fn span(&self) -> &SourceSpan {
         match self {
-            Statement::Expression(stmt) => &stmt.span,
-            Statement::Block(stmt) => &stmt.span,
-            Statement::If(stmt) => &stmt.span,
-            Statement::While(stmt) => &stmt.span,
-            Statement::For(stmt) => &stmt.span,
-            Statement::Break(stmt) => &stmt.span,
-            Statement::Continue(stmt) => &stmt.span,
-            Statement::Return(stmt) => &stmt.span,
-            Statement::Throw(stmt) => &stmt.span,
-            Statement::Try(stmt) => &stmt.span,
+            Stmt::Expr(stmt) => &stmt.span,
+            Stmt::Block(stmt) => &stmt.span,
+            Stmt::If(stmt) => &stmt.span,
+            Stmt::While(stmt) => &stmt.span,
+            Stmt::For(stmt) => &stmt.span,
+            Stmt::Break(stmt) => &stmt.span,
+            Stmt::Continue(stmt) => &stmt.span,
+            Stmt::Return(stmt) => &stmt.span,
+            Stmt::Throw(stmt) => &stmt.span,
+            Stmt::Try(stmt) => &stmt.span,
         }
     }
 }
 
 /// Expression statement: expression ;
 #[derive(Debug, Clone, PartialEq)]
-pub struct ExpressionStatement {
-    pub expr: Expression,
+pub struct ExprStmt {
+    pub expr: Expr,
     pub span: SourceSpan,
 }
 
 /// Block statement: { declaration* }
 #[derive(Debug, Clone, PartialEq)]
-pub struct BlockStatement {
-    pub decls: Vec<Declaration>,
+pub struct BlockStmt {
+    pub decls: Vec<Decl>,
     pub span: SourceSpan,
 }
 
 /// If statement: if ( expression ) statement ( else statement )?
 #[derive(Debug, Clone, PartialEq)]
-pub struct IfStatement {
-    pub condition: Expression,
-    pub then_branch: Box<Statement>,
-    pub else_branch: Option<Box<Statement>>,
+pub struct IfStmt {
+    pub condition: Expr,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
     pub span: SourceSpan,
 }
 
 /// While statement: while ( expression ) statement
 #[derive(Debug, Clone, PartialEq)]
-pub struct WhileStatement {
-    pub condition: Expression,
-    pub body: Box<Statement>,
+pub struct WhileStmt {
+    pub condition: Expr,
+    pub body: Box<Stmt>,
     pub span: SourceSpan,
 }
 
 /// For statement: for ( ( varDecl | exprStmt | ; ) expression? ; expression? ) statement
 #[derive(Debug, Clone, PartialEq)]
-pub struct ForStatement {
+pub struct ForStmt {
     pub initializer: Option<ForInitializer>,
-    pub condition: Option<Expression>,
-    pub increment: Option<Expression>,
-    pub body: Box<Statement>,
+    pub condition: Option<Expr>,
+    pub increment: Option<Expr>,
+    pub body: Box<Stmt>,
     pub span: SourceSpan,
 }
 
 /// Initializer for a for loop
 #[derive(Debug, Clone, PartialEq)]
 pub enum ForInitializer {
-    Variable(VariableDeclaration),
-    Expression(Expression),
+    Variable(VariableDecl),
+    Expr(Expr),
 }
 
 impl ForInitializer {
     pub fn span(&self) -> SourceSpan {
         match self {
             ForInitializer::Variable(var) => var.span,
-            ForInitializer::Expression(expr) => expr.span(),
+            ForInitializer::Expr(expr) => expr.span(),
         }
     }
 }
 
 /// Break statement: break ;
 #[derive(Debug, Clone, PartialEq)]
-pub struct BreakStatement {
+pub struct BreakStmt {
     pub span: SourceSpan,
 }
 
 /// Continue statement: continue ;
 #[derive(Debug, Clone, PartialEq)]
-pub struct ContinueStatement {
+pub struct ContinueStmt {
     pub span: SourceSpan,
 }
 
 /// Return statement: return expression? ;
 #[derive(Debug, Clone, PartialEq)]
-pub struct ReturnStatement {
-    pub value: Option<Expression>,
+pub struct ReturnStmt {
+    pub value: Option<Expr>,
     pub span: SourceSpan,
 }
 
 /// Throw statement: throw expression? ;
 #[derive(Debug, Clone, PartialEq)]
-pub struct ThrowStatement {
-    pub value: Option<Expression>,
+pub struct ThrowStmt {
+    pub value: Option<Expr>,
     pub span: SourceSpan,
 }
 
 /// Try statement: try block catchFinally
 #[derive(Debug, Clone, PartialEq)]
-pub struct TryStatement {
-    pub try_block: BlockStatement,
+pub struct TryStmt {
+    pub try_block: BlockStmt,
     pub catch_clause: Option<CatchClause>,
-    pub finally_block: Option<BlockStatement>,
+    pub finally_block: Option<BlockStmt>,
     pub span: SourceSpan,
 }
 
@@ -273,51 +273,51 @@ pub struct TryStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CatchClause {
     pub parameter: Option<Identifier>,
-    pub body: BlockStatement,
+    pub body: BlockStmt,
     pub span: SourceSpan,
 }
 
 /// All possible expressions
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
-    Assignment(AssignmentExpression),
-    Pipe(PipeExpression),
-    Ternary(TernaryExpression),
-    LogicalOr(LogicalOrExpression),
-    LogicalAnd(LogicalAndExpression),
-    Equality(EqualityExpression),
-    Comparison(ComparisonExpression),
-    Term(TermExpression),
-    Factor(FactorExpression),
-    Unary(UnaryExpression),
-    Call(CallExpression),
-    Primary(PrimaryExpression),
+pub enum Expr {
+    Assignment(AssignmentExpr),
+    Pipe(PipeExpr),
+    Ternary(TernaryExpr),
+    LogicalOr(LogicalOrExpr),
+    LogicalAnd(LogicalAndExpr),
+    Equality(EqualityExpr),
+    Comparison(ComparisonExpr),
+    Term(TermExpr),
+    Factor(FactorExpr),
+    Unary(UnaryExpr),
+    Call(CallExpr),
+    Primary(PrimaryExpr),
 }
 
-impl Expression {
+impl Expr {
     pub fn span(&self) -> SourceSpan {
         match self {
-            Expression::Assignment(expr) => expr.span,
-            Expression::Pipe(expr) => expr.span,
-            Expression::Ternary(expr) => expr.span,
-            Expression::LogicalOr(expr) => expr.span,
-            Expression::LogicalAnd(expr) => expr.span,
-            Expression::Equality(expr) => expr.span,
-            Expression::Comparison(expr) => expr.span,
-            Expression::Term(expr) => expr.span,
-            Expression::Factor(expr) => expr.span,
-            Expression::Unary(expr) => expr.span,
-            Expression::Call(expr) => expr.span,
-            Expression::Primary(expr) => expr.span(),
+            Expr::Assignment(expr) => expr.span,
+            Expr::Pipe(expr) => expr.span,
+            Expr::Ternary(expr) => expr.span,
+            Expr::LogicalOr(expr) => expr.span,
+            Expr::LogicalAnd(expr) => expr.span,
+            Expr::Equality(expr) => expr.span,
+            Expr::Comparison(expr) => expr.span,
+            Expr::Term(expr) => expr.span,
+            Expr::Factor(expr) => expr.span,
+            Expr::Unary(expr) => expr.span,
+            Expr::Call(expr) => expr.span,
+            Expr::Primary(expr) => expr.span(),
         }
     }
 }
 
 /// Assignment expression: ( call . IDENTIFIER | IDENTIFIER ) = assignment | pipe
 #[derive(Debug, Clone, PartialEq)]
-pub struct AssignmentExpression {
+pub struct AssignmentExpr {
     pub target: AssignmentTarget,
-    pub value: Box<Expression>,
+    pub value: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -340,50 +340,50 @@ impl AssignmentTarget {
 /// Property access for assignment: call . IDENTIFIER
 #[derive(Debug, Clone, PartialEq)]
 pub struct PropertyAccess {
-    pub object: Box<Expression>,
+    pub object: Box<Expr>,
     pub property: Identifier,
     pub span: SourceSpan,
 }
 
 /// Pipe expression: ternary ( |> pipe )?
 #[derive(Debug, Clone, PartialEq)]
-pub struct PipeExpression {
-    pub left: Box<Expression>,
-    pub right: Option<Box<Expression>>,
+pub struct PipeExpr {
+    pub left: Box<Expr>,
+    pub right: Option<Box<Expr>>,
     pub span: SourceSpan,
 }
 
 /// Ternary expression: logicOr ( ? expression : ternary )?
 #[derive(Debug, Clone, PartialEq)]
-pub struct TernaryExpression {
-    pub condition: Box<Expression>,
-    pub then_expr: Option<Box<Expression>>,
-    pub else_expr: Option<Box<Expression>>,
+pub struct TernaryExpr {
+    pub condition: Box<Expr>,
+    pub then_expr: Option<Box<Expr>>,
+    pub else_expr: Option<Box<Expr>>,
     pub span: SourceSpan,
 }
 
 /// Logical OR expression: logicAnd ( or logicAnd )*
 #[derive(Debug, Clone, PartialEq)]
-pub struct LogicalOrExpression {
-    pub left: Box<Expression>,
-    pub right: Box<Expression>,
+pub struct LogicalOrExpr {
+    pub left: Box<Expr>,
+    pub right: Box<Expr>,
     pub span: SourceSpan,
 }
 
 /// Logical AND expression: equality ( and equality )*
 #[derive(Debug, Clone, PartialEq)]
-pub struct LogicalAndExpression {
-    pub left: Box<Expression>,
-    pub right: Box<Expression>,
+pub struct LogicalAndExpr {
+    pub left: Box<Expr>,
+    pub right: Box<Expr>,
     pub span: SourceSpan,
 }
 
 /// Equality expression: comparison ( ( != | == ) comparison )*
 #[derive(Debug, Clone, PartialEq)]
-pub struct EqualityExpression {
-    pub left: Box<Expression>,
+pub struct EqualityExpr {
+    pub left: Box<Expr>,
     pub operator: EqualityOperator,
-    pub right: Box<Expression>,
+    pub right: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -396,10 +396,10 @@ pub enum EqualityOperator {
 
 /// Comparison expression: term ( ( > | >= | < | <= ) term )*
 #[derive(Debug, Clone, PartialEq)]
-pub struct ComparisonExpression {
-    pub left: Box<Expression>,
+pub struct ComparisonExpr {
+    pub left: Box<Expr>,
     pub operator: ComparisonOperator,
-    pub right: Box<Expression>,
+    pub right: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -414,10 +414,10 @@ pub enum ComparisonOperator {
 
 /// Term expression: factor ( ( + | - ) factor )*
 #[derive(Debug, Clone, PartialEq)]
-pub struct TermExpression {
-    pub left: Box<Expression>,
+pub struct TermExpr {
+    pub left: Box<Expr>,
     pub operator: TermOperator,
-    pub right: Box<Expression>,
+    pub right: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -430,10 +430,10 @@ pub enum TermOperator {
 
 /// Factor expression: unary ( ( / | * | % ) unary )*
 #[derive(Debug, Clone, PartialEq)]
-pub struct FactorExpression {
-    pub left: Box<Expression>,
+pub struct FactorExpr {
+    pub left: Box<Expr>,
     pub operator: FactorOperator,
-    pub right: Box<Expression>,
+    pub right: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -447,9 +447,9 @@ pub enum FactorOperator {
 
 /// Unary expression: ( - | ! ) unary | call
 #[derive(Debug, Clone, PartialEq)]
-pub struct UnaryExpression {
+pub struct UnaryExpr {
     pub operator: UnaryOperator,
-    pub operand: Box<Expression>,
+    pub operand: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -462,8 +462,8 @@ pub enum UnaryOperator {
 
 /// Call expression: primary ( ( arguments? ) | . IDENTIFIER | .? IDENTIFIER | [ expression ] )*
 #[derive(Debug, Clone, PartialEq)]
-pub struct CallExpression {
-    pub callee: Box<Expression>,
+pub struct CallExpr {
+    pub callee: Box<Expr>,
     pub operations: Vec<CallOperation>,
     pub span: SourceSpan,
 }
@@ -471,10 +471,10 @@ pub struct CallExpression {
 /// Operations that can be chained on a call expression
 #[derive(Debug, Clone, PartialEq)]
 pub enum CallOperation {
-    Call(Vec<Expression>),        // ( arguments? )
+    Call(Vec<Expr>),              // ( arguments? )
     Property(Identifier),         // . IDENTIFIER
     OptionalProperty(Identifier), // .? IDENTIFIER
-    Index(Expression),            // [ expression ]
+    Index(Expr),                  // [ expression ]
 }
 
 impl CallOperation {
@@ -488,41 +488,41 @@ impl CallOperation {
                     SourceSpan::combine(args[0].span(), args[args.len() - 1].span())
                 }
             }
-            CallOperation::Property(id) => id.span.clone(),
-            CallOperation::OptionalProperty(id) => id.span.clone(),
-            CallOperation::Index(expr) => expr.span().clone(),
+            CallOperation::Property(id) => id.span,
+            CallOperation::OptionalProperty(id) => id.span,
+            CallOperation::Index(expr) => expr.span(),
         }
     }
 }
 
 /// Primary expressions
 #[derive(Debug, Clone, PartialEq)]
-pub enum PrimaryExpression {
+pub enum PrimaryExpr {
     Number(NumberLiteral),
     String(StringLiteral),
     Boolean(BooleanLiteral),
     Nil(NilLiteral),
-    This(ThisExpression),
-    Super(SuperExpression),
+    This(ThisExpr),
+    Super(SuperExpr),
     Identifier(Identifier),
-    Grouping(GroupingExpression),
-    Lambda(Box<LambdaExpression>),
+    Grouping(GroupingExpr),
+    Lambda(Box<LambdaExpr>),
     Array(ArrayLiteral),
 }
 
-impl PrimaryExpression {
+impl PrimaryExpr {
     pub fn span(&self) -> SourceSpan {
         match self {
-            PrimaryExpression::Number(lit) => lit.span,
-            PrimaryExpression::String(lit) => lit.span,
-            PrimaryExpression::Boolean(lit) => lit.span,
-            PrimaryExpression::Nil(lit) => lit.span,
-            PrimaryExpression::This(expr) => expr.span,
-            PrimaryExpression::Super(expr) => expr.span(),
-            PrimaryExpression::Identifier(id) => id.span,
-            PrimaryExpression::Grouping(expr) => expr.span,
-            PrimaryExpression::Lambda(lambda) => lambda.span,
-            PrimaryExpression::Array(array) => array.span,
+            PrimaryExpr::Number(lit) => lit.span,
+            PrimaryExpr::String(lit) => lit.span,
+            PrimaryExpr::Boolean(lit) => lit.span,
+            PrimaryExpr::Nil(lit) => lit.span,
+            PrimaryExpr::This(expr) => expr.span,
+            PrimaryExpr::Super(expr) => expr.span,
+            PrimaryExpr::Identifier(id) => id.span,
+            PrimaryExpr::Grouping(expr) => expr.span,
+            PrimaryExpr::Lambda(lambda) => lambda.span,
+            PrimaryExpr::Array(array) => array.span,
         }
     }
 }
@@ -556,26 +556,14 @@ pub struct NilLiteral {
 
 /// This expression
 #[derive(Debug, Clone, PartialEq)]
-pub struct ThisExpression {
+pub struct ThisExpr {
     pub span: SourceSpan,
 }
 
-/// Super expression: "super" | "super" "." IDENTIFIER
+/// Super expression: "super"
 #[derive(Debug, Clone, PartialEq)]
-pub enum SuperExpression {
-    /// Just "super" (for constructor calls)
-    Constructor(SuperConstructor),
-    /// "super.method" (for method calls)  
-    Method(SuperMethod),
-}
-
-impl SuperExpression {
-    pub fn span(&self) -> SourceSpan {
-        match self {
-            SuperExpression::Constructor(sup) => sup.span,
-            SuperExpression::Method(sup) => sup.span,
-        }
-    }
+pub struct SuperExpr {
+    pub span: SourceSpan,
 }
 
 /// Super constructor call: "super"
@@ -600,21 +588,21 @@ pub struct Identifier {
 
 /// Grouping expression: ( expression )
 #[derive(Debug, Clone, PartialEq)]
-pub struct GroupingExpression {
-    pub expr: Box<Expression>,
+pub struct GroupingExpr {
+    pub expr: Box<Expr>,
     pub span: SourceSpan,
 }
 
 /// Array literal: [ ( expression ( , expression )* )? ]
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrayLiteral {
-    pub elements: Vec<Expression>,
+    pub elements: Vec<Expr>,
     pub span: SourceSpan,
 }
 
 /// Utility functions for working with the AST
 impl Program {
-    pub fn new(decls: Vec<Declaration>, span: SourceSpan) -> Self {
+    pub fn new(decls: Vec<Decl>, span: SourceSpan) -> Self {
         Self { decls, span }
     }
 }

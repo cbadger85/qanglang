@@ -1,7 +1,7 @@
 use crate::tokenizer::Token;
 
 /// Represents a position in the source code for error reporting and debugging
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Copy)]
 pub struct SourceSpan {
     pub start: usize,
     pub end: usize,
@@ -19,7 +19,7 @@ impl SourceSpan {
         }
     }
 
-    pub fn combine(start: &SourceSpan, end: &SourceSpan) -> Self {
+    pub fn combine(start: SourceSpan, end: SourceSpan) -> Self {
         Self {
             start: start.start,
             end: end.end,
@@ -129,9 +129,9 @@ pub enum LambdaBody {
 }
 
 impl LambdaBody {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            LambdaBody::Block(block) => &block.span,
+            LambdaBody::Block(block) => block.span,
             LambdaBody::Expression(expr) => expr.span(),
         }
     }
@@ -226,9 +226,9 @@ pub enum ForInitializer {
 }
 
 impl ForInitializer {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            ForInitializer::Variable(var) => &var.span,
+            ForInitializer::Variable(var) => var.span,
             ForInitializer::Expression(expr) => expr.span(),
         }
     }
@@ -295,19 +295,19 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            Expression::Assignment(expr) => &expr.span,
-            Expression::Pipe(expr) => &expr.span,
-            Expression::Ternary(expr) => &expr.span,
-            Expression::LogicalOr(expr) => &expr.span,
-            Expression::LogicalAnd(expr) => &expr.span,
-            Expression::Equality(expr) => &expr.span,
-            Expression::Comparison(expr) => &expr.span,
-            Expression::Term(expr) => &expr.span,
-            Expression::Factor(expr) => &expr.span,
-            Expression::Unary(expr) => &expr.span,
-            Expression::Call(expr) => &expr.span,
+            Expression::Assignment(expr) => expr.span,
+            Expression::Pipe(expr) => expr.span,
+            Expression::Ternary(expr) => expr.span,
+            Expression::LogicalOr(expr) => expr.span,
+            Expression::LogicalAnd(expr) => expr.span,
+            Expression::Equality(expr) => expr.span,
+            Expression::Comparison(expr) => expr.span,
+            Expression::Term(expr) => expr.span,
+            Expression::Factor(expr) => expr.span,
+            Expression::Unary(expr) => expr.span,
+            Expression::Call(expr) => expr.span,
             Expression::Primary(expr) => expr.span(),
         }
     }
@@ -366,7 +366,7 @@ pub struct TernaryExpression {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LogicalOrExpression {
     pub left: Box<Expression>,
-    pub right: Vec<Expression>,
+    pub right: Box<Expression>,
     pub span: SourceSpan,
 }
 
@@ -374,7 +374,7 @@ pub struct LogicalOrExpression {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LogicalAndExpression {
     pub left: Box<Expression>,
-    pub right: Vec<Expression>,
+    pub right: Box<Expression>,
     pub span: SourceSpan,
 }
 
@@ -382,7 +382,8 @@ pub struct LogicalAndExpression {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EqualityExpression {
     pub left: Box<Expression>,
-    pub operations: Vec<(EqualityOperator, Expression)>,
+    pub operator: EqualityOperator,
+    pub right: Box<Expression>,
     pub span: SourceSpan,
 }
 
@@ -397,7 +398,8 @@ pub enum EqualityOperator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComparisonExpression {
     pub left: Box<Expression>,
-    pub operations: Vec<(ComparisonOperator, Expression)>,
+    pub operator: ComparisonOperator,
+    pub right: Box<Expression>,
     pub span: SourceSpan,
 }
 
@@ -414,7 +416,8 @@ pub enum ComparisonOperator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TermExpression {
     pub left: Box<Expression>,
-    pub operations: Vec<(TermOperator, Expression)>,
+    pub operator: TermOperator,
+    pub right: Box<Expression>,
     pub span: SourceSpan,
 }
 
@@ -429,7 +432,8 @@ pub enum TermOperator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FactorExpression {
     pub left: Box<Expression>,
-    pub operations: Vec<(FactorOperator, Expression)>,
+    pub operator: FactorOperator,
+    pub right: Box<Expression>,
     pub span: SourceSpan,
 }
 
@@ -507,18 +511,18 @@ pub enum PrimaryExpression {
 }
 
 impl PrimaryExpression {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            PrimaryExpression::Number(lit) => &lit.span,
-            PrimaryExpression::String(lit) => &lit.span,
-            PrimaryExpression::Boolean(lit) => &lit.span,
-            PrimaryExpression::Nil(lit) => &lit.span,
-            PrimaryExpression::This(expr) => &expr.span,
-            PrimaryExpression::Super(expr) => &expr.span(),
-            PrimaryExpression::Identifier(id) => &id.span,
-            PrimaryExpression::Grouping(expr) => &expr.span,
-            PrimaryExpression::Lambda(lambda) => &lambda.span,
-            PrimaryExpression::Array(array) => &array.span,
+            PrimaryExpression::Number(lit) => lit.span,
+            PrimaryExpression::String(lit) => lit.span,
+            PrimaryExpression::Boolean(lit) => lit.span,
+            PrimaryExpression::Nil(lit) => lit.span,
+            PrimaryExpression::This(expr) => expr.span,
+            PrimaryExpression::Super(expr) => expr.span(),
+            PrimaryExpression::Identifier(id) => id.span,
+            PrimaryExpression::Grouping(expr) => expr.span,
+            PrimaryExpression::Lambda(lambda) => lambda.span,
+            PrimaryExpression::Array(array) => array.span,
         }
     }
 }
@@ -566,10 +570,10 @@ pub enum SuperExpression {
 }
 
 impl SuperExpression {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            SuperExpression::Constructor(sup) => &sup.span,
-            SuperExpression::Method(sup) => &sup.span,
+            SuperExpression::Constructor(sup) => sup.span,
+            SuperExpression::Method(sup) => sup.span,
         }
     }
 }

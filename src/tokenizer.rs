@@ -1,6 +1,6 @@
 use phf::phf_map;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug, Eq, Hash)]
 pub enum TokenType {
     EqualsEquals,       // ==
     Equals,             // =

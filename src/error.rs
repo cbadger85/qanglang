@@ -5,14 +5,14 @@ use std::fmt;
 /// Represents different types of errors that can occur during language processing
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorKind {
-    Parse,
+    Syntax,
     Runtime,
 }
 
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::Parse => write!(f, "Parse Error"),
+            ErrorKind::Syntax => write!(f, "Syntax Error"),
             ErrorKind::Runtime => write!(f, "Runtime Error"),
         }
     }
@@ -35,12 +35,12 @@ impl QangError {
         }
     }
 
-    pub fn parse_error(message: String, span: SourceSpan) -> Self {
-        Self::new(ErrorKind::Parse, message, span)
+    pub fn parse_error(message: &str, span: SourceSpan) -> Self {
+        Self::new(ErrorKind::Syntax, message.to_string(), span)
     }
 
-    pub fn runtime_error(message: String, span: SourceSpan) -> Self {
-        Self::new(ErrorKind::Runtime, message, span)
+    pub fn runtime_error(message: &str, span: SourceSpan) -> Self {
+        Self::new(ErrorKind::Runtime, message.to_string(), span)
     }
 }
 
@@ -122,13 +122,13 @@ impl<'a> ErrorReporter<'a> {
     }
 
     /// Report a parse error
-    pub fn report_parse_error(&mut self, message: String, span: SourceSpan) {
+    pub fn report_parse_error(&mut self, message: &str, span: SourceSpan) {
         let error = QangError::parse_error(message, span);
         self.report_error(error);
     }
 
     /// Report a runtime error
-    pub fn report_runtime_error(&mut self, message: String, span: SourceSpan) {
+    pub fn report_runtime_error(&mut self, message: &str, span: SourceSpan) {
         let error = QangError::runtime_error(message, span);
         self.report_error(error);
     }
@@ -207,7 +207,7 @@ impl<'a> ErrorReporter<'a> {
 
         // Add additional context for runtime errors (e.g., call stack)
         if error.kind == ErrorKind::Runtime {
-            // TODO This could be extended to show call stack information
+            // TODO This should also hold a stack trace.
             output.push_str(&format!(
                 " {} | Note: Error occurred during execution\n",
                 padding
@@ -289,7 +289,7 @@ mod tests {
 
         // Report an error
         reporter.report(
-            ErrorKind::Parse,
+            ErrorKind::Syntax,
             "Expected expression after '+'".to_string(),
             SourceSpan::new(11, 11),
         );
@@ -298,7 +298,7 @@ mod tests {
         assert_eq!(reporter.error_count(), 1);
 
         let output = reporter.format_errors();
-        assert!(output.contains("Parse Error at line 1, column 12"));
+        assert!(output.contains("Syntax Error at line 1, column 12"));
         assert!(output.contains("var x = 5 +"));
         assert!(output.contains("^"));
     }
@@ -311,13 +311,13 @@ mod tests {
 
         // Report multiple errors
         reporter.report(
-            ErrorKind::Parse,
+            ErrorKind::Syntax,
             "Missing operand after '+'".to_string(),
             SourceSpan::new(11, 11),
         );
 
         reporter.report(
-            ErrorKind::Parse,
+            ErrorKind::Syntax,
             "Missing operand after '*'".to_string(),
             SourceSpan::new(23, 23),
         );
@@ -336,7 +336,7 @@ mod tests {
 
         // Error spanning the invalid identifier
         reporter.report(
-            ErrorKind::Parse,
+            ErrorKind::Syntax,
             "Invalid identifier name".to_string(),
             SourceSpan::new(4, 24), // "invalidIdentifier123!"
         );
@@ -353,7 +353,7 @@ mod tests {
 
         // Simulate a tokenizer error
         reporter.report(
-            ErrorKind::Parse,
+            ErrorKind::Syntax,
             "Unterminated string".to_string(),
             SourceSpan::new(8, 28),
         );
@@ -379,7 +379,7 @@ mod tests {
         let source_map = SourceMap::new(source.to_string());
         let mut reporter = ErrorReporter::new(&source_map);
 
-        reporter.report_parse_error("Parse error 1".to_string(), SourceSpan::new(0, 3));
+        reporter.report_parse_error("Syntax error 1", SourceSpan::new(0, 3));
 
         let summary = reporter.error_summary();
         assert!(summary.contains("Found 1 error."));
@@ -391,8 +391,8 @@ mod tests {
         let source_map = SourceMap::new(source.to_string());
         let mut reporter = ErrorReporter::new(&source_map);
 
-        reporter.report_parse_error("Parse error 1".to_string(), SourceSpan::new(0, 3));
-        reporter.report_parse_error("Parse error 2".to_string(), SourceSpan::new(4, 5));
+        reporter.report_parse_error("Syntax error 1", SourceSpan::new(0, 3));
+        reporter.report_parse_error("Syntax error 2", SourceSpan::new(4, 5));
 
         let summary = reporter.error_summary();
         assert!(summary.contains("Found 2 errors."));
@@ -404,10 +404,7 @@ mod tests {
         let source_map = SourceMap::new(source.to_string());
         let mut reporter = ErrorReporter::new(&source_map);
 
-        reporter.report_runtime_error(
-            "Undefined variable 'y'".to_string(),
-            SourceSpan::new(12, 13),
-        );
+        reporter.report_runtime_error("Undefined variable 'y'", SourceSpan::new(12, 13));
 
         let output = reporter.format_errors();
         assert!(output.contains("Runtime Error at line 1, column 13"));

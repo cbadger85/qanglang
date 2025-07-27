@@ -325,7 +325,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub mod expression_parser {
+mod expression_parser {
     use super::*;
     use crate::tokenizer;
 
@@ -617,7 +617,7 @@ pub mod expression_parser {
         precedence: Precedence,
     }
 
-    pub const fn get_rule(token_type: tokenizer::TokenType) -> ParseRule {
+    const fn get_rule(token_type: tokenizer::TokenType) -> ParseRule {
         match token_type {
             tokenizer::TokenType::Number => ParseRule {
                 prefix: Some(number),
@@ -626,8 +626,8 @@ pub mod expression_parser {
             },
             tokenizer::TokenType::LeftParen => ParseRule {
                 prefix: Some(grouping_or_lambda),
-                infix: Some(call), // TODO does this go here?
-                precedence: Precedence::None,
+                infix: Some(call),            // TODO does this go here?
+                precedence: Precedence::None, // TODO is this right?
             },
             tokenizer::TokenType::Minus => ParseRule {
                 prefix: Some(unary),
@@ -736,8 +736,8 @@ pub mod expression_parser {
             },
             tokenizer::TokenType::LeftSquareBracket => ParseRule {
                 prefix: Some(array),
-                infix: None,
-                precedence: Precedence::Pipe,
+                infix: Some(call),            // TODO does this go here?
+                precedence: Precedence::Pipe, // TODO is this right?
             },
             tokenizer::TokenType::Super => ParseRule {
                 prefix: Some(literal),
@@ -748,6 +748,11 @@ pub mod expression_parser {
                 prefix: Some(literal),
                 infix: None,
                 precedence: Precedence::None,
+            },
+            tokenizer::TokenType::Dot => ParseRule {
+                prefix: None,
+                infix: Some(call),
+                precedence: Precedence::Call,
             },
             _ => ParseRule {
                 prefix: None,

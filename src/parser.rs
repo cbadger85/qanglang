@@ -1,6 +1,7 @@
 use crate::{
-    AssignmentExpr, BlockStmt, Decl, Expr, ExprStmt, Identifier, Program, QangError, QangResult,
-    SourceMap, SourceSpan, VariableDecl,
+    AssignmentExpr, BlockStmt, BreakStmt, ContinueStmt, Decl, Expr, ExprStmt, ForStmt,
+    FunctionDecl, FunctionExpr, Identifier, IfStmt, LambdaExpr, Program, QangError, QangResult,
+    ReturnStmt, SourceMap, SourceSpan, Stmt, ThrowStmt, TryStmt, VariableDecl, WhileStmt,
     error::ErrorReporter,
     tokenizer::{Token, TokenType, Tokenizer},
 };
@@ -217,10 +218,22 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Option<Decl> {
-        let result = if self.match_token(TokenType::Var) {
-            self.variable_declaration()
-        } else {
-            self.statement()
+        let current_token_type = self.current_token.as_ref()?.token_type;
+
+        let result = match current_token_type {
+            TokenType::Var => {
+                self.advance();
+                self.variable_declaration()
+            }
+            TokenType::Fn => {
+                self.advance();
+                self.function_declaration()
+            }
+            TokenType::Class => {
+                self.advance();
+                self.class_declaration()
+            }
+            _ => self.statement(),
         };
 
         match result {
@@ -246,7 +259,14 @@ impl<'a> Parser<'a> {
         let identifier = Identifier::new(name, identifier_span);
 
         let initializer = if self.match_token(TokenType::Equals) {
-            Some(self.expression()?)
+            if self.is_lambda_start() {
+                let lambda_expr = self.lambda_expression()?;
+                Some(Expr::Primary(crate::PrimaryExpr::Lambda(Box::new(
+                    lambda_expr,
+                ))))
+            } else {
+                Some(self.expression()?)
+            }
         } else {
             None
         };
@@ -266,9 +286,82 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    fn class_declaration(&mut self) -> ParseResult<Decl> {
+        todo!()
+    }
+
+    fn field_declaration(&mut self) -> ParseResult<Decl> {
+        todo!()
+    }
+
+    fn class_member(&mut self) -> ParseResult<Decl> {
+        todo!()
+    }
+
+    fn function_declaration(&mut self) -> ParseResult<Decl> {
+        let function_expr = self.function_expression()?;
+        let span = SourceSpan::combine(self.get_previous_span(), function_expr.span);
+
+        Ok(Decl::Function(FunctionDecl {
+            function: function_expr,
+            span,
+        }))
+    }
+
     fn statement(&mut self) -> ParseResult<Decl> {
-        let expr_stmt = self.expression_statement()?;
-        Ok(Decl::Stmt(crate::Stmt::Expr(expr_stmt)))
+        let current_token_type = self
+            .current_token
+            .as_ref()
+            .expect("Expected statement.")
+            .token_type;
+
+        match current_token_type {
+            TokenType::While => Ok(Decl::Stmt(Stmt::While(self.while_statement()?))),
+            TokenType::If => Ok(Decl::Stmt(Stmt::If(self.if_statement()?))),
+            TokenType::LeftBrace => Ok(Decl::Stmt(Stmt::Block(self.block_statement()?))),
+            TokenType::For => Ok(Decl::Stmt(Stmt::For(self.for_statement()?))),
+            TokenType::Break => Ok(Decl::Stmt(Stmt::Break(self.break_statement()?))),
+            TokenType::Continue => Ok(Decl::Stmt(Stmt::Continue(self.continue_statement()?))),
+            TokenType::Return => Ok(Decl::Stmt(Stmt::Return(self.return_statement()?))),
+            TokenType::Throw => Ok(Decl::Stmt(Stmt::Throw(self.throw_statement()?))),
+            TokenType::Try => Ok(Decl::Stmt(Stmt::Try(self.try_statement()?))),
+            _ => Ok(Decl::Stmt(Stmt::Expr(self.expression_statement()?))),
+        }
+    }
+
+    fn block_statement(&mut self) -> ParseResult<BlockStmt> {
+        todo!()
+    }
+
+    fn if_statement(&mut self) -> ParseResult<IfStmt> {
+        todo!()
+    }
+
+    fn while_statement(&mut self) -> ParseResult<WhileStmt> {
+        todo!()
+    }
+
+    fn for_statement(&mut self) -> ParseResult<ForStmt> {
+        todo!()
+    }
+
+    fn break_statement(&mut self) -> ParseResult<BreakStmt> {
+        todo!()
+    }
+
+    fn continue_statement(&mut self) -> ParseResult<ContinueStmt> {
+        todo!()
+    }
+
+    fn return_statement(&mut self) -> ParseResult<ReturnStmt> {
+        todo!()
+    }
+
+    fn throw_statement(&mut self) -> ParseResult<ThrowStmt> {
+        todo!()
+    }
+    fn try_statement(&mut self) -> ParseResult<TryStmt> {
+        todo!()
     }
 
     fn expression_statement(&mut self) -> ParseResult<ExprStmt> {
@@ -288,6 +381,10 @@ impl<'a> Parser<'a> {
 
     fn expression(&mut self) -> ParseResult<Expr> {
         self.assignment()
+    }
+
+    fn lambda_expression(&mut self) -> ParseResult<LambdaExpr> {
+        todo!()
     }
 
     fn assignment(&mut self) -> ParseResult<crate::Expr> {
@@ -316,11 +413,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn argument_parameters(&mut self) -> ParseResult<Vec<Identifier>> {
+    fn function_expression(&mut self) -> ParseResult<FunctionExpr> {
         todo!()
     }
 
-    fn block(&mut self) -> ParseResult<BlockStmt> {
+    fn argument_parameters(&mut self) -> ParseResult<Vec<Identifier>> {
         todo!()
     }
 }
@@ -394,9 +491,10 @@ mod expression_parser {
     }
 
     fn grouping_or_lambda(parser: &mut Parser) -> ParseResult<crate::Expr> {
-        // Look ahead to see if this is a lambda
         if parser.is_lambda_start() {
-            todo!()
+            Ok(Expr::Primary(crate::PrimaryExpr::Lambda(Box::new(
+                parser.lambda_expression()?,
+            ))))
         } else {
             grouping(parser)
         }
@@ -496,7 +594,31 @@ mod expression_parser {
     }
 
     fn array(parser: &mut Parser) -> ParseResult<crate::Expr> {
-        todo!()
+        let start_span = parser.get_previous_span();
+        let mut elements = Vec::new();
+
+        // Handle empty array case
+        if !parser.check(tokenizer::TokenType::RightSquareBracket) {
+            loop {
+                elements.push(parser.expression()?);
+
+                if !parser.match_token(tokenizer::TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        parser.consume(
+            tokenizer::TokenType::RightSquareBracket,
+            "Expect ']' after array elements.",
+        )?;
+
+        let end_span = parser.get_previous_span();
+        let span = crate::SourceSpan::combine(start_span, end_span);
+
+        Ok(crate::Expr::Primary(crate::PrimaryExpr::Array(
+            crate::ArrayLiteral { elements, span },
+        )))
     }
 
     fn binary(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
@@ -600,15 +722,146 @@ mod expression_parser {
     }
 
     fn ternary(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
-        todo!("use a combination of logical ands and ors to create a ternary expression.")
+        // Parse the "then" expression with ternary precedence
+        let then_expr = Box::new(parse(parser, Precedence::Ternary)?);
+
+        parser.consume(
+            tokenizer::TokenType::Colon,
+            "Expect ':' after then expression in ternary.",
+        )?;
+
+        // Parse the "else" expression with ternary precedence (right associative)
+        let else_expr = Box::new(parse(parser, Precedence::Ternary)?);
+
+        let span = crate::SourceSpan::combine(left.span(), else_expr.span());
+
+        Ok(crate::Expr::Ternary(crate::TernaryExpr {
+            condition: Box::new(left),
+            then_expr: Some(then_expr),
+            else_expr: Some(else_expr),
+            span,
+        }))
     }
 
     fn pipe(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
-        todo!()
+        // Parse the right side with pipe precedence + 1 for left associativity
+        let right = Box::new(parse(parser, Precedence::Pipe)?);
+        let span = crate::SourceSpan::combine(left.span(), right.span());
+
+        Ok(crate::Expr::Pipe(crate::PipeExpr {
+            left: Box::new(left),
+            right: Some(right),
+            span,
+        }))
     }
 
     fn call(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
-        todo!()
+        let mut expr = left;
+
+        // Keep applying call operations as long as we find them
+        loop {
+            let current_token = match &parser.current_token {
+                Some(token) => token,
+                None => break, // No more tokens, we're done
+            };
+
+            // Determine what kind of call operation this is
+            let operation = match current_token.token_type {
+                // Function call: expr(args...)
+                tokenizer::TokenType::LeftParen => {
+                    parser.advance(); // consume the '('
+                    let arguments = parse_arguments(parser)?;
+                    parser.consume(
+                        tokenizer::TokenType::RightParen,
+                        "Expect ')' after arguments.",
+                    )?;
+                    crate::CallOperation::Call(arguments)
+                }
+
+                // Property access: expr.property
+                tokenizer::TokenType::Dot => {
+                    parser.advance(); // consume the '.'
+                    parser.consume(
+                        tokenizer::TokenType::Identifier,
+                        "Expect property name after '.'.",
+                    )?;
+
+                    let property_span = parser.get_previous_span();
+                    let property_name = parser
+                        .previous_token
+                        .as_ref()
+                        .map(|t| t.lexeme(parser.source_map))
+                        .unwrap();
+                    let property = crate::Identifier::new(property_name, property_span);
+
+                    crate::CallOperation::Property(property)
+                }
+
+                // Optional property access: expr.?property
+                tokenizer::TokenType::OptionalChaining => {
+                    parser.advance(); // consume the '.?'
+                    parser.consume(
+                        tokenizer::TokenType::Identifier,
+                        "Expect property name after '.?'.",
+                    )?;
+
+                    let property_span = parser.get_previous_span();
+                    let property_name = parser
+                        .previous_token
+                        .as_ref()
+                        .map(|t| t.lexeme(parser.source_map))
+                        .unwrap();
+                    let property = crate::Identifier::new(property_name, property_span);
+
+                    crate::CallOperation::OptionalProperty(property)
+                }
+
+                // Array/index access: expr[index]
+                tokenizer::TokenType::LeftSquareBracket => {
+                    parser.advance(); // consume the '['
+                    let index = parser.expression()?;
+                    parser.consume(
+                        tokenizer::TokenType::RightSquareBracket,
+                        "Expect ']' after array index.",
+                    )?;
+                    crate::CallOperation::Index(index)
+                }
+
+                // Not a call operation, we're done with this chain
+                _ => break,
+            };
+
+            // Create a new CallExpr with the operation applied
+            let end_span = parser.get_previous_span();
+            let span = crate::SourceSpan::combine(expr.span(), end_span);
+
+            expr = crate::Expr::Call(crate::CallExpr {
+                callee: Box::new(expr),
+                operation: Box::new(operation),
+                span,
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_arguments(parser: &mut Parser) -> ParseResult<Vec<crate::Expr>> {
+        let mut arguments = Vec::new();
+
+        // Handle empty argument list: func()
+        if parser.check(tokenizer::TokenType::RightParen) {
+            return Ok(arguments);
+        }
+
+        // Parse first argument
+        arguments.push(parser.expression()?);
+
+        // Parse remaining arguments separated by commas
+        while parser.match_token(tokenizer::TokenType::Comma) {
+            arguments.push(parser.expression()?);
+        }
+
+        Ok(arguments)
     }
 
     pub struct ParseRule {
@@ -626,8 +879,8 @@ mod expression_parser {
             },
             tokenizer::TokenType::LeftParen => ParseRule {
                 prefix: Some(grouping_or_lambda),
-                infix: Some(call),            // TODO does this go here?
-                precedence: Precedence::None, // TODO is this right?
+                infix: Some(call),
+                precedence: Precedence::Call,
             },
             tokenizer::TokenType::Minus => ParseRule {
                 prefix: Some(unary),
@@ -736,8 +989,8 @@ mod expression_parser {
             },
             tokenizer::TokenType::LeftSquareBracket => ParseRule {
                 prefix: Some(array),
-                infix: Some(call),            // TODO does this go here?
-                precedence: Precedence::Pipe, // TODO is this right?
+                infix: Some(call),
+                precedence: Precedence::Call,
             },
             tokenizer::TokenType::Super => ParseRule {
                 prefix: Some(literal),

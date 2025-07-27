@@ -464,7 +464,7 @@ pub enum UnaryOperator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallExpr {
     pub callee: Box<Expr>,
-    pub operations: Vec<CallOperation>,
+    pub operation: Box<CallOperation>,
     pub span: SourceSpan,
 }
 

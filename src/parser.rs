@@ -1,7 +1,9 @@
 use crate::{
-    AssignmentExpr, BlockStmt, BreakStmt, ContinueStmt, Decl, Expr, ExprStmt, ForStmt,
-    FunctionDecl, FunctionExpr, Identifier, IfStmt, LambdaExpr, Program, QangError, QangResult,
-    ReturnStmt, SourceMap, SourceSpan, Stmt, ThrowStmt, TryStmt, VariableDecl, WhileStmt,
+    AssignmentExpr, AssignmentTarget, BlockStmt, BreakStmt, CallOperation, CatchClause, ClassDecl,
+    ClassMember, ContinueStmt, Decl, Expr, ExprStmt, FieldDecl, ForInitializer, ForStmt,
+    FunctionDecl, FunctionExpr, Identifier, IfStmt, LambdaBody, LambdaExpr, PrimaryExpr, Program,
+    PropertyAccess, QangError, QangResult, ReturnStmt, SourceMap, SourceSpan, Stmt, ThrowStmt,
+    TryStmt, VariableDecl, WhileStmt,
     error::ErrorReporter,
     tokenizer::{Token, TokenType, Tokenizer},
 };
@@ -269,9 +271,7 @@ impl<'a> Parser<'a> {
         let initializer = if self.match_token(TokenType::Equals) {
             if self.is_lambda_start() {
                 let lambda_expr = self.lambda_expression()?;
-                Some(Expr::Primary(crate::PrimaryExpr::Lambda(Box::new(
-                    lambda_expr,
-                ))))
+                Some(Expr::Primary(PrimaryExpr::Lambda(Box::new(lambda_expr))))
             } else {
                 Some(self.expression()?)
             }
@@ -295,15 +295,84 @@ impl<'a> Parser<'a> {
     }
 
     fn class_declaration(&mut self) -> ParseResult<Decl> {
-        todo!()
+        let start_span = self.get_previous_span();
+
+        self.consume(TokenType::Identifier, "Expect class name.")?;
+        let name = self.get_identifier()?;
+
+        let superclass = if self.match_token(TokenType::Colon) {
+            self.consume(TokenType::Identifier, "Expect superclass name.")?;
+            Some(self.get_identifier()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
+
+        let mut members = Vec::new();
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            if let Some(member) = self.class_member()? {
+                members.push(member);
+            }
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
+        let end_span = self.get_previous_span();
+        let span = SourceSpan::combine(start_span, end_span);
+
+        Ok(Decl::Class(ClassDecl {
+            name,
+            superclass,
+            members,
+            span,
+        }))
     }
 
-    fn field_declaration(&mut self) -> ParseResult<Decl> {
-        todo!()
+    fn class_member(&mut self) -> ParseResult<Option<ClassMember>> {
+        if self.check(TokenType::Identifier) {
+            let checkpoint = self.current_token.clone();
+
+            // Try to parse as method (identifier followed by '(')
+            self.advance(); // consume identifier
+            if self.check(TokenType::LeftParen) {
+                // Reset to checkpoint and parse as method
+                self.current_token = checkpoint;
+                let function_expr = self.function_expression()?;
+                return Ok(Some(ClassMember::Method(function_expr)));
+            } else {
+                // Reset to checkpoint and parse as field
+                self.current_token = checkpoint;
+                let field = self.field_declaration()?;
+                return Ok(Some(ClassMember::Field(field)));
+            }
+        }
+
+        Err(QangError::parse_error(
+            "Expected field or method declaration.",
+            self.get_current_span(),
+        ))
     }
 
-    fn class_member(&mut self) -> ParseResult<Decl> {
-        todo!()
+    fn field_declaration(&mut self) -> ParseResult<FieldDecl> {
+        let start_span = self.get_current_span();
+        self.consume(TokenType::Identifier, "Expect field name.")?;
+        let name = self.get_identifier()?;
+
+        let initializer = if self.match_token(TokenType::Equals) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenType::Semicolon, "Expect ';' after field declaration.")?;
+        let end_span = self.get_previous_span();
+        let span = SourceSpan::combine(start_span, end_span);
+
+        Ok(FieldDecl {
+            name,
+            initializer,
+            span,
+        })
     }
 
     fn function_declaration(&mut self) -> ParseResult<Decl> {
@@ -361,11 +430,10 @@ impl<'a> Parser<'a> {
         self.advance();
         self.consume(TokenType::LeftParen, "Expected '('.")?;
         let condition = self.expression()?;
-        self.consume(TokenType::RightBrace, "Expected ')'.")?;
 
         let then_branch = Box::new(Stmt::Block(self.block_statement()?));
 
-        let (else_branch, span) = if self.check(TokenType::Else) {
+        let (else_branch, span) = if self.match_token(TokenType::Else) {
             let block_stmt = Stmt::Block(self.block_statement()?);
             let span = SourceSpan::combine(start_span, block_stmt.span());
             (Some(Box::new(block_stmt)), span)
@@ -386,7 +454,7 @@ impl<'a> Parser<'a> {
         self.advance();
         self.consume(TokenType::LeftParen, "Expected '('.")?;
         let condition = self.expression()?;
-        self.consume(TokenType::RightBrace, "Expected ')'.")?;
+        self.consume(TokenType::RightParen, "Expected ')'.")?;
 
         let block_stmt = self.block_statement()?;
         let span = SourceSpan::combine(start_span, block_stmt.span);
@@ -400,7 +468,58 @@ impl<'a> Parser<'a> {
     }
 
     fn for_statement(&mut self) -> ParseResult<ForStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
+
+        // Parse initializer
+        let initializer = if self.match_token(TokenType::Semicolon) {
+            None
+        } else if self.match_token(TokenType::Var) {
+            let var_decl = self.variable_declaration()?;
+            if let Decl::Variable(var_decl) = var_decl {
+                Some(ForInitializer::Variable(var_decl))
+            } else {
+                return Err(QangError::parse_error(
+                    "Expected variable declaration.",
+                    self.get_current_span(),
+                ));
+            }
+        } else {
+            let expr = self.expression()?;
+            self.consume(
+                TokenType::Semicolon,
+                "Expect ';' after for loop initializer.",
+            )?;
+            Some(ForInitializer::Expr(expr))
+        };
+
+        // Parse condition
+        let condition = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(TokenType::Semicolon, "Expect ';' after for loop condition.")?;
+
+        // Parse increment
+        let increment = if self.check(TokenType::RightParen) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
+
+        let body = Box::new(Stmt::Block(self.block_statement()?));
+        let span = SourceSpan::combine(start_span, body.span());
+
+        Ok(ForStmt {
+            initializer,
+            condition,
+            increment,
+            body,
+            span,
+        })
     }
 
     fn break_statement(&mut self) -> ParseResult<BreakStmt> {
@@ -422,15 +541,97 @@ impl<'a> Parser<'a> {
     }
 
     fn return_statement(&mut self) -> ParseResult<ReturnStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+
+        let value = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
+        let end_span = self.get_previous_span();
+        let span = SourceSpan::combine(start_span, end_span);
+
+        Ok(ReturnStmt { value, span })
     }
 
     fn throw_statement(&mut self) -> ParseResult<ThrowStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+
+        let value = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(TokenType::Semicolon, "Expect ';' after throw value.")?;
+        let end_span = self.get_previous_span();
+        let span = SourceSpan::combine(start_span, end_span);
+
+        Ok(ThrowStmt { value, span })
     }
 
     fn try_statement(&mut self) -> ParseResult<TryStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+
+        let try_block = self.block_statement()?;
+
+        let catch_clause = if self.match_token(TokenType::Catch) {
+            let catch_start = self.get_previous_span();
+
+            let parameter = if self.match_token(TokenType::LeftParen) {
+                self.consume(TokenType::Identifier, "Expect parameter name.")?;
+                let param = Some(self.get_identifier()?);
+                self.consume(TokenType::RightParen, "Expect ')' after catch parameter.")?;
+                param
+            } else {
+                None
+            };
+
+            let body = self.block_statement()?;
+            let catch_span = SourceSpan::combine(catch_start, body.span);
+
+            Some(CatchClause {
+                parameter,
+                body,
+                span: catch_span,
+            })
+        } else {
+            None
+        };
+
+        let finally_block = if self.match_token(TokenType::Finally) {
+            Some(self.block_statement()?)
+        } else {
+            None
+        };
+
+        // Validate that we have at least catch or finally
+        if catch_clause.is_none() && finally_block.is_none() {
+            return Err(QangError::parse_error(
+                "Expected 'catch' or 'finally' after try block.",
+                self.get_current_span(),
+            ));
+        }
+
+        let end_span = finally_block
+            .as_ref()
+            .map(|b| b.span)
+            .or_else(|| catch_clause.as_ref().map(|c| c.span))
+            .unwrap_or(try_block.span);
+
+        let span = SourceSpan::combine(start_span, end_span);
+
+        Ok(TryStmt {
+            try_block,
+            catch_clause,
+            finally_block,
+            span,
+        })
     }
 
     fn expression_statement(&mut self) -> ParseResult<ExprStmt> {
@@ -453,10 +654,60 @@ impl<'a> Parser<'a> {
     }
 
     fn lambda_expression(&mut self) -> ParseResult<LambdaExpr> {
-        todo!()
+        let start_span = self.get_current_span();
+
+        // We should be at '('
+        self.consume(TokenType::LeftParen, "Expect '(' at start of lambda.")?;
+
+        let mut parameters = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.consume(TokenType::Identifier, "Expect parameter name.")?;
+                parameters.push(self.get_identifier()?);
+
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+        self.consume(TokenType::Arrow, "Expect '->' after lambda parameters.")?;
+
+        let body = if self.check(TokenType::LeftBrace) {
+            Box::new(LambdaBody::Block(self.block_statement()?))
+        } else {
+            let expr = self.expression()?;
+            Box::new(LambdaBody::Expr(Box::new(expr)))
+        };
+
+        let span = SourceSpan::combine(start_span, body.span());
+
+        Ok(LambdaExpr {
+            parameters,
+            body,
+            span,
+        })
     }
 
-    fn assignment(&mut self) -> ParseResult<crate::Expr> {
+    fn function_expression(&mut self) -> ParseResult<FunctionExpr> {
+        let start_span = self.get_current_span();
+        self.consume(TokenType::Identifier, "Expect function name.")?;
+        let name = self.get_identifier()?;
+
+        let parameters = self.argument_parameters()?;
+        let body = self.block_statement()?;
+        let span = SourceSpan::combine(start_span, body.span);
+
+        Ok(FunctionExpr {
+            name,
+            parameters,
+            body,
+            span,
+        })
+    }
+
+    fn assignment(&mut self) -> ParseResult<Expr> {
         let expr = expression_parser::parse(self, expression_parser::Precedence::Ternary)?;
 
         if self.match_token(TokenType::Equals) {
@@ -464,30 +715,54 @@ impl<'a> Parser<'a> {
             let span = SourceSpan::combine(expr.span(), value.span());
 
             match expr {
-                crate::Expr::Primary(crate::PrimaryExpr::Identifier(id)) => {
-                    Ok(crate::Expr::Assignment(AssignmentExpr {
-                        target: crate::AssignmentTarget::Identifier(id),
+                Expr::Primary(PrimaryExpr::Identifier(id)) => {
+                    Ok(Expr::Assignment(AssignmentExpr {
+                        target: AssignmentTarget::Identifier(id),
                         value,
                         span,
                     }))
                 }
-                // TODO: Handle property assignments
-                _ => Err(crate::QangError::parse_error(
-                    "Invalid assignemnt target",
-                    span,
-                )),
+                Expr::Call(call_expr) => {
+                    if let CallOperation::Property(property) = call_expr.operation.as_ref() {
+                        let property_access = PropertyAccess {
+                            object: call_expr.callee,
+                            property: property.clone(),
+                            span: call_expr.span,
+                        };
+                        Ok(Expr::Assignment(AssignmentExpr {
+                            target: AssignmentTarget::Property(property_access),
+                            value,
+                            span,
+                        }))
+                    } else {
+                        Err(QangError::parse_error("Invalid assignment target", span))
+                    }
+                }
+                _ => Err(QangError::parse_error("Invalid assignment target", span)),
             }
         } else {
             Ok(expr)
         }
     }
 
-    fn function_expression(&mut self) -> ParseResult<FunctionExpr> {
-        todo!()
-    }
-
     fn argument_parameters(&mut self) -> ParseResult<Vec<Identifier>> {
-        todo!()
+        self.consume(TokenType::LeftParen, "Expect '(' before parameters.")?;
+
+        let mut parameters = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.consume(TokenType::Identifier, "Expect parameter name.")?;
+                parameters.push(self.get_identifier()?);
+
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+
+        Ok(parameters)
     }
 }
 

@@ -117,6 +117,7 @@ impl Token {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Tokenizer<'a> {
     source_map: &'a SourceMap,
     line: u32,
@@ -158,6 +159,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Convenience method for peek_next (peek_ahead(1))
+    #[allow(dead_code)]
     pub fn peek_next(&mut self) -> Option<&Token> {
         self.peek_ahead(1)
     }

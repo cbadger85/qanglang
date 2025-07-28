@@ -1,6 +1,5 @@
 use crate::SourceMap;
 use crate::ast::SourceSpan;
-use crate::tokenizer::Token;
 use std::fmt;
 
 /// Represents different types of errors that can occur during language processing
@@ -134,29 +133,19 @@ impl<'a> ErrorReporter<'a> {
         self.report_error(error);
     }
 
-    /// Report an error with a specific kind
-    pub fn report(&mut self, kind: ErrorKind, message: String, span: SourceSpan) {
-        let error = QangError::new(kind, message, span);
-        self.report_error(error);
-    }
-
-    /// Report an error at a specific token
-    pub fn report_at_token(&mut self, kind: ErrorKind, message: String, token: Option<&Token>) {
-        let span = token.map(SourceSpan::from_token).unwrap_or_default();
-        self.report(kind, message, span);
-    }
-
     /// Check if there are any errors
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
 
     /// Get the number of errors
+    #[allow(dead_code)]
     pub fn error_count(&self) -> usize {
         self.errors.len()
     }
 
     /// Print all errors with pretty formatting to stderr
+    #[allow(dead_code)]
     pub fn print_errors(&self) {
         for error in &self.errors.0 {
             eprintln!("{}", self.pretty_print_error(error));
@@ -164,11 +153,13 @@ impl<'a> ErrorReporter<'a> {
     }
 
     /// Print a specific error with pretty formatting
+    #[allow(dead_code)]
     pub fn print_error(&self, error: &QangError) {
         eprintln!("{}", self.pretty_print_error(error));
     }
 
     /// Get a pretty printed string for all errors
+    #[allow(dead_code)]
     pub fn format_errors(&self) -> String {
         self.errors
             .all()
@@ -261,6 +252,7 @@ impl<'a> ErrorReporter<'a> {
     }
 
     /// Create a summary of all errors
+    #[allow(dead_code)]
     pub fn error_summary(&self) -> String {
         if self.errors.is_empty() {
             "No errors found.".to_string()
@@ -289,17 +281,13 @@ mod tests {
         let mut reporter = ErrorReporter::new(&source_map);
 
         // Report an error
-        reporter.report(
-            ErrorKind::Syntax,
-            "Expected expression after '+'".to_string(),
-            SourceSpan::new(11, 11),
-        );
+        reporter.report_runtime_error("Expected expression after '+'", SourceSpan::new(11, 11));
 
         assert!(reporter.has_errors());
         assert_eq!(reporter.error_count(), 1);
 
         let output = reporter.format_errors();
-        assert!(output.contains("Syntax Error at line 1, column 12"));
+        assert!(output.contains("Runtime Error at line 1, column 12"));
         assert!(output.contains("var x = 5 +"));
         assert!(output.contains("^"));
     }
@@ -311,17 +299,9 @@ mod tests {
         let mut reporter = ErrorReporter::new(&source_map);
 
         // Report multiple errors
-        reporter.report(
-            ErrorKind::Syntax,
-            "Missing operand after '+'".to_string(),
-            SourceSpan::new(11, 11),
-        );
+        reporter.report_runtime_error("Missing operand after '+'", SourceSpan::new(11, 11));
 
-        reporter.report(
-            ErrorKind::Syntax,
-            "Missing operand after '*'".to_string(),
-            SourceSpan::new(23, 23),
-        );
+        reporter.report_runtime_error("Missing operand after '*'", SourceSpan::new(23, 23));
 
         assert_eq!(reporter.error_count(), 2);
 
@@ -336,9 +316,8 @@ mod tests {
         let mut reporter = ErrorReporter::new(&source_map);
 
         // Error spanning the invalid identifier
-        reporter.report(
-            ErrorKind::Syntax,
-            "Invalid identifier name".to_string(),
+        reporter.report_runtime_error(
+            "Invalid identifier name",
             SourceSpan::new(4, 24), // "invalidIdentifier123!"
         );
 
@@ -353,11 +332,7 @@ mod tests {
         let mut reporter = ErrorReporter::new(&source_map);
 
         // Simulate a tokenizer error
-        reporter.report(
-            ErrorKind::Syntax,
-            "Unterminated string".to_string(),
-            SourceSpan::new(8, 28),
-        );
+        reporter.report_runtime_error("Unterminated string", SourceSpan::new(8, 28));
 
         let output = reporter.format_errors();
         assert!(output.contains("Unterminated string"));

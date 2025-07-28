@@ -1095,12 +1095,7 @@ mod expression_parser {
         let mut expr = left;
 
         // Keep applying call operations as long as we find them
-        loop {
-            let current_token = match &parser.current_token {
-                Some(token) => token,
-                None => break, // No more tokens, we're done
-            };
-
+        while let Some(current_token) = &parser.current_token {
             // Determine what kind of call operation this is
             let operation = match current_token.token_type {
                 // Function call: expr(args...)

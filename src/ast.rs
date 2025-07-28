@@ -1,4 +1,4 @@
-use crate::tokenizer::Token;
+use crate::{QangError, tokenizer::Token};
 
 /// Represents a position in the source code for error reporting and debugging
 #[derive(Debug, Clone, PartialEq, Default, Copy)]
@@ -610,5 +610,519 @@ impl Program {
 impl Identifier {
     pub fn new(name: String, span: SourceSpan) -> Self {
         Self { name, span }
+    }
+}
+
+/// A visitor trait for walking the AST and producing results
+///
+/// This trait provides default implementations that recursively visit child nodes.
+/// Implementors can override specific methods to customize behavior for particular node types.
+pub trait AstVisitor<T> {
+    type Error;
+
+    fn visit_program(&mut self, program: &Program) -> Result<T, Self::Error> {
+        for decl in &program.decls {
+            self.visit_declaration(decl)?;
+        }
+        self.default_result()
+    }
+
+    fn visit_declaration(&mut self, decl: &Decl) -> Result<T, Self::Error> {
+        match decl {
+            Decl::Class(class_decl) => self.visit_class_declaration(class_decl),
+            Decl::Function(func_decl) => self.visit_function_declaration(func_decl),
+            Decl::Lambda(lambda_decl) => self.visit_lambda_declaration(lambda_decl),
+            Decl::Variable(var_decl) => self.visit_variable_declaration(var_decl),
+            Decl::Stmt(stmt) => self.visit_statement(stmt),
+        }
+    }
+
+    fn visit_class_declaration(&mut self, class_decl: &ClassDecl) -> Result<T, Self::Error> {
+        self.visit_identifier(&class_decl.name)?;
+
+        if let Some(superclass) = &class_decl.superclass {
+            self.visit_identifier(superclass)?;
+        }
+
+        for member in &class_decl.members {
+            self.visit_class_member(member)?;
+        }
+
+        self.default_result()
+    }
+
+    fn visit_class_member(&mut self, member: &ClassMember) -> Result<T, Self::Error> {
+        match member {
+            ClassMember::Method(method) => self.visit_function_expression(method),
+            ClassMember::Field(field) => self.visit_field_declaration(field),
+        }
+    }
+
+    fn visit_field_declaration(&mut self, field_decl: &FieldDecl) -> Result<T, Self::Error> {
+        self.visit_identifier(&field_decl.name)?;
+
+        if let Some(initializer) = &field_decl.initializer {
+            self.visit_expression(initializer)?;
+        }
+
+        self.default_result()
+    }
+
+    fn visit_function_declaration(&mut self, func_decl: &FunctionDecl) -> Result<T, Self::Error> {
+        self.visit_function_expression(&func_decl.function)
+    }
+
+    fn visit_function_expression(&mut self, func_expr: &FunctionExpr) -> Result<T, Self::Error> {
+        self.visit_identifier(&func_expr.name)?;
+
+        for param in &func_expr.parameters {
+            self.visit_identifier(param)?;
+        }
+
+        self.visit_block_statement(&func_expr.body)
+    }
+
+    fn visit_lambda_declaration(&mut self, lambda_decl: &LambdaDecl) -> Result<T, Self::Error> {
+        self.visit_identifier(&lambda_decl.name)?;
+        self.visit_lambda_expression(&lambda_decl.lambda)
+    }
+
+    fn visit_lambda_expression(&mut self, lambda_expr: &LambdaExpr) -> Result<T, Self::Error> {
+        for param in &lambda_expr.parameters {
+            self.visit_identifier(param)?;
+        }
+
+        self.visit_lambda_body(&lambda_expr.body)
+    }
+
+    fn visit_lambda_body(&mut self, body: &LambdaBody) -> Result<T, Self::Error> {
+        match body {
+            LambdaBody::Block(block) => self.visit_block_statement(block),
+            LambdaBody::Expr(expr) => self.visit_expression(expr),
+        }
+    }
+
+    fn visit_variable_declaration(&mut self, var_decl: &VariableDecl) -> Result<T, Self::Error> {
+        self.visit_identifier(&var_decl.name)?;
+
+        if let Some(initializer) = &var_decl.initializer {
+            self.visit_expression(initializer)?;
+        }
+
+        self.default_result()
+    }
+
+    fn visit_statement(&mut self, stmt: &Stmt) -> Result<T, Self::Error> {
+        match stmt {
+            Stmt::Expr(expr_stmt) => self.visit_expression_statement(expr_stmt),
+            Stmt::Block(block_stmt) => self.visit_block_statement(block_stmt),
+            Stmt::If(if_stmt) => self.visit_if_statement(if_stmt),
+            Stmt::While(while_stmt) => self.visit_while_statement(while_stmt),
+            Stmt::For(for_stmt) => self.visit_for_statement(for_stmt),
+            Stmt::Break(break_stmt) => self.visit_break_statement(break_stmt),
+            Stmt::Continue(continue_stmt) => self.visit_continue_statement(continue_stmt),
+            Stmt::Return(return_stmt) => self.visit_return_statement(return_stmt),
+            Stmt::Throw(throw_stmt) => self.visit_throw_statement(throw_stmt),
+            Stmt::Try(try_stmt) => self.visit_try_statement(try_stmt),
+        }
+    }
+
+    fn visit_expression_statement(&mut self, expr_stmt: &ExprStmt) -> Result<T, Self::Error> {
+        self.visit_expression(&expr_stmt.expr)
+    }
+
+    fn visit_block_statement(&mut self, block_stmt: &BlockStmt) -> Result<T, Self::Error> {
+        for decl in &block_stmt.decls {
+            self.visit_declaration(decl)?;
+        }
+        self.default_result()
+    }
+
+    fn visit_if_statement(&mut self, if_stmt: &IfStmt) -> Result<T, Self::Error> {
+        self.visit_expression(&if_stmt.condition)?;
+        self.visit_statement(&if_stmt.then_branch)?;
+
+        if let Some(else_branch) = &if_stmt.else_branch {
+            self.visit_statement(else_branch)?;
+        }
+
+        self.default_result()
+    }
+
+    fn visit_while_statement(&mut self, while_stmt: &WhileStmt) -> Result<T, Self::Error> {
+        self.visit_expression(&while_stmt.condition)?;
+        self.visit_statement(&while_stmt.body)
+    }
+
+    fn visit_for_statement(&mut self, for_stmt: &ForStmt) -> Result<T, Self::Error> {
+        if let Some(initializer) = &for_stmt.initializer {
+            self.visit_for_initializer(initializer)?;
+        }
+
+        if let Some(condition) = &for_stmt.condition {
+            self.visit_expression(condition)?;
+        }
+
+        if let Some(increment) = &for_stmt.increment {
+            self.visit_expression(increment)?;
+        }
+
+        self.visit_statement(&for_stmt.body)
+    }
+
+    fn visit_for_initializer(&mut self, initializer: &ForInitializer) -> Result<T, Self::Error> {
+        match initializer {
+            ForInitializer::Variable(var_decl) => self.visit_variable_declaration(var_decl),
+            ForInitializer::Expr(expr) => self.visit_expression(expr),
+        }
+    }
+
+    fn visit_break_statement(&mut self, _break_stmt: &BreakStmt) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_continue_statement(
+        &mut self,
+        _continue_stmt: &ContinueStmt,
+    ) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_return_statement(&mut self, return_stmt: &ReturnStmt) -> Result<T, Self::Error> {
+        if let Some(value) = &return_stmt.value {
+            self.visit_expression(value)?;
+        }
+        self.default_result()
+    }
+
+    fn visit_throw_statement(&mut self, throw_stmt: &ThrowStmt) -> Result<T, Self::Error> {
+        if let Some(value) = &throw_stmt.value {
+            self.visit_expression(value)?;
+        }
+        self.default_result()
+    }
+
+    fn visit_try_statement(&mut self, try_stmt: &TryStmt) -> Result<T, Self::Error> {
+        self.visit_block_statement(&try_stmt.try_block)?;
+
+        if let Some(catch_clause) = &try_stmt.catch_clause {
+            self.visit_catch_clause(catch_clause)?;
+        }
+
+        if let Some(finally_block) = &try_stmt.finally_block {
+            self.visit_block_statement(finally_block)?;
+        }
+
+        self.default_result()
+    }
+
+    fn visit_catch_clause(&mut self, catch_clause: &CatchClause) -> Result<T, Self::Error> {
+        if let Some(parameter) = &catch_clause.parameter {
+            self.visit_identifier(parameter)?;
+        }
+
+        self.visit_block_statement(&catch_clause.body)
+    }
+
+    fn visit_expression(&mut self, expr: &Expr) -> Result<T, Self::Error> {
+        match expr {
+            Expr::Assignment(assignment) => self.visit_assignment_expression(assignment),
+            Expr::Pipe(pipe) => self.visit_pipe_expression(pipe),
+            Expr::Ternary(ternary) => self.visit_ternary_expression(ternary),
+            Expr::LogicalOr(logical_or) => self.visit_logical_or_expression(logical_or),
+            Expr::LogicalAnd(logical_and) => self.visit_logical_and_expression(logical_and),
+            Expr::Equality(equality) => self.visit_equality_expression(equality),
+            Expr::Comparison(comparison) => self.visit_comparison_expression(comparison),
+            Expr::Term(term) => self.visit_term_expression(term),
+            Expr::Factor(factor) => self.visit_factor_expression(factor),
+            Expr::Unary(unary) => self.visit_unary_expression(unary),
+            Expr::Call(call) => self.visit_call_expression(call),
+            Expr::Primary(primary) => self.visit_primary_expression(primary),
+        }
+    }
+
+    fn visit_assignment_expression(
+        &mut self,
+        assignment: &AssignmentExpr,
+    ) -> Result<T, Self::Error> {
+        self.visit_assignment_target(&assignment.target)?;
+        self.visit_expression(&assignment.value)
+    }
+
+    fn visit_assignment_target(&mut self, target: &AssignmentTarget) -> Result<T, Self::Error> {
+        match target {
+            AssignmentTarget::Identifier(identifier) => self.visit_identifier(identifier),
+            AssignmentTarget::Property(property) => self.visit_property_access(property),
+        }
+    }
+
+    fn visit_property_access(&mut self, property: &PropertyAccess) -> Result<T, Self::Error> {
+        self.visit_expression(&property.object)?;
+        self.visit_identifier(&property.property)
+    }
+
+    fn visit_pipe_expression(&mut self, pipe: &PipeExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&pipe.left)?;
+
+        if let Some(right) = &pipe.right {
+            self.visit_expression(right)?;
+        }
+
+        self.default_result()
+    }
+
+    fn visit_ternary_expression(&mut self, ternary: &TernaryExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&ternary.condition)?;
+
+        if let Some(then_expr) = &ternary.then_expr {
+            self.visit_expression(then_expr)?;
+        }
+
+        if let Some(else_expr) = &ternary.else_expr {
+            self.visit_expression(else_expr)?;
+        }
+
+        self.default_result()
+    }
+
+    fn visit_logical_or_expression(
+        &mut self,
+        logical_or: &LogicalOrExpr,
+    ) -> Result<T, Self::Error> {
+        self.visit_expression(&logical_or.left)?;
+        self.visit_expression(&logical_or.right)
+    }
+
+    fn visit_logical_and_expression(
+        &mut self,
+        logical_and: &LogicalAndExpr,
+    ) -> Result<T, Self::Error> {
+        self.visit_expression(&logical_and.left)?;
+        self.visit_expression(&logical_and.right)
+    }
+
+    fn visit_equality_expression(&mut self, equality: &EqualityExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&equality.left)?;
+        self.visit_expression(&equality.right)
+    }
+
+    fn visit_comparison_expression(
+        &mut self,
+        comparison: &ComparisonExpr,
+    ) -> Result<T, Self::Error> {
+        self.visit_expression(&comparison.left)?;
+        self.visit_expression(&comparison.right)
+    }
+
+    fn visit_term_expression(&mut self, term: &TermExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&term.left)?;
+        self.visit_expression(&term.right)
+    }
+
+    fn visit_factor_expression(&mut self, factor: &FactorExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&factor.left)?;
+        self.visit_expression(&factor.right)
+    }
+
+    fn visit_unary_expression(&mut self, unary: &UnaryExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&unary.operand)
+    }
+
+    fn visit_call_expression(&mut self, call: &CallExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&call.callee)?;
+        self.visit_call_operation(&call.operation)
+    }
+
+    fn visit_call_operation(&mut self, operation: &crate::CallOperation) -> Result<T, Self::Error> {
+        match operation {
+            crate::CallOperation::Call(args) => {
+                for arg in args {
+                    self.visit_expression(arg)?;
+                }
+                self.default_result()
+            }
+            crate::CallOperation::Property(identifier) => self.visit_identifier(identifier),
+            crate::CallOperation::OptionalProperty(identifier) => self.visit_identifier(identifier),
+            crate::CallOperation::Index(expr) => self.visit_expression(expr),
+        }
+    }
+
+    fn visit_primary_expression(&mut self, primary: &PrimaryExpr) -> Result<T, Self::Error> {
+        match primary {
+            PrimaryExpr::Number(number) => self.visit_number_literal(number),
+            PrimaryExpr::String(string) => self.visit_string_literal(string),
+            PrimaryExpr::Boolean(boolean) => self.visit_boolean_literal(boolean),
+            PrimaryExpr::Nil(nil) => self.visit_nil_literal(nil),
+            PrimaryExpr::This(this_expr) => self.visit_this_expression(this_expr),
+            PrimaryExpr::Super(super_expr) => self.visit_super_expression(super_expr),
+            PrimaryExpr::Identifier(identifier) => self.visit_identifier(identifier),
+            PrimaryExpr::Grouping(grouping) => self.visit_grouping_expression(grouping),
+            PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda),
+            PrimaryExpr::Array(array) => self.visit_array_literal(array),
+        }
+    }
+
+    fn visit_number_literal(&mut self, _number: &NumberLiteral) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_string_literal(&mut self, _string: &StringLiteral) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_boolean_literal(&mut self, _boolean: &BooleanLiteral) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_nil_literal(&mut self, _nil: &NilLiteral) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_this_expression(&mut self, _this_expr: &ThisExpr) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_super_expression(&mut self, _super_expr: &SuperExpr) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_identifier(&mut self, _identifier: &Identifier) -> Result<T, Self::Error> {
+        self.default_result()
+    }
+
+    fn visit_grouping_expression(&mut self, grouping: &GroupingExpr) -> Result<T, Self::Error> {
+        self.visit_expression(&grouping.expr)
+    }
+
+    fn visit_array_literal(&mut self, array: &ArrayLiteral) -> Result<T, Self::Error> {
+        for element in &array.elements {
+            self.visit_expression(element)?;
+        }
+        self.default_result()
+    }
+
+    /// Default result to return when a visit method doesn't produce a specific value
+    /// This should be implemented by each visitor
+    fn default_result(&self) -> Result<T, Self::Error>;
+}
+
+/// A concrete implementation using QangError for errors
+pub trait QangAstVisitor<T>: AstVisitor<T, Error = QangError> {}
+
+/// Blanket implementation for any visitor that uses QangError
+impl<T, V> QangAstVisitor<T> for V where V: AstVisitor<T, Error = QangError> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Expr, NumberLiteral, PrimaryExpr, SourceSpan};
+
+    pub struct IdentifierCollector {
+        pub identifiers: Vec<String>,
+    }
+
+    impl IdentifierCollector {
+        pub fn new() -> Self {
+            Self {
+                identifiers: Vec::new(),
+            }
+        }
+    }
+
+    impl AstVisitor<()> for IdentifierCollector {
+        type Error = QangError;
+
+        fn visit_identifier(&mut self, identifier: &Identifier) -> Result<(), Self::Error> {
+            self.identifiers.push(identifier.name.clone());
+            self.default_result()
+        }
+
+        fn default_result(&self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_identifier_collector() {
+        let mut collector = IdentifierCollector::new();
+
+        let identifier = Identifier {
+            name: "test_var".to_string(),
+            span: SourceSpan::new(0, 8),
+        };
+
+        collector.visit_identifier(&identifier).unwrap();
+
+        assert_eq!(collector.identifiers.len(), 1);
+        assert_eq!(collector.identifiers[0], "test_var");
+    }
+
+    #[test]
+    fn test_expression_visitor() {
+        let mut collector = IdentifierCollector::new();
+
+        let expr = Expr::Primary(PrimaryExpr::Number(NumberLiteral {
+            value: 42.0,
+            span: SourceSpan::new(0, 2),
+        }));
+
+        collector.visit_expression(&expr).unwrap();
+
+        // Should not collect any identifiers from a number literal
+        assert_eq!(collector.identifiers.len(), 0);
+    }
+
+    pub struct AstValidator {
+        pub errors: Vec<QangError>,
+    }
+
+    impl AstValidator {
+        pub fn new() -> Self {
+            Self { errors: Vec::new() }
+        }
+
+        pub fn has_errors(&self) -> bool {
+            !self.errors.is_empty()
+        }
+    }
+
+    impl AstVisitor<()> for AstValidator {
+        type Error = QangError;
+
+        fn visit_return_statement(&mut self, return_stmt: &ReturnStmt) -> Result<(), Self::Error> {
+            // Example validation: check if return statement is in valid context
+            // This would need additional context tracking in a real implementation
+
+            if let Some(value) = &return_stmt.value {
+                self.visit_expression(value)?;
+            }
+
+            self.default_result()
+        }
+
+        fn visit_break_statement(&mut self, _break_stmt: &BreakStmt) -> Result<(), Self::Error> {
+            // Example validation: check if break is inside a loop
+            // This would need loop context tracking in a real implementation
+
+            self.default_result()
+        }
+
+        fn default_result(&self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_validator() {
+        let mut validator = AstValidator::new();
+
+        let return_stmt = ReturnStmt {
+            value: None,
+            span: SourceSpan::new(0, 6),
+        };
+
+        validator.visit_return_statement(&return_stmt).unwrap();
+
+        assert!(!validator.has_errors());
     }
 }

@@ -45,12 +45,12 @@ pub enum Decl {
 }
 
 impl Decl {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            Decl::Class(decl) => &decl.span,
-            Decl::Function(decl) => &decl.span,
-            Decl::Lambda(decl) => &decl.span,
-            Decl::Variable(decl) => &decl.span,
+            Decl::Class(decl) => decl.span,
+            Decl::Function(decl) => decl.span,
+            Decl::Lambda(decl) => decl.span,
+            Decl::Variable(decl) => decl.span,
             Decl::Stmt(stmt) => stmt.span(),
         }
     }
@@ -161,18 +161,18 @@ pub enum Stmt {
 }
 
 impl Stmt {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            Stmt::Expr(stmt) => &stmt.span,
-            Stmt::Block(stmt) => &stmt.span,
-            Stmt::If(stmt) => &stmt.span,
-            Stmt::While(stmt) => &stmt.span,
-            Stmt::For(stmt) => &stmt.span,
-            Stmt::Break(stmt) => &stmt.span,
-            Stmt::Continue(stmt) => &stmt.span,
-            Stmt::Return(stmt) => &stmt.span,
-            Stmt::Throw(stmt) => &stmt.span,
-            Stmt::Try(stmt) => &stmt.span,
+            Stmt::Expr(stmt) => stmt.span,
+            Stmt::Block(stmt) => stmt.span,
+            Stmt::If(stmt) => stmt.span,
+            Stmt::While(stmt) => stmt.span,
+            Stmt::For(stmt) => stmt.span,
+            Stmt::Break(stmt) => stmt.span,
+            Stmt::Continue(stmt) => stmt.span,
+            Stmt::Return(stmt) => stmt.span,
+            Stmt::Throw(stmt) => stmt.span,
+            Stmt::Try(stmt) => stmt.span,
         }
     }
 }

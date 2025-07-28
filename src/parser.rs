@@ -106,6 +106,20 @@ impl<'a> Parser<'a> {
             .unwrap_or_default()
     }
 
+    fn get_identifier(&mut self) -> ParseResult<Identifier> {
+        let token = self.previous_token.as_ref();
+        let span = token
+            .map(SourceSpan::from_token)
+            .unwrap_or(SourceSpan { start: 0, end: 0 });
+
+        if let Some(token) = token {
+            let name = token.lexeme(self.source_map);
+            Ok(Identifier::new(name, span))
+        } else {
+            Err(QangError::parse_error("Expected identifier.", span))
+        }
+    }
+
     fn synchronize(&mut self) {
         loop {
             if self
@@ -250,13 +264,7 @@ impl<'a> Parser<'a> {
         let var_span = self.get_previous_span();
         self.consume(TokenType::Identifier, "Expect variable name.")?;
 
-        let identifier_span = self.get_previous_span();
-        let name = self
-            .previous_token
-            .as_ref()
-            .map(|t| t.lexeme(self.source_map))
-            .unwrap();
-        let identifier = Identifier::new(name, identifier_span);
+        let identifier = self.get_identifier()?;
 
         let initializer = if self.match_token(TokenType::Equals) {
             if self.is_lambda_start() {
@@ -330,15 +338,65 @@ impl<'a> Parser<'a> {
     }
 
     fn block_statement(&mut self) -> ParseResult<BlockStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+        let mut decls = Vec::new();
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            if let Some(decl) = self.declaration() {
+                decls.push(decl);
+            }
+        }
+        self.consume(TokenType::RightBrace, "Expected '}'.")?;
+        let end_span = self.get_current_span();
+
+        Ok(BlockStmt {
+            decls,
+            span: SourceSpan::combine(start_span, end_span),
+        })
     }
 
     fn if_statement(&mut self) -> ParseResult<IfStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+        self.consume(TokenType::LeftParen, "Expected '('.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightBrace, "Expected ')'.")?;
+
+        let then_branch = Box::new(Stmt::Block(self.block_statement()?));
+
+        let (else_branch, span) = if self.check(TokenType::Else) {
+            let block_stmt = Stmt::Block(self.block_statement()?);
+            let span = SourceSpan::combine(start_span, block_stmt.span());
+            (Some(Box::new(block_stmt)), span)
+        } else {
+            (None, SourceSpan::combine(start_span, then_branch.span()))
+        };
+
+        Ok(IfStmt {
+            condition,
+            then_branch,
+            else_branch,
+            span,
+        })
     }
 
     fn while_statement(&mut self) -> ParseResult<WhileStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+        self.consume(TokenType::LeftParen, "Expected '('.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightBrace, "Expected ')'.")?;
+
+        let block_stmt = self.block_statement()?;
+        let span = SourceSpan::combine(start_span, block_stmt.span);
+        let body = Box::new(Stmt::Block(block_stmt));
+
+        Ok(WhileStmt {
+            condition,
+            body,
+            span,
+        })
     }
 
     fn for_statement(&mut self) -> ParseResult<ForStmt> {
@@ -346,11 +404,21 @@ impl<'a> Parser<'a> {
     }
 
     fn break_statement(&mut self) -> ParseResult<BreakStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+        self.consume(TokenType::Semicolon, "Expected ';'.")?;
+        let span = SourceSpan::combine(start_span, self.get_previous_span());
+
+        Ok(BreakStmt { span })
     }
 
     fn continue_statement(&mut self) -> ParseResult<ContinueStmt> {
-        todo!()
+        let start_span = self.get_current_span();
+        self.advance();
+        self.consume(TokenType::Semicolon, "Expected ';'.")?;
+        let span = SourceSpan::combine(start_span, self.get_previous_span());
+
+        Ok(ContinueStmt { span })
     }
 
     fn return_statement(&mut self) -> ParseResult<ReturnStmt> {
@@ -360,6 +428,7 @@ impl<'a> Parser<'a> {
     fn throw_statement(&mut self) -> ParseResult<ThrowStmt> {
         todo!()
     }
+
     fn try_statement(&mut self) -> ParseResult<TryStmt> {
         todo!()
     }
@@ -580,16 +649,8 @@ mod expression_parser {
     }
 
     fn identifier(parser: &mut Parser) -> ParseResult<crate::Expr> {
-        let token = parser
-            .previous_token
-            .as_ref()
-            .expect("Missing previous token.");
-        let span = crate::SourceSpan::from_token(token);
-        let name = token.lexeme(parser.source_map);
-        let identifier = crate::Identifier::new(name, span);
-
         Ok(crate::Expr::Primary(crate::PrimaryExpr::Identifier(
-            identifier,
+            parser.get_identifier()?,
         )))
     }
 

@@ -80,10 +80,6 @@ impl QangErrors {
     pub fn all(&self) -> &[QangError] {
         &self.0
     }
-
-    pub fn take(&mut self) -> QangErrors {
-        QangErrors(std::mem::take(&mut self.0))
-    }
 }
 
 impl fmt::Display for QangErrors {
@@ -113,6 +109,13 @@ impl<'a> ErrorReporter<'a> {
         Self {
             source_map,
             errors: QangErrors::new(),
+        }
+    }
+
+    pub fn from_errors(source_map: &'a SourceMap, errors: Vec<QangError>) -> Self {
+        Self {
+            source_map,
+            errors: QangErrors(errors),
         }
     }
 
@@ -264,8 +267,8 @@ impl<'a> ErrorReporter<'a> {
     }
 
     /// Convert accumulated errors into QangErrors for returning as a result
-    pub fn take_errors(&mut self) -> QangErrors {
-        self.errors.take()
+    pub fn into_errors(self) -> QangErrors {
+        self.errors
     }
 }
 

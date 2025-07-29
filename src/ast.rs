@@ -73,10 +73,10 @@ pub enum ClassMember {
 }
 
 impl ClassMember {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            ClassMember::Method(method) => &method.span,
-            ClassMember::Field(field) => &field.span,
+            ClassMember::Method(method) => method.span,
+            ClassMember::Field(field) => field.span,
         }
     }
 }
@@ -329,10 +329,10 @@ pub enum AssignmentTarget {
 }
 
 impl AssignmentTarget {
-    pub fn span(&self) -> &SourceSpan {
+    pub fn span(&self) -> SourceSpan {
         match self {
-            AssignmentTarget::Identifier(id) => &id.span,
-            AssignmentTarget::Property(prop) => &prop.span,
+            AssignmentTarget::Identifier(id) => id.span,
+            AssignmentTarget::Property(prop) => prop.span,
         }
     }
 }
@@ -620,7 +620,14 @@ impl Identifier {
 pub trait AstVisitor<T> {
     type Error;
 
+    fn set_span(&mut self, _span: SourceSpan) {}
+
+    fn get_span(&self) -> SourceSpan {
+        SourceSpan::default()
+    }
+
     fn visit_program(&mut self, program: &Program) -> Result<T, Self::Error> {
+        self.set_span(program.span);
         for decl in &program.decls {
             self.visit_declaration(decl)?;
         }
@@ -628,6 +635,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_declaration(&mut self, decl: &Decl) -> Result<T, Self::Error> {
+        self.set_span(decl.span());
         match decl {
             Decl::Class(class_decl) => self.visit_class_declaration(class_decl),
             Decl::Function(func_decl) => self.visit_function_declaration(func_decl),
@@ -638,6 +646,8 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_class_declaration(&mut self, class_decl: &ClassDecl) -> Result<T, Self::Error> {
+        self.set_span(class_decl.span);
+
         self.visit_identifier(&class_decl.name)?;
 
         if let Some(superclass) = &class_decl.superclass {
@@ -652,6 +662,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_class_member(&mut self, member: &ClassMember) -> Result<T, Self::Error> {
+        self.set_span(member.span());
         match member {
             ClassMember::Method(method) => self.visit_function_expression(method),
             ClassMember::Field(field) => self.visit_field_declaration(field),
@@ -659,6 +670,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_field_declaration(&mut self, field_decl: &FieldDecl) -> Result<T, Self::Error> {
+        self.set_span(field_decl.span);
         self.visit_identifier(&field_decl.name)?;
 
         if let Some(initializer) = &field_decl.initializer {
@@ -669,10 +681,12 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_function_declaration(&mut self, func_decl: &FunctionDecl) -> Result<T, Self::Error> {
+        self.set_span(func_decl.span);
         self.visit_function_expression(&func_decl.function)
     }
 
     fn visit_function_expression(&mut self, func_expr: &FunctionExpr) -> Result<T, Self::Error> {
+        self.set_span(func_expr.span);
         self.visit_identifier(&func_expr.name)?;
 
         for param in &func_expr.parameters {
@@ -683,11 +697,13 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_lambda_declaration(&mut self, lambda_decl: &LambdaDecl) -> Result<T, Self::Error> {
+        self.set_span(lambda_decl.span);
         self.visit_identifier(&lambda_decl.name)?;
         self.visit_lambda_expression(&lambda_decl.lambda)
     }
 
     fn visit_lambda_expression(&mut self, lambda_expr: &LambdaExpr) -> Result<T, Self::Error> {
+        self.set_span(lambda_expr.span);
         for param in &lambda_expr.parameters {
             self.visit_identifier(param)?;
         }
@@ -696,6 +712,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_lambda_body(&mut self, body: &LambdaBody) -> Result<T, Self::Error> {
+        self.set_span(body.span());
         match body {
             LambdaBody::Block(block) => self.visit_block_statement(block),
             LambdaBody::Expr(expr) => self.visit_expression(expr),
@@ -703,6 +720,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_variable_declaration(&mut self, var_decl: &VariableDecl) -> Result<T, Self::Error> {
+        self.set_span(var_decl.span);
         self.visit_identifier(&var_decl.name)?;
 
         if let Some(initializer) = &var_decl.initializer {
@@ -713,6 +731,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_statement(&mut self, stmt: &Stmt) -> Result<T, Self::Error> {
+        self.set_span(stmt.span());
         match stmt {
             Stmt::Expr(expr_stmt) => self.visit_expression_statement(expr_stmt),
             Stmt::Block(block_stmt) => self.visit_block_statement(block_stmt),
@@ -728,10 +747,12 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_expression_statement(&mut self, expr_stmt: &ExprStmt) -> Result<T, Self::Error> {
+        self.set_span(expr_stmt.span);
         self.visit_expression(&expr_stmt.expr)
     }
 
     fn visit_block_statement(&mut self, block_stmt: &BlockStmt) -> Result<T, Self::Error> {
+        self.set_span(block_stmt.span);
         for decl in &block_stmt.decls {
             self.visit_declaration(decl)?;
         }
@@ -739,6 +760,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_if_statement(&mut self, if_stmt: &IfStmt) -> Result<T, Self::Error> {
+        self.set_span(if_stmt.span);
         self.visit_expression(&if_stmt.condition)?;
         self.visit_statement(&if_stmt.then_branch)?;
 
@@ -750,11 +772,13 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_while_statement(&mut self, while_stmt: &WhileStmt) -> Result<T, Self::Error> {
+        self.set_span(while_stmt.span);
         self.visit_expression(&while_stmt.condition)?;
         self.visit_statement(&while_stmt.body)
     }
 
     fn visit_for_statement(&mut self, for_stmt: &ForStmt) -> Result<T, Self::Error> {
+        self.set_span(for_stmt.span);
         if let Some(initializer) = &for_stmt.initializer {
             self.visit_for_initializer(initializer)?;
         }
@@ -771,24 +795,25 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_for_initializer(&mut self, initializer: &ForInitializer) -> Result<T, Self::Error> {
+        self.set_span(initializer.span());
         match initializer {
             ForInitializer::Variable(var_decl) => self.visit_variable_declaration(var_decl),
             ForInitializer::Expr(expr) => self.visit_expression(expr),
         }
     }
 
-    fn visit_break_statement(&mut self, _break_stmt: &BreakStmt) -> Result<T, Self::Error> {
+    fn visit_break_statement(&mut self, break_stmt: &BreakStmt) -> Result<T, Self::Error> {
+        self.set_span(break_stmt.span);
         self.default_result()
     }
 
-    fn visit_continue_statement(
-        &mut self,
-        _continue_stmt: &ContinueStmt,
-    ) -> Result<T, Self::Error> {
+    fn visit_continue_statement(&mut self, continue_stmt: &ContinueStmt) -> Result<T, Self::Error> {
+        self.set_span(continue_stmt.span);
         self.default_result()
     }
 
     fn visit_return_statement(&mut self, return_stmt: &ReturnStmt) -> Result<T, Self::Error> {
+        self.set_span(return_stmt.span);
         if let Some(value) = &return_stmt.value {
             self.visit_expression(value)?;
         }
@@ -796,6 +821,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_throw_statement(&mut self, throw_stmt: &ThrowStmt) -> Result<T, Self::Error> {
+        self.set_span(throw_stmt.span);
         if let Some(value) = &throw_stmt.value {
             self.visit_expression(value)?;
         }
@@ -803,6 +829,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_try_statement(&mut self, try_stmt: &TryStmt) -> Result<T, Self::Error> {
+        self.set_span(try_stmt.span);
         self.visit_block_statement(&try_stmt.try_block)?;
 
         if let Some(catch_clause) = &try_stmt.catch_clause {
@@ -817,6 +844,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_catch_clause(&mut self, catch_clause: &CatchClause) -> Result<T, Self::Error> {
+        self.set_span(catch_clause.span);
         if let Some(parameter) = &catch_clause.parameter {
             self.visit_identifier(parameter)?;
         }
@@ -825,6 +853,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_expression(&mut self, expr: &Expr) -> Result<T, Self::Error> {
+        self.set_span(expr.span());
         match expr {
             Expr::Assignment(assignment) => self.visit_assignment_expression(assignment),
             Expr::Pipe(pipe) => self.visit_pipe_expression(pipe),
@@ -845,11 +874,13 @@ pub trait AstVisitor<T> {
         &mut self,
         assignment: &AssignmentExpr,
     ) -> Result<T, Self::Error> {
+        self.set_span(assignment.span);
         self.visit_assignment_target(&assignment.target)?;
         self.visit_expression(&assignment.value)
     }
 
     fn visit_assignment_target(&mut self, target: &AssignmentTarget) -> Result<T, Self::Error> {
+        self.set_span(target.span());
         match target {
             AssignmentTarget::Identifier(identifier) => self.visit_identifier(identifier),
             AssignmentTarget::Property(property) => self.visit_property_access(property),
@@ -857,11 +888,13 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_property_access(&mut self, property: &PropertyAccess) -> Result<T, Self::Error> {
+        self.set_span(property.span);
         self.visit_expression(&property.object)?;
         self.visit_identifier(&property.property)
     }
 
     fn visit_pipe_expression(&mut self, pipe: &PipeExpr) -> Result<T, Self::Error> {
+        self.set_span(pipe.span);
         self.visit_expression(&pipe.left)?;
 
         if let Some(right) = &pipe.right {
@@ -872,6 +905,7 @@ pub trait AstVisitor<T> {
     }
 
     fn visit_ternary_expression(&mut self, ternary: &TernaryExpr) -> Result<T, Self::Error> {
+        self.set_span(ternary.span);
         self.visit_expression(&ternary.condition)?;
 
         if let Some(then_expr) = &ternary.then_expr {
@@ -889,6 +923,7 @@ pub trait AstVisitor<T> {
         &mut self,
         logical_or: &LogicalOrExpr,
     ) -> Result<T, Self::Error> {
+        self.set_span(logical_or.span);
         self.visit_expression(&logical_or.left)?;
         self.visit_expression(&logical_or.right)
     }
@@ -897,11 +932,13 @@ pub trait AstVisitor<T> {
         &mut self,
         logical_and: &LogicalAndExpr,
     ) -> Result<T, Self::Error> {
+        self.set_span(logical_and.span);
         self.visit_expression(&logical_and.left)?;
         self.visit_expression(&logical_and.right)
     }
 
     fn visit_equality_expression(&mut self, equality: &EqualityExpr) -> Result<T, Self::Error> {
+        self.set_span(equality.span);
         self.visit_expression(&equality.left)?;
         self.visit_expression(&equality.right)
     }
@@ -910,44 +947,51 @@ pub trait AstVisitor<T> {
         &mut self,
         comparison: &ComparisonExpr,
     ) -> Result<T, Self::Error> {
+        self.set_span(comparison.span);
         self.visit_expression(&comparison.left)?;
         self.visit_expression(&comparison.right)
     }
 
     fn visit_term_expression(&mut self, term: &TermExpr) -> Result<T, Self::Error> {
+        self.set_span(term.span);
         self.visit_expression(&term.left)?;
         self.visit_expression(&term.right)
     }
 
     fn visit_factor_expression(&mut self, factor: &FactorExpr) -> Result<T, Self::Error> {
+        self.set_span(factor.span);
         self.visit_expression(&factor.left)?;
         self.visit_expression(&factor.right)
     }
 
     fn visit_unary_expression(&mut self, unary: &UnaryExpr) -> Result<T, Self::Error> {
+        self.set_span(unary.span);
         self.visit_expression(&unary.operand)
     }
 
     fn visit_call_expression(&mut self, call: &CallExpr) -> Result<T, Self::Error> {
+        self.set_span(call.span);
         self.visit_expression(&call.callee)?;
         self.visit_call_operation(&call.operation)
     }
 
-    fn visit_call_operation(&mut self, operation: &crate::CallOperation) -> Result<T, Self::Error> {
+    fn visit_call_operation(&mut self, operation: &CallOperation) -> Result<T, Self::Error> {
+        self.set_span(operation.span());
         match operation {
-            crate::CallOperation::Call(args) => {
+            CallOperation::Call(args) => {
                 for arg in args {
                     self.visit_expression(arg)?;
                 }
                 self.default_result()
             }
-            crate::CallOperation::Property(identifier) => self.visit_identifier(identifier),
-            crate::CallOperation::OptionalProperty(identifier) => self.visit_identifier(identifier),
-            crate::CallOperation::Index(expr) => self.visit_expression(expr),
+            CallOperation::Property(identifier) => self.visit_identifier(identifier),
+            CallOperation::OptionalProperty(identifier) => self.visit_identifier(identifier),
+            CallOperation::Index(expr) => self.visit_expression(expr),
         }
     }
 
     fn visit_primary_expression(&mut self, primary: &PrimaryExpr) -> Result<T, Self::Error> {
+        self.set_span(primary.span());
         match primary {
             PrimaryExpr::Number(number) => self.visit_number_literal(number),
             PrimaryExpr::String(string) => self.visit_string_literal(string),
@@ -962,39 +1006,48 @@ pub trait AstVisitor<T> {
         }
     }
 
-    fn visit_number_literal(&mut self, _number: &NumberLiteral) -> Result<T, Self::Error> {
+    fn visit_number_literal(&mut self, number: &NumberLiteral) -> Result<T, Self::Error> {
+        self.set_span(number.span);
         self.default_result()
     }
 
-    fn visit_string_literal(&mut self, _string: &StringLiteral) -> Result<T, Self::Error> {
+    fn visit_string_literal(&mut self, string: &StringLiteral) -> Result<T, Self::Error> {
+        self.set_span(string.span);
         self.default_result()
     }
 
-    fn visit_boolean_literal(&mut self, _boolean: &BooleanLiteral) -> Result<T, Self::Error> {
+    fn visit_boolean_literal(&mut self, boolean: &BooleanLiteral) -> Result<T, Self::Error> {
+        self.set_span(boolean.span);
         self.default_result()
     }
 
-    fn visit_nil_literal(&mut self, _nil: &NilLiteral) -> Result<T, Self::Error> {
+    fn visit_nil_literal(&mut self, nil: &NilLiteral) -> Result<T, Self::Error> {
+        self.set_span(nil.span);
         self.default_result()
     }
 
-    fn visit_this_expression(&mut self, _this_expr: &ThisExpr) -> Result<T, Self::Error> {
+    fn visit_this_expression(&mut self, this_expr: &ThisExpr) -> Result<T, Self::Error> {
+        self.set_span(this_expr.span);
         self.default_result()
     }
 
-    fn visit_super_expression(&mut self, _super_expr: &SuperExpr) -> Result<T, Self::Error> {
+    fn visit_super_expression(&mut self, super_expr: &SuperExpr) -> Result<T, Self::Error> {
+        self.set_span(super_expr.span);
         self.default_result()
     }
 
-    fn visit_identifier(&mut self, _identifier: &Identifier) -> Result<T, Self::Error> {
+    fn visit_identifier(&mut self, identifier: &Identifier) -> Result<T, Self::Error> {
+        self.set_span(identifier.span);
         self.default_result()
     }
 
     fn visit_grouping_expression(&mut self, grouping: &GroupingExpr) -> Result<T, Self::Error> {
+        self.set_span(grouping.span);
         self.visit_expression(&grouping.expr)
     }
 
     fn visit_array_literal(&mut self, array: &ArrayLiteral) -> Result<T, Self::Error> {
+        self.set_span(array.span);
         for element in &array.elements {
             self.visit_expression(element)?;
         }
@@ -1015,7 +1068,6 @@ impl<T, V> QangAstVisitor<T> for V where V: AstVisitor<T, Error = QangError> {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Expr, NumberLiteral, PrimaryExpr, SourceSpan};
 
     pub struct IdentifierCollector {
         pub identifiers: Vec<String>,

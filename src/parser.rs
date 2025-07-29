@@ -1,10 +1,5 @@
 use crate::{
-    AssignmentExpr, AssignmentTarget, BlockStmt, BreakStmt, CallOperation, CatchClause, ClassDecl,
-    ClassMember, ContinueStmt, Decl, Expr, ExprStmt, FieldDecl, ForInitializer, ForStmt,
-    FunctionDecl, FunctionExpr, Identifier, IfStmt, LambdaBody, LambdaExpr, PrimaryExpr, Program,
-    PropertyAccess, QangError, QangResult, ReturnStmt, SourceMap, SourceSpan, Stmt, ThrowStmt,
-    TryStmt, VariableDecl, WhileStmt,
-    error::ErrorReporter,
+    ErrorReporter, QangError, SourceMap, ast,
     tokenizer::{Token, TokenType, Tokenizer},
 };
 
@@ -32,6 +27,10 @@ impl<'a> Parser<'a> {
         parser
     }
 
+    pub fn into_reporter(self) -> ErrorReporter<'a> {
+        self.errors
+    }
+
     fn advance(&mut self) {
         self.previous_token = self.current_token.take();
 
@@ -57,7 +56,7 @@ impl<'a> Parser<'a> {
         let span = self
             .current_token
             .as_ref()
-            .map(SourceSpan::from_token)
+            .map(ast::SourceSpan::from_token)
             .unwrap_or_default();
 
         if !self.is_at_end() {
@@ -91,32 +90,32 @@ impl<'a> Parser<'a> {
             .unwrap_or("Tokenization error");
 
         self.errors
-            .report_parse_error(message, SourceSpan::from_token(token));
+            .report_parse_error(message, ast::SourceSpan::from_token(token));
     }
 
-    fn get_current_span(&self) -> SourceSpan {
+    fn get_current_span(&self) -> ast::SourceSpan {
         self.current_token
             .as_ref()
-            .map(SourceSpan::from_token)
+            .map(ast::SourceSpan::from_token)
             .unwrap_or_default()
     }
 
-    fn get_previous_span(&self) -> SourceSpan {
+    fn get_previous_span(&self) -> ast::SourceSpan {
         self.previous_token
             .as_ref()
-            .map(SourceSpan::from_token)
+            .map(ast::SourceSpan::from_token)
             .unwrap_or_default()
     }
 
-    fn get_identifier(&mut self) -> ParseResult<Identifier> {
+    fn get_identifier(&mut self) -> ParseResult<ast::Identifier> {
         let token = self.previous_token.as_ref();
         let span = token
-            .map(SourceSpan::from_token)
-            .unwrap_or(SourceSpan { start: 0, end: 0 });
+            .map(ast::SourceSpan::from_token)
+            .unwrap_or(ast::SourceSpan { start: 0, end: 0 });
 
         if let Some(token) = token {
             let name = token.lexeme(self.source_map);
-            Ok(Identifier::new(name, span))
+            Ok(ast::Identifier::new(name, span))
         } else {
             Err(QangError::parse_error("Expected identifier.", span))
         }
@@ -211,7 +210,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> QangResult<Program> {
+    pub fn parse(&mut self) -> ast::Program {
         let start_span = self.get_current_span();
         let mut decls = Vec::new();
 
@@ -223,17 +222,10 @@ impl<'a> Parser<'a> {
 
         let end_span = self.get_current_span();
 
-        let program = Program::new(decls, SourceSpan::combine(start_span, end_span));
-
-        if self.errors.has_errors() {
-            let errors = self.errors.take_errors();
-            Err(errors)
-        } else {
-            Ok(program)
-        }
+        ast::Program::new(decls, ast::SourceSpan::combine(start_span, end_span))
     }
 
-    fn declaration(&mut self) -> Option<Decl> {
+    fn declaration(&mut self) -> Option<ast::Decl> {
         let current_token_type = self.current_token.as_ref()?.token_type;
 
         let result = match current_token_type {
@@ -262,7 +254,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn variable_declaration(&mut self) -> ParseResult<Decl> {
+    fn variable_declaration(&mut self) -> ParseResult<ast::Decl> {
         let var_span = self.get_previous_span();
         self.consume(TokenType::Identifier, "Expect variable name.")?;
 
@@ -271,7 +263,9 @@ impl<'a> Parser<'a> {
         let initializer = if self.match_token(TokenType::Equals) {
             if self.is_lambda_start() {
                 let lambda_expr = self.lambda_expression()?;
-                Some(Expr::Primary(PrimaryExpr::Lambda(Box::new(lambda_expr))))
+                Some(ast::Expr::Primary(ast::PrimaryExpr::Lambda(Box::new(
+                    lambda_expr,
+                ))))
             } else {
                 Some(self.expression()?)
             }
@@ -285,16 +279,16 @@ impl<'a> Parser<'a> {
         )?;
 
         let semicolon_span = self.get_previous_span();
-        let span = SourceSpan::combine(var_span, semicolon_span);
+        let span = ast::SourceSpan::combine(var_span, semicolon_span);
 
-        Ok(Decl::Variable(VariableDecl {
+        Ok(ast::Decl::Variable(ast::VariableDecl {
             name: identifier,
             initializer,
             span,
         }))
     }
 
-    fn class_declaration(&mut self) -> ParseResult<Decl> {
+    fn class_declaration(&mut self) -> ParseResult<ast::Decl> {
         let start_span = self.get_previous_span();
 
         self.consume(TokenType::Identifier, "Expect class name.")?;
@@ -318,9 +312,9 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
         let end_span = self.get_previous_span();
-        let span = SourceSpan::combine(start_span, end_span);
+        let span = ast::SourceSpan::combine(start_span, end_span);
 
-        Ok(Decl::Class(ClassDecl {
+        Ok(ast::Decl::Class(ast::ClassDecl {
             name,
             superclass,
             members,
@@ -328,7 +322,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn class_member(&mut self) -> ParseResult<Option<ClassMember>> {
+    fn class_member(&mut self) -> ParseResult<Option<ast::ClassMember>> {
         if self.check(TokenType::Identifier) {
             let checkpoint = self.current_token.clone();
 
@@ -338,12 +332,12 @@ impl<'a> Parser<'a> {
                 // Reset to checkpoint and parse as method
                 self.current_token = checkpoint;
                 let function_expr = self.function_expression()?;
-                return Ok(Some(ClassMember::Method(function_expr)));
+                return Ok(Some(ast::ClassMember::Method(function_expr)));
             } else {
                 // Reset to checkpoint and parse as field
                 self.current_token = checkpoint;
                 let field = self.field_declaration()?;
-                return Ok(Some(ClassMember::Field(field)));
+                return Ok(Some(ast::ClassMember::Field(field)));
             }
         }
 
@@ -353,7 +347,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn field_declaration(&mut self) -> ParseResult<FieldDecl> {
+    fn field_declaration(&mut self) -> ParseResult<ast::FieldDecl> {
         let start_span = self.get_current_span();
         self.consume(TokenType::Identifier, "Expect field name.")?;
         let name = self.get_identifier()?;
@@ -366,26 +360,26 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expect ';' after field declaration.")?;
         let end_span = self.get_previous_span();
-        let span = SourceSpan::combine(start_span, end_span);
+        let span = ast::SourceSpan::combine(start_span, end_span);
 
-        Ok(FieldDecl {
+        Ok(ast::FieldDecl {
             name,
             initializer,
             span,
         })
     }
 
-    fn function_declaration(&mut self) -> ParseResult<Decl> {
+    fn function_declaration(&mut self) -> ParseResult<ast::Decl> {
         let function_expr = self.function_expression()?;
-        let span = SourceSpan::combine(self.get_previous_span(), function_expr.span);
+        let span = ast::SourceSpan::combine(self.get_previous_span(), function_expr.span);
 
-        Ok(Decl::Function(FunctionDecl {
+        Ok(ast::Decl::Function(ast::FunctionDecl {
             function: function_expr,
             span,
         }))
     }
 
-    fn statement(&mut self) -> ParseResult<Decl> {
+    fn statement(&mut self) -> ParseResult<ast::Decl> {
         let current_token_type = self
             .current_token
             .as_ref()
@@ -393,20 +387,24 @@ impl<'a> Parser<'a> {
             .token_type;
 
         match current_token_type {
-            TokenType::While => Ok(Decl::Stmt(Stmt::While(self.while_statement()?))),
-            TokenType::If => Ok(Decl::Stmt(Stmt::If(self.if_statement()?))),
-            TokenType::LeftBrace => Ok(Decl::Stmt(Stmt::Block(self.block_statement()?))),
-            TokenType::For => Ok(Decl::Stmt(Stmt::For(self.for_statement()?))),
-            TokenType::Break => Ok(Decl::Stmt(Stmt::Break(self.break_statement()?))),
-            TokenType::Continue => Ok(Decl::Stmt(Stmt::Continue(self.continue_statement()?))),
-            TokenType::Return => Ok(Decl::Stmt(Stmt::Return(self.return_statement()?))),
-            TokenType::Throw => Ok(Decl::Stmt(Stmt::Throw(self.throw_statement()?))),
-            TokenType::Try => Ok(Decl::Stmt(Stmt::Try(self.try_statement()?))),
-            _ => Ok(Decl::Stmt(Stmt::Expr(self.expression_statement()?))),
+            TokenType::While => Ok(ast::Decl::Stmt(ast::Stmt::While(self.while_statement()?))),
+            TokenType::If => Ok(ast::Decl::Stmt(ast::Stmt::If(self.if_statement()?))),
+            TokenType::LeftBrace => Ok(ast::Decl::Stmt(ast::Stmt::Block(self.block_statement()?))),
+            TokenType::For => Ok(ast::Decl::Stmt(ast::Stmt::For(self.for_statement()?))),
+            TokenType::Break => Ok(ast::Decl::Stmt(ast::Stmt::Break(self.break_statement()?))),
+            TokenType::Continue => Ok(ast::Decl::Stmt(ast::Stmt::Continue(
+                self.continue_statement()?,
+            ))),
+            TokenType::Return => Ok(ast::Decl::Stmt(ast::Stmt::Return(self.return_statement()?))),
+            TokenType::Throw => Ok(ast::Decl::Stmt(ast::Stmt::Throw(self.throw_statement()?))),
+            TokenType::Try => Ok(ast::Decl::Stmt(ast::Stmt::Try(self.try_statement()?))),
+            _ => Ok(ast::Decl::Stmt(ast::Stmt::Expr(
+                self.expression_statement()?,
+            ))),
         }
     }
 
-    fn block_statement(&mut self) -> ParseResult<BlockStmt> {
+    fn block_statement(&mut self) -> ParseResult<ast::BlockStmt> {
         let start_span = self.get_current_span();
         self.advance();
         let mut decls = Vec::new();
@@ -419,29 +417,32 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::RightBrace, "Expected '}'.")?;
         let end_span = self.get_current_span();
 
-        Ok(BlockStmt {
+        Ok(ast::BlockStmt {
             decls,
-            span: SourceSpan::combine(start_span, end_span),
+            span: ast::SourceSpan::combine(start_span, end_span),
         })
     }
 
-    fn if_statement(&mut self) -> ParseResult<IfStmt> {
+    fn if_statement(&mut self) -> ParseResult<ast::IfStmt> {
         let start_span = self.get_current_span();
         self.advance();
         self.consume(TokenType::LeftParen, "Expected '('.")?;
         let condition = self.expression()?;
 
-        let then_branch = Box::new(Stmt::Block(self.block_statement()?));
+        let then_branch = Box::new(ast::Stmt::Block(self.block_statement()?));
 
         let (else_branch, span) = if self.match_token(TokenType::Else) {
-            let block_stmt = Stmt::Block(self.block_statement()?);
-            let span = SourceSpan::combine(start_span, block_stmt.span());
+            let block_stmt = ast::Stmt::Block(self.block_statement()?);
+            let span = ast::SourceSpan::combine(start_span, block_stmt.span());
             (Some(Box::new(block_stmt)), span)
         } else {
-            (None, SourceSpan::combine(start_span, then_branch.span()))
+            (
+                None,
+                ast::SourceSpan::combine(start_span, then_branch.span()),
+            )
         };
 
-        Ok(IfStmt {
+        Ok(ast::IfStmt {
             condition,
             then_branch,
             else_branch,
@@ -449,7 +450,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn while_statement(&mut self) -> ParseResult<WhileStmt> {
+    fn while_statement(&mut self) -> ParseResult<ast::WhileStmt> {
         let start_span = self.get_current_span();
         self.advance();
         self.consume(TokenType::LeftParen, "Expected '('.")?;
@@ -457,17 +458,17 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::RightParen, "Expected ')'.")?;
 
         let block_stmt = self.block_statement()?;
-        let span = SourceSpan::combine(start_span, block_stmt.span);
-        let body = Box::new(Stmt::Block(block_stmt));
+        let span = ast::SourceSpan::combine(start_span, block_stmt.span);
+        let body = Box::new(ast::Stmt::Block(block_stmt));
 
-        Ok(WhileStmt {
+        Ok(ast::WhileStmt {
             condition,
             body,
             span,
         })
     }
 
-    fn for_statement(&mut self) -> ParseResult<ForStmt> {
+    fn for_statement(&mut self) -> ParseResult<ast::ForStmt> {
         let start_span = self.get_current_span();
         self.advance();
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
@@ -477,8 +478,8 @@ impl<'a> Parser<'a> {
             None
         } else if self.match_token(TokenType::Var) {
             let var_decl = self.variable_declaration()?;
-            if let Decl::Variable(var_decl) = var_decl {
-                Some(ForInitializer::Variable(var_decl))
+            if let ast::Decl::Variable(var_decl) = var_decl {
+                Some(ast::ForInitializer::Variable(var_decl))
             } else {
                 return Err(QangError::parse_error(
                     "Expected variable declaration.",
@@ -491,7 +492,7 @@ impl<'a> Parser<'a> {
                 TokenType::Semicolon,
                 "Expect ';' after for loop initializer.",
             )?;
-            Some(ForInitializer::Expr(expr))
+            Some(ast::ForInitializer::Expr(expr))
         };
 
         // Parse condition
@@ -510,10 +511,10 @@ impl<'a> Parser<'a> {
         };
         self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
 
-        let body = Box::new(Stmt::Block(self.block_statement()?));
-        let span = SourceSpan::combine(start_span, body.span());
+        let body = Box::new(ast::Stmt::Block(self.block_statement()?));
+        let span = ast::SourceSpan::combine(start_span, body.span());
 
-        Ok(ForStmt {
+        Ok(ast::ForStmt {
             initializer,
             condition,
             increment,
@@ -522,25 +523,25 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn break_statement(&mut self) -> ParseResult<BreakStmt> {
+    fn break_statement(&mut self) -> ParseResult<ast::BreakStmt> {
         let start_span = self.get_current_span();
         self.advance();
         self.consume(TokenType::Semicolon, "Expected ';'.")?;
-        let span = SourceSpan::combine(start_span, self.get_previous_span());
+        let span = ast::SourceSpan::combine(start_span, self.get_previous_span());
 
-        Ok(BreakStmt { span })
+        Ok(ast::BreakStmt { span })
     }
 
-    fn continue_statement(&mut self) -> ParseResult<ContinueStmt> {
+    fn continue_statement(&mut self) -> ParseResult<ast::ContinueStmt> {
         let start_span = self.get_current_span();
         self.advance();
         self.consume(TokenType::Semicolon, "Expected ';'.")?;
-        let span = SourceSpan::combine(start_span, self.get_previous_span());
+        let span = ast::SourceSpan::combine(start_span, self.get_previous_span());
 
-        Ok(ContinueStmt { span })
+        Ok(ast::ContinueStmt { span })
     }
 
-    fn return_statement(&mut self) -> ParseResult<ReturnStmt> {
+    fn return_statement(&mut self) -> ParseResult<ast::ReturnStmt> {
         let start_span = self.get_current_span();
         self.advance();
 
@@ -552,12 +553,12 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
         let end_span = self.get_previous_span();
-        let span = SourceSpan::combine(start_span, end_span);
+        let span = ast::SourceSpan::combine(start_span, end_span);
 
-        Ok(ReturnStmt { value, span })
+        Ok(ast::ReturnStmt { value, span })
     }
 
-    fn throw_statement(&mut self) -> ParseResult<ThrowStmt> {
+    fn throw_statement(&mut self) -> ParseResult<ast::ThrowStmt> {
         let start_span = self.get_current_span();
         self.advance();
 
@@ -569,12 +570,12 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expect ';' after throw value.")?;
         let end_span = self.get_previous_span();
-        let span = SourceSpan::combine(start_span, end_span);
+        let span = ast::SourceSpan::combine(start_span, end_span);
 
-        Ok(ThrowStmt { value, span })
+        Ok(ast::ThrowStmt { value, span })
     }
 
-    fn try_statement(&mut self) -> ParseResult<TryStmt> {
+    fn try_statement(&mut self) -> ParseResult<ast::TryStmt> {
         let start_span = self.get_current_span();
         self.advance();
 
@@ -593,9 +594,9 @@ impl<'a> Parser<'a> {
             };
 
             let body = self.block_statement()?;
-            let catch_span = SourceSpan::combine(catch_start, body.span);
+            let catch_span = ast::SourceSpan::combine(catch_start, body.span);
 
-            Some(CatchClause {
+            Some(ast::CatchClause {
                 parameter,
                 body,
                 span: catch_span,
@@ -624,9 +625,9 @@ impl<'a> Parser<'a> {
             .or_else(|| catch_clause.as_ref().map(|c| c.span))
             .unwrap_or(try_block.span);
 
-        let span = SourceSpan::combine(start_span, end_span);
+        let span = ast::SourceSpan::combine(start_span, end_span);
 
-        Ok(TryStmt {
+        Ok(ast::TryStmt {
             try_block,
             catch_clause,
             finally_block,
@@ -634,7 +635,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn expression_statement(&mut self) -> ParseResult<ExprStmt> {
+    fn expression_statement(&mut self) -> ParseResult<ast::ExprStmt> {
         let expr = self.expression()?;
 
         self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
@@ -643,17 +644,17 @@ impl<'a> Parser<'a> {
 
         let expr_span = expr.span();
 
-        Ok(ExprStmt {
+        Ok(ast::ExprStmt {
             expr,
-            span: SourceSpan::combine(expr_span, semicolon_span),
+            span: ast::SourceSpan::combine(expr_span, semicolon_span),
         })
     }
 
-    fn expression(&mut self) -> ParseResult<Expr> {
+    fn expression(&mut self) -> ParseResult<ast::Expr> {
         self.assignment()
     }
 
-    fn lambda_expression(&mut self) -> ParseResult<LambdaExpr> {
+    fn lambda_expression(&mut self) -> ParseResult<ast::LambdaExpr> {
         let start_span = self.get_current_span();
 
         // We should be at '('
@@ -675,31 +676,31 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::Arrow, "Expect '->' after lambda parameters.")?;
 
         let body = if self.check(TokenType::LeftBrace) {
-            Box::new(LambdaBody::Block(self.block_statement()?))
+            Box::new(ast::LambdaBody::Block(self.block_statement()?))
         } else {
             let expr = self.expression()?;
-            Box::new(LambdaBody::Expr(Box::new(expr)))
+            Box::new(ast::LambdaBody::Expr(Box::new(expr)))
         };
 
-        let span = SourceSpan::combine(start_span, body.span());
+        let span = ast::SourceSpan::combine(start_span, body.span());
 
-        Ok(LambdaExpr {
+        Ok(ast::LambdaExpr {
             parameters,
             body,
             span,
         })
     }
 
-    fn function_expression(&mut self) -> ParseResult<FunctionExpr> {
+    fn function_expression(&mut self) -> ParseResult<ast::FunctionExpr> {
         let start_span = self.get_current_span();
         self.consume(TokenType::Identifier, "Expect function name.")?;
         let name = self.get_identifier()?;
 
         let parameters = self.argument_parameters()?;
         let body = self.block_statement()?;
-        let span = SourceSpan::combine(start_span, body.span);
+        let span = ast::SourceSpan::combine(start_span, body.span);
 
-        Ok(FunctionExpr {
+        Ok(ast::FunctionExpr {
             name,
             parameters,
             body,
@@ -707,30 +708,30 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn assignment(&mut self) -> ParseResult<Expr> {
+    fn assignment(&mut self) -> ParseResult<ast::Expr> {
         let expr = expression_parser::parse(self, expression_parser::Precedence::Ternary)?;
 
         if self.match_token(TokenType::Equals) {
             let value = Box::new(self.expression()?);
-            let span = SourceSpan::combine(expr.span(), value.span());
+            let span = ast::SourceSpan::combine(expr.span(), value.span());
 
             match expr {
-                Expr::Primary(PrimaryExpr::Identifier(id)) => {
-                    Ok(Expr::Assignment(AssignmentExpr {
-                        target: AssignmentTarget::Identifier(id),
+                ast::Expr::Primary(ast::PrimaryExpr::Identifier(id)) => {
+                    Ok(ast::Expr::Assignment(ast::AssignmentExpr {
+                        target: ast::AssignmentTarget::Identifier(id),
                         value,
                         span,
                     }))
                 }
-                Expr::Call(call_expr) => {
-                    if let CallOperation::Property(property) = call_expr.operation.as_ref() {
-                        let property_access = PropertyAccess {
+                ast::Expr::Call(call_expr) => {
+                    if let ast::CallOperation::Property(property) = call_expr.operation.as_ref() {
+                        let property_access = ast::PropertyAccess {
                             object: call_expr.callee,
                             property: property.clone(),
                             span: call_expr.span,
                         };
-                        Ok(Expr::Assignment(AssignmentExpr {
-                            target: AssignmentTarget::Property(property_access),
+                        Ok(ast::Expr::Assignment(ast::AssignmentExpr {
+                            target: ast::AssignmentTarget::Property(property_access),
                             value,
                             span,
                         }))
@@ -745,7 +746,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn argument_parameters(&mut self) -> ParseResult<Vec<Identifier>> {
+    fn argument_parameters(&mut self) -> ParseResult<Vec<ast::Identifier>> {
         self.consume(TokenType::LeftParen, "Expect '(' before parameters.")?;
 
         let mut parameters = Vec::new();
@@ -768,7 +769,7 @@ impl<'a> Parser<'a> {
 
 mod expression_parser {
     use super::*;
-    use crate::tokenizer;
+    use crate::{ast, tokenizer};
 
     #[derive(Debug, PartialEq, PartialOrd)]
     #[repr(u8)]
@@ -813,30 +814,30 @@ mod expression_parser {
         }
     }
 
-    type PrefixParseFn = fn(&mut Parser) -> ParseResult<crate::Expr>;
-    type InfixParseFn = fn(&mut Parser, crate::Expr) -> ParseResult<crate::Expr>;
+    type PrefixParseFn = fn(&mut Parser) -> ParseResult<ast::Expr>;
+    type InfixParseFn = fn(&mut Parser, ast::Expr) -> ParseResult<ast::Expr>;
 
-    fn number(parser: &mut Parser) -> ParseResult<crate::Expr> {
+    fn number(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let token = parser
             .previous_token
             .as_ref()
             .expect("Missing previous token.");
 
-        let span = crate::SourceSpan::from_token(token);
+        let span = ast::SourceSpan::from_token(token);
 
         let value = token
             .lexeme(parser.source_map)
             .parse::<f64>()
             .map_err(|_| crate::QangError::parse_error("Expected number.", span))?;
 
-        Ok(crate::Expr::Primary(crate::PrimaryExpr::Number(
-            crate::NumberLiteral { value, span },
+        Ok(ast::Expr::Primary(ast::PrimaryExpr::Number(
+            ast::NumberLiteral { value, span },
         )))
     }
 
-    fn grouping_or_lambda(parser: &mut Parser) -> ParseResult<crate::Expr> {
+    fn grouping_or_lambda(parser: &mut Parser) -> ParseResult<ast::Expr> {
         if parser.is_lambda_start() {
-            Ok(Expr::Primary(crate::PrimaryExpr::Lambda(Box::new(
+            Ok(ast::Expr::Primary(ast::PrimaryExpr::Lambda(Box::new(
                 parser.lambda_expression()?,
             ))))
         } else {
@@ -844,7 +845,7 @@ mod expression_parser {
         }
     }
 
-    fn grouping(parser: &mut Parser) -> ParseResult<crate::Expr> {
+    fn grouping(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let expr = parser.expression()?;
         parser.consume(
             tokenizer::TokenType::RightParen,
@@ -854,7 +855,7 @@ mod expression_parser {
         Ok(expr)
     }
 
-    fn unary(parser: &mut Parser) -> ParseResult<crate::Expr> {
+    fn unary(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let operand = Box::new(parser.expression()?);
         let token = parser
             .previous_token
@@ -862,17 +863,17 @@ mod expression_parser {
             .expect("Missing previous token.");
 
         let operator_type = token.token_type;
-        let operator_span = crate::SourceSpan::from_token(token);
+        let operator_span = ast::SourceSpan::from_token(token);
 
-        let span = crate::SourceSpan::combine(operator_span, operand.span());
+        let span = ast::SourceSpan::combine(operator_span, operand.span());
         match operator_type {
-            tokenizer::TokenType::Minus => Ok(crate::Expr::Unary(crate::UnaryExpr {
-                operator: crate::UnaryOperator::Minus,
+            tokenizer::TokenType::Minus => Ok(ast::Expr::Unary(ast::UnaryExpr {
+                operator: ast::UnaryOperator::Minus,
                 operand,
                 span,
             })),
-            tokenizer::TokenType::Bang => Ok(crate::Expr::Unary(crate::UnaryExpr {
-                operator: crate::UnaryOperator::Not,
+            tokenizer::TokenType::Bang => Ok(ast::Expr::Unary(ast::UnaryExpr {
+                operator: ast::UnaryOperator::Not,
                 operand,
                 span,
             })),
@@ -880,35 +881,39 @@ mod expression_parser {
         }
     }
 
-    fn literal(parser: &mut Parser) -> ParseResult<crate::Expr> {
+    fn literal(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let token = parser
             .previous_token
             .as_ref()
             .expect("Missing previous token.");
 
-        let span = crate::SourceSpan::from_token(token);
+        let span = ast::SourceSpan::from_token(token);
 
         match token.token_type {
-            tokenizer::TokenType::False => Ok(crate::Expr::Primary(crate::PrimaryExpr::Boolean(
-                crate::BooleanLiteral { value: false, span },
+            tokenizer::TokenType::False => Ok(ast::Expr::Primary(ast::PrimaryExpr::Boolean(
+                ast::BooleanLiteral { value: false, span },
             ))),
-            tokenizer::TokenType::True => Ok(crate::Expr::Primary(crate::PrimaryExpr::Boolean(
-                crate::BooleanLiteral { value: true, span },
+            tokenizer::TokenType::True => Ok(ast::Expr::Primary(ast::PrimaryExpr::Boolean(
+                ast::BooleanLiteral { value: true, span },
             ))),
-            tokenizer::TokenType::Nil => Ok(crate::Expr::Primary(crate::PrimaryExpr::Nil(
-                crate::NilLiteral { span },
-            ))),
-            tokenizer::TokenType::This => Ok(crate::Expr::Primary(crate::PrimaryExpr::This(
-                crate::ThisExpr { span },
-            ))),
-            tokenizer::TokenType::Super => Ok(crate::Expr::Primary(crate::PrimaryExpr::Super(
-                crate::SuperExpr { span },
+            tokenizer::TokenType::Nil => {
+                Ok(ast::Expr::Primary(ast::PrimaryExpr::Nil(ast::NilLiteral {
+                    span,
+                })))
+            }
+            tokenizer::TokenType::This => {
+                Ok(ast::Expr::Primary(ast::PrimaryExpr::This(ast::ThisExpr {
+                    span,
+                })))
+            }
+            tokenizer::TokenType::Super => Ok(ast::Expr::Primary(ast::PrimaryExpr::Super(
+                ast::SuperExpr { span },
             ))),
             _ => Err(crate::QangError::parse_error("Unknown literal.", span)),
         }
     }
 
-    fn string(parser: &mut Parser) -> ParseResult<crate::Expr> {
+    fn string(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let token = parser
             .previous_token
             .as_ref()
@@ -916,20 +921,20 @@ mod expression_parser {
 
         let value = token.lexeme(parser.source_map);
 
-        let span = crate::SourceSpan::from_token(token);
+        let span = ast::SourceSpan::from_token(token);
 
-        Ok(crate::Expr::Primary(crate::PrimaryExpr::String(
-            crate::StringLiteral { value, span },
+        Ok(ast::Expr::Primary(ast::PrimaryExpr::String(
+            ast::StringLiteral { value, span },
         )))
     }
 
-    fn identifier(parser: &mut Parser) -> ParseResult<crate::Expr> {
-        Ok(crate::Expr::Primary(crate::PrimaryExpr::Identifier(
+    fn identifier(parser: &mut Parser) -> ParseResult<ast::Expr> {
+        Ok(ast::Expr::Primary(ast::PrimaryExpr::Identifier(
             parser.get_identifier()?,
         )))
     }
 
-    fn array(parser: &mut Parser) -> ParseResult<crate::Expr> {
+    fn array(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let start_span = parser.get_previous_span();
         let mut elements = Vec::new();
 
@@ -950,14 +955,14 @@ mod expression_parser {
         )?;
 
         let end_span = parser.get_previous_span();
-        let span = crate::SourceSpan::combine(start_span, end_span);
+        let span = ast::SourceSpan::combine(start_span, end_span);
 
-        Ok(crate::Expr::Primary(crate::PrimaryExpr::Array(
-            crate::ArrayLiteral { elements, span },
+        Ok(ast::Expr::Primary(ast::PrimaryExpr::Array(
+            ast::ArrayLiteral { elements, span },
         )))
     }
 
-    fn binary(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
+    fn binary(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
         let token = parser
             .previous_token
             .as_ref()
@@ -970,85 +975,81 @@ mod expression_parser {
         let precedence: Precedence = (rule.precedence as u8 + 1).into();
 
         let right = parse(parser, precedence)?;
-        let span = crate::SourceSpan::new(span_start, right.span().end);
+        let span = ast::SourceSpan::new(span_start, right.span().end);
 
         match token_type {
-            tokenizer::TokenType::Plus => Ok(crate::Expr::Term(crate::TermExpr {
+            tokenizer::TokenType::Plus => Ok(ast::Expr::Term(ast::TermExpr {
                 left: Box::new(left),
-                operator: crate::TermOperator::Add,
+                operator: ast::TermOperator::Add,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::Minus => Ok(crate::Expr::Term(crate::TermExpr {
+            tokenizer::TokenType::Minus => Ok(ast::Expr::Term(ast::TermExpr {
                 left: Box::new(left),
-                operator: crate::TermOperator::Subtract,
+                operator: ast::TermOperator::Subtract,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::Star => Ok(crate::Expr::Factor(crate::FactorExpr {
+            tokenizer::TokenType::Star => Ok(ast::Expr::Factor(ast::FactorExpr {
                 left: Box::new(left),
-                operator: crate::FactorOperator::Multiply,
+                operator: ast::FactorOperator::Multiply,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::Slash => Ok(crate::Expr::Factor(crate::FactorExpr {
+            tokenizer::TokenType::Slash => Ok(ast::Expr::Factor(ast::FactorExpr {
                 left: Box::new(left),
-                operator: crate::FactorOperator::Divide,
+                operator: ast::FactorOperator::Divide,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::Modulo => Ok(crate::Expr::Factor(crate::FactorExpr {
+            tokenizer::TokenType::Modulo => Ok(ast::Expr::Factor(ast::FactorExpr {
                 left: Box::new(left),
-                operator: crate::FactorOperator::Modulo,
+                operator: ast::FactorOperator::Modulo,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::EqualsEquals => Ok(crate::Expr::Equality(crate::EqualityExpr {
+            tokenizer::TokenType::EqualsEquals => Ok(ast::Expr::Equality(ast::EqualityExpr {
                 left: Box::new(left),
-                operator: crate::EqualityOperator::Equal,
+                operator: ast::EqualityOperator::Equal,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::BangEquals => Ok(crate::Expr::Equality(crate::EqualityExpr {
+            tokenizer::TokenType::BangEquals => Ok(ast::Expr::Equality(ast::EqualityExpr {
                 left: Box::new(left),
-                operator: crate::EqualityOperator::NotEqual,
+                operator: ast::EqualityOperator::NotEqual,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::Less => Ok(crate::Expr::Comparison(crate::ComparisonExpr {
+            tokenizer::TokenType::Less => Ok(ast::Expr::Comparison(ast::ComparisonExpr {
                 left: Box::new(left),
-                operator: crate::ComparisonOperator::Less,
+                operator: ast::ComparisonOperator::Less,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::LessEquals => {
-                Ok(crate::Expr::Comparison(crate::ComparisonExpr {
-                    left: Box::new(left),
-                    operator: crate::ComparisonOperator::LessEqual,
-                    right: Box::new(right),
-                    span,
-                }))
-            }
-            tokenizer::TokenType::Greater => Ok(crate::Expr::Comparison(crate::ComparisonExpr {
+            tokenizer::TokenType::LessEquals => Ok(ast::Expr::Comparison(ast::ComparisonExpr {
                 left: Box::new(left),
-                operator: crate::ComparisonOperator::Greater,
+                operator: ast::ComparisonOperator::LessEqual,
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::GreaterEquals => {
-                Ok(crate::Expr::Comparison(crate::ComparisonExpr {
-                    left: Box::new(left),
-                    operator: crate::ComparisonOperator::GreaterEqual,
-                    right: Box::new(right),
-                    span,
-                }))
-            }
-            tokenizer::TokenType::And => Ok(crate::Expr::LogicalAnd(crate::LogicalAndExpr {
+            tokenizer::TokenType::Greater => Ok(ast::Expr::Comparison(ast::ComparisonExpr {
+                left: Box::new(left),
+                operator: ast::ComparisonOperator::Greater,
+                right: Box::new(right),
+                span,
+            })),
+            tokenizer::TokenType::GreaterEquals => Ok(ast::Expr::Comparison(ast::ComparisonExpr {
+                left: Box::new(left),
+                operator: ast::ComparisonOperator::GreaterEqual,
+                right: Box::new(right),
+                span,
+            })),
+            tokenizer::TokenType::And => Ok(ast::Expr::LogicalAnd(ast::LogicalAndExpr {
                 left: Box::new(left),
                 right: Box::new(right),
                 span,
             })),
-            tokenizer::TokenType::Or => Ok(crate::Expr::LogicalOr(crate::LogicalOrExpr {
+            tokenizer::TokenType::Or => Ok(ast::Expr::LogicalOr(ast::LogicalOrExpr {
                 left: Box::new(left),
                 right: Box::new(right),
                 span,
@@ -1057,8 +1058,7 @@ mod expression_parser {
         }
     }
 
-    fn ternary(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
-        // Parse the "then" expression with ternary precedence
+    fn ternary(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
         let then_expr = Box::new(parse(parser, Precedence::Ternary)?);
 
         parser.consume(
@@ -1069,9 +1069,9 @@ mod expression_parser {
         // Parse the "else" expression with ternary precedence (right associative)
         let else_expr = Box::new(parse(parser, Precedence::Ternary)?);
 
-        let span = crate::SourceSpan::combine(left.span(), else_expr.span());
+        let span = ast::SourceSpan::combine(left.span(), else_expr.span());
 
-        Ok(crate::Expr::Ternary(crate::TernaryExpr {
+        Ok(ast::Expr::Ternary(ast::TernaryExpr {
             condition: Box::new(left),
             then_expr: Some(then_expr),
             else_expr: Some(else_expr),
@@ -1079,19 +1079,19 @@ mod expression_parser {
         }))
     }
 
-    fn pipe(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
+    fn pipe(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
         // Parse the right side with pipe precedence + 1 for left associativity
         let right = Box::new(parse(parser, Precedence::Pipe)?);
-        let span = crate::SourceSpan::combine(left.span(), right.span());
+        let span = ast::SourceSpan::combine(left.span(), right.span());
 
-        Ok(crate::Expr::Pipe(crate::PipeExpr {
+        Ok(ast::Expr::Pipe(ast::PipeExpr {
             left: Box::new(left),
             right: Some(right),
             span,
         }))
     }
 
-    fn call(parser: &mut Parser, left: crate::Expr) -> ParseResult<crate::Expr> {
+    fn call(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
         let mut expr = left;
 
         // Keep applying call operations as long as we find them
@@ -1106,7 +1106,7 @@ mod expression_parser {
                         tokenizer::TokenType::RightParen,
                         "Expect ')' after arguments.",
                     )?;
-                    crate::CallOperation::Call(arguments)
+                    ast::CallOperation::Call(arguments)
                 }
 
                 // Property access: expr.property
@@ -1123,9 +1123,9 @@ mod expression_parser {
                         .as_ref()
                         .map(|t| t.lexeme(parser.source_map))
                         .unwrap();
-                    let property = crate::Identifier::new(property_name, property_span);
+                    let property = ast::Identifier::new(property_name, property_span);
 
-                    crate::CallOperation::Property(property)
+                    ast::CallOperation::Property(property)
                 }
 
                 // Optional property access: expr.?property
@@ -1142,9 +1142,9 @@ mod expression_parser {
                         .as_ref()
                         .map(|t| t.lexeme(parser.source_map))
                         .unwrap();
-                    let property = crate::Identifier::new(property_name, property_span);
+                    let property = ast::Identifier::new(property_name, property_span);
 
-                    crate::CallOperation::OptionalProperty(property)
+                    ast::CallOperation::OptionalProperty(property)
                 }
 
                 // Array/index access: expr[index]
@@ -1155,7 +1155,7 @@ mod expression_parser {
                         tokenizer::TokenType::RightSquareBracket,
                         "Expect ']' after array index.",
                     )?;
-                    crate::CallOperation::Index(index)
+                    ast::CallOperation::Index(index)
                 }
 
                 // Not a call operation, we're done with this chain
@@ -1164,9 +1164,9 @@ mod expression_parser {
 
             // Create a new CallExpr with the operation applied
             let end_span = parser.get_previous_span();
-            let span = crate::SourceSpan::combine(expr.span(), end_span);
+            let span = ast::SourceSpan::combine(expr.span(), end_span);
 
-            expr = crate::Expr::Call(crate::CallExpr {
+            expr = ast::Expr::Call(ast::CallExpr {
                 callee: Box::new(expr),
                 operation: Box::new(operation),
                 span,
@@ -1176,7 +1176,7 @@ mod expression_parser {
         Ok(expr)
     }
 
-    fn parse_arguments(parser: &mut Parser) -> ParseResult<Vec<crate::Expr>> {
+    fn parse_arguments(parser: &mut Parser) -> ParseResult<Vec<ast::Expr>> {
         let mut arguments = Vec::new();
 
         // Handle empty argument list: func()
@@ -1346,7 +1346,7 @@ mod expression_parser {
         }
     }
 
-    pub fn parse(parser: &mut Parser, precedence: Precedence) -> ParseResult<crate::Expr> {
+    pub fn parse(parser: &mut Parser, precedence: Precedence) -> ParseResult<ast::Expr> {
         parser.advance();
 
         let prefix_rule = parser
@@ -1361,7 +1361,7 @@ mod expression_parser {
                 let span = parser
                     .previous_token
                     .as_ref()
-                    .map(crate::SourceSpan::from_token)
+                    .map(ast::SourceSpan::from_token)
                     .unwrap_or_default();
 
                 return Err(crate::QangError::parse_error("Expected expression.", span));

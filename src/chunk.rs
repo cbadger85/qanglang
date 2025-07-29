@@ -1,4 +1,7 @@
-use crate::{ast::SourceSpan, heap::ObjectHandle};
+use crate::{
+    ast::{self, SourceSpan},
+    heap::ObjectHandle,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -6,6 +9,12 @@ pub enum Value {
     Boolean(bool),
     Number(f64),
     String(ObjectHandle),
+}
+
+impl From<f64> for Value {
+    fn from(num: f64) -> Self {
+        Value::Number(num)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,6 +35,9 @@ pub enum OpCode {
     Equal,
     Greater,
     Less,
+    GreaterEqual,
+    LessEqual,
+    Modulo,
 }
 
 impl From<u8> for OpCode {
@@ -45,7 +57,55 @@ impl From<u8> for OpCode {
             11 => OpCode::Equal,
             12 => OpCode::Greater,
             13 => OpCode::Less,
+            14 => OpCode::GreaterEqual,
+            15 => OpCode::LessEqual,
+            16 => OpCode::Modulo,
             _ => panic!("Unknown opcode: {}", byte),
+        }
+    }
+}
+
+impl From<bool> for OpCode {
+    fn from(boolean: bool) -> Self {
+        if boolean { OpCode::True } else { OpCode::False }
+    }
+}
+
+impl From<ast::ComparisonOperator> for OpCode {
+    fn from(value: ast::ComparisonOperator) -> Self {
+        match value {
+            ast::ComparisonOperator::Greater => OpCode::Greater,
+            ast::ComparisonOperator::Less => OpCode::Less,
+            ast::ComparisonOperator::GreaterEqual => OpCode::GreaterEqual,
+            ast::ComparisonOperator::LessEqual => OpCode::LessEqual,
+        }
+    }
+}
+
+impl From<ast::TermOperator> for OpCode {
+    fn from(value: ast::TermOperator) -> Self {
+        match value {
+            ast::TermOperator::Add => OpCode::Add,
+            ast::TermOperator::Subtract => OpCode::Subtract,
+        }
+    }
+}
+
+impl From<ast::FactorOperator> for OpCode {
+    fn from(value: ast::FactorOperator) -> Self {
+        match value {
+            ast::FactorOperator::Divide => OpCode::Divide,
+            ast::FactorOperator::Multiply => OpCode::Multiply,
+            ast::FactorOperator::Modulo => OpCode::Modulo,
+        }
+    }
+}
+
+impl From<ast::UnaryOperator> for OpCode {
+    fn from(value: ast::UnaryOperator) -> Self {
+        match value {
+            ast::UnaryOperator::Minus => OpCode::Negate,
+            ast::UnaryOperator::Not => OpCode::Not,
         }
     }
 }

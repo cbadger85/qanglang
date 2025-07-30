@@ -1,21 +1,22 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);
 
 #[derive(Debug)]
-pub enum HeapObject {
-    String(String),
-    // TODO - flesh this out below
-    Function,
-    Class,
-    Instance,
+pub struct HeapObject {
+    pub value: HeapObjectValue,
+}
+
+#[derive(Debug)]
+pub enum HeapObjectValue {
+    String(Box<str>),
 }
 
 pub struct ObjectHeap {
     objects: Vec<Option<HeapObject>>,
     free_list: Vec<usize>,
-    string_interner: HashMap<String, ObjectHandle>,
+    string_interner: HashMap<Box<str>, ObjectHandle>,
 }
 
 impl ObjectHeap {
@@ -27,16 +28,18 @@ impl ObjectHeap {
         }
     }
 
-    pub fn intern_string(&mut self, s: String) -> ObjectHandle {
-        if let Some(&existing_handle) = self.string_interner.get(&s) {
-            return existing_handle;
+    pub fn intern_string(&mut self, s: Box<str>) -> ObjectHandle {
+        match self.string_interner.entry(s) {
+            Entry::Occupied(entry) => *entry.get(),
+            Entry::Vacant(entry) => {
+                let s = entry.into_key();
+                let handle = self.allocate_object(HeapObject {
+                    value: HeapObjectValue::String(s.clone()),
+                });
+                self.string_interner.insert(s, handle);
+                handle
+            }
         }
-
-        let handle = self.allocate_object(HeapObject::String(s.clone()));
-
-        self.string_interner.insert(s, handle);
-
-        handle
     }
 
     pub fn allocate_object(&mut self, obj: HeapObject) -> ObjectHandle {
@@ -60,10 +63,23 @@ impl ObjectHeap {
 
     pub fn free(&mut self, handle: ObjectHandle) {
         if let Some(obj) = self.objects[handle.0].take() {
-            if let HeapObject::String(s) = obj {
-                self.string_interner.remove(&s);
+            match obj.value {
+                HeapObjectValue::String(_) => {
+                    return;
+                }
+                _ => self.free_list.push(handle.0),
             }
-            self.free_list.push(handle.0);
+        }
+    }
+
+    pub fn garbage_collect(&mut self) {
+        for (index, obj) in self.objects.iter().enumerate() {
+            match obj {
+                Some(obj) => todo!("Check if object is in use, if it is not, free it"),
+                _ => {
+                    continue;
+                }
+            }
         }
     }
 }

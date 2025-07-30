@@ -537,7 +537,7 @@ pub struct NumberLiteral {
 /// String literal
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringLiteral {
-    pub value: String,
+    pub value: Box<str>,
     pub span: SourceSpan,
 }
 
@@ -582,7 +582,7 @@ pub struct SuperMethod {
 /// Identifier
 #[derive(Debug, Clone, PartialEq)]
 pub struct Identifier {
-    pub name: String,
+    pub name: Box<str>,
     pub span: SourceSpan,
 }
 
@@ -608,7 +608,7 @@ impl Program {
 }
 
 impl Identifier {
-    pub fn new(name: String, span: SourceSpan) -> Self {
+    pub fn new(name: Box<str>, span: SourceSpan) -> Self {
         Self { name, span }
     }
 }
@@ -1679,7 +1679,7 @@ mod tests {
     use super::*;
 
     pub struct IdentifierCollector {
-        pub identifiers: Vec<String>,
+        pub identifiers: Vec<Box<str>>,
     }
 
     impl IdentifierCollector {
@@ -1707,10 +1707,7 @@ mod tests {
     fn test_identifier_collector() {
         let mut collector = IdentifierCollector::new();
 
-        let identifier = Identifier {
-            name: "test_var".to_string(),
-            span: SourceSpan::new(0, 8),
-        };
+        let identifier = Identifier::new("test_var".into(), SourceSpan::new(0, 8));
 
         let source_map = SourceMap::new("".to_string());
         let mut errors = ErrorReporter::new(&source_map);
@@ -1719,7 +1716,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(collector.identifiers.len(), 1);
-        assert_eq!(collector.identifiers[0], "test_var");
+        assert_eq!(collector.identifiers[0], Box::<str>::from("test_var"));
     }
 
     #[test]

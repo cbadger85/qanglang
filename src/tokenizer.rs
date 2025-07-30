@@ -102,7 +102,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn lexeme(&self, source_map: &SourceMap) -> String {
+    pub fn lexeme(&self, source_map: &SourceMap) -> Box<str> {
         source_map.get_source()[self.start..self.end]
             .iter()
             .collect()
@@ -729,9 +729,9 @@ mod tests {
         let source_map = &SourceMap::new("hello world 123".to_string());
         let tokens = tokenize_all(source_map);
 
-        assert_eq!(tokens[0].lexeme(source_map), "hello");
-        assert_eq!(tokens[1].lexeme(source_map), "world");
-        assert_eq!(tokens[2].lexeme(source_map), "123");
+        assert_eq!(tokens[0].lexeme(source_map), Box::<str>::from("hello"));
+        assert_eq!(tokens[1].lexeme(source_map), Box::<str>::from("world"));
+        assert_eq!(tokens[2].lexeme(source_map), Box::<str>::from("123"));
     }
 
     #[test]
@@ -1518,11 +1518,11 @@ mod tests {
         // Verify lexemes are correct
         assert_eq!(
             tokenizer.peek_ahead(0).unwrap().lexeme(&source_map),
-            "\"hello world\""
+            Box::<str>::from("\"hello world\"")
         );
         assert_eq!(
             tokenizer.peek_ahead(2).unwrap().lexeme(&source_map),
-            "123.45"
+            Box::<str>::from("123.45")
         );
     }
 

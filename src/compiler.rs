@@ -1,13 +1,13 @@
 use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
-    ast::{self, AstTransformer, AstVisitor},
+    ast::{self, AstTransformer, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode},
     heap::ObjectHeap,
     parser::Parser,
 };
 
 trait TransformerMiddleware {
-    fn run(&mut self, program: ast::Program, _errors: &mut ErrorReporter) -> ast::Program {
+    fn run(&mut self, program: ast::Program) -> ast::Program {
         program
     }
 }
@@ -24,17 +24,10 @@ impl<T> TransformerAdapter<T> {
 
 impl<T> TransformerMiddleware for TransformerAdapter<T>
 where
-    T: AstTransformer<Error = QangError>,
+    T: AstTransformer,
 {
-    fn run(&mut self, program: ast::Program, errors: &mut ErrorReporter) -> ast::Program {
-        match self.transformer.transform_program(program) {
-            Ok(transformed) => transformed,
-            Err(error) => {
-                errors.report_error(error);
-                // Return original or empty program on error
-                ast::Program::new(Vec::new(), ast::SourceSpan::default())
-            }
-        }
+    fn run(&mut self, program: ast::Program) -> ast::Program {
+        self.transformer.transform_program(program)
     }
 }
 
@@ -54,10 +47,10 @@ impl<T> VisitorAdapter<T> {
 
 impl<T> AnalysisMiddleware for VisitorAdapter<T>
 where
-    T: AstVisitor<(), Error = QangError>,
+    T: AstVisitor<Error = QangError>,
 {
     fn analyze(&mut self, program: &ast::Program, errors: &mut ErrorReporter) {
-        if let Err(error) = self.visitor.visit_program(program) {
+        if let Err(error) = self.visitor.visit_program(program, errors) {
             errors.report_error(error);
         }
     }
@@ -65,8 +58,6 @@ where
 
 pub struct Compiler<'a> {
     source_map: &'a SourceMap,
-    errors: ErrorReporter<'a>,
-    current_span: ast::SourceSpan,
     current_chunk: Chunk,
     transformers: Vec<Box<dyn TransformerMiddleware>>,
     analyzers: Vec<Box<dyn AnalysisMiddleware>>,
@@ -79,8 +70,6 @@ impl<'a> Compiler<'a> {
         Self {
             source_map,
             current_chunk: Chunk::new(),
-            current_span: ast::SourceSpan::default(),
-            errors: ErrorReporter::new(source_map),
             transformers: Vec::new(),
             analyzers: Vec::new(),
             is_silent: false,
@@ -90,7 +79,7 @@ impl<'a> Compiler<'a> {
 
     pub fn add_analyzer<T>(mut self, analyzer: T) -> Self
     where
-        T: AstVisitor<(), Error = QangError> + 'static,
+        T: AstVisitor<Error = QangError> + 'static,
     {
         self.analyzers.push(Box::new(VisitorAdapter::new(analyzer)));
 
@@ -99,7 +88,7 @@ impl<'a> Compiler<'a> {
 
     pub fn add_transformer<T>(mut self, transformer: T) -> Self
     where
-        T: AstTransformer<Error = QangError> + 'static,
+        T: AstTransformer + 'static,
     {
         self.transformers
             .push(Box::new(TransformerAdapter::new(transformer)));
@@ -118,59 +107,53 @@ impl<'a> Compiler<'a> {
         let mut program = parser.parse();
         let mut errors = parser.into_reporter();
 
-        for transformer in &mut self.transformers {
-            program = transformer.as_mut().run(program, &mut errors);
-        }
-
         for analyzer in &mut self.analyzers {
             analyzer.analyze(&program, &mut errors);
         }
 
-        self.errors = errors;
+        for transformer in &mut self.transformers {
+            program = transformer.as_mut().run(program);
+        }
 
-        self.visit_program(&program)
+        self.visit_program(&program, &mut errors)
             .map_err(|err| QangErrors(vec![err]))?;
 
-        if self.errors.has_errors() {
-            Err(self.errors.into_errors())
+        if errors.has_errors() {
+            Err(errors.into_errors())
         } else {
             Ok(self.current_chunk)
         }
     }
 
-    fn emit_opcode(&mut self, opcode: OpCode) {
+    fn emit_opcode(&mut self, opcode: OpCode, span: SourceSpan) {
         if !self.is_silent {
-            self.current_chunk.write_opcode(opcode, self.current_span);
+            self.current_chunk.write_opcode(opcode, span);
         }
     }
 
-    fn emit_byte(&mut self, byte: u8) {
+    fn emit_byte(&mut self, byte: u8, span: SourceSpan) {
         if !self.is_silent {
-            self.current_chunk.write(byte, self.current_span);
+            self.current_chunk.write(byte, span);
         }
     }
 
-    fn emit_opcode_and_byte(&mut self, opcode: OpCode, byte: u8) {
-        self.emit_opcode(opcode);
-        self.emit_byte(byte);
+    fn emit_opcode_and_byte(&mut self, opcode: OpCode, byte: u8, span: SourceSpan) {
+        self.emit_opcode(opcode, span);
+        self.emit_byte(byte, span);
     }
 
-    fn emit_constant(&mut self, value: Value) {
-        let constant = self.make_constant(value);
+    fn emit_constant(&mut self, value: Value, span: SourceSpan, errors: &mut ErrorReporter) {
+        let constant = self.make_constant(value, span, errors);
 
-        self.emit_opcode_and_byte(OpCode::Constant, constant);
+        self.emit_opcode_and_byte(OpCode::Constant, constant, span);
     }
 
-    fn report_error(&mut self, message: &str) {
-        self.is_silent = true;
-        self.errors.report_parse_error(message, self.current_span);
-    }
-
-    fn make_constant(&mut self, value: Value) -> u8 {
+    fn make_constant(&mut self, value: Value, span: SourceSpan, errors: &mut ErrorReporter) -> u8 {
         let index = self.current_chunk.add_constant(value);
 
         if index > u8::MAX as usize {
-            self.report_error("Constant index out of range");
+            self.is_silent = true;
+            errors.report_parse_error("Constant index out of range", span);
             0
         } else {
             index as u8
@@ -178,63 +161,93 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl<'a> AstVisitor<()> for Compiler<'a> {
+impl<'a> AstVisitor for Compiler<'a> {
     type Error = QangError;
 
-    fn visit_number_literal(&mut self, number: &ast::NumberLiteral) -> Result<(), Self::Error> {
-        self.emit_constant(number.value.into());
+    fn visit_number_literal(
+        &mut self,
+        number: &ast::NumberLiteral,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.emit_constant(number.value.into(), number.span, errors);
         Ok(())
     }
 
-    fn visit_string_literal(&mut self, string: &ast::StringLiteral) -> Result<(), Self::Error> {
+    fn visit_string_literal(
+        &mut self,
+        string: &ast::StringLiteral,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         let handle = self.heap.intern_string(string.value.to_owned());
-        self.emit_constant(Value::String(handle));
+        self.emit_constant(Value::String(handle), string.span, errors);
         Ok(())
     }
 
-    fn visit_boolean_literal(&mut self, boolean: &ast::BooleanLiteral) -> Result<(), Self::Error> {
-        self.emit_opcode(boolean.value.into());
+    fn visit_boolean_literal(
+        &mut self,
+        boolean: &ast::BooleanLiteral,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.emit_opcode(boolean.value.into(), boolean.span);
         Ok(())
     }
 
-    fn visit_nil_literal(&mut self, _nil: &ast::NilLiteral) -> Result<(), Self::Error> {
-        self.emit_opcode(OpCode::Nil);
+    fn visit_nil_literal(
+        &mut self,
+        nil: &ast::NilLiteral,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.emit_opcode(OpCode::Nil, nil.span);
         Ok(())
     }
 
     fn visit_comparison_expression(
         &mut self,
         comparison: &ast::ComparisonExpr,
+        errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(&comparison.left)?;
-        self.emit_opcode(comparison.operator.into());
-        self.visit_expression(&comparison.right)?;
+        self.visit_expression(&comparison.left, errors)?;
+        self.emit_opcode(comparison.operator.into(), comparison.span);
+        self.visit_expression(&comparison.right, errors)?;
         Ok(())
     }
 
-    fn visit_term_expression(&mut self, term: &ast::TermExpr) -> Result<(), Self::Error> {
-        self.visit_expression(&term.left)?;
-        self.emit_opcode(term.operator.into());
-        self.visit_expression(&term.right)?;
+    fn visit_term_expression(
+        &mut self,
+        term: &ast::TermExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&term.left, errors)?;
+        self.emit_opcode(term.operator.into(), term.span);
+        self.visit_expression(&term.right, errors)?;
         Ok(())
     }
 
-    fn visit_factor_expression(&mut self, factor: &ast::FactorExpr) -> Result<(), Self::Error> {
-        self.visit_expression(&factor.left)?;
-        self.emit_opcode(factor.operator.into());
-        self.visit_expression(&factor.right)?;
+    fn visit_factor_expression(
+        &mut self,
+        factor: &ast::FactorExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&factor.left, errors)?;
+        self.emit_opcode(factor.operator.into(), factor.span);
+        self.visit_expression(&factor.right, errors)?;
         Ok(())
     }
 
-    fn visit_unary_expression(&mut self, unary: &ast::UnaryExpr) -> Result<(), Self::Error> {
-        self.emit_opcode(unary.operator.into());
-        self.visit_expression(&unary.operand)?;
+    fn visit_unary_expression(
+        &mut self,
+        unary: &ast::UnaryExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.emit_opcode(unary.operator.into(), unary.span);
+        self.visit_expression(&unary.operand, errors)?;
         Ok(())
     }
 
     fn visit_assignment_expression(
         &mut self,
         _assignment: &ast::AssignmentExpr,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -242,6 +255,7 @@ impl<'a> AstVisitor<()> for Compiler<'a> {
     fn visit_variable_declaration(
         &mut self,
         _var_decl: &ast::VariableDecl,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -249,6 +263,7 @@ impl<'a> AstVisitor<()> for Compiler<'a> {
     fn visit_lambda_declaration(
         &mut self,
         _lambda_decl: &ast::LambdaDecl,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -256,15 +271,16 @@ impl<'a> AstVisitor<()> for Compiler<'a> {
     fn visit_function_declaration(
         &mut self,
         _func_decl: &ast::FunctionDecl,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn visit_class_declaration(&mut self, _class_decl: &ast::ClassDecl) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    fn default_result(&self) -> Result<(), Self::Error> {
+    fn visit_class_declaration(
+        &mut self,
+        _class_decl: &ast::ClassDecl,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }

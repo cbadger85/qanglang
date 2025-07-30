@@ -1,4 +1,4 @@
-use crate::tokenizer::Token;
+use crate::{ErrorReporter, tokenizer::Token};
 
 /// Represents a position in the source code for error reporting and debugging
 #[derive(Debug, Clone, PartialEq, Default, Copy)]
@@ -613,451 +613,622 @@ impl Identifier {
     }
 }
 
-pub trait AstVisitor<T> {
+pub trait AstVisitor {
     type Error;
 
-    fn visit_program(&mut self, program: &Program) -> Result<T, Self::Error> {
+    fn visit_program(
+        &mut self,
+        program: &Program,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         for decl in &program.decls {
-            self.visit_declaration(decl)?;
+            self.visit_declaration(decl, errors)?;
         }
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_declaration(&mut self, decl: &Decl) -> Result<T, Self::Error> {
+    fn visit_declaration(
+        &mut self,
+        decl: &Decl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match decl {
-            Decl::Class(class_decl) => self.visit_class_declaration(class_decl),
-            Decl::Function(func_decl) => self.visit_function_declaration(func_decl),
-            Decl::Lambda(lambda_decl) => self.visit_lambda_declaration(lambda_decl),
-            Decl::Variable(var_decl) => self.visit_variable_declaration(var_decl),
-            Decl::Stmt(stmt) => self.visit_statement(stmt),
+            Decl::Class(class_decl) => self.visit_class_declaration(class_decl, errors),
+            Decl::Function(func_decl) => self.visit_function_declaration(func_decl, errors),
+            Decl::Lambda(lambda_decl) => self.visit_lambda_declaration(lambda_decl, errors),
+            Decl::Variable(var_decl) => self.visit_variable_declaration(var_decl, errors),
+            Decl::Stmt(stmt) => self.visit_statement(stmt, errors),
         }
     }
 
-    fn visit_class_declaration(&mut self, class_decl: &ClassDecl) -> Result<T, Self::Error> {
-        self.visit_identifier(&class_decl.name)?;
+    fn visit_class_declaration(
+        &mut self,
+        class_decl: &ClassDecl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(&class_decl.name, errors)?;
 
         if let Some(superclass) = &class_decl.superclass {
-            self.visit_identifier(superclass)?;
+            self.visit_identifier(superclass, errors)?;
         }
 
         for member in &class_decl.members {
-            self.visit_class_member(member)?;
+            self.visit_class_member(member, errors)?;
         }
 
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_class_member(&mut self, member: &ClassMember) -> Result<T, Self::Error> {
+    fn visit_class_member(
+        &mut self,
+        member: &ClassMember,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match member {
-            ClassMember::Method(method) => self.visit_function_expression(method),
-            ClassMember::Field(field) => self.visit_field_declaration(field),
+            ClassMember::Method(method) => self.visit_function_expression(method, errors),
+            ClassMember::Field(field) => self.visit_field_declaration(field, errors),
         }
     }
 
-    fn visit_field_declaration(&mut self, field_decl: &FieldDecl) -> Result<T, Self::Error> {
-        self.visit_identifier(&field_decl.name)?;
+    fn visit_field_declaration(
+        &mut self,
+        field_decl: &FieldDecl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(&field_decl.name, errors)?;
 
         if let Some(initializer) = &field_decl.initializer {
-            self.visit_expression(initializer)?;
+            self.visit_expression(initializer, errors)?;
         }
 
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_function_declaration(&mut self, func_decl: &FunctionDecl) -> Result<T, Self::Error> {
-        self.visit_function_expression(&func_decl.function)
+    fn visit_function_declaration(
+        &mut self,
+        func_decl: &FunctionDecl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_function_expression(&func_decl.function, errors)
     }
 
-    fn visit_function_expression(&mut self, func_expr: &FunctionExpr) -> Result<T, Self::Error> {
-        self.visit_identifier(&func_expr.name)?;
+    fn visit_function_expression(
+        &mut self,
+        func_expr: &FunctionExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(&func_expr.name, errors)?;
 
         for param in &func_expr.parameters {
-            self.visit_identifier(param)?;
+            self.visit_identifier(param, errors)?;
         }
 
-        self.visit_block_statement(&func_expr.body)
+        self.visit_block_statement(&func_expr.body, errors)
     }
 
-    fn visit_lambda_declaration(&mut self, lambda_decl: &LambdaDecl) -> Result<T, Self::Error> {
-        self.visit_identifier(&lambda_decl.name)?;
-        self.visit_lambda_expression(&lambda_decl.lambda)
+    fn visit_lambda_declaration(
+        &mut self,
+        lambda_decl: &LambdaDecl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(&lambda_decl.name, errors)?;
+        self.visit_lambda_expression(&lambda_decl.lambda, errors)
     }
 
-    fn visit_lambda_expression(&mut self, lambda_expr: &LambdaExpr) -> Result<T, Self::Error> {
+    fn visit_lambda_expression(
+        &mut self,
+        lambda_expr: &LambdaExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         for param in &lambda_expr.parameters {
-            self.visit_identifier(param)?;
+            self.visit_identifier(param, errors)?;
         }
 
-        self.visit_lambda_body(&lambda_expr.body)
+        self.visit_lambda_body(&lambda_expr.body, errors)
     }
 
-    fn visit_lambda_body(&mut self, body: &LambdaBody) -> Result<T, Self::Error> {
+    fn visit_lambda_body(
+        &mut self,
+        body: &LambdaBody,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match body {
-            LambdaBody::Block(block) => self.visit_block_statement(block),
-            LambdaBody::Expr(expr) => self.visit_expression(expr),
+            LambdaBody::Block(block) => self.visit_block_statement(block, errors),
+            LambdaBody::Expr(expr) => self.visit_expression(expr, errors),
         }
     }
 
-    fn visit_variable_declaration(&mut self, var_decl: &VariableDecl) -> Result<T, Self::Error> {
-        self.visit_identifier(&var_decl.name)?;
+    fn visit_variable_declaration(
+        &mut self,
+        var_decl: &VariableDecl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(&var_decl.name, errors)?;
 
         if let Some(initializer) = &var_decl.initializer {
-            self.visit_expression(initializer)?;
+            self.visit_expression(initializer, errors)?;
         }
 
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_statement(&mut self, stmt: &Stmt) -> Result<T, Self::Error> {
+    fn visit_statement(
+        &mut self,
+        stmt: &Stmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match stmt {
-            Stmt::Expr(expr_stmt) => self.visit_expression_statement(expr_stmt),
-            Stmt::Block(block_stmt) => self.visit_block_statement(block_stmt),
-            Stmt::If(if_stmt) => self.visit_if_statement(if_stmt),
-            Stmt::While(while_stmt) => self.visit_while_statement(while_stmt),
-            Stmt::For(for_stmt) => self.visit_for_statement(for_stmt),
-            Stmt::Break(break_stmt) => self.visit_break_statement(break_stmt),
-            Stmt::Continue(continue_stmt) => self.visit_continue_statement(continue_stmt),
-            Stmt::Return(return_stmt) => self.visit_return_statement(return_stmt),
-            Stmt::Throw(throw_stmt) => self.visit_throw_statement(throw_stmt),
-            Stmt::Try(try_stmt) => self.visit_try_statement(try_stmt),
+            Stmt::Expr(expr_stmt) => self.visit_expression_statement(expr_stmt, errors),
+            Stmt::Block(block_stmt) => self.visit_block_statement(block_stmt, errors),
+            Stmt::If(if_stmt) => self.visit_if_statement(if_stmt, errors),
+            Stmt::While(while_stmt) => self.visit_while_statement(while_stmt, errors),
+            Stmt::For(for_stmt) => self.visit_for_statement(for_stmt, errors),
+            Stmt::Break(break_stmt) => self.visit_break_statement(break_stmt, errors),
+            Stmt::Continue(continue_stmt) => self.visit_continue_statement(continue_stmt, errors),
+            Stmt::Return(return_stmt) => self.visit_return_statement(return_stmt, errors),
+            Stmt::Throw(throw_stmt) => self.visit_throw_statement(throw_stmt, errors),
+            Stmt::Try(try_stmt) => self.visit_try_statement(try_stmt, errors),
         }
     }
 
-    fn visit_expression_statement(&mut self, expr_stmt: &ExprStmt) -> Result<T, Self::Error> {
-        self.visit_expression(&expr_stmt.expr)
+    fn visit_expression_statement(
+        &mut self,
+        expr_stmt: &ExprStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&expr_stmt.expr, errors)
     }
 
-    fn visit_block_statement(&mut self, block_stmt: &BlockStmt) -> Result<T, Self::Error> {
+    fn visit_block_statement(
+        &mut self,
+        block_stmt: &BlockStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         for decl in &block_stmt.decls {
-            self.visit_declaration(decl)?;
+            self.visit_declaration(decl, errors)?;
         }
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_if_statement(&mut self, if_stmt: &IfStmt) -> Result<T, Self::Error> {
-        self.visit_expression(&if_stmt.condition)?;
-        self.visit_statement(&if_stmt.then_branch)?;
+    fn visit_if_statement(
+        &mut self,
+        if_stmt: &IfStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&if_stmt.condition, errors)?;
+        self.visit_statement(&if_stmt.then_branch, errors)?;
 
         if let Some(else_branch) = &if_stmt.else_branch {
-            self.visit_statement(else_branch)?;
+            self.visit_statement(else_branch, errors)?;
         }
 
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_while_statement(&mut self, while_stmt: &WhileStmt) -> Result<T, Self::Error> {
-        self.visit_expression(&while_stmt.condition)?;
-        self.visit_statement(&while_stmt.body)
+    fn visit_while_statement(
+        &mut self,
+        while_stmt: &WhileStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&while_stmt.condition, errors)?;
+        self.visit_statement(&while_stmt.body, errors)
     }
 
-    fn visit_for_statement(&mut self, for_stmt: &ForStmt) -> Result<T, Self::Error> {
+    fn visit_for_statement(
+        &mut self,
+        for_stmt: &ForStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         if let Some(initializer) = &for_stmt.initializer {
-            self.visit_for_initializer(initializer)?;
+            self.visit_for_initializer(initializer, errors)?;
         }
 
         if let Some(condition) = &for_stmt.condition {
-            self.visit_expression(condition)?;
+            self.visit_expression(condition, errors)?;
         }
 
         if let Some(increment) = &for_stmt.increment {
-            self.visit_expression(increment)?;
+            self.visit_expression(increment, errors)?;
         }
 
-        self.visit_statement(&for_stmt.body)
+        self.visit_statement(&for_stmt.body, errors)
     }
 
-    fn visit_for_initializer(&mut self, initializer: &ForInitializer) -> Result<T, Self::Error> {
+    fn visit_for_initializer(
+        &mut self,
+        initializer: &ForInitializer,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match initializer {
-            ForInitializer::Variable(var_decl) => self.visit_variable_declaration(var_decl),
-            ForInitializer::Expr(expr) => self.visit_expression(expr),
+            ForInitializer::Variable(var_decl) => self.visit_variable_declaration(var_decl, errors),
+            ForInitializer::Expr(expr) => self.visit_expression(expr, errors),
         }
     }
 
-    fn visit_break_statement(&mut self, _break_stmt: &BreakStmt) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_break_statement(
+        &mut self,
+        _break_stmt: &BreakStmt,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
     fn visit_continue_statement(
         &mut self,
         _continue_stmt: &ContinueStmt,
-    ) -> Result<T, Self::Error> {
-        self.default_result()
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_return_statement(&mut self, return_stmt: &ReturnStmt) -> Result<T, Self::Error> {
+    fn visit_return_statement(
+        &mut self,
+        return_stmt: &ReturnStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         if let Some(value) = &return_stmt.value {
-            self.visit_expression(value)?;
+            self.visit_expression(value, errors)?;
         }
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_throw_statement(&mut self, throw_stmt: &ThrowStmt) -> Result<T, Self::Error> {
+    fn visit_throw_statement(
+        &mut self,
+        throw_stmt: &ThrowStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         if let Some(value) = &throw_stmt.value {
-            self.visit_expression(value)?;
+            self.visit_expression(value, errors)?;
         }
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_try_statement(&mut self, try_stmt: &TryStmt) -> Result<T, Self::Error> {
-        self.visit_block_statement(&try_stmt.try_block)?;
+    fn visit_try_statement(
+        &mut self,
+        try_stmt: &TryStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_block_statement(&try_stmt.try_block, errors)?;
 
         if let Some(catch_clause) = &try_stmt.catch_clause {
-            self.visit_catch_clause(catch_clause)?;
+            self.visit_catch_clause(catch_clause, errors)?;
         }
 
         if let Some(finally_block) = &try_stmt.finally_block {
-            self.visit_block_statement(finally_block)?;
+            self.visit_block_statement(finally_block, errors)?;
         }
 
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_catch_clause(&mut self, catch_clause: &CatchClause) -> Result<T, Self::Error> {
+    fn visit_catch_clause(
+        &mut self,
+        catch_clause: &CatchClause,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         if let Some(parameter) = &catch_clause.parameter {
-            self.visit_identifier(parameter)?;
+            self.visit_identifier(parameter, errors)?;
         }
 
-        self.visit_block_statement(&catch_clause.body)
+        self.visit_block_statement(&catch_clause.body, errors)
     }
 
-    fn visit_expression(&mut self, expr: &Expr) -> Result<T, Self::Error> {
+    fn visit_expression(
+        &mut self,
+        expr: &Expr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match expr {
-            Expr::Assignment(assignment) => self.visit_assignment_expression(assignment),
-            Expr::Pipe(pipe) => self.visit_pipe_expression(pipe),
-            Expr::Ternary(ternary) => self.visit_ternary_expression(ternary),
-            Expr::LogicalOr(logical_or) => self.visit_logical_or_expression(logical_or),
-            Expr::LogicalAnd(logical_and) => self.visit_logical_and_expression(logical_and),
-            Expr::Equality(equality) => self.visit_equality_expression(equality),
-            Expr::Comparison(comparison) => self.visit_comparison_expression(comparison),
-            Expr::Term(term) => self.visit_term_expression(term),
-            Expr::Factor(factor) => self.visit_factor_expression(factor),
-            Expr::Unary(unary) => self.visit_unary_expression(unary),
-            Expr::Call(call) => self.visit_call_expression(call),
-            Expr::Primary(primary) => self.visit_primary_expression(primary),
+            Expr::Assignment(assignment) => self.visit_assignment_expression(assignment, errors),
+            Expr::Pipe(pipe) => self.visit_pipe_expression(pipe, errors),
+            Expr::Ternary(ternary) => self.visit_ternary_expression(ternary, errors),
+            Expr::LogicalOr(logical_or) => self.visit_logical_or_expression(logical_or, errors),
+            Expr::LogicalAnd(logical_and) => self.visit_logical_and_expression(logical_and, errors),
+            Expr::Equality(equality) => self.visit_equality_expression(equality, errors),
+            Expr::Comparison(comparison) => self.visit_comparison_expression(comparison, errors),
+            Expr::Term(term) => self.visit_term_expression(term, errors),
+            Expr::Factor(factor) => self.visit_factor_expression(factor, errors),
+            Expr::Unary(unary) => self.visit_unary_expression(unary, errors),
+            Expr::Call(call) => self.visit_call_expression(call, errors),
+            Expr::Primary(primary) => self.visit_primary_expression(primary, errors),
         }
     }
 
     fn visit_assignment_expression(
         &mut self,
         assignment: &AssignmentExpr,
-    ) -> Result<T, Self::Error> {
-        self.visit_assignment_target(&assignment.target)?;
-        self.visit_expression(&assignment.value)
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_assignment_target(&assignment.target, errors)?;
+        self.visit_expression(&assignment.value, errors)
     }
 
-    fn visit_assignment_target(&mut self, target: &AssignmentTarget) -> Result<T, Self::Error> {
+    fn visit_assignment_target(
+        &mut self,
+        target: &AssignmentTarget,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match target {
-            AssignmentTarget::Identifier(identifier) => self.visit_identifier(identifier),
-            AssignmentTarget::Property(property) => self.visit_property_access(property),
+            AssignmentTarget::Identifier(identifier) => self.visit_identifier(identifier, errors),
+            AssignmentTarget::Property(property) => self.visit_property_access(property, errors),
         }
     }
 
-    fn visit_property_access(&mut self, property: &PropertyAccess) -> Result<T, Self::Error> {
-        self.visit_expression(&property.object)?;
-        self.visit_identifier(&property.property)
+    fn visit_property_access(
+        &mut self,
+        property: &PropertyAccess,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&property.object, errors)?;
+        self.visit_identifier(&property.property, errors)
     }
 
-    fn visit_pipe_expression(&mut self, pipe: &PipeExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&pipe.left)?;
+    fn visit_pipe_expression(
+        &mut self,
+        pipe: &PipeExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&pipe.left, errors)?;
 
         if let Some(right) = &pipe.right {
-            self.visit_expression(right)?;
+            self.visit_expression(right, errors)?;
         }
 
-        self.default_result()
+        Ok(())
     }
 
-    fn visit_ternary_expression(&mut self, ternary: &TernaryExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&ternary.condition)?;
+    fn visit_ternary_expression(
+        &mut self,
+        ternary: &TernaryExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&ternary.condition, errors)?;
 
         if let Some(then_expr) = &ternary.then_expr {
-            self.visit_expression(then_expr)?;
+            self.visit_expression(then_expr, errors)?;
         }
 
         if let Some(else_expr) = &ternary.else_expr {
-            self.visit_expression(else_expr)?;
+            self.visit_expression(else_expr, errors)?;
         }
 
-        self.default_result()
+        Ok(())
     }
 
     fn visit_logical_or_expression(
         &mut self,
         logical_or: &LogicalOrExpr,
-    ) -> Result<T, Self::Error> {
-        self.visit_expression(&logical_or.left)?;
-        self.visit_expression(&logical_or.right)
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&logical_or.left, errors)?;
+        self.visit_expression(&logical_or.right, errors)
     }
 
     fn visit_logical_and_expression(
         &mut self,
         logical_and: &LogicalAndExpr,
-    ) -> Result<T, Self::Error> {
-        self.visit_expression(&logical_and.left)?;
-        self.visit_expression(&logical_and.right)
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&logical_and.left, errors)?;
+        self.visit_expression(&logical_and.right, errors)
     }
 
-    fn visit_equality_expression(&mut self, equality: &EqualityExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&equality.left)?;
-        self.visit_expression(&equality.right)
+    fn visit_equality_expression(
+        &mut self,
+        equality: &EqualityExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&equality.left, errors)?;
+        self.visit_expression(&equality.right, errors)
     }
 
     fn visit_comparison_expression(
         &mut self,
         comparison: &ComparisonExpr,
-    ) -> Result<T, Self::Error> {
-        self.visit_expression(&comparison.left)?;
-        self.visit_expression(&comparison.right)
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&comparison.left, errors)?;
+        self.visit_expression(&comparison.right, errors)
     }
 
-    fn visit_term_expression(&mut self, term: &TermExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&term.left)?;
-        self.visit_expression(&term.right)
+    fn visit_term_expression(
+        &mut self,
+        term: &TermExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&term.left, errors)?;
+        self.visit_expression(&term.right, errors)
     }
 
-    fn visit_factor_expression(&mut self, factor: &FactorExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&factor.left)?;
-        self.visit_expression(&factor.right)
+    fn visit_factor_expression(
+        &mut self,
+        factor: &FactorExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&factor.left, errors)?;
+        self.visit_expression(&factor.right, errors)
     }
 
-    fn visit_unary_expression(&mut self, unary: &UnaryExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&unary.operand)
+    fn visit_unary_expression(
+        &mut self,
+        unary: &UnaryExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&unary.operand, errors)
     }
 
-    fn visit_call_expression(&mut self, call: &CallExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&call.callee)?;
-        self.visit_call_operation(&call.operation)
+    fn visit_call_expression(
+        &mut self,
+        call: &CallExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&call.callee, errors)?;
+        self.visit_call_operation(&call.operation, errors)
     }
 
-    fn visit_call_operation(&mut self, operation: &CallOperation) -> Result<T, Self::Error> {
+    fn visit_call_operation(
+        &mut self,
+        operation: &CallOperation,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match operation {
             CallOperation::Call(args) => {
                 for arg in args {
-                    self.visit_expression(arg)?;
+                    self.visit_expression(arg, errors)?;
                 }
-                self.default_result()
+                Ok(())
             }
-            CallOperation::Property(identifier) => self.visit_identifier(identifier),
-            CallOperation::OptionalProperty(identifier) => self.visit_identifier(identifier),
-            CallOperation::Index(expr) => self.visit_expression(expr),
+            CallOperation::Property(identifier) => self.visit_identifier(identifier, errors),
+            CallOperation::OptionalProperty(identifier) => {
+                self.visit_identifier(identifier, errors)
+            }
+            CallOperation::Index(expr) => self.visit_expression(expr, errors),
         }
     }
 
-    fn visit_primary_expression(&mut self, primary: &PrimaryExpr) -> Result<T, Self::Error> {
+    fn visit_primary_expression(
+        &mut self,
+        primary: &PrimaryExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         match primary {
-            PrimaryExpr::Number(number) => self.visit_number_literal(number),
-            PrimaryExpr::String(string) => self.visit_string_literal(string),
-            PrimaryExpr::Boolean(boolean) => self.visit_boolean_literal(boolean),
-            PrimaryExpr::Nil(nil) => self.visit_nil_literal(nil),
-            PrimaryExpr::This(this_expr) => self.visit_this_expression(this_expr),
-            PrimaryExpr::Super(super_expr) => self.visit_super_expression(super_expr),
-            PrimaryExpr::Identifier(identifier) => self.visit_identifier(identifier),
-            PrimaryExpr::Grouping(grouping) => self.visit_grouping_expression(grouping),
-            PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda),
-            PrimaryExpr::Array(array) => self.visit_array_literal(array),
+            PrimaryExpr::Number(number) => self.visit_number_literal(number, errors),
+            PrimaryExpr::String(string) => self.visit_string_literal(string, errors),
+            PrimaryExpr::Boolean(boolean) => self.visit_boolean_literal(boolean, errors),
+            PrimaryExpr::Nil(nil) => self.visit_nil_literal(nil, errors),
+            PrimaryExpr::This(this_expr) => self.visit_this_expression(this_expr, errors),
+            PrimaryExpr::Super(super_expr) => self.visit_super_expression(super_expr, errors),
+            PrimaryExpr::Identifier(identifier) => self.visit_identifier(identifier, errors),
+            PrimaryExpr::Grouping(grouping) => self.visit_grouping_expression(grouping, errors),
+            PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda, errors),
+            PrimaryExpr::Array(array) => self.visit_array_literal(array, errors),
         }
     }
 
-    fn visit_number_literal(&mut self, _number: &NumberLiteral) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_number_literal(
+        &mut self,
+        _number: &NumberLiteral,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_string_literal(&mut self, _string: &StringLiteral) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_string_literal(
+        &mut self,
+        _string: &StringLiteral,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_boolean_literal(&mut self, _boolean: &BooleanLiteral) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_boolean_literal(
+        &mut self,
+        _boolean: &BooleanLiteral,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_nil_literal(&mut self, _nil: &NilLiteral) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_nil_literal(
+        &mut self,
+        _nil: &NilLiteral,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_this_expression(&mut self, _this_expr: &ThisExpr) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_this_expression(
+        &mut self,
+        _this_expr: &ThisExpr,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_super_expression(&mut self, _super_expr: &SuperExpr) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_super_expression(
+        &mut self,
+        _super_expr: &SuperExpr,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_identifier(&mut self, _identifier: &Identifier) -> Result<T, Self::Error> {
-        self.default_result()
+    fn visit_identifier(
+        &mut self,
+        _identifier: &Identifier,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn visit_grouping_expression(&mut self, grouping: &GroupingExpr) -> Result<T, Self::Error> {
-        self.visit_expression(&grouping.expr)
+    fn visit_grouping_expression(
+        &mut self,
+        grouping: &GroupingExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&grouping.expr, errors)
     }
 
-    fn visit_array_literal(&mut self, array: &ArrayLiteral) -> Result<T, Self::Error> {
+    fn visit_array_literal(
+        &mut self,
+        array: &ArrayLiteral,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
         for element in &array.elements {
-            self.visit_expression(element)?;
+            self.visit_expression(element, errors)?;
         }
-        self.default_result()
+        Ok(())
     }
-
-    /// Default result to return when a visit method doesn't produce a specific value
-    /// This should be implemented by each visitor
-    fn default_result(&self) -> Result<T, Self::Error>;
 }
 
 /// A practical AST transformer that balances flexibility with simplicity
 pub trait AstTransformer {
-    type Error;
-
-    fn transform_program(&mut self, program: Program) -> Result<Program, Self::Error> {
+    fn transform_program(&mut self, program: Program) -> Program {
         let mut transformed_decls = Vec::new();
         for decl in program.decls {
-            match self.transform_declaration(decl)? {
+            match self.transform_declaration(decl) {
                 DeclarationResult::Keep(decl) => transformed_decls.push(*decl),
                 DeclarationResult::Replace(new_decls) => transformed_decls.extend(new_decls),
                 DeclarationResult::Remove => {} // Skip this declaration
             }
         }
-        Ok(Program::new(transformed_decls, program.span))
+        Program::new(transformed_decls, program.span)
     }
 
-    fn transform_identifier(&mut self, identifier: Identifier) -> Result<Identifier, Self::Error> {
-        Ok(identifier)
+    fn transform_identifier(&mut self, identifier: Identifier) -> Identifier {
+        identifier
     }
 
-    fn transform_block_statement(
-        &mut self,
-        block_stmt: BlockStmt,
-    ) -> Result<BlockStmt, Self::Error> {
+    fn transform_block_statement(&mut self, block_stmt: BlockStmt) -> BlockStmt {
         let mut transformed_decls = Vec::new();
         for decl in block_stmt.decls {
-            match self.transform_declaration(decl)? {
+            match self.transform_declaration(decl) {
                 DeclarationResult::Keep(decl) => transformed_decls.push(*decl),
                 DeclarationResult::Replace(new_decls) => transformed_decls.extend(new_decls),
                 DeclarationResult::Remove => {}
             }
         }
-        Ok(BlockStmt {
+        BlockStmt {
             decls: transformed_decls,
             span: block_stmt.span,
-        })
+        }
     }
 
-    fn transform_function_expression(
-        &mut self,
-        func_expr: FunctionExpr,
-    ) -> Result<FunctionExpr, Self::Error> {
+    fn transform_function_expression(&mut self, func_expr: FunctionExpr) -> FunctionExpr {
         let mut transformed_params = Vec::new();
         for param in func_expr.parameters {
-            transformed_params.push(self.transform_identifier(param)?);
+            transformed_params.push(self.transform_identifier(param));
         }
 
-        Ok(FunctionExpr {
-            name: self.transform_identifier(func_expr.name)?,
+        FunctionExpr {
+            name: self.transform_identifier(func_expr.name),
             parameters: transformed_params,
-            body: self.transform_block_statement(func_expr.body)?,
+            body: self.transform_block_statement(func_expr.body),
             span: func_expr.span,
-        })
+        }
     }
 
-    fn transform_declaration(&mut self, decl: Decl) -> Result<DeclarationResult, Self::Error> {
+    fn transform_declaration(&mut self, decl: Decl) -> DeclarationResult {
         match decl {
             Decl::Class(class_decl) => self.transform_class_declaration(class_decl),
             Decl::Function(func_decl) => self.transform_function_declaration(func_decl),
@@ -1065,88 +1236,82 @@ pub trait AstTransformer {
             Decl::Variable(var_decl) => self.transform_variable_declaration(var_decl),
             Decl::Stmt(stmt) => {
                 // Convert statement result to declaration result
-                match self.transform_statement(stmt)? {
+                match self.transform_statement(stmt) {
                     StatementResult::Keep(stmt) => {
-                        Ok(DeclarationResult::Keep(Box::new(Decl::Stmt(*stmt))))
+                        DeclarationResult::Keep(Box::new(Decl::Stmt(*stmt)))
                     }
                     StatementResult::Replace(stmts) => {
                         let decls = stmts.into_iter().map(Decl::Stmt).collect();
-                        Ok(DeclarationResult::Replace(decls))
+                        DeclarationResult::Replace(decls)
                     }
-                    StatementResult::Remove => Ok(DeclarationResult::Remove),
+                    StatementResult::Remove => DeclarationResult::Remove,
                 }
             }
         }
     }
 
-    fn transform_statement(&mut self, stmt: Stmt) -> Result<StatementResult, Self::Error> {
+    fn transform_statement(&mut self, stmt: Stmt) -> StatementResult {
         match stmt {
             Stmt::Expr(expr_stmt) => {
-                let transformed_expr = self.transform_expression(expr_stmt.expr)?;
-                Ok(StatementResult::Keep(Box::new(Stmt::Expr(ExprStmt {
+                let transformed_expr = self.transform_expression(expr_stmt.expr);
+                StatementResult::Keep(Box::new(Stmt::Expr(ExprStmt {
                     expr: transformed_expr,
                     span: expr_stmt.span,
-                }))))
+                })))
             }
             Stmt::Block(block_stmt) => {
-                let transformed_block = self.transform_block_statement(block_stmt)?;
-                Ok(StatementResult::Keep(Box::new(Stmt::Block(
-                    transformed_block,
-                ))))
+                let transformed_block = self.transform_block_statement(block_stmt);
+                StatementResult::Keep(Box::new(Stmt::Block(transformed_block)))
             }
             Stmt::If(if_stmt) => self.transform_if_statement(if_stmt),
             Stmt::While(while_stmt) => self.transform_while_statement(while_stmt),
             Stmt::For(for_stmt) => self.transform_for_statement(for_stmt),
-            Stmt::Break(break_stmt) => Ok(StatementResult::Keep(Box::new(Stmt::Break(break_stmt)))),
-            Stmt::Continue(continue_stmt) => Ok(StatementResult::Keep(Box::new(Stmt::Continue(
-                continue_stmt,
-            )))),
+            Stmt::Break(break_stmt) => StatementResult::Keep(Box::new(Stmt::Break(break_stmt))),
+            Stmt::Continue(continue_stmt) => {
+                StatementResult::Keep(Box::new(Stmt::Continue(continue_stmt)))
+            }
             Stmt::Return(return_stmt) => {
-                let transformed_value = match return_stmt.value {
-                    Some(value) => Some(self.transform_expression(value)?),
-                    None => None,
-                };
-                Ok(StatementResult::Keep(Box::new(Stmt::Return(ReturnStmt {
+                let transformed_value = return_stmt
+                    .value
+                    .map(|value| self.transform_expression(value));
+                StatementResult::Keep(Box::new(Stmt::Return(ReturnStmt {
                     value: transformed_value,
                     span: return_stmt.span,
-                }))))
+                })))
             }
             Stmt::Throw(throw_stmt) => {
-                let transformed_value = match throw_stmt.value {
-                    Some(value) => Some(self.transform_expression(value)?),
-                    None => None,
-                };
-                Ok(StatementResult::Keep(Box::new(Stmt::Throw(ThrowStmt {
+                let transformed_value = throw_stmt
+                    .value
+                    .map(|value| self.transform_expression(value));
+                StatementResult::Keep(Box::new(Stmt::Throw(ThrowStmt {
                     value: transformed_value,
                     span: throw_stmt.span,
-                }))))
+                })))
             }
             Stmt::Try(try_stmt) => {
                 let transformed_try = TryStmt {
-                    try_block: self.transform_block_statement(try_stmt.try_block)?,
+                    try_block: self.transform_block_statement(try_stmt.try_block),
                     catch_clause: match try_stmt.catch_clause {
                         Some(catch) => Some(CatchClause {
-                            parameter: match catch.parameter {
-                                Some(param) => Some(self.transform_identifier(param)?),
-                                None => None,
-                            },
-                            body: self.transform_block_statement(catch.body)?,
+                            parameter: catch
+                                .parameter
+                                .map(|param| self.transform_identifier(param)),
+                            body: self.transform_block_statement(catch.body),
                             span: catch.span,
                         }),
                         None => None,
                     },
-                    finally_block: match try_stmt.finally_block {
-                        Some(finally) => Some(self.transform_block_statement(finally)?),
-                        None => None,
-                    },
+                    finally_block: try_stmt
+                        .finally_block
+                        .map(|finally| self.transform_block_statement(finally)),
                     span: try_stmt.span,
                 };
-                Ok(StatementResult::Keep(Box::new(Stmt::Try(transformed_try))))
+                StatementResult::Keep(Box::new(Stmt::Try(transformed_try)))
             }
         }
     }
 
-    fn transform_expression(&mut self, expr: Expr) -> Result<Expr, Self::Error> {
+    fn transform_expression(&mut self, expr: Expr) -> Expr {
         match expr {
             Expr::Assignment(assignment) => self.transform_assignment_expression(assignment),
             Expr::Pipe(pipe) => self.transform_pipe_expression(pipe),
@@ -1163,135 +1328,107 @@ pub trait AstTransformer {
         }
     }
 
-    fn transform_class_declaration(
-        &mut self,
-        class_decl: ClassDecl,
-    ) -> Result<DeclarationResult, Self::Error> {
+    fn transform_class_declaration(&mut self, class_decl: ClassDecl) -> DeclarationResult {
         let mut transformed_members = Vec::new();
         for member in class_decl.members {
             transformed_members.push(match member {
                 ClassMember::Method(method) => {
-                    ClassMember::Method(self.transform_function_expression(method)?)
+                    ClassMember::Method(self.transform_function_expression(method))
                 }
                 ClassMember::Field(field) => ClassMember::Field(FieldDecl {
-                    name: self.transform_identifier(field.name)?,
-                    initializer: match field.initializer {
-                        Some(init) => Some(self.transform_expression(init)?),
-                        None => None,
-                    },
+                    name: self.transform_identifier(field.name),
+                    initializer: field
+                        .initializer
+                        .map(|init| self.transform_expression(init)),
                     span: field.span,
                 }),
             });
         }
 
-        Ok(DeclarationResult::Keep(Box::new(Decl::Class(ClassDecl {
-            name: self.transform_identifier(class_decl.name)?,
-            superclass: match class_decl.superclass {
-                Some(superclass) => Some(self.transform_identifier(superclass)?),
-                None => None,
-            },
+        DeclarationResult::Keep(Box::new(Decl::Class(ClassDecl {
+            name: self.transform_identifier(class_decl.name),
+            superclass: class_decl
+                .superclass
+                .map(|superclass| self.transform_identifier(superclass)),
             members: transformed_members,
             span: class_decl.span,
-        }))))
+        })))
     }
 
-    fn transform_function_declaration(
-        &mut self,
-        func_decl: FunctionDecl,
-    ) -> Result<DeclarationResult, Self::Error> {
-        Ok(DeclarationResult::Keep(Box::new(Decl::Function(
-            FunctionDecl {
-                function: self.transform_function_expression(func_decl.function)?,
-                span: func_decl.span,
-            },
-        ))))
+    fn transform_function_declaration(&mut self, func_decl: FunctionDecl) -> DeclarationResult {
+        DeclarationResult::Keep(Box::new(Decl::Function(FunctionDecl {
+            function: self.transform_function_expression(func_decl.function),
+            span: func_decl.span,
+        })))
     }
 
-    fn transform_lambda_declaration(
-        &mut self,
-        lambda_decl: LambdaDecl,
-    ) -> Result<DeclarationResult, Self::Error> {
+    fn transform_lambda_declaration(&mut self, lambda_decl: LambdaDecl) -> DeclarationResult {
         let transformed_lambda = LambdaExpr {
             parameters: {
                 let mut params = Vec::new();
                 for param in lambda_decl.lambda.parameters {
-                    params.push(self.transform_identifier(param)?);
+                    params.push(self.transform_identifier(param));
                 }
                 params
             },
             body: Box::new(match *lambda_decl.lambda.body {
                 LambdaBody::Block(block) => {
-                    LambdaBody::Block(self.transform_block_statement(block)?)
+                    LambdaBody::Block(self.transform_block_statement(block))
                 }
                 LambdaBody::Expr(expr) => {
-                    LambdaBody::Expr(Box::new(self.transform_expression(*expr)?))
+                    LambdaBody::Expr(Box::new(self.transform_expression(*expr)))
                 }
             }),
             span: lambda_decl.lambda.span,
         };
 
-        Ok(DeclarationResult::Keep(Box::new(Decl::Lambda(
-            LambdaDecl {
-                name: self.transform_identifier(lambda_decl.name)?,
-                lambda: transformed_lambda,
-                span: lambda_decl.span,
-            },
-        ))))
+        DeclarationResult::Keep(Box::new(Decl::Lambda(LambdaDecl {
+            name: self.transform_identifier(lambda_decl.name),
+            lambda: transformed_lambda,
+            span: lambda_decl.span,
+        })))
     }
 
-    fn transform_variable_declaration(
-        &mut self,
-        var_decl: VariableDecl,
-    ) -> Result<DeclarationResult, Self::Error> {
-        Ok(DeclarationResult::Keep(Box::new(Decl::Variable(
-            VariableDecl {
-                name: self.transform_identifier(var_decl.name)?,
-                initializer: match var_decl.initializer {
-                    Some(init) => Some(self.transform_expression(init)?),
-                    None => None,
-                },
-                span: var_decl.span,
-            },
-        ))))
+    fn transform_variable_declaration(&mut self, var_decl: VariableDecl) -> DeclarationResult {
+        DeclarationResult::Keep(Box::new(Decl::Variable(VariableDecl {
+            name: self.transform_identifier(var_decl.name),
+            initializer: var_decl
+                .initializer
+                .map(|init| self.transform_expression(init)),
+            span: var_decl.span,
+        })))
     }
 
-    fn transform_if_statement(&mut self, if_stmt: IfStmt) -> Result<StatementResult, Self::Error> {
-        let condition = self.transform_expression(if_stmt.condition)?;
-        let then_branch = Box::new(self.transform_statement_to_single(*if_stmt.then_branch)?);
-        let else_branch = match if_stmt.else_branch {
-            Some(else_stmt) => Some(Box::new(self.transform_statement_to_single(*else_stmt)?)),
-            None => None,
-        };
+    fn transform_if_statement(&mut self, if_stmt: IfStmt) -> StatementResult {
+        let condition = self.transform_expression(if_stmt.condition);
+        let then_branch = Box::new(self.transform_statement_to_single(*if_stmt.then_branch));
+        let else_branch = if_stmt
+            .else_branch
+            .map(|else_stmt| Box::new(self.transform_statement_to_single(*else_stmt)));
 
-        Ok(StatementResult::Keep(Box::new(Stmt::If(IfStmt {
+        StatementResult::Keep(Box::new(Stmt::If(IfStmt {
             condition,
             then_branch,
             else_branch,
             span: if_stmt.span,
-        }))))
+        })))
     }
 
-    fn transform_while_statement(
-        &mut self,
-        while_stmt: WhileStmt,
-    ) -> Result<StatementResult, Self::Error> {
-        let condition = self.transform_expression(while_stmt.condition)?;
-        let body = Box::new(self.transform_statement_to_single(*while_stmt.body)?);
+    fn transform_while_statement(&mut self, while_stmt: WhileStmt) -> StatementResult {
+        let condition = self.transform_expression(while_stmt.condition);
+        let body = Box::new(self.transform_statement_to_single(*while_stmt.body));
 
-        Ok(StatementResult::Keep(Box::new(Stmt::While(WhileStmt {
+        StatementResult::Keep(Box::new(Stmt::While(WhileStmt {
             condition,
             body,
             span: while_stmt.span,
-        }))))
+        })))
     }
 
-    fn transform_for_statement(
-        &mut self,
-        for_stmt: ForStmt,
-    ) -> Result<StatementResult, Self::Error> {
+    fn transform_for_statement(&mut self, for_stmt: ForStmt) -> StatementResult {
         let initializer = match for_stmt.initializer {
             Some(ForInitializer::Variable(var_decl)) => {
-                match self.transform_variable_declaration(var_decl)? {
+                match self.transform_variable_declaration(var_decl) {
                     DeclarationResult::Keep(boxed_decl) => match *boxed_decl {
                         Decl::Variable(var_decl) => Some(ForInitializer::Variable(var_decl)),
                         _ => None,
@@ -1300,248 +1437,222 @@ pub trait AstTransformer {
                 }
             }
             Some(ForInitializer::Expr(expr)) => {
-                Some(ForInitializer::Expr(self.transform_expression(expr)?))
+                Some(ForInitializer::Expr(self.transform_expression(expr)))
             }
             None => None,
         };
 
-        let condition = match for_stmt.condition {
-            Some(cond) => Some(self.transform_expression(cond)?),
-            None => None,
-        };
+        let condition = for_stmt
+            .condition
+            .map(|cond| self.transform_expression(cond));
 
-        let increment = match for_stmt.increment {
-            Some(inc) => Some(self.transform_expression(inc)?),
-            None => None,
-        };
+        let increment = for_stmt.increment.map(|inc| self.transform_expression(inc));
 
-        let body = Box::new(self.transform_statement_to_single(*for_stmt.body)?);
+        let body = Box::new(self.transform_statement_to_single(*for_stmt.body));
 
-        Ok(StatementResult::Keep(Box::new(Stmt::For(ForStmt {
+        StatementResult::Keep(Box::new(Stmt::For(ForStmt {
             initializer,
             condition,
             increment,
             body,
             span: for_stmt.span,
-        }))))
+        })))
     }
 
-    fn transform_pipe_expression(&mut self, pipe: PipeExpr) -> Result<Expr, Self::Error> {
-        let left = self.transform_expression(*pipe.left)?;
-        let right = match pipe.right {
-            Some(right) => Some(Box::new(self.transform_expression(*right)?)),
-            None => None,
-        };
+    fn transform_pipe_expression(&mut self, pipe: PipeExpr) -> Expr {
+        let left = self.transform_expression(*pipe.left);
+        let right = pipe
+            .right
+            .map(|right| Box::new(self.transform_expression(*right)));
 
-        Ok(Expr::Pipe(PipeExpr {
+        Expr::Pipe(PipeExpr {
             left: Box::new(left),
             right,
             span: pipe.span,
-        }))
+        })
     }
 
     /// Transform ternary expressions - can become any expression
-    fn transform_ternary_expression(&mut self, ternary: TernaryExpr) -> Result<Expr, Self::Error> {
-        Ok(Expr::Ternary(TernaryExpr {
-            condition: Box::new(self.transform_expression(*ternary.condition)?),
-            then_expr: match ternary.then_expr {
-                Some(then_expr) => Some(Box::new(self.transform_expression(*then_expr)?)),
-                None => None,
-            },
-            else_expr: match ternary.else_expr {
-                Some(else_expr) => Some(Box::new(self.transform_expression(*else_expr)?)),
-                None => None,
-            },
+    fn transform_ternary_expression(&mut self, ternary: TernaryExpr) -> Expr {
+        Expr::Ternary(TernaryExpr {
+            condition: Box::new(self.transform_expression(*ternary.condition)),
+            then_expr: ternary
+                .then_expr
+                .map(|then_expr| Box::new(self.transform_expression(*then_expr))),
+            else_expr: ternary
+                .else_expr
+                .map(|else_expr| Box::new(self.transform_expression(*else_expr))),
             span: ternary.span,
-        }))
+        })
     }
 
-    fn transform_statement_to_single(&mut self, stmt: Stmt) -> Result<Stmt, Self::Error> {
-        match self.transform_statement(stmt)? {
-            StatementResult::Keep(stmt) => Ok(*stmt),
+    fn transform_statement_to_single(&mut self, stmt: Stmt) -> Stmt {
+        match self.transform_statement(stmt) {
+            StatementResult::Keep(stmt) => *stmt,
             StatementResult::Replace(stmts) => {
                 // Wrap multiple statements in a block
-                Ok(Stmt::Block(BlockStmt {
+                Stmt::Block(BlockStmt {
                     decls: stmts.into_iter().map(Decl::Stmt).collect(),
                     span: SourceSpan::default(), // You might want better span handling
-                }))
+                })
             }
             StatementResult::Remove => {
                 // Return empty block for removed statements
-                Ok(Stmt::Block(BlockStmt {
+                Stmt::Block(BlockStmt {
                     decls: Vec::new(),
                     span: SourceSpan::default(),
-                }))
+                })
             }
         }
     }
 
-    fn transform_assignment_expression(
-        &mut self,
-        assignment: AssignmentExpr,
-    ) -> Result<Expr, Self::Error> {
+    fn transform_assignment_expression(&mut self, assignment: AssignmentExpr) -> Expr {
         let target = match assignment.target {
             AssignmentTarget::Identifier(id) => {
-                AssignmentTarget::Identifier(self.transform_identifier(id)?)
+                AssignmentTarget::Identifier(self.transform_identifier(id))
             }
             AssignmentTarget::Property(prop) => AssignmentTarget::Property(PropertyAccess {
-                object: Box::new(self.transform_expression(*prop.object)?),
-                property: self.transform_identifier(prop.property)?,
+                object: Box::new(self.transform_expression(*prop.object)),
+                property: self.transform_identifier(prop.property),
                 span: prop.span,
             }),
         };
 
-        Ok(Expr::Assignment(AssignmentExpr {
+        Expr::Assignment(AssignmentExpr {
             target,
-            value: Box::new(self.transform_expression(*assignment.value)?),
+            value: Box::new(self.transform_expression(*assignment.value)),
             span: assignment.span,
-        }))
+        })
     }
 
-    fn transform_logical_or_expression(
-        &mut self,
-        logical_or: LogicalOrExpr,
-    ) -> Result<Expr, Self::Error> {
-        Ok(Expr::LogicalOr(LogicalOrExpr {
-            left: Box::new(self.transform_expression(*logical_or.left)?),
-            right: Box::new(self.transform_expression(*logical_or.right)?),
+    fn transform_logical_or_expression(&mut self, logical_or: LogicalOrExpr) -> Expr {
+        Expr::LogicalOr(LogicalOrExpr {
+            left: Box::new(self.transform_expression(*logical_or.left)),
+            right: Box::new(self.transform_expression(*logical_or.right)),
             span: logical_or.span,
-        }))
+        })
     }
 
-    fn transform_logical_and_expression(
-        &mut self,
-        logical_and: LogicalAndExpr,
-    ) -> Result<Expr, Self::Error> {
-        Ok(Expr::LogicalAnd(LogicalAndExpr {
-            left: Box::new(self.transform_expression(*logical_and.left)?),
-            right: Box::new(self.transform_expression(*logical_and.right)?),
+    fn transform_logical_and_expression(&mut self, logical_and: LogicalAndExpr) -> Expr {
+        Expr::LogicalAnd(LogicalAndExpr {
+            left: Box::new(self.transform_expression(*logical_and.left)),
+            right: Box::new(self.transform_expression(*logical_and.right)),
             span: logical_and.span,
-        }))
+        })
     }
 
-    fn transform_equality_expression(
-        &mut self,
-        equality: EqualityExpr,
-    ) -> Result<Expr, Self::Error> {
-        Ok(Expr::Equality(EqualityExpr {
-            left: Box::new(self.transform_expression(*equality.left)?),
+    fn transform_equality_expression(&mut self, equality: EqualityExpr) -> Expr {
+        Expr::Equality(EqualityExpr {
+            left: Box::new(self.transform_expression(*equality.left)),
             operator: equality.operator,
-            right: Box::new(self.transform_expression(*equality.right)?),
+            right: Box::new(self.transform_expression(*equality.right)),
             span: equality.span,
-        }))
+        })
     }
 
-    fn transform_comparison_expression(
-        &mut self,
-        comparison: ComparisonExpr,
-    ) -> Result<Expr, Self::Error> {
-        Ok(Expr::Comparison(ComparisonExpr {
-            left: Box::new(self.transform_expression(*comparison.left)?),
+    fn transform_comparison_expression(&mut self, comparison: ComparisonExpr) -> Expr {
+        Expr::Comparison(ComparisonExpr {
+            left: Box::new(self.transform_expression(*comparison.left)),
             operator: comparison.operator,
-            right: Box::new(self.transform_expression(*comparison.right)?),
+            right: Box::new(self.transform_expression(*comparison.right)),
             span: comparison.span,
-        }))
+        })
     }
 
-    fn transform_term_expression(&mut self, term: TermExpr) -> Result<Expr, Self::Error> {
-        Ok(Expr::Term(TermExpr {
-            left: Box::new(self.transform_expression(*term.left)?),
+    fn transform_term_expression(&mut self, term: TermExpr) -> Expr {
+        Expr::Term(TermExpr {
+            left: Box::new(self.transform_expression(*term.left)),
             operator: term.operator,
-            right: Box::new(self.transform_expression(*term.right)?),
+            right: Box::new(self.transform_expression(*term.right)),
             span: term.span,
-        }))
+        })
     }
 
-    fn transform_factor_expression(&mut self, factor: FactorExpr) -> Result<Expr, Self::Error> {
-        Ok(Expr::Factor(FactorExpr {
-            left: Box::new(self.transform_expression(*factor.left)?),
+    fn transform_factor_expression(&mut self, factor: FactorExpr) -> Expr {
+        Expr::Factor(FactorExpr {
+            left: Box::new(self.transform_expression(*factor.left)),
             operator: factor.operator,
-            right: Box::new(self.transform_expression(*factor.right)?),
+            right: Box::new(self.transform_expression(*factor.right)),
             span: factor.span,
-        }))
+        })
     }
 
-    fn transform_unary_expression(&mut self, unary: UnaryExpr) -> Result<Expr, Self::Error> {
-        Ok(Expr::Unary(UnaryExpr {
+    fn transform_unary_expression(&mut self, unary: UnaryExpr) -> Expr {
+        Expr::Unary(UnaryExpr {
             operator: unary.operator,
-            operand: Box::new(self.transform_expression(*unary.operand)?),
+            operand: Box::new(self.transform_expression(*unary.operand)),
             span: unary.span,
-        }))
+        })
     }
 
-    fn transform_call_expression(&mut self, call: CallExpr) -> Result<Expr, Self::Error> {
+    fn transform_call_expression(&mut self, call: CallExpr) -> Expr {
         let operation = match *call.operation {
             CallOperation::Call(args) => {
                 let mut transformed_args = Vec::new();
                 for arg in args {
-                    transformed_args.push(self.transform_expression(arg)?);
+                    transformed_args.push(self.transform_expression(arg));
                 }
                 CallOperation::Call(transformed_args)
             }
-            CallOperation::Property(id) => CallOperation::Property(self.transform_identifier(id)?),
+            CallOperation::Property(id) => CallOperation::Property(self.transform_identifier(id)),
             CallOperation::OptionalProperty(id) => {
-                CallOperation::OptionalProperty(self.transform_identifier(id)?)
+                CallOperation::OptionalProperty(self.transform_identifier(id))
             }
-            CallOperation::Index(expr) => CallOperation::Index(self.transform_expression(expr)?),
+            CallOperation::Index(expr) => CallOperation::Index(self.transform_expression(expr)),
         };
 
-        Ok(Expr::Call(CallExpr {
-            callee: Box::new(self.transform_expression(*call.callee)?),
+        Expr::Call(CallExpr {
+            callee: Box::new(self.transform_expression(*call.callee)),
             operation: Box::new(operation),
             span: call.span,
-        }))
+        })
     }
 
-    fn transform_primary_expression(&mut self, primary: PrimaryExpr) -> Result<Expr, Self::Error> {
+    fn transform_primary_expression(&mut self, primary: PrimaryExpr) -> Expr {
         match primary {
-            PrimaryExpr::Number(num) => Ok(Expr::Primary(PrimaryExpr::Number(num))),
-            PrimaryExpr::String(str) => Ok(Expr::Primary(PrimaryExpr::String(str))),
-            PrimaryExpr::Boolean(bool) => Ok(Expr::Primary(PrimaryExpr::Boolean(bool))),
-            PrimaryExpr::Nil(nil) => Ok(Expr::Primary(PrimaryExpr::Nil(nil))),
-            PrimaryExpr::This(this) => Ok(Expr::Primary(PrimaryExpr::This(this))),
-            PrimaryExpr::Super(sup) => Ok(Expr::Primary(PrimaryExpr::Super(sup))),
-            PrimaryExpr::Identifier(id) => Ok(Expr::Primary(PrimaryExpr::Identifier(
-                self.transform_identifier(id)?,
-            ))),
-            PrimaryExpr::Grouping(group) => {
-                Ok(Expr::Primary(PrimaryExpr::Grouping(GroupingExpr {
-                    expr: Box::new(self.transform_expression(*group.expr)?),
-                    span: group.span,
-                })))
+            PrimaryExpr::Number(num) => Expr::Primary(PrimaryExpr::Number(num)),
+            PrimaryExpr::String(str) => Expr::Primary(PrimaryExpr::String(str)),
+            PrimaryExpr::Boolean(bool) => Expr::Primary(PrimaryExpr::Boolean(bool)),
+            PrimaryExpr::Nil(nil) => Expr::Primary(PrimaryExpr::Nil(nil)),
+            PrimaryExpr::This(this) => Expr::Primary(PrimaryExpr::This(this)),
+            PrimaryExpr::Super(sup) => Expr::Primary(PrimaryExpr::Super(sup)),
+            PrimaryExpr::Identifier(id) => {
+                Expr::Primary(PrimaryExpr::Identifier(self.transform_identifier(id)))
             }
+            PrimaryExpr::Grouping(group) => Expr::Primary(PrimaryExpr::Grouping(GroupingExpr {
+                expr: Box::new(self.transform_expression(*group.expr)),
+                span: group.span,
+            })),
             PrimaryExpr::Lambda(lambda) => {
                 let transformed_lambda = LambdaExpr {
                     parameters: {
                         let mut params = Vec::new();
                         for param in lambda.parameters {
-                            params.push(self.transform_identifier(param)?);
+                            params.push(self.transform_identifier(param));
                         }
                         params
                     },
                     body: Box::new(match *lambda.body {
                         LambdaBody::Block(block) => {
-                            LambdaBody::Block(self.transform_block_statement(block)?)
+                            LambdaBody::Block(self.transform_block_statement(block))
                         }
                         LambdaBody::Expr(expr) => {
-                            LambdaBody::Expr(Box::new(self.transform_expression(*expr)?))
+                            LambdaBody::Expr(Box::new(self.transform_expression(*expr)))
                         }
                     }),
                     span: lambda.span,
                 };
-                Ok(Expr::Primary(PrimaryExpr::Lambda(Box::new(
-                    transformed_lambda,
-                ))))
+                Expr::Primary(PrimaryExpr::Lambda(Box::new(transformed_lambda)))
             }
             PrimaryExpr::Array(array) => {
                 let mut transformed_elements = Vec::new();
                 for element in array.elements {
-                    transformed_elements.push(self.transform_expression(element)?);
+                    transformed_elements.push(self.transform_expression(element));
                 }
-                Ok(Expr::Primary(PrimaryExpr::Array(ArrayLiteral {
+                Expr::Primary(PrimaryExpr::Array(ArrayLiteral {
                     elements: transformed_elements,
                     span: array.span,
-                })))
+                }))
             }
         }
     }
@@ -1563,6 +1674,8 @@ pub enum StatementResult {
 
 #[cfg(test)]
 mod tests {
+    use crate::SourceMap;
+
     use super::*;
 
     pub struct IdentifierCollector {
@@ -1577,15 +1690,15 @@ mod tests {
         }
     }
 
-    impl AstVisitor<()> for IdentifierCollector {
+    impl AstVisitor for IdentifierCollector {
         type Error = crate::QangError;
 
-        fn visit_identifier(&mut self, identifier: &Identifier) -> Result<(), Self::Error> {
+        fn visit_identifier(
+            &mut self,
+            identifier: &Identifier,
+            _errors: &mut ErrorReporter,
+        ) -> Result<(), Self::Error> {
             self.identifiers.push(identifier.name.clone());
-            self.default_result()
-        }
-
-        fn default_result(&self) -> Result<(), Self::Error> {
             Ok(())
         }
     }
@@ -1599,7 +1712,11 @@ mod tests {
             span: SourceSpan::new(0, 8),
         };
 
-        collector.visit_identifier(&identifier).unwrap();
+        let source_map = SourceMap::new("".to_string());
+        let mut errors = ErrorReporter::new(&source_map);
+        collector
+            .visit_identifier(&identifier, &mut errors)
+            .unwrap();
 
         assert_eq!(collector.identifiers.len(), 1);
         assert_eq!(collector.identifiers[0], "test_var");
@@ -1614,7 +1731,10 @@ mod tests {
             span: SourceSpan::new(0, 2),
         }));
 
-        collector.visit_expression(&expr).unwrap();
+        let source_map = SourceMap::new("".to_owned());
+        let mut errors = ErrorReporter::new(&source_map);
+
+        collector.visit_expression(&expr, &mut errors).unwrap();
 
         // Should not collect any identifiers from a number literal
         assert_eq!(collector.identifiers.len(), 0);
@@ -1634,28 +1754,32 @@ mod tests {
         }
     }
 
-    impl AstVisitor<()> for AstValidator {
+    impl AstVisitor for AstValidator {
         type Error = crate::QangError;
 
-        fn visit_return_statement(&mut self, return_stmt: &ReturnStmt) -> Result<(), Self::Error> {
+        fn visit_return_statement(
+            &mut self,
+            return_stmt: &ReturnStmt,
+            errors: &mut ErrorReporter,
+        ) -> Result<(), Self::Error> {
             // Example validation: check if return statement is in valid context
             // This would need additional context tracking in a real implementation
 
             if let Some(value) = &return_stmt.value {
-                self.visit_expression(value)?;
+                self.visit_expression(value, errors)?;
             }
 
-            self.default_result()
+            Ok(())
         }
 
-        fn visit_break_statement(&mut self, _break_stmt: &BreakStmt) -> Result<(), Self::Error> {
+        fn visit_break_statement(
+            &mut self,
+            _break_stmt: &BreakStmt,
+            _errors: &mut ErrorReporter,
+        ) -> Result<(), Self::Error> {
             // Example validation: check if break is inside a loop
             // This would need loop context tracking in a real implementation
 
-            self.default_result()
-        }
-
-        fn default_result(&self) -> Result<(), Self::Error> {
             Ok(())
         }
     }
@@ -1669,7 +1793,11 @@ mod tests {
             span: SourceSpan::new(0, 6),
         };
 
-        validator.visit_return_statement(&return_stmt).unwrap();
+        let source_map = SourceMap::new("".to_string());
+        let mut errors = ErrorReporter::new(&source_map);
+        validator
+            .visit_return_statement(&return_stmt, &mut errors)
+            .unwrap();
 
         assert!(!validator.has_errors());
     }

@@ -1,4 +1,4 @@
-use crate::{QangError, tokenizer::Token};
+use crate::tokenizer::Token;
 
 /// Represents a position in the source code for error reporting and debugging
 #[derive(Debug, Clone, PartialEq, Default, Copy)]
@@ -773,11 +773,14 @@ pub trait AstVisitor<T> {
         }
     }
 
-    fn visit_break_statement(&mut self, break_stmt: &BreakStmt) -> Result<T, Self::Error> {
+    fn visit_break_statement(&mut self, _break_stmt: &BreakStmt) -> Result<T, Self::Error> {
         self.default_result()
     }
 
-    fn visit_continue_statement(&mut self, continue_stmt: &ContinueStmt) -> Result<T, Self::Error> {
+    fn visit_continue_statement(
+        &mut self,
+        _continue_stmt: &ContinueStmt,
+    ) -> Result<T, Self::Error> {
         self.default_result()
     }
 
@@ -955,31 +958,31 @@ pub trait AstVisitor<T> {
         }
     }
 
-    fn visit_number_literal(&mut self, number: &NumberLiteral) -> Result<T, Self::Error> {
+    fn visit_number_literal(&mut self, _number: &NumberLiteral) -> Result<T, Self::Error> {
         self.default_result()
     }
 
-    fn visit_string_literal(&mut self, string: &StringLiteral) -> Result<T, Self::Error> {
+    fn visit_string_literal(&mut self, _string: &StringLiteral) -> Result<T, Self::Error> {
         self.default_result()
     }
 
-    fn visit_boolean_literal(&mut self, boolean: &BooleanLiteral) -> Result<T, Self::Error> {
+    fn visit_boolean_literal(&mut self, _boolean: &BooleanLiteral) -> Result<T, Self::Error> {
         self.default_result()
     }
 
-    fn visit_nil_literal(&mut self, nil: &NilLiteral) -> Result<T, Self::Error> {
+    fn visit_nil_literal(&mut self, _nil: &NilLiteral) -> Result<T, Self::Error> {
         self.default_result()
     }
 
-    fn visit_this_expression(&mut self, this_expr: &ThisExpr) -> Result<T, Self::Error> {
+    fn visit_this_expression(&mut self, _this_expr: &ThisExpr) -> Result<T, Self::Error> {
         self.default_result()
     }
 
-    fn visit_super_expression(&mut self, super_expr: &SuperExpr) -> Result<T, Self::Error> {
+    fn visit_super_expression(&mut self, _super_expr: &SuperExpr) -> Result<T, Self::Error> {
         self.default_result()
     }
 
-    fn visit_identifier(&mut self, identifier: &Identifier) -> Result<T, Self::Error> {
+    fn visit_identifier(&mut self, _identifier: &Identifier) -> Result<T, Self::Error> {
         self.default_result()
     }
 
@@ -999,12 +1002,6 @@ pub trait AstVisitor<T> {
     fn default_result(&self) -> Result<T, Self::Error>;
 }
 
-/// A concrete implementation using QangError for errors
-pub trait QangAstVisitor<T>: AstVisitor<T, Error = QangError> {}
-
-/// Blanket implementation for any visitor that uses QangError
-impl<T, V> QangAstVisitor<T> for V where V: AstVisitor<T, Error = QangError> {}
-
 /// A practical AST transformer that balances flexibility with simplicity
 pub trait AstTransformer {
     type Error;
@@ -1013,7 +1010,7 @@ pub trait AstTransformer {
         let mut transformed_decls = Vec::new();
         for decl in program.decls {
             match self.transform_declaration(decl)? {
-                DeclarationResult::Keep(decl) => transformed_decls.push(decl),
+                DeclarationResult::Keep(decl) => transformed_decls.push(*decl),
                 DeclarationResult::Replace(new_decls) => transformed_decls.extend(new_decls),
                 DeclarationResult::Remove => {} // Skip this declaration
             }
@@ -1032,7 +1029,7 @@ pub trait AstTransformer {
         let mut transformed_decls = Vec::new();
         for decl in block_stmt.decls {
             match self.transform_declaration(decl)? {
-                DeclarationResult::Keep(decl) => transformed_decls.push(decl),
+                DeclarationResult::Keep(decl) => transformed_decls.push(*decl),
                 DeclarationResult::Replace(new_decls) => transformed_decls.extend(new_decls),
                 DeclarationResult::Remove => {}
             }
@@ -1069,7 +1066,9 @@ pub trait AstTransformer {
             Decl::Stmt(stmt) => {
                 // Convert statement result to declaration result
                 match self.transform_statement(stmt)? {
-                    StatementResult::Keep(stmt) => Ok(DeclarationResult::Keep(Decl::Stmt(stmt))),
+                    StatementResult::Keep(stmt) => {
+                        Ok(DeclarationResult::Keep(Box::new(Decl::Stmt(*stmt))))
+                    }
                     StatementResult::Replace(stmts) => {
                         let decls = stmts.into_iter().map(Decl::Stmt).collect();
                         Ok(DeclarationResult::Replace(decls))
@@ -1084,41 +1083,43 @@ pub trait AstTransformer {
         match stmt {
             Stmt::Expr(expr_stmt) => {
                 let transformed_expr = self.transform_expression(expr_stmt.expr)?;
-                Ok(StatementResult::Keep(Stmt::Expr(ExprStmt {
+                Ok(StatementResult::Keep(Box::new(Stmt::Expr(ExprStmt {
                     expr: transformed_expr,
                     span: expr_stmt.span,
-                })))
+                }))))
             }
             Stmt::Block(block_stmt) => {
                 let transformed_block = self.transform_block_statement(block_stmt)?;
-                Ok(StatementResult::Keep(Stmt::Block(transformed_block)))
+                Ok(StatementResult::Keep(Box::new(Stmt::Block(
+                    transformed_block,
+                ))))
             }
             Stmt::If(if_stmt) => self.transform_if_statement(if_stmt),
             Stmt::While(while_stmt) => self.transform_while_statement(while_stmt),
             Stmt::For(for_stmt) => self.transform_for_statement(for_stmt),
-            Stmt::Break(break_stmt) => Ok(StatementResult::Keep(Stmt::Break(break_stmt))),
-            Stmt::Continue(continue_stmt) => {
-                Ok(StatementResult::Keep(Stmt::Continue(continue_stmt)))
-            }
+            Stmt::Break(break_stmt) => Ok(StatementResult::Keep(Box::new(Stmt::Break(break_stmt)))),
+            Stmt::Continue(continue_stmt) => Ok(StatementResult::Keep(Box::new(Stmt::Continue(
+                continue_stmt,
+            )))),
             Stmt::Return(return_stmt) => {
                 let transformed_value = match return_stmt.value {
                     Some(value) => Some(self.transform_expression(value)?),
                     None => None,
                 };
-                Ok(StatementResult::Keep(Stmt::Return(ReturnStmt {
+                Ok(StatementResult::Keep(Box::new(Stmt::Return(ReturnStmt {
                     value: transformed_value,
                     span: return_stmt.span,
-                })))
+                }))))
             }
             Stmt::Throw(throw_stmt) => {
                 let transformed_value = match throw_stmt.value {
                     Some(value) => Some(self.transform_expression(value)?),
                     None => None,
                 };
-                Ok(StatementResult::Keep(Stmt::Throw(ThrowStmt {
+                Ok(StatementResult::Keep(Box::new(Stmt::Throw(ThrowStmt {
                     value: transformed_value,
                     span: throw_stmt.span,
-                })))
+                }))))
             }
             Stmt::Try(try_stmt) => {
                 let transformed_try = TryStmt {
@@ -1140,7 +1141,7 @@ pub trait AstTransformer {
                     },
                     span: try_stmt.span,
                 };
-                Ok(StatementResult::Keep(Stmt::Try(transformed_try)))
+                Ok(StatementResult::Keep(Box::new(Stmt::Try(transformed_try))))
             }
         }
     }
@@ -1183,7 +1184,7 @@ pub trait AstTransformer {
             });
         }
 
-        Ok(DeclarationResult::Keep(Decl::Class(ClassDecl {
+        Ok(DeclarationResult::Keep(Box::new(Decl::Class(ClassDecl {
             name: self.transform_identifier(class_decl.name)?,
             superclass: match class_decl.superclass {
                 Some(superclass) => Some(self.transform_identifier(superclass)?),
@@ -1191,17 +1192,19 @@ pub trait AstTransformer {
             },
             members: transformed_members,
             span: class_decl.span,
-        })))
+        }))))
     }
 
     fn transform_function_declaration(
         &mut self,
         func_decl: FunctionDecl,
     ) -> Result<DeclarationResult, Self::Error> {
-        Ok(DeclarationResult::Keep(Decl::Function(FunctionDecl {
-            function: self.transform_function_expression(func_decl.function)?,
-            span: func_decl.span,
-        })))
+        Ok(DeclarationResult::Keep(Box::new(Decl::Function(
+            FunctionDecl {
+                function: self.transform_function_expression(func_decl.function)?,
+                span: func_decl.span,
+            },
+        ))))
     }
 
     fn transform_lambda_declaration(
@@ -1227,25 +1230,29 @@ pub trait AstTransformer {
             span: lambda_decl.lambda.span,
         };
 
-        Ok(DeclarationResult::Keep(Decl::Lambda(LambdaDecl {
-            name: self.transform_identifier(lambda_decl.name)?,
-            lambda: transformed_lambda,
-            span: lambda_decl.span,
-        })))
+        Ok(DeclarationResult::Keep(Box::new(Decl::Lambda(
+            LambdaDecl {
+                name: self.transform_identifier(lambda_decl.name)?,
+                lambda: transformed_lambda,
+                span: lambda_decl.span,
+            },
+        ))))
     }
 
     fn transform_variable_declaration(
         &mut self,
         var_decl: VariableDecl,
     ) -> Result<DeclarationResult, Self::Error> {
-        Ok(DeclarationResult::Keep(Decl::Variable(VariableDecl {
-            name: self.transform_identifier(var_decl.name)?,
-            initializer: match var_decl.initializer {
-                Some(init) => Some(self.transform_expression(init)?),
-                None => None,
+        Ok(DeclarationResult::Keep(Box::new(Decl::Variable(
+            VariableDecl {
+                name: self.transform_identifier(var_decl.name)?,
+                initializer: match var_decl.initializer {
+                    Some(init) => Some(self.transform_expression(init)?),
+                    None => None,
+                },
+                span: var_decl.span,
             },
-            span: var_decl.span,
-        })))
+        ))))
     }
 
     fn transform_if_statement(&mut self, if_stmt: IfStmt) -> Result<StatementResult, Self::Error> {
@@ -1256,12 +1263,12 @@ pub trait AstTransformer {
             None => None,
         };
 
-        Ok(StatementResult::Keep(Stmt::If(IfStmt {
+        Ok(StatementResult::Keep(Box::new(Stmt::If(IfStmt {
             condition,
             then_branch,
             else_branch,
             span: if_stmt.span,
-        })))
+        }))))
     }
 
     fn transform_while_statement(
@@ -1271,11 +1278,11 @@ pub trait AstTransformer {
         let condition = self.transform_expression(while_stmt.condition)?;
         let body = Box::new(self.transform_statement_to_single(*while_stmt.body)?);
 
-        Ok(StatementResult::Keep(Stmt::While(WhileStmt {
+        Ok(StatementResult::Keep(Box::new(Stmt::While(WhileStmt {
             condition,
             body,
             span: while_stmt.span,
-        })))
+        }))))
     }
 
     fn transform_for_statement(
@@ -1285,9 +1292,10 @@ pub trait AstTransformer {
         let initializer = match for_stmt.initializer {
             Some(ForInitializer::Variable(var_decl)) => {
                 match self.transform_variable_declaration(var_decl)? {
-                    DeclarationResult::Keep(Decl::Variable(var_decl)) => {
-                        Some(ForInitializer::Variable(var_decl))
-                    }
+                    DeclarationResult::Keep(boxed_decl) => match *boxed_decl {
+                        Decl::Variable(var_decl) => Some(ForInitializer::Variable(var_decl)),
+                        _ => None,
+                    },
                     _ => None,
                 }
             }
@@ -1309,13 +1317,13 @@ pub trait AstTransformer {
 
         let body = Box::new(self.transform_statement_to_single(*for_stmt.body)?);
 
-        Ok(StatementResult::Keep(Stmt::For(ForStmt {
+        Ok(StatementResult::Keep(Box::new(Stmt::For(ForStmt {
             initializer,
             condition,
             increment,
             body,
             span: for_stmt.span,
-        })))
+        }))))
     }
 
     fn transform_pipe_expression(&mut self, pipe: PipeExpr) -> Result<Expr, Self::Error> {
@@ -1348,12 +1356,9 @@ pub trait AstTransformer {
         }))
     }
 
-    // ===== HELPER METHODS =====
-
-    /// Helper to convert StatementResult to a single statement (wraps multiple in block)
     fn transform_statement_to_single(&mut self, stmt: Stmt) -> Result<Stmt, Self::Error> {
         match self.transform_statement(stmt)? {
-            StatementResult::Keep(stmt) => Ok(stmt),
+            StatementResult::Keep(stmt) => Ok(*stmt),
             StatementResult::Replace(stmts) => {
                 // Wrap multiple statements in a block
                 Ok(Stmt::Block(BlockStmt {
@@ -1370,8 +1375,6 @@ pub trait AstTransformer {
             }
         }
     }
-
-    // ===== DEFAULT IMPLEMENTATIONS FOR COMMON EXPRESSIONS =====
 
     fn transform_assignment_expression(
         &mut self,
@@ -1546,14 +1549,14 @@ pub trait AstTransformer {
 
 #[derive(Debug, Clone)]
 pub enum DeclarationResult {
-    Keep(Decl),         // Keep the declaration as-is (after transformation)
+    Keep(Box<Decl>),    // Keep the declaration as-is (after transformation)
     Replace(Vec<Decl>), // Replace with multiple declarations
     Remove,             // Remove the declaration entirely
 }
 
 #[derive(Debug, Clone)]
 pub enum StatementResult {
-    Keep(Stmt),         // Keep the statement as-is (after transformation)
+    Keep(Box<Stmt>),    // Keep the statement as-is (after transformation)
     Replace(Vec<Stmt>), // Replace with multiple statements
     Remove,             // Remove the statement entirely
 }
@@ -1575,7 +1578,7 @@ mod tests {
     }
 
     impl AstVisitor<()> for IdentifierCollector {
-        type Error = QangError;
+        type Error = crate::QangError;
 
         fn visit_identifier(&mut self, identifier: &Identifier) -> Result<(), Self::Error> {
             self.identifiers.push(identifier.name.clone());
@@ -1618,7 +1621,7 @@ mod tests {
     }
 
     pub struct AstValidator {
-        pub errors: Vec<QangError>,
+        pub errors: Vec<crate::QangError>,
     }
 
     impl AstValidator {
@@ -1632,7 +1635,7 @@ mod tests {
     }
 
     impl AstVisitor<()> for AstValidator {
-        type Error = QangError;
+        type Error = crate::QangError;
 
         fn visit_return_statement(&mut self, return_stmt: &ReturnStmt) -> Result<(), Self::Error> {
             // Example validation: check if return statement is in valid context

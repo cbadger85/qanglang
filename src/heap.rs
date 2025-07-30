@@ -64,9 +64,7 @@ impl ObjectHeap {
     pub fn free(&mut self, handle: ObjectHandle) {
         if let Some(obj) = self.objects[handle.0].take() {
             match obj.value {
-                HeapObjectValue::String(_) => {
-                    return;
-                }
+                HeapObjectValue::String(_) => {}
                 _ => self.free_list.push(handle.0),
             }
         }

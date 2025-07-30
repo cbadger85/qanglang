@@ -1,5 +1,6 @@
 use crate::{
-    ErrorReporter, QangError, SourceMap, ast,
+    ErrorReporter, QangError, SourceMap,
+    ast::{self, SourceSpan},
     tokenizer::{Token, TokenType, Tokenizer},
 };
 
@@ -383,7 +384,13 @@ impl<'a> Parser<'a> {
         let current_token_type = self
             .current_token
             .as_ref()
-            .expect("Expected statement.")
+            .ok_or(QangError::parse_error(
+                "Expected statement.",
+                self.previous_token
+                    .as_ref()
+                    .map(SourceSpan::from_token)
+                    .unwrap_or_default(),
+            ))?
             .token_type;
 
         match current_token_type {
@@ -818,10 +825,7 @@ mod expression_parser {
     type InfixParseFn = fn(&mut Parser, ast::Expr) -> ParseResult<ast::Expr>;
 
     fn number(parser: &mut Parser) -> ParseResult<ast::Expr> {
-        let token = parser
-            .previous_token
-            .as_ref()
-            .expect("Missing previous token.");
+        let token = get_previous_token(parser);
 
         let span = ast::SourceSpan::from_token(token);
 
@@ -857,10 +861,7 @@ mod expression_parser {
 
     fn unary(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let operand = Box::new(parser.expression()?);
-        let token = parser
-            .previous_token
-            .as_ref()
-            .expect("Missing previous token.");
+        let token = get_previous_token(parser);
 
         let operator_type = token.token_type;
         let operator_span = ast::SourceSpan::from_token(token);
@@ -882,10 +883,7 @@ mod expression_parser {
     }
 
     fn literal(parser: &mut Parser) -> ParseResult<ast::Expr> {
-        let token = parser
-            .previous_token
-            .as_ref()
-            .expect("Missing previous token.");
+        let token = get_previous_token(parser);
 
         let span = ast::SourceSpan::from_token(token);
 
@@ -914,10 +912,7 @@ mod expression_parser {
     }
 
     fn string(parser: &mut Parser) -> ParseResult<ast::Expr> {
-        let token = parser
-            .previous_token
-            .as_ref()
-            .expect("Missing previous token.");
+        let token = get_previous_token(parser);
 
         let value = token.lexeme(parser.source_map);
 
@@ -963,14 +958,18 @@ mod expression_parser {
     }
 
     fn binary(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
-        let token = parser
-            .previous_token
-            .as_ref()
-            .expect("Expected previous token.");
+        let token = get_previous_token(parser);
         let span_start = left.span().start;
         let token_type = token.token_type;
 
         let rule = get_rule(token_type);
+
+        if rule.is_empty() {
+            return Err(QangError::parse_error(
+                "Unexpected token.",
+                ast::SourceSpan::from_token(token),
+            ));
+        }
 
         let precedence: Precedence = (rule.precedence as u8 + 1).into();
 
@@ -1080,8 +1079,7 @@ mod expression_parser {
     }
 
     fn pipe(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
-        // Parse the right side with pipe precedence + 1 for left associativity
-        let right = Box::new(parse(parser, Precedence::Pipe)?);
+        let right = Box::new(parse(parser, (Precedence::Pipe as u8 + 1).into())?);
         let span = ast::SourceSpan::combine(left.span(), right.span());
 
         Ok(ast::Expr::Pipe(ast::PipeExpr {
@@ -1094,7 +1092,6 @@ mod expression_parser {
     fn call(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
         let mut expr = left;
 
-        // Keep applying call operations as long as we find them
         while let Some(current_token) = &parser.current_token {
             // Determine what kind of call operation this is
             let operation = match current_token.token_type {
@@ -1158,11 +1155,9 @@ mod expression_parser {
                     ast::CallOperation::Index(index)
                 }
 
-                // Not a call operation, we're done with this chain
                 _ => break,
             };
 
-            // Create a new CallExpr with the operation applied
             let end_span = parser.get_previous_span();
             let span = ast::SourceSpan::combine(expr.span(), end_span);
 
@@ -1179,15 +1174,12 @@ mod expression_parser {
     fn parse_arguments(parser: &mut Parser) -> ParseResult<Vec<ast::Expr>> {
         let mut arguments = Vec::new();
 
-        // Handle empty argument list: func()
         if parser.check(tokenizer::TokenType::RightParen) {
             return Ok(arguments);
         }
 
-        // Parse first argument
         arguments.push(parser.expression()?);
 
-        // Parse remaining arguments separated by commas
         while parser.match_token(tokenizer::TokenType::Comma) {
             arguments.push(parser.expression()?);
         }
@@ -1195,10 +1187,30 @@ mod expression_parser {
         Ok(arguments)
     }
 
+    fn get_previous_token<'a>(parser: &'a Parser) -> &'a Token {
+        // This should never panic because the expression parser will always have a previous token available to it.
+        let token: &&Token = &parser
+            .previous_token
+            .as_ref()
+            .expect("Expected token but found none.");
+
+        token
+    }
+
     pub struct ParseRule {
         infix: Option<InfixParseFn>,
         prefix: Option<PrefixParseFn>,
         precedence: Precedence,
+    }
+
+    impl ParseRule {
+        fn is_empty(&self) -> bool {
+            self.infix.is_none() && self.prefix.is_none() && self.precedence == Precedence::None
+        }
+
+        fn is_not_empty(&self) -> bool {
+            !self.is_empty()
+        }
     }
 
     const fn get_rule(token_type: tokenizer::TokenType) -> ParseRule {
@@ -1353,6 +1365,7 @@ mod expression_parser {
             .previous_token
             .as_ref()
             .map(|t| get_rule(t.token_type))
+            .filter(ParseRule::is_not_empty)
             .and_then(|r| r.prefix);
 
         let mut expr = match prefix_rule {
@@ -1370,6 +1383,14 @@ mod expression_parser {
 
         while let Some(current_token) = &parser.current_token {
             let rule = get_rule(current_token.token_type);
+
+            if rule.is_empty() {
+                return Err(QangError::parse_error(
+                    "Unexpected token.",
+                    ast::SourceSpan::from_token(current_token),
+                ));
+            }
+
             if precedence <= rule.precedence {
                 parser.advance();
 

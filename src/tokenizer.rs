@@ -172,7 +172,7 @@ impl<'a> Tokenizer<'a> {
                 return None;
             } else {
                 self.is_eof = true;
-                return self.make_token(TokenType::Eof, 0);
+                return self.make_token(TokenType::Eof, self.location);
             }
         }
 
@@ -308,7 +308,7 @@ impl<'a> Tokenizer<'a> {
 
     /// Creates a string token.
     fn string(&mut self) -> Option<Token> {
-        let start = self.location - 1;
+        let start = self.location;
 
         while self.peek_char() != '"' && !self.is_at_end() {
             if self.peek_char() == '\n' {
@@ -344,8 +344,10 @@ impl<'a> Tokenizer<'a> {
             return self.error_token("Unterminated string.");
         }
 
+        let token = self.make_token(TokenType::String, start);
         self.advance(); // Consume closing quote 
-        self.make_token(TokenType::String, start)
+
+        token
     }
 
     /// Advances cursor without treating characters as line breaks (for use in strings)
@@ -464,9 +466,32 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
+    /// Asserts that the token produced from tokenizing the source string match the expected types.
+    fn assert_single_token(source: &str, expected: Token) {
+        assert_tokens(
+            source,
+            &[
+                expected,
+                Token {
+                    token_type: TokenType::Eof,
+                    start: source.len(),
+                    end: source.len(),
+                    error_message: None,
+                },
+            ],
+        );
+    }
+
+    /// Asserts that the tokens produced from tokenizing the source string match the expected types.
+    fn assert_tokens(source: &str, expected: &[Token]) {
+        let source_map = &SourceMap::new(source.to_string());
+        let tokens = tokenize_all(source_map);
+        assert_eq!(&tokens, expected);
+    }
+
     /// Asserts that a single token of the expected type is produced from tokenizing the source string,
     /// followed by an EOF token.
-    fn assert_single_token(source: &str, expected: TokenType) {
+    fn assert_single_token_type(source: &str, expected: TokenType) {
         assert_token_types(source, &[expected, TokenType::Eof]);
     }
 
@@ -482,81 +507,113 @@ mod tests {
 
     #[test]
     fn test_single_character_tokens() {
-        assert_single_token("(", TokenType::LeftParen);
-        assert_single_token(")", TokenType::RightParen);
-        assert_single_token("{", TokenType::LeftBrace);
-        assert_single_token("}", TokenType::RightBrace);
-        assert_single_token("[", TokenType::LeftSquareBracket);
-        assert_single_token("]", TokenType::RightSquareBracket);
-        assert_single_token(",", TokenType::Comma);
-        assert_single_token(".", TokenType::Dot);
-        assert_single_token(":", TokenType::Colon);
-        assert_single_token("?", TokenType::Question);
-        assert_single_token("+", TokenType::Plus);
-        assert_single_token("-", TokenType::Minus);
-        assert_single_token("*", TokenType::Star);
-        assert_single_token("/", TokenType::Slash);
-        assert_single_token("%", TokenType::Modulo);
-        assert_single_token(";", TokenType::Semicolon);
-        assert_single_token("=", TokenType::Equals);
-        assert_single_token("!", TokenType::Bang);
-        assert_single_token("<", TokenType::Less);
-        assert_single_token(">", TokenType::Greater);
+        assert_single_token_type("(", TokenType::LeftParen);
+        assert_single_token_type(")", TokenType::RightParen);
+        assert_single_token_type("{", TokenType::LeftBrace);
+        assert_single_token_type("}", TokenType::RightBrace);
+        assert_single_token_type("[", TokenType::LeftSquareBracket);
+        assert_single_token_type("]", TokenType::RightSquareBracket);
+        assert_single_token_type(",", TokenType::Comma);
+        assert_single_token_type(".", TokenType::Dot);
+        assert_single_token_type(":", TokenType::Colon);
+        assert_single_token_type("?", TokenType::Question);
+        assert_single_token_type("+", TokenType::Plus);
+        assert_single_token_type("-", TokenType::Minus);
+        assert_single_token_type("*", TokenType::Star);
+        assert_single_token_type("/", TokenType::Slash);
+        assert_single_token_type("%", TokenType::Modulo);
+        assert_single_token_type(";", TokenType::Semicolon);
+        assert_single_token_type("=", TokenType::Equals);
+        assert_single_token_type("!", TokenType::Bang);
+        assert_single_token_type("<", TokenType::Less);
+        assert_single_token_type(">", TokenType::Greater);
     }
 
     #[test]
     fn test_two_character_tokens() {
-        assert_single_token("!=", TokenType::BangEquals);
-        assert_single_token("<=", TokenType::LessEquals);
-        assert_single_token(">=", TokenType::GreaterEquals);
-        assert_single_token("->", TokenType::Arrow);
+        assert_single_token_type("!=", TokenType::BangEquals);
+        assert_single_token_type("<=", TokenType::LessEquals);
+        assert_single_token_type(">=", TokenType::GreaterEquals);
+        assert_single_token_type("->", TokenType::Arrow);
     }
 
     #[test]
     fn test_keywords() {
-        assert_single_token("and", TokenType::And);
-        assert_single_token("class", TokenType::Class);
-        assert_single_token("else", TokenType::Else);
-        assert_single_token("false", TokenType::False);
-        assert_single_token("for", TokenType::For);
-        assert_single_token("fn", TokenType::Fn);
-        assert_single_token("if", TokenType::If);
-        assert_single_token("nil", TokenType::Nil);
-        assert_single_token("or", TokenType::Or);
-        assert_single_token("return", TokenType::Return);
-        assert_single_token("super", TokenType::Super);
-        assert_single_token("this", TokenType::This);
-        assert_single_token("true", TokenType::True);
-        assert_single_token("var", TokenType::Var);
-        assert_single_token("while", TokenType::While);
-        assert_single_token("break", TokenType::Break);
-        assert_single_token("continue", TokenType::Continue);
+        assert_single_token_type("and", TokenType::And);
+        assert_single_token_type("class", TokenType::Class);
+        assert_single_token_type("else", TokenType::Else);
+        assert_single_token_type("false", TokenType::False);
+        assert_single_token_type("for", TokenType::For);
+        assert_single_token_type("fn", TokenType::Fn);
+        assert_single_token_type("if", TokenType::If);
+        assert_single_token_type("nil", TokenType::Nil);
+        assert_single_token_type("or", TokenType::Or);
+        assert_single_token_type("return", TokenType::Return);
+        assert_single_token_type("super", TokenType::Super);
+        assert_single_token_type("this", TokenType::This);
+        assert_single_token_type("true", TokenType::True);
+        assert_single_token_type("var", TokenType::Var);
+        assert_single_token_type("while", TokenType::While);
+        assert_single_token_type("break", TokenType::Break);
+        assert_single_token_type("continue", TokenType::Continue);
     }
 
     #[test]
     fn test_identifiers() {
-        assert_single_token("hello", TokenType::Identifier);
-        assert_single_token("_underscore", TokenType::Identifier);
-        assert_single_token("with123numbers", TokenType::Identifier);
-        assert_single_token("_", TokenType::Identifier);
-        assert_single_token("CamelCase", TokenType::Identifier);
+        assert_single_token_type("hello", TokenType::Identifier);
+        assert_single_token_type("_underscore", TokenType::Identifier);
+        assert_single_token_type("with123numbers", TokenType::Identifier);
+        assert_single_token_type("_", TokenType::Identifier);
+        assert_single_token_type("CamelCase", TokenType::Identifier);
     }
 
     #[test]
     fn test_numbers() {
-        assert_single_token("123", TokenType::Number);
-        assert_single_token("0", TokenType::Number);
-        assert_single_token("123.456", TokenType::Number);
-        assert_single_token("0.5", TokenType::Number);
-        assert_single_token("999.0", TokenType::Number);
+        assert_single_token_type("123", TokenType::Number);
+        assert_single_token_type("0", TokenType::Number);
+        assert_single_token_type("123.456", TokenType::Number);
+        assert_single_token_type("0.5", TokenType::Number);
+        assert_single_token_type("999.0", TokenType::Number);
     }
 
     #[test]
     fn test_strings() {
-        assert_single_token("\"hello\"", TokenType::String);
-        assert_single_token("\"\"", TokenType::String);
-        assert_single_token("\"hello world\"", TokenType::String);
-        assert_single_token("\"with spaces and 123 numbers\"", TokenType::String);
+        assert_single_token(
+            "\"hello\"",
+            Token {
+                start: 1,
+                end: 6,
+                error_message: None,
+                token_type: TokenType::String,
+            },
+        );
+        assert_single_token(
+            "\"\"",
+            Token {
+                start: 1,
+                end: 1,
+                error_message: None,
+                token_type: TokenType::String,
+            },
+        );
+        assert_single_token(
+            "\"hello world\"",
+            Token {
+                start: 1,
+                end: 12,
+                error_message: None,
+                token_type: TokenType::String,
+            },
+        );
+        assert_single_token(
+            "\"with spaces and 123 numbers\"",
+            Token {
+                start: 1,
+                end: 28,
+                error_message: None,
+                token_type: TokenType::String,
+            },
+        );
     }
 
     #[test]
@@ -577,8 +634,8 @@ mod tests {
 
     #[test]
     fn test_single_line_comments() {
-        assert_single_token("// this is a comment", TokenType::Comment);
-        assert_single_token("//no space", TokenType::Comment);
+        assert_single_token_type("// this is a comment", TokenType::Comment);
+        assert_single_token_type("//no space", TokenType::Comment);
 
         let source_map = &SourceMap::new("// comment\n".to_string());
         let tokens = tokenize_all(source_map);
@@ -590,9 +647,9 @@ mod tests {
 
     #[test]
     fn test_multi_line_comments() {
-        assert_single_token("/* this is a comment */", TokenType::Comment);
-        assert_single_token("/*no spaces*/", TokenType::Comment);
-        assert_single_token("/* multi\nline\ncomment */", TokenType::Comment);
+        assert_single_token_type("/* this is a comment */", TokenType::Comment);
+        assert_single_token_type("/*no spaces*/", TokenType::Comment);
+        assert_single_token_type("/* multi\nline\ncomment */", TokenType::Comment);
     }
 
     #[test]
@@ -1023,7 +1080,7 @@ mod tests {
 
     #[test]
     fn test_string_with_escaped_newline() {
-        assert_single_token("\"hello\\nworld\"", TokenType::String);
+        assert_single_token_type("\"hello\\nworld\"", TokenType::String);
 
         let source_map: &SourceMap = &SourceMap::new("\"hello\\nworld\"".to_string());
         let tokens = tokenize_all(source_map);
@@ -1032,7 +1089,7 @@ mod tests {
 
     #[test]
     fn test_string_with_various_escapes() {
-        assert_single_token("\"hello\\tworld\\\"test\\\\path\"", TokenType::String);
+        assert_single_token_type("\"hello\\tworld\\\"test\\\\path\"", TokenType::String);
     }
 
     #[test]
@@ -1074,23 +1131,23 @@ mod tests {
 
     #[test]
     fn test_nested_quotes_in_strings() {
-        assert_single_token("\"He said \\\"hello\\\"\"", TokenType::String);
+        assert_single_token_type("\"He said \\\"hello\\\"\"", TokenType::String);
     }
 
     #[test]
     fn test_empty_string() {
-        assert_single_token("\"\"", TokenType::String);
+        assert_single_token_type("\"\"", TokenType::String);
     }
 
     #[test]
     fn test_unicode_in_strings() {
-        assert_single_token("\"café 🦀\"", TokenType::String);
+        assert_single_token_type("\"café 🦀\"", TokenType::String);
     }
 
     #[test]
     fn test_decimal_point_numbers() {
-        assert_single_token(".5", TokenType::Number);
-        assert_single_token(".123", TokenType::Number);
+        assert_single_token_type(".5", TokenType::Number);
+        assert_single_token_type(".123", TokenType::Number);
     }
 
     #[test]
@@ -1098,7 +1155,7 @@ mod tests {
         // First, you'll need to add this to your TokenType enum:
         // OptionalChaining,    // .?
 
-        assert_single_token(".?", TokenType::OptionalChaining);
+        assert_single_token_type(".?", TokenType::OptionalChaining);
     }
 
     #[test]

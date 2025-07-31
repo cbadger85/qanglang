@@ -311,6 +311,16 @@ impl<'a> Tokenizer<'a> {
         let start = self.location - 1;
 
         while self.peek_char() != '"' && !self.is_at_end() {
+            if self.peek_char() == '\n' {
+                // Don't consume the newline - leave it for the next token
+                return Some(Token {
+                    token_type: TokenType::Error,
+                    start,
+                    end: self.location,
+                    error_message: Some("Unterminated string.".to_string()),
+                });
+            }
+
             if self.peek_char() == '\\' {
                 self.advance_in_string(); // consume backslash
                 if !self.is_at_end() {
@@ -1603,5 +1613,26 @@ mod tests {
             tokenizer.peek_ahead(2).unwrap().token_type,
             TokenType::Identifier
         ); // 'e'
+    }
+
+    #[test]
+    fn test_unterminated_string_with_following_code() {
+        let source_map = &SourceMap::new("\"unterminated\nvar x = 5;".to_string());
+        let mut tokenizer = Tokenizer::new(source_map);
+
+        // First token should be error for unterminated string
+        let first_token = tokenizer.next().unwrap();
+        assert_eq!(first_token.token_type, TokenType::Error);
+
+        // Should continue parsing after the error
+        let tokens: Vec<Token> = tokenizer.collect();
+        println!("tokens.len(): {:?}", tokens.len());
+        // Should have: var, x, =, 5, ;, EOF
+        assert!(tokens.len() >= 5);
+        assert_eq!(tokens[0].token_type, TokenType::Var);
+        assert_eq!(tokens[1].token_type, TokenType::Identifier);
+        assert_eq!(tokens[2].token_type, TokenType::Equals);
+        assert_eq!(tokens[3].token_type, TokenType::Number);
+        assert_eq!(tokens[4].token_type, TokenType::Semicolon);
     }
 }

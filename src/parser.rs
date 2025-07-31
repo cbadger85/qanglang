@@ -37,7 +37,12 @@ impl<'a> Parser<'a> {
 
         while let Some(token) = self.tokens.next() {
             if token.token_type == TokenType::Error {
+                println!("Is token error.");
                 self.handle_tokenizer_error(&token);
+                continue;
+            }
+
+            if token.token_type == TokenType::Comment {
                 continue;
             }
 
@@ -124,26 +129,29 @@ impl<'a> Parser<'a> {
 
     fn synchronize(&mut self) {
         loop {
-            if self
-                .current_token
-                .as_ref()
-                .map(|t| &t.token_type)
-                .map(|t| t == &TokenType::Eof)
-                .unwrap_or(false)
-            {
+            // If current_token is None, we've reached the end of input
+            let current_token_type = match self.current_token.as_ref() {
+                Some(token) => &token.token_type,
+                None => {
+                    // No more tokens available - treat as EOF and exit
+                    return;
+                }
+            };
+
+            // Check if we've reached EOF
+            if current_token_type == &TokenType::Eof {
                 break;
             }
 
-            if (self
-                .previous_token
-                .as_ref()
-                .map(|t| t.token_type == TokenType::Semicolon))
-            .unwrap_or(false)
-            {
-                return;
+            // Check if previous token was a semicolon (good synchronization point)
+            if let Some(prev_token) = &self.previous_token {
+                if prev_token.token_type == TokenType::Semicolon {
+                    return;
+                }
             }
 
-            if let Some(
+            // Check if current token is a statement keyword (good synchronization point)
+            match current_token_type {
                 TokenType::Class
                 | TokenType::Fn
                 | TokenType::Var
@@ -155,10 +163,10 @@ impl<'a> Parser<'a> {
                 | TokenType::Catch
                 | TokenType::Finally
                 | TokenType::Break
-                | TokenType::Continue,
-            ) = self.current_token.as_ref().map(|t| &t.token_type)
-            {
-                return;
+                | TokenType::Continue => {
+                    return;
+                }
+                _ => {}
             }
 
             self.advance();
@@ -166,7 +174,10 @@ impl<'a> Parser<'a> {
     }
 
     fn is_at_end(&self) -> bool {
-        self.check(TokenType::Eof)
+        match &self.current_token {
+            Some(token) => token.token_type == TokenType::Eof,
+            None => true,
+        }
     }
 
     fn is_lambda_start(&mut self) -> bool {
@@ -428,6 +439,7 @@ impl<'a> Parser<'a> {
         self.advance();
         self.consume(TokenType::LeftParen, "Expected '('.")?;
         let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expected ')'.")?;
 
         let then_branch = Box::new(ast::Stmt::Block(self.block_statement()?));
 
@@ -1378,12 +1390,38 @@ mod expression_parser {
             }
         }
 
+        // Check for potential malformed expressions
+        // If we have an identifier or other expression-starting token immediately following
+        // our parsed expression, it's likely a syntax error
+        if let Some(current_token) = &parser.current_token {
+            match current_token.token_type {
+                TokenType::Identifier
+                | TokenType::Number
+                | TokenType::String
+                | TokenType::True
+                | TokenType::False
+                | TokenType::Nil
+                | TokenType::This
+                | TokenType::Super
+                | TokenType::LeftParen => {
+                    // We have an expression-like token that couldn't be parsed as part of the current expression
+                    // This suggests a syntax error like missing operator
+                    let span = ast::SourceSpan::from_token(current_token);
+                    return Err(crate::QangError::parse_error(
+                        "Unexpected token in expression. Missing operator?",
+                        span,
+                    ));
+                }
+                _ => {}
+            }
+        }
+
         Ok(expr)
     }
 }
 
 #[cfg(test)]
-mod parser_tests {
+mod tests {
     use super::*;
     use crate::{SourceMap, ast::*};
 
@@ -2234,7 +2272,7 @@ mod parser_tests {
     fn test_this_and_super() {
         let source_code = r#"
             class Child : Parent {
-                fn method() {
+                method() {
                     this.value = super.getValue();
                 }
             }
@@ -2386,10 +2424,12 @@ mod parser_tests {
 
     #[test]
     fn test_unterminated_string_error() {
-        todo!("This test is super broken and creates an infinite loop.");
         let source_code = r#"var msg = "unterminated string"#;
         let source_map = SourceMap::new(source_code.to_string());
-
+        println!(
+            "tokens: {:?}",
+            Tokenizer::new(&source_map).collect::<Vec<_>>()
+        );
         let (_program, errors) = parse_source(&source_map);
 
         assert!(errors.has_errors());
@@ -2522,7 +2562,7 @@ mod parser_tests {
 
         let (_program, errors) = parse_source(&source_map);
 
-        assert_parse_error(&errors, "Expect '->' after lambda parameters");
+        assert_parse_error(&errors, "Unexpected token in expression. Missing operator?");
     }
 
     #[test]
@@ -2779,11 +2819,11 @@ mod parser_tests {
     fn test_complete_program_example() {
         let source_code = r#"
             class Calculator {
-                fn add(a, b) {
+                add(a, b) {
                     return a + b;
                 }
                 
-                fn multiply(a, b) {
+                multiply(a, b) {
                     return a * b;
                 }
             }

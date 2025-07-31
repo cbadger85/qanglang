@@ -306,9 +306,7 @@ impl<'a> Parser<'a> {
 
         let mut members = Vec::new();
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
-            if let Some(member) = self.class_member()? {
-                members.push(member);
-            }
+            members.push(self.class_member()?);
         }
 
         self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
@@ -323,29 +321,24 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn class_member(&mut self) -> ParseResult<Option<ast::ClassMember>> {
+    fn class_member(&mut self) -> ParseResult<ast::ClassMember> {
         if self.check(TokenType::Identifier) {
-            let checkpoint = self.current_token.clone();
-
-            // Try to parse as method (identifier followed by '(')
-            self.advance(); // consume identifier
-            if self.check(TokenType::LeftParen) {
-                // Reset to checkpoint and parse as method
-                self.current_token = checkpoint;
-                let function_expr = self.function_expression()?;
-                return Ok(Some(ast::ClassMember::Method(function_expr)));
+            if self
+                .tokens
+                .peek()
+                .map(|t| t.token_type == TokenType::LeftParen)
+                .unwrap_or(false)
+            {
+                Ok(ast::ClassMember::Method(self.function_expression()?))
             } else {
-                // Reset to checkpoint and parse as field
-                self.current_token = checkpoint;
-                let field = self.field_declaration()?;
-                return Ok(Some(ast::ClassMember::Field(field)));
+                Ok(ast::ClassMember::Field(self.field_declaration()?))
             }
+        } else {
+            Err(QangError::parse_error(
+                "Expected field or method declaration.",
+                self.get_current_span(),
+            ))
         }
-
-        Err(QangError::parse_error(
-            "Expected field or method declaration.",
-            self.get_current_span(),
-        ))
     }
 
     fn field_declaration(&mut self) -> ParseResult<ast::FieldDecl> {
@@ -437,6 +430,8 @@ impl<'a> Parser<'a> {
         let condition = self.expression()?;
 
         let then_branch = Box::new(ast::Stmt::Block(self.block_statement()?));
+
+        println!("current token: {:?}", self.current_token);
 
         let (else_branch, span) = if self.match_token(TokenType::Else) {
             let block_stmt = ast::Stmt::Block(self.block_statement()?);
@@ -783,8 +778,8 @@ mod expression_parser {
     pub enum Precedence {
         None = 0,
         Assignment, // =
-        Pipe,       // |>
         Ternary,    // ? :
+        Pipe,       // |>
         Or,         // or
         And,        // and
         Equality,   // == !=
@@ -860,11 +855,10 @@ mod expression_parser {
     }
 
     fn unary(parser: &mut Parser) -> ParseResult<ast::Expr> {
-        let operand = Box::new(parser.expression()?);
         let token = get_previous_token(parser);
-
         let operator_type = token.token_type;
         let operator_span = ast::SourceSpan::from_token(token);
+        let operand = Box::new(parse(parser, Precedence::Unary)?);
 
         let span = ast::SourceSpan::combine(operator_span, operand.span());
         match operator_type {
@@ -1090,85 +1084,64 @@ mod expression_parser {
     }
 
     fn call(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
-        let mut expr = left;
+        let operation = match parser.previous_token.as_ref().unwrap().token_type {
+            tokenizer::TokenType::LeftParen => {
+                let arguments = parse_arguments(parser)?;
+                parser.consume(
+                    tokenizer::TokenType::RightParen,
+                    "Expect ')' after arguments.",
+                )?;
+                ast::CallOperation::Call(arguments)
+            }
+            tokenizer::TokenType::Dot => {
+                parser.consume(
+                    tokenizer::TokenType::Identifier,
+                    "Expect property name after '.'.",
+                )?;
+                let property_span = parser.get_previous_span();
+                let property_name = parser
+                    .previous_token
+                    .as_ref()
+                    .map(|t| t.lexeme(parser.source_map))
+                    .unwrap();
+                let property = ast::Identifier::new(property_name, property_span);
+                ast::CallOperation::Property(property)
+            }
+            tokenizer::TokenType::LeftSquareBracket => {
+                let index = parse(parser, Precedence::None)?;
+                parser.consume(
+                    tokenizer::TokenType::RightSquareBracket,
+                    "Expect ']' after array index.",
+                )?;
+                ast::CallOperation::Index(index)
+            }
+            tokenizer::TokenType::OptionalChaining => {
+                parser.consume(
+                    tokenizer::TokenType::Identifier,
+                    "Expect property name after '.?'.",
+                )?;
 
-        while let Some(current_token) = &parser.current_token {
-            // Determine what kind of call operation this is
-            let operation = match current_token.token_type {
-                // Function call: expr(args...)
-                tokenizer::TokenType::LeftParen => {
-                    parser.advance(); // consume the '('
-                    let arguments = parse_arguments(parser)?;
-                    parser.consume(
-                        tokenizer::TokenType::RightParen,
-                        "Expect ')' after arguments.",
-                    )?;
-                    ast::CallOperation::Call(arguments)
-                }
+                let property_span = parser.get_previous_span();
+                let property_name = parser
+                    .previous_token
+                    .as_ref()
+                    .map(|t| t.lexeme(parser.source_map))
+                    .unwrap();
+                let property = ast::Identifier::new(property_name, property_span);
 
-                // Property access: expr.property
-                tokenizer::TokenType::Dot => {
-                    parser.advance(); // consume the '.'
-                    parser.consume(
-                        tokenizer::TokenType::Identifier,
-                        "Expect property name after '.'.",
-                    )?;
+                ast::CallOperation::OptionalProperty(property)
+            }
+            _ => return Ok(left), // This shouldn't happen
+        };
 
-                    let property_span = parser.get_previous_span();
-                    let property_name = parser
-                        .previous_token
-                        .as_ref()
-                        .map(|t| t.lexeme(parser.source_map))
-                        .unwrap();
-                    let property = ast::Identifier::new(property_name, property_span);
+        let end_span = parser.get_previous_span();
+        let span = ast::SourceSpan::combine(left.span(), end_span);
 
-                    ast::CallOperation::Property(property)
-                }
-
-                // Optional property access: expr.?property
-                tokenizer::TokenType::OptionalChaining => {
-                    parser.advance(); // consume the '.?'
-                    parser.consume(
-                        tokenizer::TokenType::Identifier,
-                        "Expect property name after '.?'.",
-                    )?;
-
-                    let property_span = parser.get_previous_span();
-                    let property_name = parser
-                        .previous_token
-                        .as_ref()
-                        .map(|t| t.lexeme(parser.source_map))
-                        .unwrap();
-                    let property = ast::Identifier::new(property_name, property_span);
-
-                    ast::CallOperation::OptionalProperty(property)
-                }
-
-                // Array/index access: expr[index]
-                tokenizer::TokenType::LeftSquareBracket => {
-                    parser.advance(); // consume the '['
-                    let index = parser.expression()?;
-                    parser.consume(
-                        tokenizer::TokenType::RightSquareBracket,
-                        "Expect ']' after array index.",
-                    )?;
-                    ast::CallOperation::Index(index)
-                }
-
-                _ => break,
-            };
-
-            let end_span = parser.get_previous_span();
-            let span = ast::SourceSpan::combine(expr.span(), end_span);
-
-            expr = ast::Expr::Call(ast::CallExpr {
-                callee: Box::new(expr),
-                operation: Box::new(operation),
-                span,
-            });
-        }
-
-        Ok(expr)
+        Ok(ast::Expr::Call(ast::CallExpr {
+            callee: Box::new(left),
+            operation: Box::new(operation),
+            span,
+        }))
     }
 
     fn parse_arguments(parser: &mut Parser) -> ParseResult<Vec<ast::Expr>> {
@@ -1350,6 +1323,11 @@ mod expression_parser {
                 infix: Some(call),
                 precedence: Precedence::Call,
             },
+            tokenizer::TokenType::OptionalChaining => ParseRule {
+                prefix: None,
+                infix: Some(call),
+                precedence: Precedence::Call,
+            },
             _ => ParseRule {
                 prefix: None,
                 infix: None,
@@ -1365,7 +1343,7 @@ mod expression_parser {
             .previous_token
             .as_ref()
             .map(|t| get_rule(t.token_type))
-            .filter(ParseRule::is_not_empty)
+            // .filter(ParseRule::is_not_empty)
             .and_then(|r| r.prefix);
 
         let mut expr = match prefix_rule {
@@ -1383,15 +1361,11 @@ mod expression_parser {
 
         while let Some(current_token) = &parser.current_token {
             let rule = get_rule(current_token.token_type);
-
-            if rule.is_empty() {
-                return Err(QangError::parse_error(
-                    "Unexpected token.",
-                    ast::SourceSpan::from_token(current_token),
-                ));
-            }
-
-            if precedence <= rule.precedence {
+            println!(
+                "Current token: {:?}, precedence: {:?}, rule precedence: {:?}",
+                current_token.token_type, precedence, rule.precedence
+            );
+            if precedence <= rule.precedence && rule.is_not_empty() {
                 parser.advance();
 
                 if let Some(infix_rule) = rule.infix {
@@ -1405,5 +1379,1461 @@ mod expression_parser {
         }
 
         Ok(expr)
+    }
+}
+
+#[cfg(test)]
+mod parser_tests {
+    use super::*;
+    use crate::{SourceMap, ast::*};
+
+    fn parse_source(source_map: &SourceMap) -> (Program, ErrorReporter) {
+        let mut parser = Parser::new(&source_map);
+        let program = parser.parse();
+        let errors = parser.into_reporter();
+        (program, errors)
+    }
+
+    fn assert_no_parse_errors(errors: &ErrorReporter) {
+        if errors.has_errors() {
+            panic!("Unexpected parse errors:\n{}", errors.format_errors());
+        }
+    }
+
+    fn assert_parse_error(errors: &ErrorReporter, expected_message: &str) {
+        assert!(
+            errors.has_errors(),
+            "Expected parse error but none occurred"
+        );
+        let error_text = errors.format_errors();
+        assert!(
+            error_text.contains(expected_message),
+            "Expected error message '{}' but got: {}",
+            expected_message,
+            error_text
+        );
+    }
+
+    #[test]
+    fn test_empty_program() {
+        let source_code = r#""#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 0);
+    }
+
+    #[test]
+    fn test_simple_variable_declaration() {
+        let source_code = r#"var x = 42;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert_eq!(var_decl.name.name.as_ref(), "x");
+            assert!(var_decl.initializer.is_some());
+
+            if let Some(Expr::Primary(PrimaryExpr::Number(num))) = &var_decl.initializer {
+                assert_eq!(num.value, 42.0);
+            } else {
+                panic!("Expected number literal");
+            }
+        } else {
+            panic!("Expected variable declaration");
+        }
+    }
+
+    #[test]
+    fn test_variable_declaration_without_initializer() {
+        let source_code = r#"var x;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert_eq!(var_decl.name.name.as_ref(), "x");
+            assert!(var_decl.initializer.is_none());
+        } else {
+            panic!("Expected variable declaration");
+        }
+    }
+
+    #[test]
+    fn test_function_declaration() {
+        let source_code = r#"
+            fn add(a, b) {
+                return a + b;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Function(func_decl) = &program.decls[0] {
+            assert_eq!(func_decl.function.name.name.as_ref(), "add");
+            assert_eq!(func_decl.function.parameters.len(), 2);
+            assert_eq!(func_decl.function.parameters[0].name.as_ref(), "a");
+            assert_eq!(func_decl.function.parameters[1].name.as_ref(), "b");
+            assert_eq!(func_decl.function.body.decls.len(), 1);
+        } else {
+            panic!("Expected function declaration");
+        }
+    }
+
+    #[test]
+    fn test_function_without_parameters() {
+        let source_code = r#"
+            fn main() {
+                var x = 5;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Function(func_decl) = &program.decls[0] {
+            assert_eq!(func_decl.function.name.name.as_ref(), "main");
+            assert_eq!(func_decl.function.parameters.len(), 0);
+        } else {
+            panic!("Expected function declaration");
+        }
+    }
+
+    #[test]
+    fn test_class_declaration() {
+        let source_code = r#"
+            class Person {
+                name;
+                age = 0;
+                
+                get_name() {
+                    return this.name;
+                }
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Class(class_decl) = &program.decls[0] {
+            assert_eq!(class_decl.name.name.as_ref(), "Person");
+            assert!(class_decl.superclass.is_none());
+            assert_eq!(class_decl.members.len(), 3);
+
+            // Check field without initializer
+            if let ClassMember::Field(field) = &class_decl.members[0] {
+                assert_eq!(field.name.name.as_ref(), "name");
+                assert!(field.initializer.is_none());
+            } else {
+                panic!("Expected field declaration");
+            }
+
+            // Check field with initializer
+            if let ClassMember::Field(field) = &class_decl.members[1] {
+                assert_eq!(field.name.name.as_ref(), "age");
+                assert!(field.initializer.is_some());
+            } else {
+                panic!("Expected field declaration");
+            }
+
+            // Check method
+            if let ClassMember::Method(method) = &class_decl.members[2] {
+                assert_eq!(method.name.name.as_ref(), "get_name");
+                assert_eq!(method.parameters.len(), 0);
+            } else {
+                panic!("Expected method declaration");
+            }
+        } else {
+            panic!("Expected class declaration");
+        }
+    }
+
+    #[test]
+    fn test_class_with_inheritance() {
+        let source_code = r#"
+            class Student : Person {
+                grade = "A";
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Class(class_decl) = &program.decls[0] {
+            assert_eq!(class_decl.name.name.as_ref(), "Student");
+            assert!(class_decl.superclass.is_some());
+            assert_eq!(
+                class_decl.superclass.as_ref().unwrap().name.as_ref(),
+                "Person"
+            );
+        } else {
+            panic!("Expected class declaration");
+        }
+    }
+
+    #[test]
+    fn test_lambda_declaration() {
+        let source_code = r#"var add = (a, b) -> a + b;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert_eq!(var_decl.name.name.as_ref(), "add");
+
+            if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
+                assert_eq!(lambda.parameters.len(), 2);
+                assert_eq!(lambda.parameters[0].name.as_ref(), "a");
+                assert_eq!(lambda.parameters[1].name.as_ref(), "b");
+
+                if let LambdaBody::Expr(_) = lambda.body.as_ref() {
+                    // Expected expression body
+                } else {
+                    panic!("Expected expression body in lambda");
+                }
+            } else {
+                panic!("Expected lambda expression");
+            }
+        } else {
+            panic!("Expected variable declaration");
+        }
+    }
+
+    #[test]
+    fn test_lambda_with_block_body() {
+        let source_code = r#"var calc = (x) -> { return x * 2; };"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
+                if let LambdaBody::Block(_) = lambda.body.as_ref() {
+                    // Expected block body
+                } else {
+                    panic!("Expected block body in lambda");
+                }
+            } else {
+                panic!("Expected lambda expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_if_statement() {
+        let source_code = r#"
+            if (x > 0) {
+                return true;
+            } else {
+                return false;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Stmt(Stmt::If(if_stmt)) = &program.decls[0] {
+            assert!(if_stmt.else_branch.is_some());
+        } else {
+            panic!("Expected if statement");
+        }
+    }
+
+    #[test]
+    fn test_if_statement_without_else() {
+        let source_code = r#"
+            if (condition) {
+                doSomething();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::If(if_stmt)) = &program.decls[0] {
+            assert!(if_stmt.else_branch.is_none());
+        } else {
+            panic!("Expected if statement");
+        }
+    }
+
+    #[test]
+    fn test_while_statement() {
+        let source_code = r#"
+            while (i < 10) {
+                i = i + 1;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Stmt(Stmt::While(_)) = &program.decls[0] {
+            // Expected while statement
+        } else {
+            panic!("Expected while statement");
+        }
+    }
+
+    #[test]
+    fn test_for_statement_with_all_clauses() {
+        let source_code = r#"
+            for (var i = 0; i < 10; i = i + 1) {
+                print(i);
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::For(for_stmt)) = &program.decls[0] {
+            assert!(for_stmt.initializer.is_some());
+            assert!(for_stmt.condition.is_some());
+            assert!(for_stmt.increment.is_some());
+
+            if let Some(ForInitializer::Variable(var_decl)) = &for_stmt.initializer {
+                assert_eq!(var_decl.name.name.as_ref(), "i");
+            } else {
+                panic!("Expected variable initializer");
+            }
+        } else {
+            panic!("Expected for statement");
+        }
+    }
+
+    #[test]
+    fn test_for_statement_with_expression_initializer() {
+        let source_code = r#"
+            for (i = 0; i < 10; i = i + 1) {
+                print(i);
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::For(for_stmt)) = &program.decls[0] {
+            if let Some(ForInitializer::Expr(_)) = &for_stmt.initializer {
+                // Expected expression initializer
+            } else {
+                panic!("Expected expression initializer");
+            }
+        } else {
+            panic!("Expected for statement");
+        }
+    }
+
+    #[test]
+    fn test_for_statement_minimal() {
+        let source_code = r#"
+            for (;;) {
+                break;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::For(for_stmt)) = &program.decls[0] {
+            assert!(for_stmt.initializer.is_none());
+            assert!(for_stmt.condition.is_none());
+            assert!(for_stmt.increment.is_none());
+        } else {
+            panic!("Expected for statement");
+        }
+    }
+
+    #[test]
+    fn test_break_and_continue_statements() {
+        let source_code = r#"
+            while (true) {
+                if (condition1) {
+                    break;
+                }
+                if (condition2) {
+                    continue;
+                }
+                doWork();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        // The break and continue statements should be parsed successfully
+        // We don't need to deeply inspect the structure for this test
+    }
+
+    #[test]
+    fn test_return_statement() {
+        let source_code = r#"
+            fn test() {
+                return 42;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Function(func_decl) = &program.decls[0] {
+            if let Decl::Stmt(Stmt::Return(ret_stmt)) = &func_decl.function.body.decls[0] {
+                assert!(ret_stmt.value.is_some());
+            } else {
+                panic!("Expected return statement");
+            }
+        }
+    }
+
+    #[test]
+    fn test_return_statement_without_value() {
+        let source_code = r#"
+            fn test() {
+                return;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Function(func_decl) = &program.decls[0] {
+            if let Decl::Stmt(Stmt::Return(ret_stmt)) = &func_decl.function.body.decls[0] {
+                assert!(ret_stmt.value.is_none());
+            } else {
+                panic!("Expected return statement");
+            }
+        }
+    }
+
+    #[test]
+    fn test_try_catch_finally() {
+        let source_code = r#"
+            try {
+                riskyOperation();
+            } catch (error) {
+                handleError(error);
+            } finally {
+                cleanup();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::Try(try_stmt)) = &program.decls[0] {
+            assert!(try_stmt.catch_clause.is_some());
+            assert!(try_stmt.finally_block.is_some());
+
+            let catch_clause = try_stmt.catch_clause.as_ref().unwrap();
+            assert!(catch_clause.parameter.is_some());
+            assert_eq!(
+                catch_clause.parameter.as_ref().unwrap().name.as_ref(),
+                "error"
+            );
+        } else {
+            panic!("Expected try statement");
+        }
+    }
+
+    #[test]
+    fn test_try_catch_without_parameter() {
+        let source_code = r#"
+            try {
+                riskyOperation();
+            } catch {
+                handleError();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::Try(try_stmt)) = &program.decls[0] {
+            let catch_clause = try_stmt.catch_clause.as_ref().unwrap();
+            assert!(catch_clause.parameter.is_none());
+        }
+    }
+
+    #[test]
+    fn test_try_finally_without_catch() {
+        let source_code = r#"
+            try {
+                riskyOperation();
+            } finally {
+                cleanup();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::Try(try_stmt)) = &program.decls[0] {
+            assert!(try_stmt.catch_clause.is_none());
+            assert!(try_stmt.finally_block.is_some());
+        }
+    }
+
+    #[test]
+    fn test_throw_statement() {
+        let source_code = r#"
+            throw Error("Something went wrong");
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::Throw(throw_stmt)) = &program.decls[0] {
+            assert!(throw_stmt.value.is_some());
+        } else {
+            panic!("Expected throw statement");
+        }
+    }
+
+    #[test]
+    fn test_throw_statement_without_value() {
+        let source_code = r#"throw;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::Throw(throw_stmt)) = &program.decls[0] {
+            assert!(throw_stmt.value.is_none());
+        }
+    }
+
+    #[test]
+    fn test_arithmetic_expressions() {
+        let source_code = r#"var result = a + b * c - d / e % f;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+            // The expression should be parsed correctly according to operator precedence
+        }
+    }
+
+    #[test]
+    fn test_comparison_expressions() {
+        let source_code = r#"var check = x > y and a <= b or c != d and e == f;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_unary_expressions() {
+        let source_code = r#"var result = !condition and -number;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_assignment_expressions() {
+        let source_code = r#"
+            x = 5;
+            obj.property = "value";
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 2);
+
+        // Both should be expression statements containing assignments
+        if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &program.decls[0] {
+            if let Expr::Assignment(_) = expr_stmt.expr {
+                // Expected assignment
+            } else {
+                panic!("Expected assignment expression");
+            }
+        }
+
+        if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &program.decls[1] {
+            if let Expr::Assignment(_) = expr_stmt.expr {
+                // Expected assignment
+            } else {
+                panic!("Expected assignment expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_ternary_expressions() {
+        let source_code = r#"var result = condition ? trueValue : falseValue;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Ternary(ternary)) = &var_decl.initializer {
+                assert!(ternary.then_expr.is_some());
+                assert!(ternary.else_expr.is_some());
+            } else {
+                panic!("Expected ternary expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_pipe_expressions() {
+        let source_code = r#"var result = value |> transform |> finalize;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Pipe(_)) = &var_decl.initializer {
+                // Expected pipe expression
+            } else {
+                panic!("Expected pipe expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_function_calls() {
+        let source_code = r#"
+            result = func();
+            result2 = func(a, b, c);
+            result3 = obj.method(arg);
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 3);
+
+        // All should contain function call expressions
+    }
+
+    #[test]
+    fn test_property_access() {
+        let source_code = r#"
+            value = obj.property;
+            value2 = obj.nested.deep.property;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 2);
+    }
+
+    #[test]
+    fn test_optional_chaining() {
+        let source_code = r#"
+            value = obj.?property;
+            value2 = obj.?method().?result;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 2);
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let source_code = r#"
+            empty = [];
+            numbers = [1, 2, 3, 4];
+            mixed = [1, "string", true, nil];
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 3);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Primary(PrimaryExpr::Array(array))) = &var_decl.initializer {
+                assert_eq!(array.elements.len(), 0);
+            } else {
+                panic!("Expected array literal");
+            }
+        }
+
+        if let Decl::Variable(var_decl) = &program.decls[1] {
+            if let Some(Expr::Primary(PrimaryExpr::Array(array))) = &var_decl.initializer {
+                assert_eq!(array.elements.len(), 4);
+            } else {
+                panic!("Expected array literal");
+            }
+        }
+    }
+
+    #[test]
+    fn test_array_access() {
+        let source_code = r#"
+            value = array[0];
+            value2 = matrix[row][col];
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 2);
+    }
+
+    #[test]
+    fn test_grouping_expressions() {
+        let source_code = r#"var result = (a + b) * (c - d);"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_literals() {
+        let source_code = r#"
+            var num = 42.5;
+            var str = "hello world";
+            var bool1 = true;
+            var bool2 = false;
+            var nothing = nil;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 5);
+
+        // Check number literal
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Primary(PrimaryExpr::Number(num))) = &var_decl.initializer {
+                assert_eq!(num.value, 42.5);
+            } else {
+                panic!("Expected number literal");
+            }
+        }
+
+        // Check string literal
+        if let Decl::Variable(var_decl) = &program.decls[1] {
+            if let Some(Expr::Primary(PrimaryExpr::String(str))) = &var_decl.initializer {
+                assert_eq!(str.value.as_ref(), "\"hello world\"");
+            } else {
+                panic!("Expected string literal");
+            }
+        }
+
+        // Check boolean literals
+        if let Decl::Variable(var_decl) = &program.decls[2] {
+            if let Some(Expr::Primary(PrimaryExpr::Boolean(bool))) = &var_decl.initializer {
+                assert_eq!(bool.value, true);
+            } else {
+                panic!("Expected boolean literal");
+            }
+        }
+
+        if let Decl::Variable(var_decl) = &program.decls[3] {
+            if let Some(Expr::Primary(PrimaryExpr::Boolean(bool))) = &var_decl.initializer {
+                assert_eq!(bool.value, false);
+            } else {
+                panic!("Expected boolean literal");
+            }
+        }
+
+        // Check nil literal
+        if let Decl::Variable(var_decl) = &program.decls[4] {
+            if let Some(Expr::Primary(PrimaryExpr::Nil(_))) = &var_decl.initializer {
+                // Expected nil
+            } else {
+                panic!("Expected nil literal");
+            }
+        }
+    }
+
+    #[test]
+    fn test_this_and_super() {
+        let source_code = r#"
+            class Child : Parent {
+                fn method() {
+                    this.value = super.getValue();
+                }
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Class(class_decl) = &program.decls[0] {
+            if let ClassMember::Method(method) = &class_decl.members[0] {
+                // Should contain 'this' and 'super' expressions in the assignment
+                assert_eq!(method.body.decls.len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn test_complex_nested_expression() {
+        let source_code = r#"
+            var result = obj.method(a + b * c).property[index].?optional |> transform;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_nested_function_calls() {
+        let source_code = r#"
+            var result = outer(inner(deep(value)));
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence() {
+        let source_code = r#"
+            var result = a + b * c == d - e / f;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            // Should be parsed as: (a + (b * c)) == (d - (e / f))
+            if let Some(Expr::Equality(_)) = &var_decl.initializer {
+                // Top level should be equality
+            } else {
+                panic!("Expected equality expression at top level");
+            }
+        }
+    }
+
+    #[test]
+    fn test_right_associative_ternary() {
+        let source_code = r#"
+            var result = a ? b ? c : d : e;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            // Should be parsed as: a ? (b ? c : d) : e
+            if let Some(Expr::Ternary(_)) = &var_decl.initializer {
+                // Expected ternary expression
+            } else {
+                panic!("Expected ternary expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_block_statements() {
+        let source_code = r#"
+            {
+                var x = 1;
+                var y = 2;
+                x + y;
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Stmt(Stmt::Block(block)) = &program.decls[0] {
+            assert_eq!(block.decls.len(), 3);
+        } else {
+            panic!("Expected block statement");
+        }
+    }
+
+    #[test]
+    fn test_expression_statements() {
+        let source_code = r#"
+            someFunction();
+            obj.method();
+            x + y;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 3);
+
+        for decl in &program.decls {
+            if let Decl::Stmt(Stmt::Expr(_)) = decl {
+                // Expected expression statement
+            } else {
+                panic!("Expected expression statement");
+            }
+        }
+    }
+
+    // Error handling tests
+    #[test]
+    fn test_missing_semicolon_error() {
+        let source_code = r#"var x = 5"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expect ';'");
+    }
+
+    #[test]
+    fn test_unterminated_string_error() {
+        todo!("This test is super broken and creates an infinite loop.");
+        let source_code = r#"var msg = "unterminated string"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert!(errors.has_errors());
+    }
+
+    #[test]
+    fn test_missing_closing_brace_error() {
+        let source_code = r#"
+            fn test() {
+                var x = 5;
+                // Missing closing brace
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expected '}'");
+    }
+
+    #[test]
+    fn test_invalid_assignment_target_error() {
+        let source_code = r#"5 = x;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Invalid assignment target");
+    }
+
+    #[test]
+    fn test_missing_function_name_error() {
+        let source_code = r#"fn () { return 42; }"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expect function name");
+    }
+
+    #[test]
+    fn test_missing_variable_name_error() {
+        let source_code = r#"var = 5;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expect variable name");
+    }
+
+    #[test]
+    fn test_missing_class_name_error() {
+        let source_code = r#"class { }"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expect class name");
+    }
+
+    #[test]
+    fn test_invalid_try_without_catch_or_finally() {
+        let source_code = r#"
+            try {
+                riskyOperation();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expected 'catch' or 'finally'");
+    }
+
+    #[test]
+    fn test_missing_parentheses_in_if() {
+        let source_code = r#"
+            if condition {
+                doSomething();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expected '('");
+    }
+
+    #[test]
+    fn test_missing_parentheses_in_while() {
+        let source_code = r#"
+            while condition {
+                doSomething();
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expected '('");
+    }
+
+    #[test]
+    fn test_missing_parentheses_in_for() {
+        let source_code = r#"
+            for var i = 0; i < 10; i = i + 1 {
+                print(i);
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expect '(' after 'for'");
+    }
+
+    #[test]
+    fn test_unexpected_token_in_expression() {
+        let source_code = r#"var x = 5 @ 3;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert!(errors.has_errors());
+    }
+
+    #[test]
+    fn test_missing_arrow_in_lambda() {
+        let source_code = r#"var func = (x) x + 1;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (_program, errors) = parse_source(&source_map);
+
+        assert_parse_error(&errors, "Expect '->' after lambda parameters");
+    }
+
+    #[test]
+    fn test_empty_lambda_parameters() {
+        let source_code = r#"var func = () -> 42;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
+                assert_eq!(lambda.parameters.len(), 0);
+            } else {
+                panic!("Expected lambda expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_lambda_with_single_parameter() {
+        let source_code = r#"var func = (x) -> x * 2;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
+                assert_eq!(lambda.parameters.len(), 1);
+                assert_eq!(lambda.parameters[0].name.as_ref(), "x");
+            } else {
+                panic!("Expected lambda expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_lambda_with_multiple_parameters() {
+        let source_code = r#"var func = (a, b, c) -> a + b + c;"#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
+                assert_eq!(lambda.parameters.len(), 3);
+                assert_eq!(lambda.parameters[0].name.as_ref(), "a");
+                assert_eq!(lambda.parameters[1].name.as_ref(), "b");
+                assert_eq!(lambda.parameters[2].name.as_ref(), "c");
+            } else {
+                panic!("Expected lambda expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_chained_method_calls() {
+        let source_code = r#"
+            var result = obj.method1().method2().method3();
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            // Should be parsed as a chain of call expressions
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_mixed_property_and_method_access() {
+        let source_code = r#"
+            var result = obj.property.method().field[index];
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_complex_array_access() {
+        let source_code = r#"
+            var result = matrix[row + 1][col - 1];
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_assignment_chaining() {
+        let source_code = r#"
+            a = b = c = 5;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
+
+        if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &program.decls[0] {
+            if let Expr::Assignment(_) = expr_stmt.expr {
+                // Expected assignment expression
+            } else {
+                panic!("Expected assignment expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_nested_ternary_expressions() {
+        let source_code = r#"
+            var result = a ? b : c ? d : e ? f : g;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            if let Some(Expr::Ternary(_)) = &var_decl.initializer {
+                // Expected nested ternary
+            } else {
+                panic!("Expected ternary expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_complex_boolean_logic() {
+        let source_code = r#"
+            var condition = !a and (b or c) and !(d or e);
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_pipe_operator_precedence() {
+        let source_code = r#"
+            var result = value + 1 |> transform |> process - 2;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            // Should respect pipe operator precedence
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_deeply_nested_expressions() {
+        let source_code = r#"
+            var result = ((((a + b) * c) - d) / e) % f;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+
+        if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert!(var_decl.initializer.is_some());
+        }
+    }
+
+    #[test]
+    fn test_error_recovery() {
+        let source_code = r#"
+            var x = 5;
+            var y = ; // Error here
+            var z = 10; // This should still parse
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert!(errors.has_errors());
+        // The parser should recover and continue parsing
+        assert!(program.decls.len() >= 2); // Should have at least the first and third declarations
+    }
+
+    #[test]
+    fn test_comments_ignored() {
+        let source_code = r#"
+            // This is a comment
+            var x = 5; // Another comment
+            /* Multi-line
+               comment */
+            var y = 10;
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 2);
+    }
+
+    #[test]
+    fn test_whitespace_handling() {
+        let source_code = r#"
+            
+
+            var    x    =    5    ;
+
+
+            var y=10;
+            
+            
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 2);
+    }
+
+    #[test]
+    fn test_complete_program_example() {
+        let source_code = r#"
+            class Calculator {
+                fn add(a, b) {
+                    return a + b;
+                }
+                
+                fn multiply(a, b) {
+                    return a * b;
+                }
+            }
+            
+            var calc = Calculator();
+            var result = calc.add(5, 3);
+            
+            if (result > 0) {
+                print("Positive result: " + result);
+            } else {
+                print("Non-positive result");
+            }
+            
+            for (var i = 0; i < 5; i = i + 1) {
+                var doubled = calc.multiply(i, 2);
+                print("Double of " + i + " is " + doubled);
+            }
+            
+            try {
+                var risky = someRiskyOperation();
+                print("Success: " + risky);
+            } catch (error) {
+                print("Error occurred: " + error);
+            } finally {
+                print("Cleanup completed");
+            }
+        "#;
+        let source_map = SourceMap::new(source_code.to_string());
+
+        let (program, errors) = parse_source(&source_map);
+
+        assert_no_parse_errors(&errors);
+        assert!(program.decls.len() > 0);
+
+        // Verify we have the expected top-level declarations
+        let mut class_count = 0;
+        let mut var_count = 0;
+        let mut stmt_count = 0;
+
+        for decl in &program.decls {
+            match decl {
+                Decl::Class(_) => class_count += 1,
+                Decl::Variable(_) => var_count += 1,
+                Decl::Stmt(_) => stmt_count += 1,
+                _ => {}
+            }
+        }
+
+        assert!(class_count > 0, "Should have at least one class");
+        assert!(var_count > 0, "Should have at least one variable");
+        assert!(stmt_count > 0, "Should have at least one statement");
     }
 }

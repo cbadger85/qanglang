@@ -1716,7 +1716,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(collector.identifiers.len(), 1);
-        assert_eq!(collector.identifiers[0], Box::<str>::from("test_var"));
+        assert_eq!(collector.identifiers[0].as_ref(), "test_var");
     }
 
     #[test]

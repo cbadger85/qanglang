@@ -1524,8 +1524,36 @@ mod tests {
             assert_eq!(func_decl.function.parameters.len(), 2);
             assert_eq!(func_decl.function.parameters[0].name.as_ref(), "a");
             assert_eq!(func_decl.function.parameters[1].name.as_ref(), "b");
-            // TODO write a test for each declaration node.
             assert_eq!(func_decl.function.body.decls.len(), 1);
+
+            // Verify the return statement in the function body
+            if let Decl::Stmt(Stmt::Return(return_stmt)) = &func_decl.function.body.decls[0] {
+                assert!(return_stmt.value.is_some());
+
+                // Verify the return expression: a + b
+                if let Some(Expr::Term(term_expr)) = &return_stmt.value {
+                    // Left side should be identifier 'a'
+                    if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*term_expr.left {
+                        assert_eq!(left_id.name.as_ref(), "a");
+                    } else {
+                        panic!("Expected identifier 'a' on left side of addition");
+                    }
+
+                    // Operator should be Add
+                    assert_eq!(term_expr.operator, TermOperator::Add);
+
+                    // Right side should be identifier 'b'
+                    if let Expr::Primary(PrimaryExpr::Identifier(right_id)) = &*term_expr.right {
+                        assert_eq!(right_id.name.as_ref(), "b");
+                    } else {
+                        panic!("Expected identifier 'b' on right side of addition");
+                    }
+                } else {
+                    panic!("Expected term expression (a + b) in return statement");
+                }
+            } else {
+                panic!("Expected return statement in function body");
+            }
         } else {
             panic!("Expected function declaration");
         }
@@ -1596,7 +1624,33 @@ mod tests {
             if let ClassMember::Method(method) = &class_decl.members[2] {
                 assert_eq!(method.name.name.as_ref(), "get_name");
                 assert_eq!(method.parameters.len(), 0);
-                // TODO test method declarations
+
+                // Verify method body contains return statement
+                assert_eq!(method.body.decls.len(), 1);
+                if let Decl::Stmt(Stmt::Return(return_stmt)) = &method.body.decls[0] {
+                    assert!(return_stmt.value.is_some());
+
+                    // Verify the return expression: this.name
+                    if let Some(Expr::Call(call_expr)) = &return_stmt.value {
+                        // Verify the callee is 'this'
+                        if let Expr::Primary(PrimaryExpr::This(_)) = &*call_expr.callee {
+                            // Verify the operation is property access to 'name'
+                            if let CallOperation::Property(property_id) =
+                                call_expr.operation.as_ref()
+                            {
+                                assert_eq!(property_id.name.as_ref(), "name");
+                            } else {
+                                panic!("Expected property access to 'name'");
+                            }
+                        } else {
+                            panic!("Expected 'this' as callee");
+                        }
+                    } else {
+                        panic!("Expected call expression (this.name) in return statement");
+                    }
+                } else {
+                    panic!("Expected return statement in method body");
+                }
             } else {
                 panic!("Expected method declaration");
             }

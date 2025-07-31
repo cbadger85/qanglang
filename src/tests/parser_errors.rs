@@ -37,7 +37,7 @@ fn test_unexpected_token_in_expression() {
 
     assert!(errors.has_errors());
 
-    // TODO test that specfic error is in the error reporter
+    // TODO test that the specfied error is in the error reporter
 }
 
 #[test]

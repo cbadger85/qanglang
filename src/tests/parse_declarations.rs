@@ -354,11 +354,29 @@ fn test_empty_lambda_parameters() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
+        // Verify variable name
+        assert_eq!(var_decl.name.name.as_ref(), "func");
+        assert!(var_decl.initializer.is_some());
+        
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
+            // Verify empty parameters
             assert_eq!(lambda.parameters.len(), 0);
-            // TODO write tests to ensure all nodes are assembled correctly.
+            
+            // Verify lambda body is an expression: 42
+            if let ast::LambdaBody::Expr(expr) = lambda.body.as_ref() {
+                // Verify the expression body: 42
+                if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = expr.as_ref() {
+                    assert_eq!(num_lit.value, 42.0);
+                } else {
+                    panic!("Expected number literal '42' in lambda body");
+                }
+            } else {
+                panic!("Expected expression body in lambda");
+            }
         } else {
             panic!("Expected lambda expression");
         }
+    } else {
+        panic!("Expected variable declaration");
     }
 }

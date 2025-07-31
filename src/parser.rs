@@ -1524,6 +1524,7 @@ mod tests {
             assert_eq!(func_decl.function.parameters.len(), 2);
             assert_eq!(func_decl.function.parameters[0].name.as_ref(), "a");
             assert_eq!(func_decl.function.parameters[1].name.as_ref(), "b");
+            // TODO write a test for each declaration node.
             assert_eq!(func_decl.function.body.decls.len(), 1);
         } else {
             panic!("Expected function declaration");
@@ -1595,6 +1596,7 @@ mod tests {
             if let ClassMember::Method(method) = &class_decl.members[2] {
                 assert_eq!(method.name.name.as_ref(), "get_name");
                 assert_eq!(method.parameters.len(), 0);
+                // TODO test method declarations
             } else {
                 panic!("Expected method declaration");
             }
@@ -1647,7 +1649,7 @@ mod tests {
                 assert_eq!(lambda.parameters[1].name.as_ref(), "b");
 
                 if let LambdaBody::Expr(_) = lambda.body.as_ref() {
-                    // Expected expression body
+                    // TODO write tests for expected expression body
                 } else {
                     panic!("Expected expression body in lambda");
                 }
@@ -1671,7 +1673,7 @@ mod tests {
         if let Decl::Variable(var_decl) = &program.decls[0] {
             if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
                 if let LambdaBody::Block(_) = lambda.body.as_ref() {
-                    // Expected block body
+                    // TODO write tests for expected expression body
                 } else {
                     panic!("Expected block body in lambda");
                 }
@@ -1698,6 +1700,7 @@ mod tests {
         assert_eq!(program.decls.len(), 1);
 
         if let Decl::Stmt(Stmt::If(if_stmt)) = &program.decls[0] {
+            // TODO write test for statements in if and else branches
             assert!(if_stmt.else_branch.is_some());
         } else {
             panic!("Expected if statement");
@@ -1718,6 +1721,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::If(if_stmt)) = &program.decls[0] {
+            // TODO write test for statements in if branch
             assert!(if_stmt.else_branch.is_none());
         } else {
             panic!("Expected if statement");
@@ -1739,7 +1743,7 @@ mod tests {
         assert_eq!(program.decls.len(), 1);
 
         if let Decl::Stmt(Stmt::While(_)) = &program.decls[0] {
-            // Expected while statement
+            // TODO write tests for expected statements.
         } else {
             panic!("Expected while statement");
         }
@@ -1759,6 +1763,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::For(for_stmt)) = &program.decls[0] {
+            // TODO Write tests that has expected values for all nodes.
             assert!(for_stmt.initializer.is_some());
             assert!(for_stmt.condition.is_some());
             assert!(for_stmt.increment.is_some());
@@ -1788,7 +1793,7 @@ mod tests {
 
         if let Decl::Stmt(Stmt::For(for_stmt)) = &program.decls[0] {
             if let Some(ForInitializer::Expr(_)) = &for_stmt.initializer {
-                // Expected expression initializer
+                // TODO write tests for expected expression initializer
             } else {
                 panic!("Expected expression initializer");
             }
@@ -1838,8 +1843,7 @@ mod tests {
 
         assert_no_parse_errors(&errors);
 
-        // The break and continue statements should be parsed successfully
-        // We don't need to deeply inspect the structure for this test
+        // TODO write tests for the rest of the expected nodes.
     }
 
     #[test]
@@ -1857,6 +1861,7 @@ mod tests {
 
         if let Decl::Function(func_decl) = &program.decls[0] {
             if let Decl::Stmt(Stmt::Return(ret_stmt)) = &func_decl.function.body.decls[0] {
+                // TODO write more specific test for return statement that checks all the AST nodes.
                 assert!(ret_stmt.value.is_some());
             } else {
                 panic!("Expected return statement");
@@ -1904,6 +1909,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::Try(try_stmt)) = &program.decls[0] {
+            // TODO write tests that assert all nodes in the AST
             assert!(try_stmt.catch_clause.is_some());
             assert!(try_stmt.finally_block.is_some());
 
@@ -1934,6 +1940,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::Try(try_stmt)) = &program.decls[0] {
+            // TODO write tests for all expected nodes.
             let catch_clause = try_stmt.catch_clause.as_ref().unwrap();
             assert!(catch_clause.parameter.is_none());
         }
@@ -1956,6 +1963,7 @@ mod tests {
 
         if let Decl::Stmt(Stmt::Try(try_stmt)) = &program.decls[0] {
             assert!(try_stmt.catch_clause.is_none());
+            // TODO write tests for all statements in try and finally blocks.
             assert!(try_stmt.finally_block.is_some());
         }
     }
@@ -1972,6 +1980,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::Throw(throw_stmt)) = &program.decls[0] {
+            // TODO test the nodes for the thrown expression.
             assert!(throw_stmt.value.is_some());
         } else {
             panic!("Expected throw statement");
@@ -2003,7 +2012,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             assert!(var_decl.initializer.is_some());
-            // The expression should be parsed correctly according to operator precedence
+            // TODO write tests to assert all nodes in the AST are assembled correctly.
         }
     }
 
@@ -2017,6 +2026,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
+            // TODO write tests to assert all nodes in the AST are assembled correctly.
             assert!(var_decl.initializer.is_some());
         }
     }
@@ -2031,6 +2041,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
+            // TODO write tests to assert all nodes in the AST are assembled correctly.
             assert!(var_decl.initializer.is_some());
         }
     }
@@ -2051,7 +2062,7 @@ mod tests {
         // Both should be expression statements containing assignments
         if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &program.decls[0] {
             if let Expr::Assignment(_) = expr_stmt.expr {
-                // Expected assignment
+                // TODO tests for expected assignment
             } else {
                 panic!("Expected assignment expression");
             }
@@ -2059,7 +2070,7 @@ mod tests {
 
         if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &program.decls[1] {
             if let Expr::Assignment(_) = expr_stmt.expr {
-                // Expected assignment
+                // TODO test for expected assignment
             } else {
                 panic!("Expected assignment expression");
             }
@@ -2077,6 +2088,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             if let Some(Expr::Ternary(ternary)) = &var_decl.initializer {
+                // TODO test that the nodes in the AST are correct.
                 assert!(ternary.then_expr.is_some());
                 assert!(ternary.else_expr.is_some());
             } else {
@@ -2096,7 +2108,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             if let Some(Expr::Pipe(_)) = &var_decl.initializer {
-                // Expected pipe expression
+                // TODO test for expected pipe expression
             } else {
                 panic!("Expected pipe expression");
             }
@@ -2117,7 +2129,7 @@ mod tests {
         assert_no_parse_errors(&errors);
         assert_eq!(program.decls.len(), 3);
 
-        // All should contain function call expressions
+        // TODO write tests to ensure all declaration nodes are assembled correctly.
     }
 
     #[test]
@@ -2132,6 +2144,7 @@ mod tests {
 
         assert_no_parse_errors(&errors);
         assert_eq!(program.decls.len(), 2);
+        // TODO write tests to ensure all declaration nodes are assembled correctly.
     }
 
     #[test]
@@ -2146,6 +2159,7 @@ mod tests {
 
         assert_no_parse_errors(&errors);
         assert_eq!(program.decls.len(), 2);
+        // TODO write tests to ensure all declaration nodes are assembled correctly.
     }
 
     #[test]
@@ -2172,6 +2186,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[1] {
             if let Some(Expr::Primary(PrimaryExpr::Array(array))) = &var_decl.initializer {
+                // TODO write tests to ensure all items in the array are in the AST correctly.
                 assert_eq!(array.elements.len(), 4);
             } else {
                 panic!("Expected array literal");
@@ -2191,6 +2206,7 @@ mod tests {
 
         assert_no_parse_errors(&errors);
         assert_eq!(program.decls.len(), 2);
+        // TODO write tests to ensure all declaration nodes are assembled correctly.
     }
 
     #[test]
@@ -2204,6 +2220,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             assert!(var_decl.initializer.is_some());
+            // TODO write tests to ensure all declaration nodes are assembled correctly.
         }
     }
 
@@ -2285,7 +2302,7 @@ mod tests {
 
         if let Decl::Class(class_decl) = &program.decls[0] {
             if let ClassMember::Method(method) = &class_decl.members[0] {
-                // Should contain 'this' and 'super' expressions in the assignment
+                // TODO write tests to ensure all nodes are assembled correctly.
                 assert_eq!(method.body.decls.len(), 1);
             }
         }
@@ -2305,6 +2322,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             assert!(var_decl.initializer.is_some());
+            // TODO write tests to ensure all nodes are assembled correctly.
         }
     }
 
@@ -2321,6 +2339,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             assert!(var_decl.initializer.is_some());
+            // TODO write tests to ensure all nodes are assembled correctly.
         }
     }
 
@@ -2338,7 +2357,7 @@ mod tests {
         if let Decl::Variable(var_decl) = &program.decls[0] {
             // Should be parsed as: (a + (b * c)) == (d - (e / f))
             if let Some(Expr::Equality(_)) = &var_decl.initializer {
-                // Top level should be equality
+                // TODO write tests to ensure all nodes are assembled correctly.
             } else {
                 panic!("Expected equality expression at top level");
             }
@@ -2359,7 +2378,7 @@ mod tests {
         if let Decl::Variable(var_decl) = &program.decls[0] {
             // Should be parsed as: a ? (b ? c : d) : e
             if let Some(Expr::Ternary(_)) = &var_decl.initializer {
-                // Expected ternary expression
+                // TODO write tests to ensure all nodes are assembled correctly.
             } else {
                 panic!("Expected ternary expression");
             }
@@ -2383,6 +2402,7 @@ mod tests {
 
         if let Decl::Stmt(Stmt::Block(block)) = &program.decls[0] {
             assert_eq!(block.decls.len(), 3);
+            // TODO write tests to ensure all nodes are assembled correctly.
         } else {
             panic!("Expected block statement");
         }
@@ -2404,7 +2424,7 @@ mod tests {
 
         for decl in &program.decls {
             if let Decl::Stmt(Stmt::Expr(_)) = decl {
-                // Expected expression statement
+                // TODO write tests for expected expression statement
             } else {
                 panic!("Expected expression statement");
             }
@@ -2577,6 +2597,7 @@ mod tests {
         if let Decl::Variable(var_decl) = &program.decls[0] {
             if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
                 assert_eq!(lambda.parameters.len(), 0);
+                // TODO write tests to ensure all nodes are assembled correctly.
             } else {
                 panic!("Expected lambda expression");
             }
@@ -2596,6 +2617,7 @@ mod tests {
             if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
                 assert_eq!(lambda.parameters.len(), 1);
                 assert_eq!(lambda.parameters[0].name.as_ref(), "x");
+                // TODO write tests to ensure all nodes are assembled correctly.
             } else {
                 panic!("Expected lambda expression");
             }
@@ -2617,6 +2639,7 @@ mod tests {
                 assert_eq!(lambda.parameters[0].name.as_ref(), "a");
                 assert_eq!(lambda.parameters[1].name.as_ref(), "b");
                 assert_eq!(lambda.parameters[2].name.as_ref(), "c");
+                // TODO write tests to ensure all nodes are assembled correctly.
             } else {
                 panic!("Expected lambda expression");
             }
@@ -2635,7 +2658,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
-            // Should be parsed as a chain of call expressions
+            // TODO write tests to ensure all nodes are assembled correctly.
             assert!(var_decl.initializer.is_some());
         }
     }
@@ -2653,6 +2676,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             assert!(var_decl.initializer.is_some());
+            // TODO write tests to ensure all nodes are assembled correctly.
         }
     }
 
@@ -2669,6 +2693,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             assert!(var_decl.initializer.is_some());
+            // TODO write tests to ensure all nodes are assembled correctly.
         }
     }
 
@@ -2686,7 +2711,7 @@ mod tests {
 
         if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &program.decls[0] {
             if let Expr::Assignment(_) = expr_stmt.expr {
-                // Expected assignment expression
+                // TODO test for expected assignment expression
             } else {
                 panic!("Expected assignment expression");
             }
@@ -2706,7 +2731,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             if let Some(Expr::Ternary(_)) = &var_decl.initializer {
-                // Expected nested ternary
+                // TODO write tests to ensure all nodes are assembled correctly.
             } else {
                 panic!("Expected ternary expression");
             }
@@ -2726,6 +2751,7 @@ mod tests {
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
             assert!(var_decl.initializer.is_some());
+            // TODO write tests to ensure all nodes are assembled correctly.
         }
     }
 
@@ -2741,7 +2767,7 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
-            // Should respect pipe operator precedence
+            // TODO write tests to ensure all nodes are assembled correctly.
             assert!(var_decl.initializer.is_some());
         }
     }
@@ -2774,8 +2800,9 @@ mod tests {
         let (program, errors) = parse_source(&source_map);
 
         assert!(errors.has_errors());
-        // The parser should recover and continue parsing
-        assert!(program.decls.len() >= 2); // Should have at least the first and third declarations
+        assert!(program.decls.len() >= 2);
+
+        // TODO write tests to ensure that we have at least the first and third declarations
     }
 
     #[test]
@@ -2793,6 +2820,7 @@ mod tests {
 
         assert_no_parse_errors(&errors);
         assert_eq!(program.decls.len(), 2);
+        // TODO assert the two declarations are correct.
     }
 
     #[test]
@@ -2857,6 +2885,8 @@ mod tests {
 
         assert_no_parse_errors(&errors);
         assert!(program.decls.len() > 0);
+
+        // TODO replace the below with test that actually verify the AST was created correctly.
 
         // Verify we have the expected top-level declarations
         let mut class_count = 0;

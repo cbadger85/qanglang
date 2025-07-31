@@ -1702,8 +1702,29 @@ mod tests {
                 assert_eq!(lambda.parameters[0].name.as_ref(), "a");
                 assert_eq!(lambda.parameters[1].name.as_ref(), "b");
 
-                if let LambdaBody::Expr(_) = lambda.body.as_ref() {
-                    // TODO write tests for expected expression body
+                if let LambdaBody::Expr(expr) = lambda.body.as_ref() {
+                    // Verify the expression body: a + b
+                    if let Expr::Term(term_expr) = expr.as_ref() {
+                        // Left side should be identifier 'a'
+                        if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*term_expr.left {
+                            assert_eq!(left_id.name.as_ref(), "a");
+                        } else {
+                            panic!("Expected identifier 'a' on left side of addition");
+                        }
+
+                        // Operator should be Add
+                        assert_eq!(term_expr.operator, TermOperator::Add);
+
+                        // Right side should be identifier 'b'
+                        if let Expr::Primary(PrimaryExpr::Identifier(right_id)) = &*term_expr.right
+                        {
+                            assert_eq!(right_id.name.as_ref(), "b");
+                        } else {
+                            panic!("Expected identifier 'b' on right side of addition");
+                        }
+                    } else {
+                        panic!("Expected term expression (a + b) in lambda body");
+                    }
                 } else {
                     panic!("Expected expression body in lambda");
                 }
@@ -1725,15 +1746,56 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Variable(var_decl) = &program.decls[0] {
+            assert_eq!(var_decl.name.name.as_ref(), "calc");
+
             if let Some(Expr::Primary(PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
-                if let LambdaBody::Block(_) = lambda.body.as_ref() {
-                    // TODO write tests for expected expression body
+                assert_eq!(lambda.parameters.len(), 1);
+                assert_eq!(lambda.parameters[0].name.as_ref(), "x");
+
+                if let LambdaBody::Block(block) = lambda.body.as_ref() {
+                    // Verify block contains one return statement
+                    assert_eq!(block.decls.len(), 1);
+
+                    if let Decl::Stmt(Stmt::Return(return_stmt)) = &block.decls[0] {
+                        assert!(return_stmt.value.is_some());
+
+                        // Verify the return expression: x * 2
+                        if let Some(Expr::Factor(factor_expr)) = &return_stmt.value {
+                            // Left side should be identifier 'x'
+                            if let Expr::Primary(PrimaryExpr::Identifier(left_id)) =
+                                &*factor_expr.left
+                            {
+                                assert_eq!(left_id.name.as_ref(), "x");
+                            } else {
+                                panic!("Expected identifier 'x' on left side of multiplication");
+                            }
+
+                            // Operator should be Multiply
+                            assert_eq!(factor_expr.operator, FactorOperator::Multiply);
+
+                            // Right side should be number literal 2
+                            if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*factor_expr.right
+                            {
+                                assert_eq!(num_lit.value, 2.0);
+                            } else {
+                                panic!(
+                                    "Expected number literal '2' on right side of multiplication"
+                                );
+                            }
+                        } else {
+                            panic!("Expected factor expression (x * 2) in return statement");
+                        }
+                    } else {
+                        panic!("Expected return statement in lambda block");
+                    }
                 } else {
                     panic!("Expected block body in lambda");
                 }
             } else {
                 panic!("Expected lambda expression");
             }
+        } else {
+            panic!("Expected variable declaration");
         }
     }
 
@@ -1754,8 +1816,67 @@ mod tests {
         assert_eq!(program.decls.len(), 1);
 
         if let Decl::Stmt(Stmt::If(if_stmt)) = &program.decls[0] {
-            // TODO write test for statements in if and else branches
+            // Verify the condition: x > 0
+            if let Expr::Comparison(comp_expr) = &if_stmt.condition {
+                // Left side should be identifier 'x'
+                if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*comp_expr.left {
+                    assert_eq!(left_id.name.as_ref(), "x");
+                } else {
+                    panic!("Expected identifier 'x' on left side of comparison");
+                }
+
+                // Operator should be Greater
+                assert_eq!(comp_expr.operator, ComparisonOperator::Greater);
+
+                // Right side should be number literal 0
+                if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*comp_expr.right {
+                    assert_eq!(num_lit.value, 0.0);
+                } else {
+                    panic!("Expected number literal '0' on right side of comparison");
+                }
+            } else {
+                panic!("Expected comparison expression (x > 0) in if condition");
+            }
+
+            // Verify the then branch: { return true; }
+            if let Stmt::Block(then_block) = &*if_stmt.then_branch {
+                assert_eq!(then_block.decls.len(), 1);
+                if let Decl::Stmt(Stmt::Return(return_stmt)) = &then_block.decls[0] {
+                    assert!(return_stmt.value.is_some());
+                    if let Some(Expr::Primary(PrimaryExpr::Boolean(bool_lit))) = &return_stmt.value
+                    {
+                        assert_eq!(bool_lit.value, true);
+                    } else {
+                        panic!("Expected boolean literal 'true' in then branch return");
+                    }
+                } else {
+                    panic!("Expected return statement in then branch");
+                }
+            } else {
+                panic!("Expected block statement in then branch");
+            }
+
+            // Verify the else branch: { return false; }
             assert!(if_stmt.else_branch.is_some());
+            if let Some(else_branch) = &if_stmt.else_branch {
+                if let Stmt::Block(else_block) = &**else_branch {
+                    assert_eq!(else_block.decls.len(), 1);
+                    if let Decl::Stmt(Stmt::Return(return_stmt)) = &else_block.decls[0] {
+                        assert!(return_stmt.value.is_some());
+                        if let Some(Expr::Primary(PrimaryExpr::Boolean(bool_lit))) =
+                            &return_stmt.value
+                        {
+                            assert_eq!(bool_lit.value, false);
+                        } else {
+                            panic!("Expected boolean literal 'false' in else branch return");
+                        }
+                    } else {
+                        panic!("Expected return statement in else branch");
+                    }
+                } else {
+                    panic!("Expected block statement in else branch");
+                }
+            }
         } else {
             panic!("Expected if statement");
         }
@@ -1775,7 +1896,44 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::If(if_stmt)) = &program.decls[0] {
-            // TODO write test for statements in if branch
+            // Verify the condition: condition (identifier)
+            if let Expr::Primary(PrimaryExpr::Identifier(cond_id)) = &if_stmt.condition {
+                assert_eq!(cond_id.name.as_ref(), "condition");
+            } else {
+                panic!("Expected identifier 'condition' in if condition");
+            }
+
+            // Verify the then branch: { doSomething(); }
+            if let Stmt::Block(then_block) = &*if_stmt.then_branch {
+                assert_eq!(then_block.decls.len(), 1);
+                if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &then_block.decls[0] {
+                    // Verify the function call: doSomething()
+                    if let Expr::Call(call_expr) = &expr_stmt.expr {
+                        // Verify the callee is 'doSomething'
+                        if let Expr::Primary(PrimaryExpr::Identifier(func_id)) = &*call_expr.callee
+                        {
+                            assert_eq!(func_id.name.as_ref(), "doSomething");
+                        } else {
+                            panic!("Expected identifier 'doSomething' as callee");
+                        }
+
+                        // Verify it's a function call with no arguments
+                        if let CallOperation::Call(args) = call_expr.operation.as_ref() {
+                            assert_eq!(args.len(), 0);
+                        } else {
+                            panic!("Expected function call operation");
+                        }
+                    } else {
+                        panic!("Expected call expression in if branch");
+                    }
+                } else {
+                    panic!("Expected expression statement in if branch");
+                }
+            } else {
+                panic!("Expected block statement in then branch");
+            }
+
+            // Verify no else branch
             assert!(if_stmt.else_branch.is_none());
         } else {
             panic!("Expected if statement");
@@ -1796,8 +1954,74 @@ mod tests {
         assert_no_parse_errors(&errors);
         assert_eq!(program.decls.len(), 1);
 
-        if let Decl::Stmt(Stmt::While(_)) = &program.decls[0] {
-            // TODO write tests for expected statements.
+        if let Decl::Stmt(Stmt::While(while_stmt)) = &program.decls[0] {
+            // Verify the condition: i < 10
+            if let Expr::Comparison(comp_expr) = &while_stmt.condition {
+                // Left side should be identifier 'i'
+                if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*comp_expr.left {
+                    assert_eq!(left_id.name.as_ref(), "i");
+                } else {
+                    panic!("Expected identifier 'i' on left side of comparison");
+                }
+
+                // Operator should be Less
+                assert_eq!(comp_expr.operator, ComparisonOperator::Less);
+
+                // Right side should be number literal 10
+                if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*comp_expr.right {
+                    assert_eq!(num_lit.value, 10.0);
+                } else {
+                    panic!("Expected number literal '10' on right side of comparison");
+                }
+            } else {
+                panic!("Expected comparison expression (i < 10) in while condition");
+            }
+
+            // Verify the body: { i = i + 1; }
+            if let Stmt::Block(body_block) = &*while_stmt.body {
+                assert_eq!(body_block.decls.len(), 1);
+                if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &body_block.decls[0] {
+                    // Verify the assignment: i = i + 1
+                    if let Expr::Assignment(assign_expr) = &expr_stmt.expr {
+                        // Verify the target is identifier 'i'
+                        if let AssignmentTarget::Identifier(target_id) = &assign_expr.target {
+                            assert_eq!(target_id.name.as_ref(), "i");
+                        } else {
+                            panic!("Expected identifier 'i' as assignment target");
+                        }
+
+                        // Verify the value: i + 1
+                        if let Expr::Term(term_expr) = &*assign_expr.value {
+                            // Left side should be identifier 'i'
+                            if let Expr::Primary(PrimaryExpr::Identifier(left_id)) =
+                                &*term_expr.left
+                            {
+                                assert_eq!(left_id.name.as_ref(), "i");
+                            } else {
+                                panic!("Expected identifier 'i' on left side of addition");
+                            }
+
+                            // Operator should be Add
+                            assert_eq!(term_expr.operator, TermOperator::Add);
+
+                            // Right side should be number literal 1
+                            if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*term_expr.right {
+                                assert_eq!(num_lit.value, 1.0);
+                            } else {
+                                panic!("Expected number literal '1' on right side of addition");
+                            }
+                        } else {
+                            panic!("Expected term expression (i + 1) as assignment value");
+                        }
+                    } else {
+                        panic!("Expected assignment expression in while body");
+                    }
+                } else {
+                    panic!("Expected expression statement in while body");
+                }
+            } else {
+                panic!("Expected block statement as while body");
+            }
         } else {
             panic!("Expected while statement");
         }
@@ -1817,15 +2041,112 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::For(for_stmt)) = &program.decls[0] {
-            // TODO Write tests that has expected values for all nodes.
             assert!(for_stmt.initializer.is_some());
             assert!(for_stmt.condition.is_some());
             assert!(for_stmt.increment.is_some());
 
+            // Verify the initializer: var i = 0
             if let Some(ForInitializer::Variable(var_decl)) = &for_stmt.initializer {
                 assert_eq!(var_decl.name.name.as_ref(), "i");
+                assert!(var_decl.initializer.is_some());
+                if let Some(Expr::Primary(PrimaryExpr::Number(num_lit))) = &var_decl.initializer {
+                    assert_eq!(num_lit.value, 0.0);
+                } else {
+                    panic!("Expected number literal '0' in variable initializer");
+                }
             } else {
                 panic!("Expected variable initializer");
+            }
+
+            // Verify the condition: i < 10
+            if let Some(Expr::Comparison(comp_expr)) = &for_stmt.condition {
+                // Left side should be identifier 'i'
+                if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*comp_expr.left {
+                    assert_eq!(left_id.name.as_ref(), "i");
+                } else {
+                    panic!("Expected identifier 'i' on left side of comparison");
+                }
+
+                // Operator should be Less
+                assert_eq!(comp_expr.operator, ComparisonOperator::Less);
+
+                // Right side should be number literal 10
+                if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*comp_expr.right {
+                    assert_eq!(num_lit.value, 10.0);
+                } else {
+                    panic!("Expected number literal '10' on right side of comparison");
+                }
+            } else {
+                panic!("Expected comparison expression in for condition");
+            }
+
+            // Verify the increment: i = i + 1
+            if let Some(Expr::Assignment(assign_expr)) = &for_stmt.increment {
+                // Verify the target is identifier 'i'
+                if let AssignmentTarget::Identifier(target_id) = &assign_expr.target {
+                    assert_eq!(target_id.name.as_ref(), "i");
+                } else {
+                    panic!("Expected identifier 'i' as assignment target");
+                }
+
+                // Verify the value: i + 1
+                if let Expr::Term(term_expr) = &*assign_expr.value {
+                    // Left side should be identifier 'i'
+                    if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*term_expr.left {
+                        assert_eq!(left_id.name.as_ref(), "i");
+                    } else {
+                        panic!("Expected identifier 'i' on left side of addition");
+                    }
+
+                    // Operator should be Add
+                    assert_eq!(term_expr.operator, TermOperator::Add);
+
+                    // Right side should be number literal 1
+                    if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*term_expr.right {
+                        assert_eq!(num_lit.value, 1.0);
+                    } else {
+                        panic!("Expected number literal '1' on right side of addition");
+                    }
+                } else {
+                    panic!("Expected term expression (i + 1) as assignment value");
+                }
+            } else {
+                panic!("Expected assignment expression in for increment");
+            }
+
+            // Verify the body: { print(i); }
+            if let Stmt::Block(body_block) = &*for_stmt.body {
+                assert_eq!(body_block.decls.len(), 1);
+                if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &body_block.decls[0] {
+                    // Verify the function call: print(i)
+                    if let Expr::Call(call_expr) = &expr_stmt.expr {
+                        // Verify the callee is 'print'
+                        if let Expr::Primary(PrimaryExpr::Identifier(func_id)) = &*call_expr.callee
+                        {
+                            assert_eq!(func_id.name.as_ref(), "print");
+                        } else {
+                            panic!("Expected identifier 'print' as callee");
+                        }
+
+                        // Verify it's a function call with one argument 'i'
+                        if let CallOperation::Call(args) = call_expr.operation.as_ref() {
+                            assert_eq!(args.len(), 1);
+                            if let Expr::Primary(PrimaryExpr::Identifier(arg_id)) = &args[0] {
+                                assert_eq!(arg_id.name.as_ref(), "i");
+                            } else {
+                                panic!("Expected identifier 'i' as function argument");
+                            }
+                        } else {
+                            panic!("Expected function call operation");
+                        }
+                    } else {
+                        panic!("Expected call expression in for body");
+                    }
+                } else {
+                    panic!("Expected expression statement in for body");
+                }
+            } else {
+                panic!("Expected block statement as for body");
             }
         } else {
             panic!("Expected for statement");
@@ -1846,10 +2167,85 @@ mod tests {
         assert_no_parse_errors(&errors);
 
         if let Decl::Stmt(Stmt::For(for_stmt)) = &program.decls[0] {
-            if let Some(ForInitializer::Expr(_)) = &for_stmt.initializer {
-                // TODO write tests for expected expression initializer
+            // Verify the expression initializer: i = 0
+            if let Some(ForInitializer::Expr(init_expr)) = &for_stmt.initializer {
+                if let Expr::Assignment(assign_expr) = init_expr {
+                    // Verify the target is identifier 'i'
+                    if let AssignmentTarget::Identifier(target_id) = &assign_expr.target {
+                        assert_eq!(target_id.name.as_ref(), "i");
+                    } else {
+                        panic!("Expected identifier 'i' as assignment target");
+                    }
+
+                    // Verify the value is number literal 0
+                    if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*assign_expr.value {
+                        assert_eq!(num_lit.value, 0.0);
+                    } else {
+                        panic!("Expected number literal '0' as assignment value");
+                    }
+                } else {
+                    panic!("Expected assignment expression in initializer");
+                }
             } else {
                 panic!("Expected expression initializer");
+            }
+
+            // Verify the condition: i < 10
+            assert!(for_stmt.condition.is_some());
+            if let Some(Expr::Comparison(comp_expr)) = &for_stmt.condition {
+                // Left side should be identifier 'i'
+                if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*comp_expr.left {
+                    assert_eq!(left_id.name.as_ref(), "i");
+                } else {
+                    panic!("Expected identifier 'i' on left side of comparison");
+                }
+
+                // Operator should be Less
+                assert_eq!(comp_expr.operator, ComparisonOperator::Less);
+
+                // Right side should be number literal 10
+                if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*comp_expr.right {
+                    assert_eq!(num_lit.value, 10.0);
+                } else {
+                    panic!("Expected number literal '10' on right side of comparison");
+                }
+            } else {
+                panic!("Expected comparison expression in for condition");
+            }
+
+            // Verify the increment: i = i + 1
+            assert!(for_stmt.increment.is_some());
+            if let Some(Expr::Assignment(assign_expr)) = &for_stmt.increment {
+                // Verify the target is identifier 'i'
+                if let AssignmentTarget::Identifier(target_id) = &assign_expr.target {
+                    assert_eq!(target_id.name.as_ref(), "i");
+                } else {
+                    panic!("Expected identifier 'i' as assignment target");
+                }
+
+                // Verify the value: i + 1
+                if let Expr::Term(term_expr) = &*assign_expr.value {
+                    // Left side should be identifier 'i'
+                    if let Expr::Primary(PrimaryExpr::Identifier(left_id)) = &*term_expr.left {
+                        assert_eq!(left_id.name.as_ref(), "i");
+                    } else {
+                        panic!("Expected identifier 'i' on left side of addition");
+                    }
+
+                    // Operator should be Add
+                    assert_eq!(term_expr.operator, TermOperator::Add);
+
+                    // Right side should be number literal 1
+                    if let Expr::Primary(PrimaryExpr::Number(num_lit)) = &*term_expr.right {
+                        assert_eq!(num_lit.value, 1.0);
+                    } else {
+                        panic!("Expected number literal '1' on right side of addition");
+                    }
+                } else {
+                    panic!("Expected term expression (i + 1) as assignment value");
+                }
+            } else {
+                panic!("Expected assignment expression in for increment");
             }
         } else {
             panic!("Expected for statement");
@@ -1873,6 +2269,18 @@ mod tests {
             assert!(for_stmt.initializer.is_none());
             assert!(for_stmt.condition.is_none());
             assert!(for_stmt.increment.is_none());
+
+            // Verify the body: { break; }
+            if let Stmt::Block(body_block) = &*for_stmt.body {
+                assert_eq!(body_block.decls.len(), 1);
+                if let Decl::Stmt(Stmt::Break(_)) = &body_block.decls[0] {
+                    // Break statement verified
+                } else {
+                    panic!("Expected break statement in for body");
+                }
+            } else {
+                panic!("Expected block statement as for body");
+            }
         } else {
             panic!("Expected for statement");
         }
@@ -1893,11 +2301,107 @@ mod tests {
         "#;
         let source_map = SourceMap::new(source_code.to_string());
 
-        let (_program, errors) = parse_source(&source_map);
+        let (program, errors) = parse_source(&source_map);
 
         assert_no_parse_errors(&errors);
+        assert_eq!(program.decls.len(), 1);
 
-        // TODO write tests for the rest of the expected nodes.
+        if let Decl::Stmt(Stmt::While(while_stmt)) = &program.decls[0] {
+            // Verify the condition: true
+            if let Expr::Primary(PrimaryExpr::Boolean(bool_lit)) = &while_stmt.condition {
+                assert_eq!(bool_lit.value, true);
+            } else {
+                panic!("Expected boolean literal 'true' in while condition");
+            }
+
+            // Verify the body contains 3 statements
+            if let Stmt::Block(body_block) = &*while_stmt.body {
+                assert_eq!(body_block.decls.len(), 3);
+
+                // First statement: if (condition1) { break; }
+                if let Decl::Stmt(Stmt::If(if_stmt1)) = &body_block.decls[0] {
+                    // Verify condition1
+                    if let Expr::Primary(PrimaryExpr::Identifier(cond_id)) = &if_stmt1.condition {
+                        assert_eq!(cond_id.name.as_ref(), "condition1");
+                    } else {
+                        panic!("Expected identifier 'condition1' in first if condition");
+                    }
+
+                    // Verify then branch contains break
+                    if let Stmt::Block(then_block) = &*if_stmt1.then_branch {
+                        assert_eq!(then_block.decls.len(), 1);
+                        if let Decl::Stmt(Stmt::Break(_)) = &then_block.decls[0] {
+                            // Break statement verified
+                        } else {
+                            panic!("Expected break statement in first if then branch");
+                        }
+                    } else {
+                        panic!("Expected block statement in first if then branch");
+                    }
+
+                    // Verify no else branch
+                    assert!(if_stmt1.else_branch.is_none());
+                } else {
+                    panic!("Expected first if statement");
+                }
+
+                // Second statement: if (condition2) { continue; }
+                if let Decl::Stmt(Stmt::If(if_stmt2)) = &body_block.decls[1] {
+                    // Verify condition2
+                    if let Expr::Primary(PrimaryExpr::Identifier(cond_id)) = &if_stmt2.condition {
+                        assert_eq!(cond_id.name.as_ref(), "condition2");
+                    } else {
+                        panic!("Expected identifier 'condition2' in second if condition");
+                    }
+
+                    // Verify then branch contains continue
+                    if let Stmt::Block(then_block) = &*if_stmt2.then_branch {
+                        assert_eq!(then_block.decls.len(), 1);
+                        if let Decl::Stmt(Stmt::Continue(_)) = &then_block.decls[0] {
+                            // Continue statement verified
+                        } else {
+                            panic!("Expected continue statement in second if then branch");
+                        }
+                    } else {
+                        panic!("Expected block statement in second if then branch");
+                    }
+
+                    // Verify no else branch
+                    assert!(if_stmt2.else_branch.is_none());
+                } else {
+                    panic!("Expected second if statement");
+                }
+
+                // Third statement: doWork();
+                if let Decl::Stmt(Stmt::Expr(expr_stmt)) = &body_block.decls[2] {
+                    // Verify the function call: doWork()
+                    if let Expr::Call(call_expr) = &expr_stmt.expr {
+                        // Verify the callee is 'doWork'
+                        if let Expr::Primary(PrimaryExpr::Identifier(func_id)) = &*call_expr.callee
+                        {
+                            assert_eq!(func_id.name.as_ref(), "doWork");
+                        } else {
+                            panic!("Expected identifier 'doWork' as callee");
+                        }
+
+                        // Verify it's a function call with no arguments
+                        if let CallOperation::Call(args) = call_expr.operation.as_ref() {
+                            assert_eq!(args.len(), 0);
+                        } else {
+                            panic!("Expected function call operation");
+                        }
+                    } else {
+                        panic!("Expected call expression for doWork");
+                    }
+                } else {
+                    panic!("Expected expression statement for doWork call");
+                }
+            } else {
+                panic!("Expected block statement as while body");
+            }
+        } else {
+            panic!("Expected while statement");
+        }
     }
 
     #[test]

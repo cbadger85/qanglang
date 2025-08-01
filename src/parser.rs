@@ -120,7 +120,10 @@ impl<'a> Parser<'a> {
 
         if let Some(token) = token {
             let name = token.lexeme(self.source_map);
-            Ok(ast::Identifier::new(name, span))
+            Ok(ast::Identifier::new(
+                name.iter().collect::<String>().into_boxed_str(),
+                span,
+            ))
         } else {
             Err(QangError::parse_error("Expected identifier.", span))
         }
@@ -835,6 +838,8 @@ mod expression_parser {
 
         let value = token
             .lexeme(parser.source_map)
+            .iter()
+            .collect::<String>()
             .parse::<f64>()
             .map_err(|_| crate::QangError::parse_error("Expected number.", span))?;
 
@@ -922,7 +927,13 @@ mod expression_parser {
         let span = ast::SourceSpan::from_token(token);
 
         Ok(ast::Expr::Primary(ast::PrimaryExpr::String(
-            ast::StringLiteral { value, span },
+            ast::StringLiteral {
+                value: value[1..value.len() - 1]
+                    .iter()
+                    .collect::<String>()
+                    .into_boxed_str(),
+                span,
+            },
         )))
     }
 
@@ -1113,7 +1124,10 @@ mod expression_parser {
                     .as_ref()
                     .map(|t| t.lexeme(parser.source_map))
                     .unwrap();
-                let property = ast::Identifier::new(property_name, property_span);
+                let property = ast::Identifier::new(
+                    property_name.iter().collect::<String>().into_boxed_str(),
+                    property_span,
+                );
                 ast::CallOperation::Property(property)
             }
             tokenizer::TokenType::LeftSquareBracket => {
@@ -1136,7 +1150,10 @@ mod expression_parser {
                     .as_ref()
                     .map(|t| t.lexeme(parser.source_map))
                     .unwrap();
-                let property = ast::Identifier::new(property_name, property_span);
+                let property = ast::Identifier::new(
+                    property_name.iter().collect::<String>().into_boxed_str(),
+                    property_span,
+                );
 
                 ast::CallOperation::OptionalProperty(property)
             }

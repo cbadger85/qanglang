@@ -102,10 +102,8 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn lexeme(&self, source_map: &SourceMap) -> Box<str> {
-        source_map.get_source()[self.start..self.end]
-            .iter()
-            .collect()
+    pub fn lexeme<'a>(&self, source_map: &'a SourceMap) -> &'a [char] {
+        &source_map.get_source()[self.start..self.end]
     }
     pub fn line(&self, source_map: &SourceMap) -> u32 {
         source_map.get_line_number(self.start)
@@ -307,7 +305,7 @@ impl<'a> Tokenizer<'a> {
 
     /// Creates a string token.
     fn string(&mut self) -> Option<Token> {
-        let start = self.location;
+        let start = self.location - 1;
 
         while self.peek_char() != '"' && !self.is_at_end() {
             if self.peek_char() == '\n' {
@@ -343,8 +341,8 @@ impl<'a> Tokenizer<'a> {
             return self.error_token("Unterminated string.");
         }
 
-        let token = self.make_token(TokenType::String, start);
         self.advance(); // Consume closing quote 
+        let token = self.make_token(TokenType::String, start);
 
         token
     }

@@ -129,8 +129,8 @@ fn test_strings() {
     assert_single_token(
         "\"hello\"",
         Token {
-            start: 1,
-            end: 6,
+            start: 0,
+            end: 7,
             error_message: None,
             token_type: TokenType::String,
         },
@@ -138,8 +138,8 @@ fn test_strings() {
     assert_single_token(
         "\"\"",
         Token {
-            start: 1,
-            end: 1,
+            start: 0,
+            end: 2,
             error_message: None,
             token_type: TokenType::String,
         },
@@ -147,8 +147,8 @@ fn test_strings() {
     assert_single_token(
         "\"hello world\"",
         Token {
-            start: 1,
-            end: 12,
+            start: 0,
+            end: 13,
             error_message: None,
             token_type: TokenType::String,
         },
@@ -156,8 +156,8 @@ fn test_strings() {
     assert_single_token(
         "\"with spaces and 123 numbers\"",
         Token {
-            start: 1,
-            end: 28,
+            start: 0,
+            end: 29,
             error_message: None,
             token_type: TokenType::String,
         },
@@ -344,9 +344,18 @@ fn test_lexeme_extraction() {
     let source_map = &SourceMap::new("hello world 123".to_string());
     let tokens = tokenize_all(source_map);
 
-    assert_eq!(tokens[0].lexeme(source_map).as_ref(), "hello");
-    assert_eq!(tokens[1].lexeme(source_map).as_ref(), "world");
-    assert_eq!(tokens[2].lexeme(source_map).as_ref(), "123");
+    assert_eq!(
+        tokens[0].lexeme(source_map).iter().collect::<String>(),
+        "hello"
+    );
+    assert_eq!(
+        tokens[1].lexeme(source_map).iter().collect::<String>(),
+        "world"
+    );
+    assert_eq!(
+        tokens[2].lexeme(source_map).iter().collect::<String>(),
+        "123"
+    );
 }
 
 #[test]
@@ -1135,15 +1144,17 @@ fn test_peek_ahead_with_complex_tokens() {
             .peek_ahead(0)
             .unwrap()
             .lexeme(&source_map)
-            .as_ref(),
-        "hello world"
+            .iter()
+            .collect::<String>(),
+        "\"hello world\""
     );
     assert_eq!(
         tokenizer
             .peek_ahead(2)
             .unwrap()
             .lexeme(&source_map)
-            .as_ref(),
+            .iter()
+            .collect::<String>(),
         "123.45"
     );
 }

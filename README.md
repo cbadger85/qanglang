@@ -4,17 +4,6 @@ An embedded scripting language written in Rust 🦀
 
 ## Grammar Definition
 
-```
-// anonymous class syntax
-var foo = :{
-  bar = "baz"
-  zig = `"foo"
-  _ = `_
-}
-
-var objFactory = (param1, param2) -> :{ one = param1; two = param2 }
-```
-
 <table>
   <thead>
   <thead/>
@@ -156,7 +145,7 @@ var objFactory = (param1, param2) -> :{ one = param1; two = param2 }
       <td>=</td>
       <td>"catch" ( "(" IDENTIFIER ")" )? block ( "finally" block )? | "finally" block</td>
       <td>;</td>
-    </tr> 
+    </tr>
     <tr>
       <td>expression</td>
       <td>=</td>
@@ -226,7 +215,7 @@ var objFactory = (param1, param2) -> :{ one = param1; two = param2 }
     <tr>
       <td>call</td>
       <td>=</td>
-      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | ".?" IDENTIFIER | "[" expression "]" )*</td>
+      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | ".?" IDENTIFIER | ".?" "[" expression "]" | ".?" "(" arguments? ")" | "[" expression "]" )*</td>
       <td>;</td>
     </tr>
     <tr>
@@ -249,3 +238,4 @@ var objFactory = (param1, param2) -> :{ one = param1; two = param2 }
     </tr>
   </tbody>
 </table>
+```

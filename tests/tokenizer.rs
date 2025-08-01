@@ -541,8 +541,56 @@ fn test_unexpected_character() {
 
 #[test]
 fn test_malformed_numbers() {
-    // verify tokens have an error message
-    // TODO: Test malformed numbers like 123.456.789, 123., .123.456
+    let source1 = "123.456.789";
+    let expected1 = vec![TokenType::Number, TokenType::Number, TokenType::Eof];
+    assert_token_types(source1, &expected1);
+
+    let source2 = "123.";
+    let expected2 = vec![
+        TokenType::Number, // 123
+        TokenType::Dot,    // .
+        TokenType::Eof,
+    ];
+    assert_token_types(source2, &expected2);
+
+    let source3 = "123..";
+    let expected3 = vec![
+        TokenType::Number, // 123
+        TokenType::Dot,    // .
+        TokenType::Dot,    // .
+        TokenType::Eof,
+    ];
+    assert_token_types(source3, &expected3);
+
+    let source4 = ".123.456";
+    let expected4 = vec![
+        TokenType::Number, // .123
+        TokenType::Number, // .456
+        TokenType::Eof,
+    ];
+    println!("{:?}", tokenize_all(&SourceMap::new(source4.to_owned())));
+    assert_token_types(source4, &expected4); // <- This assertion fails.
+
+    let source5 = "..123";
+    let expected5 = vec![
+        TokenType::Dot,    // .
+        TokenType::Number, // .123
+        TokenType::Eof,
+    ];
+    assert_token_types(source5, &expected5);
+
+    // Test complex malformed number in expression: var x = 123.45.67;
+    let source6 = "var x = 123.45.67;";
+    let expected6 = vec![
+        TokenType::Var,
+        TokenType::Identifier, // x
+        TokenType::Equals,
+        TokenType::Number, // 123.45
+        TokenType::Number, // .67
+        TokenType::Semicolon,
+        TokenType::Eof,
+    ];
+    assert_token_types(source6, &expected6);
 }
 
 #[test]

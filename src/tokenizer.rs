@@ -139,7 +139,6 @@ impl<'a> Tokenizer<'a> {
 
     /// Peek at the nth token ahead (0 = next token, 1 = token after that, etc.)
     pub fn peek_ahead(&mut self, n: usize) -> Option<&Token> {
-        // Fill buffer until we have enough tokens
         while self.lookahead_buffer.len() <= n {
             if let Some(token) = self.next_token() {
                 self.lookahead_buffer.push_back(token);
@@ -364,14 +363,15 @@ impl<'a> Tokenizer<'a> {
 
     /// Creates a number token.
     fn number(&mut self) -> Option<Token> {
-        let start = self.location - 1; // Account for first digit
+        let start = self.location - 1; // Account for first digit or dot
+
+        let started_with_dot = self.source_map.get_source()[start] == '.';
 
         while self.peek_char().is_ascii_digit() {
             self.advance();
         }
 
-        // Look for fractional part
-        if self.peek_char() == '.' && self.peek_next_char().is_ascii_digit() {
+        if !started_with_dot && self.peek_char() == '.' && self.peek_next_char().is_ascii_digit() {
             self.advance(); // Consume the '.'
 
             while self.peek_char().is_ascii_digit() {

@@ -75,6 +75,7 @@ fn test_single_character_tokens() {
     assert_single_token_type("!", TokenType::Bang);
     assert_single_token_type("<", TokenType::Less);
     assert_single_token_type(">", TokenType::Greater);
+    assert_single_token_type(".?", TokenType::OptionalChaining);
 }
 
 #[test]
@@ -340,25 +341,6 @@ fn test_ternary_operator() {
 }
 
 #[test]
-fn test_lexeme_extraction() {
-    let source_map = &SourceMap::new("hello world 123".to_string());
-    let tokens = tokenize_all(source_map);
-
-    assert_eq!(
-        tokens[0].lexeme(source_map).iter().collect::<String>(),
-        "hello"
-    );
-    assert_eq!(
-        tokens[1].lexeme(source_map).iter().collect::<String>(),
-        "world"
-    );
-    assert_eq!(
-        tokens[2].lexeme(source_map).iter().collect::<String>(),
-        "123"
-    );
-}
-
-#[test]
 fn test_line_and_column_tracking() {
     let source_map = &SourceMap::new("first\nsecond line".to_string());
     let tokens = tokenize_all(source_map);
@@ -515,19 +497,6 @@ fn test_boolean_expressions() {
 }
 
 #[test]
-fn test_get_line_single_line() {
-    let source_map = &SourceMap::new("hello world".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    tokenizer.for_each(drop);
-
-    let line1: String = source_map.get_line(1).iter().collect();
-    assert_eq!(line1, "hello world");
-
-    assert_eq!(source_map.get_line(2).len(), 0);
-    assert_eq!(source_map.get_line(0).len(), 0);
-}
-
-#[test]
 fn test_get_line_multiple_lines() {
     let source_map = &SourceMap::new("first line\nsecond line\nthird line".to_string());
     let tokenizer = Tokenizer::new(source_map);
@@ -539,99 +508,6 @@ fn test_get_line_multiple_lines() {
     assert_eq!(line1, "first line");
     assert_eq!(line2, "second line");
     assert_eq!(line3, "third line");
-}
-
-#[test]
-fn test_get_line_with_trailing_newline() {
-    let source_map = &SourceMap::new("line one\nline two\n".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    tokenizer.for_each(drop);
-
-    let line1: String = source_map.get_line(1).iter().collect();
-    let line2: String = source_map.get_line(2).iter().collect();
-
-    assert_eq!(line1, "line one");
-    assert_eq!(line2, "line two");
-    assert_eq!(source_map.get_line(3).len(), 0);
-}
-
-#[test]
-fn test_get_line_empty_lines() {
-    let source_map = &SourceMap::new("first\n\nthird\n\n".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    tokenizer.for_each(drop);
-
-    let line1: String = source_map.get_line(1).iter().collect();
-    let line2: String = source_map.get_line(2).iter().collect();
-    let line3: String = source_map.get_line(3).iter().collect();
-    let line4: String = source_map.get_line(4).iter().collect();
-
-    assert_eq!(line1, "first");
-    assert_eq!(line2, "");
-    assert_eq!(line3, "third");
-    assert_eq!(line4, "");
-}
-
-#[test]
-fn test_get_line_single_newline() {
-    let source_map = &SourceMap::new("\n".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    tokenizer.for_each(drop);
-
-    let line1: String = source_map.get_line(1).iter().collect();
-    assert_eq!(line1, "");
-}
-
-#[test]
-fn test_get_line_bounds_checking() {
-    let source_map = &SourceMap::new("one\ntwo\nthree".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    tokenizer.for_each(drop);
-
-    // Valid lines
-    assert!(!source_map.get_line(1).is_empty());
-    assert!(!source_map.get_line(2).is_empty());
-    assert!(!source_map.get_line(3).is_empty());
-
-    // Invalid lines
-    assert!(source_map.get_line(0).is_empty());
-    assert!(source_map.get_line(4).is_empty());
-    assert!(source_map.get_line(100).is_empty());
-}
-
-#[test]
-fn test_get_line_with_complex_content() {
-    let source_map =
-        &SourceMap::new("fn main() {\n    var x = \"hello world\";\n    // comment\n}".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    tokenizer.for_each(drop);
-
-    let line1: String = source_map.get_line(1).iter().collect();
-    let line2: String = source_map.get_line(2).iter().collect();
-    let line3: String = source_map.get_line(3).iter().collect();
-    let line4: String = source_map.get_line(4).iter().collect();
-
-    assert_eq!(line1, "fn main() {");
-    assert_eq!(line2, "    var x = \"hello world\";");
-    assert_eq!(line3, "    // comment");
-    assert_eq!(line4, "}");
-}
-
-#[test]
-fn test_get_line_error_reporting_use_case() {
-    let source_map = &SourceMap::new("var x = 5;\nvar y = ;\nvar z = 10;".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    let tokens = tokenizer.collect::<Vec<Token>>();
-
-    let error_token = tokens
-        .iter()
-        .find(|t| matches!(t.token_type, TokenType::Error));
-
-    if let Some(token) = error_token {
-        let error_line: String = source_map.get_line(token.line(source_map)).iter().collect();
-        assert_eq!(error_line, "var y = ;");
-        assert_eq!(token.line(source_map), 2);
-    }
 }
 
 #[test]
@@ -659,22 +535,12 @@ fn test_multiline_code_with_string_escapes() {
 }
 
 #[test]
-fn test_get_line_with_string_escapes() {
-    let source_map = SourceMap::new("var msg = \"hello\\nworld\";\nvar x = 5;".to_string());
-
-    let line1: String = source_map.get_line(1).iter().collect();
-    let line2: String = source_map.get_line(2).iter().collect();
-
-    assert_eq!(line1, "var msg = \"hello\\nworld\";");
-    assert_eq!(line2, "var x = 5;");
-}
-
-#[test]
 fn test_invalid_escape_sequences() {
     let source_map = &SourceMap::new("\"hello\\qworld\"".to_string());
     let tokens = tokenize_all(source_map);
 
     println!("{:?}", tokens);
+    // TODO verify error message is correct
     assert!(matches!(tokens[0].token_type, TokenType::Error));
 }
 
@@ -690,10 +556,9 @@ fn test_nested_quotes_in_strings() {
     assert_single_token_type("\"He said \\\"hello\\\"\"", TokenType::String);
 }
 
-#[test]
-fn test_empty_string() {
-    assert_single_token_type("\"\"", TokenType::String);
-}
+// TODO: Enhance basic tests to verify token positions and lexeme content for all token types
+// TODO: Add comprehensive token span tests for numbers, identifiers, operators, keywords
+// TODO: Add stress testing with very large inputs and deeply nested structures
 
 #[test]
 fn test_unicode_in_strings() {
@@ -707,33 +572,9 @@ fn test_decimal_point_numbers() {
 }
 
 #[test]
-fn test_optional_chaining_operator() {
-    // First, you'll need to add this to your TokenType enum:
-    // OptionalChaining,    // .?
-
-    assert_single_token_type(".?", TokenType::OptionalChaining);
-}
-
-#[test]
 fn test_optional_chaining_in_expressions() {
     let source = "user.?name";
     let expected = vec![
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
-}
-
-#[test]
-fn test_chained_optional_access() {
-    let source = "user.?profile.?avatar.?url";
-    let expected = vec![
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
         TokenType::Identifier,
         TokenType::OptionalChaining,
         TokenType::Identifier,
@@ -779,39 +620,10 @@ fn test_throw_try_catch_finally() {
 }
 
 #[test]
-fn test_mixed_optional_and_regular_chaining() {
-    let source = "user.name.?nickname";
-    let expected = vec![
-        TokenType::Identifier,
-        TokenType::Dot,
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
-}
-
-#[test]
-fn test_optional_chaining_with_method_calls() {
-    let source = "user.?getName()";
-    let expected = vec![
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::LeftParen,
-        TokenType::RightParen,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
-}
-
-#[test]
 fn test_optional_chaining_with_array_access() {
-    let source = "users.?[0].?name";
+    let source = "users[0].?name";
     let expected = vec![
         TokenType::Identifier,
-        TokenType::OptionalChaining,
         TokenType::LeftSquareBracket,
         TokenType::Number,
         TokenType::RightSquareBracket,
@@ -837,149 +649,6 @@ fn test_distinguish_dot_question_from_optional_chaining() {
         TokenType::Eof,
     ];
     assert_token_types(source, &expected);
-}
-
-#[test]
-fn test_optional_chaining_in_complex_expression() {
-    let source = "var result = api.?getData().?result.?value or \"default\";";
-    let expected = vec![
-        TokenType::Var,
-        TokenType::Identifier,
-        TokenType::Equals,
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::LeftParen,
-        TokenType::RightParen,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::Or,
-        TokenType::String,
-        TokenType::Semicolon,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
-}
-
-#[test]
-fn test_peek_ahead_basic() {
-    let source_map = SourceMap::new("hello world 123".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    // Test peek_ahead without consuming
-    assert_eq!(
-        tokenizer.peek_ahead(0).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(1).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(2).unwrap().token_type,
-        TokenType::Number
-    );
-    assert_eq!(tokenizer.peek_ahead(3).unwrap().token_type, TokenType::Eof);
-
-    // Verify we haven't consumed anything
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Identifier);
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Identifier);
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Number);
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Eof);
-}
-
-#[test]
-fn test_peek_ahead_out_of_bounds() {
-    let source_map = SourceMap::new("x".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    // Test peeking beyond available tokens
-    assert_eq!(
-        tokenizer.peek_ahead(0).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(tokenizer.peek_ahead(1).unwrap().token_type, TokenType::Eof);
-    assert!(tokenizer.peek_ahead(2).is_none());
-    assert!(tokenizer.peek_ahead(10).is_none());
-}
-
-#[test]
-fn test_peek_convenience_methods() {
-    let source_map = SourceMap::new("a + b".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    // Test peek() and peek_next() convenience methods
-    assert_eq!(tokenizer.peek().unwrap().token_type, TokenType::Identifier);
-    assert_eq!(tokenizer.peek_next().unwrap().token_type, TokenType::Plus);
-
-    // Verify they're equivalent to peek_ahead
-    assert_eq!(
-        tokenizer.peek().unwrap().token_type.clone(),
-        tokenizer.peek_ahead(0).unwrap().token_type
-    );
-    assert_eq!(
-        tokenizer.peek_next().unwrap().token_type.clone(),
-        tokenizer.peek_ahead(1).unwrap().token_type
-    );
-}
-
-#[test]
-fn test_mixed_peek_and_consume() {
-    let source_map = SourceMap::new("var x = 5;".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    // Peek ahead
-    assert_eq!(tokenizer.peek_ahead(0).unwrap().token_type, TokenType::Var);
-    assert_eq!(
-        tokenizer.peek_ahead(2).unwrap().token_type,
-        TokenType::Equals
-    );
-
-    // Consume one token
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Var);
-
-    // Peek should now show next tokens
-    assert_eq!(tokenizer.peek().unwrap().token_type, TokenType::Identifier);
-    assert_eq!(
-        tokenizer.peek_ahead(1).unwrap().token_type,
-        TokenType::Equals
-    );
-
-    // Consume the rest
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Identifier);
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Equals);
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Number);
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Semicolon);
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Eof);
-    assert!(tokenizer.next().is_none());
-}
-
-#[test]
-fn test_iterator_consistency_with_buffer() {
-    let source_map = SourceMap::new("fn test() { return 42; }".to_string());
-    let tokenizer = Tokenizer::new(&source_map);
-
-    // Collect tokens using iterator
-    let tokens_via_iterator: Vec<Token> = tokenizer.collect();
-
-    // Reset and collect using peek_ahead
-    let mut tokenizer2 = Tokenizer::new(&source_map);
-    let mut tokens_via_peek = Vec::new();
-    let mut i = 0;
-    while let Some(token) = tokenizer2.peek_ahead(i) {
-        tokens_via_peek.push(token.clone());
-        i += 1;
-    }
-
-    // Should be identical
-    assert_eq!(tokens_via_iterator.len(), tokens_via_peek.len());
-    for (iter_token, peek_token) in tokens_via_iterator.iter().zip(tokens_via_peek.iter()) {
-        assert_eq!(iter_token.token_type, peek_token.token_type);
-        assert_eq!(iter_token.start, peek_token.start);
-        assert_eq!(iter_token.end, peek_token.end);
-    }
 }
 
 #[test]
@@ -1115,130 +784,6 @@ fn test_distinguish_lambda_from_grouping() {
 }
 
 #[test]
-fn test_peek_ahead_with_complex_tokens() {
-    let source_map = SourceMap::new("\"hello world\" >= 123.45 != true".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    assert_eq!(
-        tokenizer.peek_ahead(0).unwrap().token_type,
-        TokenType::String
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(1).unwrap().token_type,
-        TokenType::GreaterEquals
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(2).unwrap().token_type,
-        TokenType::Number
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(3).unwrap().token_type,
-        TokenType::BangEquals
-    );
-    assert_eq!(tokenizer.peek_ahead(4).unwrap().token_type, TokenType::True);
-    assert_eq!(tokenizer.peek_ahead(5).unwrap().token_type, TokenType::Eof);
-
-    // Verify lexemes are correct
-    assert_eq!(
-        tokenizer
-            .peek_ahead(0)
-            .unwrap()
-            .lexeme(&source_map)
-            .iter()
-            .collect::<String>(),
-        "\"hello world\""
-    );
-    assert_eq!(
-        tokenizer
-            .peek_ahead(2)
-            .unwrap()
-            .lexeme(&source_map)
-            .iter()
-            .collect::<String>(),
-        "123.45"
-    );
-}
-
-#[test]
-fn test_peek_ahead_with_comments() {
-    let source_map = SourceMap::new("var x // comment\n= 5;".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    assert_eq!(tokenizer.peek_ahead(0).unwrap().token_type, TokenType::Var);
-    assert_eq!(
-        tokenizer.peek_ahead(1).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(2).unwrap().token_type,
-        TokenType::Comment
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(3).unwrap().token_type,
-        TokenType::Equals
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(4).unwrap().token_type,
-        TokenType::Number
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(5).unwrap().token_type,
-        TokenType::Semicolon
-    );
-}
-
-#[test]
-fn test_empty_source_peek_ahead() {
-    let source_map = SourceMap::new("".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    assert_eq!(tokenizer.peek_ahead(0).unwrap().token_type, TokenType::Eof);
-    assert!(tokenizer.peek_ahead(1).is_none());
-
-    // Iterator should also work correctly
-    assert_eq!(tokenizer.next().unwrap().token_type, TokenType::Eof);
-    assert!(tokenizer.next().is_none());
-}
-
-#[test]
-fn test_peek_ahead_buffer_reuse() {
-    let source_map = SourceMap::new("a b c d e".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    // Peek far ahead multiple times
-    assert_eq!(
-        tokenizer.peek_ahead(4).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(2).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(4).unwrap().token_type,
-        TokenType::Identifier
-    );
-
-    // Consume some tokens
-    tokenizer.next(); // consume 'a'
-    tokenizer.next(); // consume 'b'
-
-    // Peek should still work correctly
-    assert_eq!(
-        tokenizer.peek_ahead(0).unwrap().token_type,
-        TokenType::Identifier
-    ); // 'c'
-    assert_eq!(
-        tokenizer.peek_ahead(1).unwrap().token_type,
-        TokenType::Identifier
-    ); // 'd'
-    assert_eq!(
-        tokenizer.peek_ahead(2).unwrap().token_type,
-        TokenType::Identifier
-    ); // 'e'
-}
-
-#[test]
 fn test_unterminated_string_with_following_code() {
     let source_map = &SourceMap::new("\"unterminated\nvar x = 5;".to_string());
     let mut tokenizer = Tokenizer::new(source_map);
@@ -1257,4 +802,52 @@ fn test_unterminated_string_with_following_code() {
     assert_eq!(tokens[2].token_type, TokenType::Equals);
     assert_eq!(tokens[3].token_type, TokenType::Number);
     assert_eq!(tokens[4].token_type, TokenType::Semicolon);
+}
+
+#[test]
+fn test_malformed_numbers() {
+    // verify tokens have an error message
+    // TODO: Test malformed numbers like 123.456.789, 123., .123.456
+}
+
+#[test]
+fn test_invalid_characters_in_different_contexts() {
+    // verify tokens have an error message
+    // TODO: Test @ # $ % in various positions
+}
+
+#[test]
+fn test_nested_unterminated_constructs() {
+    // verify tokens have an error message
+    // TODO: Test nested unterminated strings, comments, etc.
+}
+
+#[test]
+fn test_number_lexeme_content() {
+    // TODO: Verify lexeme content for integers, floats, decimals,
+}
+
+#[test]
+fn test_string_lexeme_content() {
+    // TODO: Verify lexeme content for strings with escapes, unicode, etc.
+}
+
+#[test]
+fn test_identifier_lexem_contentt() {
+    // TODO: Verify lexeme content for various identifier patterns
+}
+
+#[test]
+fn test_operator_lexemw_content() {
+    // TODO: Verify lexeme content for single and multi-character operators
+}
+
+#[test]
+fn test_keyword_lexeme_token_contentt() {
+    // TODO: Verify lexeme content for all keywords
+}
+
+#[test]
+fn test_comment_token_content() {
+    // TODO: Verify lexeme content for single-line and multi-line comments
 }

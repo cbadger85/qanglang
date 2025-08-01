@@ -2,6 +2,50 @@ use super::{assert_no_parse_errors, parse_source};
 use crate::{SourceMap, ast};
 
 #[test]
+#[ignore]
+fn test_all_the_optional_calls() {
+    // TODO support this syntax for optional chaining
+    let source_code = r#"foo?[0]?.bar?()"#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+#[ignore]
+fn test_anonymous_class_declaration() {
+    // TODO support this syntax for creating an anonymous class
+    let source_code = r#"
+        var obj = :{
+            field = "value";
+            other_field;
+        }
+    "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+#[ignore]
+fn test_create_array_of_length() {
+    // TODO support this syntax creating an array of a length, and optionally filling it.
+    let source_code = r#"
+        var arr1 = [10; 0];
+        var arr2 = [2;];
+    "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
 fn test_arithmetic_expressions() {
     let source_code = r#"var result = a + b * c - d / e % f;"#;
     let source_map = SourceMap::new(source_code.to_string());
@@ -2341,7 +2385,7 @@ fn test_pipe_operator_precedence() {
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
         assert_eq!(var_decl.name.name.as_ref(), "result");
         assert!(var_decl.initializer.is_some());
-        
+
         // Expression: value + 1 |> transform |> process - 2
         // Should be parsed as: (value + 1) |> transform |> (process - 2)
         // Which becomes: ((value + 1) |> transform) |> (process - 2)
@@ -2351,16 +2395,20 @@ fn test_pipe_operator_precedence() {
             if let Some(right_expr) = &outer_pipe.right {
                 if let ast::Expr::Term(term_expr) = right_expr.as_ref() {
                     assert_eq!(term_expr.operator, ast::TermOperator::Subtract);
-                    
+
                     // Left side should be identifier 'process'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(process_id)) = term_expr.left.as_ref() {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(process_id)) =
+                        term_expr.left.as_ref()
+                    {
                         assert_eq!(process_id.name.as_ref(), "process");
                     } else {
                         panic!("Expected identifier 'process'");
                     }
-                    
+
                     // Right side should be number literal 2
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = term_expr.right.as_ref() {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
+                        term_expr.right.as_ref()
+                    {
                         assert_eq!(num_lit.value, 2.0);
                     } else {
                         panic!("Expected number literal '2'");
@@ -2369,32 +2417,38 @@ fn test_pipe_operator_precedence() {
                     panic!("Expected term expression (process - 2)");
                 }
             }
-            
+
             // Left side should be: (value + 1) |> transform
             if let ast::Expr::Pipe(inner_pipe) = outer_pipe.left.as_ref() {
                 // Right side of inner pipe should be identifier 'transform'
                 assert!(inner_pipe.right.is_some());
                 if let Some(inner_right) = &inner_pipe.right {
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(transform_id)) = inner_right.as_ref() {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(transform_id)) =
+                        inner_right.as_ref()
+                    {
                         assert_eq!(transform_id.name.as_ref(), "transform");
                     } else {
                         panic!("Expected identifier 'transform'");
                     }
                 }
-                
+
                 // Left side of inner pipe should be: value + 1
                 if let ast::Expr::Term(term_expr) = inner_pipe.left.as_ref() {
                     assert_eq!(term_expr.operator, ast::TermOperator::Add);
-                    
+
                     // Left side should be identifier 'value'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(value_id)) = term_expr.left.as_ref() {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(value_id)) =
+                        term_expr.left.as_ref()
+                    {
                         assert_eq!(value_id.name.as_ref(), "value");
                     } else {
                         panic!("Expected identifier 'value'");
                     }
-                    
+
                     // Right side should be number literal 1
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = term_expr.right.as_ref() {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
+                        term_expr.right.as_ref()
+                    {
                         assert_eq!(num_lit.value, 1.0);
                     } else {
                         panic!("Expected number literal '1'");
@@ -2425,70 +2479,82 @@ fn test_deeply_nested_expressions() {
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
         assert_eq!(var_decl.name.name.as_ref(), "result");
         assert!(var_decl.initializer.is_some());
-        
+
         // Expression: ((((a + b) * c) - d) / e) % f
         // Should be parsed as: ((((a + b) * c) - d) / e) % f
         // Outermost operation: % (modulo)
         if let Some(ast::Expr::Factor(outermost_factor)) = &var_decl.initializer {
             assert_eq!(outermost_factor.operator, ast::FactorOperator::Modulo);
-            
+
             // Right side should be identifier 'f'
-            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(f_id)) = outermost_factor.right.as_ref() {
+            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(f_id)) =
+                outermost_factor.right.as_ref()
+            {
                 assert_eq!(f_id.name.as_ref(), "f");
             } else {
                 panic!("Expected identifier 'f'");
             }
-            
+
             // Left side: (((a + b) * c) - d) / e
             // Second level operation: / (division)
             if let ast::Expr::Factor(second_factor) = outermost_factor.left.as_ref() {
                 assert_eq!(second_factor.operator, ast::FactorOperator::Divide);
-                
+
                 // Right side should be identifier 'e'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(e_id)) = second_factor.right.as_ref() {
+                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(e_id)) =
+                    second_factor.right.as_ref()
+                {
                     assert_eq!(e_id.name.as_ref(), "e");
                 } else {
                     panic!("Expected identifier 'e'");
                 }
-                
+
                 // Left side: ((a + b) * c) - d
                 // Third level operation: - (subtraction)
                 if let ast::Expr::Term(term_expr) = second_factor.left.as_ref() {
                     assert_eq!(term_expr.operator, ast::TermOperator::Subtract);
-                    
+
                     // Right side should be identifier 'd'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(d_id)) = term_expr.right.as_ref() {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(d_id)) =
+                        term_expr.right.as_ref()
+                    {
                         assert_eq!(d_id.name.as_ref(), "d");
                     } else {
                         panic!("Expected identifier 'd'");
                     }
-                    
+
                     // Left side: (a + b) * c
                     // Fourth level operation: * (multiplication)
                     if let ast::Expr::Factor(third_factor) = term_expr.left.as_ref() {
                         assert_eq!(third_factor.operator, ast::FactorOperator::Multiply);
-                        
+
                         // Right side should be identifier 'c'
-                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(c_id)) = third_factor.right.as_ref() {
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(c_id)) =
+                            third_factor.right.as_ref()
+                        {
                             assert_eq!(c_id.name.as_ref(), "c");
                         } else {
                             panic!("Expected identifier 'c'");
                         }
-                        
+
                         // Left side: a + b
                         // Innermost operation: + (addition)
                         if let ast::Expr::Term(innermost_term) = third_factor.left.as_ref() {
                             assert_eq!(innermost_term.operator, ast::TermOperator::Add);
-                            
+
                             // Left side should be identifier 'a'
-                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(a_id)) = innermost_term.left.as_ref() {
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(a_id)) =
+                                innermost_term.left.as_ref()
+                            {
                                 assert_eq!(a_id.name.as_ref(), "a");
                             } else {
                                 panic!("Expected identifier 'a'");
                             }
-                            
+
                             // Right side should be identifier 'b'
-                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(b_id)) = innermost_term.right.as_ref() {
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(b_id)) =
+                                innermost_term.right.as_ref()
+                            {
                                 assert_eq!(b_id.name.as_ref(), "b");
                             } else {
                                 panic!("Expected identifier 'b'");

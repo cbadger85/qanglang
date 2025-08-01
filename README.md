@@ -4,6 +4,17 @@ An embedded scripting language written in Rust 🦀
 
 ## Grammar Definition
 
+```
+// anonymous class syntax
+var foo = :{
+  bar = "baz"
+  zig = `"foo"
+  _ = `_
+}
+
+var objFactory = (param1, param2) -> :{ one = param1; two = param2 }
+```
+
 <table>
   <thead>
   <thead/>

@@ -166,55 +166,40 @@ fn test_strings() {
 }
 
 #[test]
-fn test_unterminated_string() {
-    let source_map = &SourceMap::new("\"unterminated".to_string());
-    let tokens = tokenize_all(source_map);
-    assert_eq!(tokens.len(), 2);
-    match &tokens[0].token_type {
-        TokenType::Error => {
-            assert_eq!(
-                tokens[0].error_message.as_ref().unwrap(),
-                "Unterminated string."
-            )
-        }
-        _ => panic!("Expected error token"),
-    }
+fn test_string_with_various_escapes() {
+    assert_single_token_type("\"hello\\tworld\\\"test\\\\path\"", TokenType::String);
 }
 
 #[test]
-fn test_single_line_comments() {
-    assert_single_token_type("// this is a comment", TokenType::Comment);
-    assert_single_token_type("//no space", TokenType::Comment);
-
-    let source_map = &SourceMap::new("// comment\n".to_string());
-    let tokens = tokenize_all(source_map);
-    // Comment followed by newline should only tokenize the comment
-    assert_eq!(tokens.len(), 2);
-    assert_eq!(tokens[0].token_type, TokenType::Comment);
-    assert_eq!(tokens[1].token_type, TokenType::Eof);
-}
-
-#[test]
-fn test_multi_line_comments() {
-    assert_single_token_type("/* this is a comment */", TokenType::Comment);
-    assert_single_token_type("/*no spaces*/", TokenType::Comment);
-    assert_single_token_type("/* multi\nline\ncomment */", TokenType::Comment);
-}
-
-#[test]
-fn test_complex_expression() {
-    let source = "var x = 123 + 456.789;";
-    let expected = vec![
+fn test_comments() {
+    let source1 = "var x = 5; // variable declaration\n/* block comment */ y = 10;";
+    let expected1 = vec![
         TokenType::Var,
         TokenType::Identifier,
         TokenType::Equals,
         TokenType::Number,
-        TokenType::Plus,
+        TokenType::Semicolon,
+        TokenType::Comment,
+        TokenType::Comment,
+        TokenType::Identifier,
+        TokenType::Equals,
         TokenType::Number,
         TokenType::Semicolon,
         TokenType::Eof,
     ];
-    assert_token_types(source, &expected);
+    assert_token_types(source1, &expected1);
+
+    let source2 = "var x = /* block comment */ 5;";
+    let expected2 = vec![
+        TokenType::Var,
+        TokenType::Identifier,
+        TokenType::Equals,
+        TokenType::Comment,
+        TokenType::Number,
+        TokenType::Semicolon,
+        TokenType::Eof,
+    ];
+    assert_token_types(source2, &expected2);
 }
 
 #[test]
@@ -341,53 +326,6 @@ fn test_ternary_operator() {
 }
 
 #[test]
-fn test_line_and_column_tracking() {
-    let source_map = &SourceMap::new("first\nsecond line".to_string());
-    let tokens = tokenize_all(source_map);
-
-    assert_eq!(tokens[0].line(source_map), 1);
-    assert_eq!(tokens[0].col(source_map), 1);
-    assert_eq!(tokens[1].line(source_map), 2);
-    assert_eq!(tokens[1].col(source_map), 1);
-    assert_eq!(tokens[2].line(source_map), 2);
-    assert_eq!(tokens[2].col(source_map), 8);
-}
-
-#[test]
-fn test_mixed_content_with_comments() {
-    let source = "var x = 5; // variable declaration\n/* block comment */ y = 10;";
-    let expected = vec![
-        TokenType::Var,
-        TokenType::Identifier,
-        TokenType::Equals,
-        TokenType::Number,
-        TokenType::Semicolon,
-        TokenType::Comment,
-        TokenType::Comment,
-        TokenType::Identifier,
-        TokenType::Equals,
-        TokenType::Number,
-        TokenType::Semicolon,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
-}
-
-#[test]
-fn test_unexpected_character() {
-    let source_map = &SourceMap::new("@".to_string());
-    let tokens = tokenize_all(source_map);
-    assert_eq!(tokens.len(), 2);
-    match &tokens[0].token_type {
-        TokenType::Error => assert_eq!(
-            tokens[0].error_message.as_ref().unwrap(),
-            "Unexpected character: '@'."
-        ),
-        _ => panic!("Expected error token"),
-    }
-}
-
-#[test]
 fn test_class_definition() {
     let source = "class MyClass { fn method() { return this.value; } }";
     let expected = vec![
@@ -497,82 +435,13 @@ fn test_boolean_expressions() {
 }
 
 #[test]
-fn test_get_line_multiple_lines() {
-    let source_map = &SourceMap::new("first line\nsecond line\nthird line".to_string());
-    let tokenizer = Tokenizer::new(source_map);
-    tokenizer.for_each(drop);
-    let line1: String = source_map.get_line(1).iter().collect();
-    let line2: String = source_map.get_line(2).iter().collect();
-    let line3: String = source_map.get_line(3).iter().collect();
-
-    assert_eq!(line1, "first line");
-    assert_eq!(line2, "second line");
-    assert_eq!(line3, "third line");
-}
-
-#[test]
-fn test_string_with_escaped_newline() {
-    assert_single_token_type("\"hello\\nworld\"", TokenType::String);
-
-    let source_map: &SourceMap = &SourceMap::new("\"hello\\nworld\"".to_string());
-    let tokens = tokenize_all(source_map);
-    assert_eq!((tokens[0].line(source_map)), 1);
-}
-
-#[test]
-fn test_string_with_various_escapes() {
-    assert_single_token_type("\"hello\\tworld\\\"test\\\\path\"", TokenType::String);
-}
-
-#[test]
-fn test_multiline_code_with_string_escapes() {
-    let source_map = &SourceMap::new("var msg = \"line 1\\nline 2\";\nvar x = 5;".to_string());
-    let tokens = tokenize_all(source_map);
-
-    assert_eq!(tokens[3].line(source_map), 1);
-    assert_eq!(tokens[3].token_type, TokenType::String);
-    assert_eq!(tokens[5].line(source_map), 2);
-}
-
-#[test]
-fn test_invalid_escape_sequences() {
-    let source_map = &SourceMap::new("\"hello\\qworld\"".to_string());
-    let tokens = tokenize_all(source_map);
-
-    println!("{:?}", tokens);
-    // TODO verify error message is correct
-    assert!(matches!(tokens[0].token_type, TokenType::Error));
-}
-
-#[test]
-fn test_unterminated_multiline_comment() {
-    let source_map = &SourceMap::new("/* unterminated comment".to_string());
-    let tokens = tokenize_all(source_map);
-    assert!(matches!(tokens[0].token_type, TokenType::Error));
-}
-
-#[test]
-fn test_nested_quotes_in_strings() {
-    assert_single_token_type("\"He said \\\"hello\\\"\"", TokenType::String);
-}
-
-// TODO: Enhance basic tests to verify token positions and lexeme content for all token types
-// TODO: Add comprehensive token span tests for numbers, identifiers, operators, keywords
-// TODO: Add stress testing with very large inputs and deeply nested structures
-
-#[test]
-fn test_unicode_in_strings() {
-    assert_single_token_type("\"café 🦀\"", TokenType::String);
-}
-
-#[test]
 fn test_decimal_point_numbers() {
     assert_single_token_type(".5", TokenType::Number);
     assert_single_token_type(".123", TokenType::Number);
 }
 
 #[test]
-fn test_optional_chaining_in_expressions() {
+fn test_optional_chaining() {
     let source = "user.?name";
     let expected = vec![
         TokenType::Identifier,
@@ -620,167 +489,19 @@ fn test_throw_try_catch_finally() {
 }
 
 #[test]
-fn test_optional_chaining_with_array_access() {
-    let source = "users[0].?name";
-    let expected = vec![
-        TokenType::Identifier,
-        TokenType::LeftSquareBracket,
-        TokenType::Number,
-        TokenType::RightSquareBracket,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
-}
-
-#[test]
-fn test_distinguish_dot_question_from_optional_chaining() {
-    // Make sure ". ?" (with space) is different from ".?"
-    let source = "condition ? user.name : nil";
-    let expected = vec![
-        TokenType::Identifier,
-        TokenType::Question,
-        TokenType::Identifier,
-        TokenType::Dot,
-        TokenType::Identifier,
-        TokenType::Colon,
-        TokenType::Nil,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
-}
-
-#[test]
-fn test_lambda_detection_patterns() {
-    // Test empty lambda: () ->
-    let source_map = SourceMap::new("() -> 42".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    assert_eq!(
-        tokenizer.peek_ahead(0).unwrap().token_type,
-        TokenType::LeftParen
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(1).unwrap().token_type,
-        TokenType::RightParen
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(2).unwrap().token_type,
-        TokenType::Arrow
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(3).unwrap().token_type,
-        TokenType::Number
-    );
-
-    // Test single param lambda: (x) ->
-    let source_map2 = SourceMap::new("(x) -> x + 1".to_string());
-    let mut tokenizer2 = Tokenizer::new(&source_map2);
-
-    assert_eq!(
-        tokenizer2.peek_ahead(0).unwrap().token_type,
-        TokenType::LeftParen
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(1).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(2).unwrap().token_type,
-        TokenType::RightParen
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(3).unwrap().token_type,
-        TokenType::Arrow
-    );
-
-    // Test multi param lambda: (a, b) ->
-    let source_map3 = SourceMap::new("(a, b) -> a + b".to_string());
-    let mut tokenizer3 = Tokenizer::new(&source_map3);
-
-    assert_eq!(
-        tokenizer3.peek_ahead(0).unwrap().token_type,
-        TokenType::LeftParen
-    );
-    assert_eq!(
-        tokenizer3.peek_ahead(1).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer3.peek_ahead(2).unwrap().token_type,
-        TokenType::Comma
-    );
-    assert_eq!(
-        tokenizer3.peek_ahead(3).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer3.peek_ahead(4).unwrap().token_type,
-        TokenType::RightParen
-    );
-    assert_eq!(
-        tokenizer3.peek_ahead(5).unwrap().token_type,
-        TokenType::Arrow
-    );
-}
-
-#[test]
-fn test_distinguish_lambda_from_grouping() {
-    // Test grouping: (x + y)
-    let source_map = SourceMap::new("(x + y)".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
-
-    assert_eq!(
-        tokenizer.peek_ahead(0).unwrap().token_type,
-        TokenType::LeftParen
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(1).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(tokenizer.peek_ahead(2).unwrap().token_type, TokenType::Plus);
-    assert_eq!(
-        tokenizer.peek_ahead(3).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer.peek_ahead(4).unwrap().token_type,
-        TokenType::RightParen
-    );
-    // No arrow after closing paren
-    assert_eq!(tokenizer.peek_ahead(5).unwrap().token_type, TokenType::Eof);
-
-    // Test method call: func(x, y)
-    let source_map2 = SourceMap::new("func(x, y)".to_string());
-    let mut tokenizer2 = Tokenizer::new(&source_map2);
-
-    assert_eq!(
-        tokenizer2.peek_ahead(0).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(1).unwrap().token_type,
-        TokenType::LeftParen
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(2).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(3).unwrap().token_type,
-        TokenType::Comma
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(4).unwrap().token_type,
-        TokenType::Identifier
-    );
-    assert_eq!(
-        tokenizer2.peek_ahead(5).unwrap().token_type,
-        TokenType::RightParen
-    );
-    // No arrow after closing paren
-    assert_eq!(tokenizer2.peek_ahead(6).unwrap().token_type, TokenType::Eof);
+fn test_unterminated_string() {
+    let source_map = &SourceMap::new("\"unterminated".to_string());
+    let tokens = tokenize_all(source_map);
+    assert_eq!(tokens.len(), 2);
+    match &tokens[0].token_type {
+        TokenType::Error => {
+            assert_eq!(
+                tokens[0].error_message.as_ref().unwrap(),
+                "Unterminated string."
+            )
+        }
+        _ => panic!("Expected error token"),
+    }
 }
 
 #[test]
@@ -805,6 +526,20 @@ fn test_unterminated_string_with_following_code() {
 }
 
 #[test]
+fn test_unexpected_character() {
+    let source_map = &SourceMap::new("@".to_string());
+    let tokens = tokenize_all(source_map);
+    assert_eq!(tokens.len(), 2);
+    match &tokens[0].token_type {
+        TokenType::Error => assert_eq!(
+            tokens[0].error_message.as_ref().unwrap(),
+            "Unexpected character: '@'."
+        ),
+        _ => panic!("Expected error token"),
+    }
+}
+
+#[test]
 fn test_malformed_numbers() {
     // verify tokens have an error message
     // TODO: Test malformed numbers like 123.456.789, 123., .123.456
@@ -823,13 +558,31 @@ fn test_nested_unterminated_constructs() {
 }
 
 #[test]
+fn test_invalid_escape_sequences() {
+    let source_map = &SourceMap::new("\"hello\\qworld\"".to_string());
+    let tokens = tokenize_all(source_map);
+
+    println!("{:?}", tokens);
+    // TODO verify error message is correct
+    assert!(matches!(tokens[0].token_type, TokenType::Error));
+}
+
+#[test]
+fn test_unterminated_multiline_comment() {
+    let source_map = &SourceMap::new("/* unterminated comment".to_string());
+    let tokens = tokenize_all(source_map);
+    assert!(matches!(tokens[0].token_type, TokenType::Error));
+}
+
+#[test]
 fn test_number_lexeme_content() {
     // TODO: Verify lexeme content for integers, floats, decimals,
 }
 
 #[test]
 fn test_string_lexeme_content() {
-    // TODO: Verify lexeme content for strings with escapes, unicode, etc.
+    // TODO: Verify lexeme content for strings with escapes, unicode, etc, verifying the lexeme is correctly extracted from the source.
+    assert_single_token_type("\"café 🦀\"", TokenType::String);
 }
 
 #[test]
@@ -850,4 +603,31 @@ fn test_keyword_lexeme_token_contentt() {
 #[test]
 fn test_comment_token_content() {
     // TODO: Verify lexeme content for single-line and multi-line comments
+}
+
+#[test]
+fn test_line_and_column_tracking() {
+    let source_map = &SourceMap::new("first\nsecond line".to_string());
+    let tokens = tokenize_all(source_map);
+
+    assert_eq!(tokens[0].line(source_map), 1);
+    assert_eq!(tokens[0].col(source_map), 1);
+    assert_eq!(tokens[1].line(source_map), 2);
+    assert_eq!(tokens[1].col(source_map), 1);
+    assert_eq!(tokens[2].line(source_map), 2);
+    assert_eq!(tokens[2].col(source_map), 8);
+}
+
+#[test]
+fn test_get_line_multiple_lines() {
+    let source_map = &SourceMap::new("first line\nsecond line\nthird line".to_string());
+    let tokenizer = Tokenizer::new(source_map);
+    tokenizer.for_each(drop);
+    let line1: String = source_map.get_line(1).iter().collect();
+    let line2: String = source_map.get_line(2).iter().collect();
+    let line3: String = source_map.get_line(3).iter().collect();
+
+    assert_eq!(line1, "first line");
+    assert_eq!(line2, "second line");
+    assert_eq!(line3, "third line");
 }

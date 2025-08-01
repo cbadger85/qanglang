@@ -3,25 +3,15 @@ use crate::{SourceMap, ast};
 
 #[test]
 #[ignore]
-fn test_all_the_optional_calls() {
-    // TODO support this syntax for optional chaining
-    let source_code = r#"foo?[0]?.bar?()"#;
-    let source_map = SourceMap::new(source_code.to_string());
-
-    let (_program, errors) = parse_source(&source_map);
-
-    assert_no_parse_errors(&errors);
-}
-
-#[test]
-#[ignore]
-fn test_anonymous_class_declaration() {
+fn test_object_declaration() {
     // TODO support this syntax for creating an anonymous class
     let source_code = r#"
         var obj = :{
             field = "value";
             other_field;
-        }
+        };
+
+        var empty_obj = :{};
     "#;
     let source_map = SourceMap::new(source_code.to_string());
 
@@ -793,13 +783,16 @@ fn test_optional_chaining() {
     let source_code = r#"
             value = obj.?property;
             value2 = obj.?method().?result;
+            value3 = array.?[0];
+            value4 = function.?();
+            
         "#;
     let source_map = SourceMap::new(source_code.to_string());
 
     let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
-    assert_eq!(program.decls.len(), 2);
+    assert_eq!(program.decls.len(), 4);
 
     // First access: value = obj.?property;
     if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
@@ -896,6 +889,82 @@ fn test_optional_chaining() {
                 }
             } else {
                 panic!("Expected call expression for optional chaining");
+            }
+        } else {
+            panic!("Expected assignment expression");
+        }
+    }
+
+    // Third access: value3 = array.?[0];
+    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[2] {
+        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+            // Target should be identifier 'value3'
+            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                assert_eq!(target_id.name.as_ref(), "value3");
+            } else {
+                panic!("Expected identifier target 'value3'");
+            }
+
+            // Value should be optional index access array.?[0]
+            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                // Callee should be identifier 'array'
+                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(array_id)) =
+                    call_expr.callee.as_ref()
+                {
+                    assert_eq!(array_id.name.as_ref(), "array");
+                } else {
+                    panic!("Expected identifier 'array'");
+                }
+
+                // Operation should be optional index access with literal 0
+                if let ast::CallOperation::OptionalIndex(index_expr) =
+                    call_expr.operation.as_ref()
+                {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = index_expr {
+                        assert_eq!(num.value, 0.0);
+                    } else {
+                        panic!("Expected number literal 0 as index");
+                    }
+                } else {
+                    panic!("Expected optional index access");
+                }
+            } else {
+                panic!("Expected call expression for optional index access");
+            }
+        } else {
+            panic!("Expected assignment expression");
+        }
+    }
+
+    // Fourth access: value4 = function.?();
+    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[3] {
+        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+            // Target should be identifier 'value4'
+            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                assert_eq!(target_id.name.as_ref(), "value4");
+            } else {
+                panic!("Expected identifier target 'value4'");
+            }
+
+            // Value should be optional call function.?()
+            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                // Callee should be identifier 'function'
+                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
+                    call_expr.callee.as_ref()
+                {
+                    assert_eq!(func_id.name.as_ref(), "function");
+                } else {
+                    panic!("Expected identifier 'function'");
+                }
+
+                // Operation should be optional call with no arguments
+                if let ast::CallOperation::OptionalCall(args) = call_expr.operation.as_ref() {
+                    assert_eq!(args.len(), 0);
+                } else {
+                    panic!("Expected optional call operation");
+                }
+            } else {
+                panic!("Expected call expression for optional call");
             }
         } else {
             panic!("Expected assignment expression");

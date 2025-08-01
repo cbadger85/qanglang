@@ -1139,23 +1139,52 @@ mod expression_parser {
                 ast::CallOperation::Index(index)
             }
             tokenizer::TokenType::OptionalChaining => {
-                parser.consume(
-                    tokenizer::TokenType::Identifier,
-                    "Expect property name after '.?'.",
-                )?;
-
-                let property_span = parser.get_previous_span();
-                let property_name = parser
-                    .previous_token
+                match parser
+                    .current_token
                     .as_ref()
-                    .map(|t| t.lexeme(parser.source_map))
-                    .unwrap();
-                let property = ast::Identifier::new(
-                    property_name.iter().collect::<String>().into_boxed_str(),
-                    property_span,
-                );
+                    .map(|t| t.token_type)
+                    .unwrap_or(TokenType::Eof)
+                {
+                    TokenType::Identifier => {
+                        parser.advance();
+                        let property_span = parser.get_previous_span();
+                        let property_name = parser
+                            .previous_token
+                            .as_ref()
+                            .map(|t| t.lexeme(parser.source_map))
+                            .unwrap();
+                        let property = ast::Identifier::new(
+                            property_name.iter().collect::<String>().into_boxed_str(),
+                            property_span,
+                        );
 
-                ast::CallOperation::OptionalProperty(property)
+                        ast::CallOperation::OptionalProperty(property)
+                    }
+                    TokenType::LeftSquareBracket => {
+                        parser.advance();
+                        let index = parse(parser, Precedence::None)?;
+                        parser.consume(
+                            tokenizer::TokenType::RightSquareBracket,
+                            "Expect ']' after array index.",
+                        )?;
+                        ast::CallOperation::OptionalIndex(index)
+                    }
+                    TokenType::LeftParen => {
+                        parser.advance();
+                        let arguments = parse_arguments(parser)?;
+                        parser.consume(
+                            tokenizer::TokenType::RightParen,
+                            "Expect ')' after arguments.",
+                        )?;
+                        ast::CallOperation::OptionalCall(arguments)
+                    }
+                    _ => {
+                        return Err(QangError::parse_error(
+                            "Expected call expression or identifier.",
+                            parser.get_current_span(),
+                        ));
+                    }
+                }
             }
             _ => return Ok(left), // This shouldn't happen
         };

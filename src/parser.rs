@@ -37,7 +37,6 @@ impl<'a> Parser<'a> {
 
         while let Some(token) = self.tokens.next() {
             if token.token_type == TokenType::Error {
-                println!("Is token error.");
                 self.handle_tokenizer_error(&token);
                 continue;
             }
@@ -442,8 +441,6 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::RightParen, "Expected ')'.")?;
 
         let then_branch = Box::new(ast::Stmt::Block(self.block_statement()?));
-
-        println!("current token: {:?}", self.current_token);
 
         let (else_branch, span) = if self.match_token(TokenType::Else) {
             let block_stmt = ast::Stmt::Block(self.block_statement()?);
@@ -1373,10 +1370,7 @@ mod expression_parser {
 
         while let Some(current_token) = &parser.current_token {
             let rule = get_rule(current_token.token_type);
-            println!(
-                "Current token: {:?}, precedence: {:?}, rule precedence: {:?}",
-                current_token.token_type, precedence, rule.precedence
-            );
+
             if precedence <= rule.precedence && rule.is_not_empty() {
                 parser.advance();
 

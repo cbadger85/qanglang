@@ -518,6 +518,7 @@ pub enum PrimaryExpr {
     Grouping(GroupingExpr),
     Lambda(Box<LambdaExpr>),
     Array(ArrayLiteral),
+    ArrayOfLength(ArrayOfLength),
 }
 
 impl PrimaryExpr {
@@ -533,6 +534,7 @@ impl PrimaryExpr {
             PrimaryExpr::Grouping(expr) => expr.span,
             PrimaryExpr::Lambda(lambda) => lambda.span,
             PrimaryExpr::Array(array) => array.span,
+            PrimaryExpr::ArrayOfLength(array) => array.span,
         }
     }
 }
@@ -607,6 +609,14 @@ pub struct GroupingExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrayLiteral {
     pub elements: Vec<Expr>,
+    pub span: SourceSpan,
+}
+
+/// Array of length: [ expression ; expression? ]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayOfLength {
+    pub length: Box<Expr>,
+    pub initializer: Option<Box<Expr>>,
     pub span: SourceSpan,
 }
 
@@ -1119,6 +1129,7 @@ pub trait AstVisitor {
             PrimaryExpr::Grouping(grouping) => self.visit_grouping_expression(grouping, errors),
             PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda, errors),
             PrimaryExpr::Array(array) => self.visit_array_literal(array, errors),
+            PrimaryExpr::ArrayOfLength(array) => self.visit_array_of_length(array, errors),
         }
     }
 
@@ -1193,6 +1204,18 @@ pub trait AstVisitor {
     ) -> Result<(), Self::Error> {
         for element in &array.elements {
             self.visit_expression(element, errors)?;
+        }
+        Ok(())
+    }
+
+    fn visit_array_of_length(
+        &mut self,
+        array: &ArrayOfLength,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&array.length, errors)?;
+        if let Some(initializer) = &array.initializer {
+            self.visit_expression(initializer, errors)?;
         }
         Ok(())
     }
@@ -1678,6 +1701,13 @@ pub trait AstTransformer {
                 }
                 Expr::Primary(PrimaryExpr::Array(ArrayLiteral {
                     elements: transformed_elements,
+                    span: array.span,
+                }))
+            }
+            PrimaryExpr::ArrayOfLength(array) => {
+                Expr::Primary(PrimaryExpr::ArrayOfLength(ArrayOfLength {
+                    length: Box::new(self.transform_expression(*array.length)),
+                    initializer: array.initializer.map(|init| Box::new(self.transform_expression(*init))),
                     span: array.span,
                 }))
             }

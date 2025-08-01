@@ -21,21 +21,6 @@ fn test_object_declaration() {
 }
 
 #[test]
-#[ignore]
-fn test_create_array_of_length() {
-    // TODO support this syntax creating an array of a length, and optionally filling it.
-    let source_code = r#"
-        var arr1 = [10; 0];
-        var arr2 = [2;];
-    "#;
-    let source_map = SourceMap::new(source_code.to_string());
-
-    let (_program, errors) = parse_source(&source_map);
-
-    assert_no_parse_errors(&errors);
-}
-
-#[test]
 fn test_arithmetic_expressions() {
     let source_code = r#"var result = a + b * c - d / e % f;"#;
     let source_map = SourceMap::new(source_code.to_string());
@@ -917,8 +902,7 @@ fn test_optional_chaining() {
                 }
 
                 // Operation should be optional index access with literal 0
-                if let ast::CallOperation::OptionalIndex(index_expr) =
-                    call_expr.operation.as_ref()
+                if let ast::CallOperation::OptionalIndex(index_expr) = call_expr.operation.as_ref()
                 {
                     if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = index_expr {
                         assert_eq!(num.value, 0.0);
@@ -1179,6 +1163,78 @@ fn test_array_literals() {
         } else {
             panic!("Expected array literal");
         }
+    }
+}
+
+#[test]
+fn test_create_array_of_length() {
+    let source_code = r#"
+        var arr1 = [10; 0];
+        var arr2 = [2;]; // will default to [2;nil] if no initializer is provided.
+    "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 2);
+
+    // First array-of-length: arr1 = [10; 0];
+    if let ast::Decl::Variable(var_decl) = &program.decls[0] {
+        assert_eq!(var_decl.name.name.as_ref(), "arr1");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ArrayOfLength(array))) =
+            &var_decl.initializer
+        {
+            // Check length expression: should be number 10
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(length_num)) = array.length.as_ref()
+            {
+                assert_eq!(length_num.value, 10.0);
+            } else {
+                panic!("Expected number literal '10' for array length");
+            }
+
+            // Check initializer expression: should be number 0
+            if let Some(initializer) = &array.initializer {
+                if let ast::Expr::Primary(ast::PrimaryExpr::Number(init_num)) = initializer.as_ref()
+                {
+                    assert_eq!(init_num.value, 0.0);
+                } else {
+                    panic!("Expected number literal '0' for array initializer");
+                }
+            } else {
+                panic!("Expected initializer for first array");
+            }
+        } else {
+            panic!("Expected ArrayOfLength for arr1");
+        }
+    } else {
+        panic!("Expected variable declaration for arr1");
+    }
+
+    // Second array-of-length: arr2 = [2;]; (no initializer)
+    if let ast::Decl::Variable(var_decl) = &program.decls[1] {
+        assert_eq!(var_decl.name.name.as_ref(), "arr2");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ArrayOfLength(array))) =
+            &var_decl.initializer
+        {
+            // Check length expression: should be number 2
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(length_num)) = array.length.as_ref()
+            {
+                assert_eq!(length_num.value, 2.0);
+            } else {
+                panic!("Expected number literal '2' for array length");
+            }
+
+            // Check that there's no initializer (should default to nil)
+            assert!(
+                array.initializer.is_none(),
+                "Expected no initializer for arr2"
+            );
+        } else {
+            panic!("Expected ArrayOfLength for arr2");
+        }
+    } else {
+        panic!("Expected variable declaration for arr2");
     }
 }
 

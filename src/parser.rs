@@ -945,17 +945,58 @@ mod expression_parser {
 
     fn array(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let start_span = parser.get_previous_span();
-        let mut elements = Vec::new();
 
         // Handle empty array case
-        if !parser.check(tokenizer::TokenType::RightSquareBracket) {
-            loop {
-                elements.push(parser.expression()?);
+        if parser.check(tokenizer::TokenType::RightSquareBracket) {
+            parser.advance();
+            let end_span = parser.get_previous_span();
+            let span = ast::SourceSpan::combine(start_span, end_span);
+            return Ok(ast::Expr::Primary(ast::PrimaryExpr::Array(
+                ast::ArrayLiteral {
+                    elements: Vec::new(),
+                    span,
+                },
+            )));
+        }
 
-                if !parser.match_token(tokenizer::TokenType::Comma) {
-                    break;
-                }
-            }
+        // Parse the first expression
+        let first_expr = parser.expression()?;
+
+        // Check if this is array-of-length syntax [length; initializer?]
+        if parser.match_token(tokenizer::TokenType::Semicolon) {
+            // This is array-of-length syntax
+            let length = Box::new(first_expr);
+            let initializer = if parser.check(tokenizer::TokenType::RightSquareBracket) {
+                // No initializer provided, will default to nil
+                None
+            } else {
+                // Parse the initializer expression
+                Some(Box::new(parser.expression()?))
+            };
+
+            parser.consume(
+                tokenizer::TokenType::RightSquareBracket,
+                "Expect ']' after array-of-length syntax.",
+            )?;
+
+            let end_span = parser.get_previous_span();
+            let span = ast::SourceSpan::combine(start_span, end_span);
+
+            return Ok(ast::Expr::Primary(ast::PrimaryExpr::ArrayOfLength(
+                ast::ArrayOfLength {
+                    length,
+                    initializer,
+                    span,
+                },
+            )));
+        }
+
+        // This is regular array literal syntax [elem1, elem2, ...]
+        let mut elements = vec![first_expr];
+
+        // Continue parsing comma-separated elements
+        while parser.match_token(tokenizer::TokenType::Comma) {
+            elements.push(parser.expression()?);
         }
 
         parser.consume(

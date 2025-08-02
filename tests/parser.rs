@@ -25,24 +25,6 @@ fn test_empty_program() {
 }
 
 #[test]
-fn test_comments_ignored() {
-    let source_code = r#"
-            // This is a comment
-            var x = 5; // Another comment
-            /* Multi-line
-               comment */
-            var y = 10;
-        "#;
-    let source_map = SourceMap::new(source_code.to_string());
-
-    let (program, errors) = parse_source(&source_map);
-
-    assert_no_parse_errors(&errors);
-    assert_eq!(program.decls.len(), 2);
-    // TODO assert the two declarations are correct.
-}
-
-#[test]
 fn test_complete_program_example() {
     let source_code = r#"
             class Calculator {

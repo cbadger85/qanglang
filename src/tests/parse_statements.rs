@@ -1032,12 +1032,14 @@ fn test_block_statements() {
 
     if let ast::Decl::Stmt(ast::Stmt::Block(block)) = &program.decls[0] {
         assert_eq!(block.decls.len(), 3);
-        
+
         // First declaration: var x = 1;
         if let ast::Decl::Variable(var_decl) = &block.decls[0] {
             assert_eq!(var_decl.name.name.as_ref(), "x");
             assert!(var_decl.initializer.is_some());
-            if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit))) = &var_decl.initializer {
+            if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit))) =
+                &var_decl.initializer
+            {
                 assert_eq!(num_lit.value, 1.0);
             } else {
                 panic!("Expected number literal '1' in first variable declaration");
@@ -1045,12 +1047,14 @@ fn test_block_statements() {
         } else {
             panic!("Expected first variable declaration");
         }
-        
+
         // Second declaration: var y = 2;
         if let ast::Decl::Variable(var_decl) = &block.decls[1] {
             assert_eq!(var_decl.name.name.as_ref(), "y");
             assert!(var_decl.initializer.is_some());
-            if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit))) = &var_decl.initializer {
+            if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit))) =
+                &var_decl.initializer
+            {
                 assert_eq!(num_lit.value, 2.0);
             } else {
                 panic!("Expected number literal '2' in second variable declaration");
@@ -1058,23 +1062,27 @@ fn test_block_statements() {
         } else {
             panic!("Expected second variable declaration");
         }
-        
+
         // Third declaration: x + y; (expression statement)
         if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &block.decls[2] {
             // Verify the expression: x + y
             if let ast::Expr::Term(term_expr) = &expr_stmt.expr {
                 // Left side should be identifier 'x'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) = term_expr.left.as_ref() {
+                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
+                    term_expr.left.as_ref()
+                {
                     assert_eq!(left_id.name.as_ref(), "x");
                 } else {
                     panic!("Expected identifier 'x' on left side of addition");
                 }
-                
+
                 // Operator should be Add
                 assert_eq!(term_expr.operator, ast::TermOperator::Add);
-                
+
                 // Right side should be identifier 'y'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) = term_expr.right.as_ref() {
+                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) =
+                    term_expr.right.as_ref()
+                {
                     assert_eq!(right_id.name.as_ref(), "y");
                 } else {
                     panic!("Expected identifier 'y' on right side of addition");
@@ -1108,12 +1116,14 @@ fn test_expression_statements() {
     if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
         if let ast::Expr::Call(call_expr) = &expr_stmt.expr {
             // Verify the callee is 'someFunction'
-            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) = call_expr.callee.as_ref() {
+            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
+                call_expr.callee.as_ref()
+            {
                 assert_eq!(func_id.name.as_ref(), "someFunction");
             } else {
                 panic!("Expected identifier 'someFunction' as callee");
             }
-            
+
             // Verify it's a function call with no arguments
             if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
                 assert_eq!(args.len(), 0);
@@ -1126,26 +1136,28 @@ fn test_expression_statements() {
     } else {
         panic!("Expected first expression statement");
     }
-    
+
     // Second expression statement: obj.method();
     if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[1] {
         if let ast::Expr::Call(call_expr) = &expr_stmt.expr {
             // Verify it's a chained call: obj.method()
             if let ast::Expr::Call(inner_call) = call_expr.callee.as_ref() {
                 // Verify the base object is 'obj'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) = inner_call.callee.as_ref() {
+                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
+                    inner_call.callee.as_ref()
+                {
                     assert_eq!(obj_id.name.as_ref(), "obj");
                 } else {
                     panic!("Expected identifier 'obj' as base object");
                 }
-                
+
                 // Verify property access to 'method'
                 if let ast::CallOperation::Property(method_id) = inner_call.operation.as_ref() {
                     assert_eq!(method_id.name.as_ref(), "method");
                 } else {
                     panic!("Expected property access to 'method'");
                 }
-                
+
                 // Verify the final call has no arguments
                 if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
                     assert_eq!(args.len(), 0);
@@ -1161,22 +1173,26 @@ fn test_expression_statements() {
     } else {
         panic!("Expected second expression statement");
     }
-    
+
     // Third expression statement: x + y;
     if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[2] {
         if let ast::Expr::Term(term_expr) = &expr_stmt.expr {
             // Left side should be identifier 'x'
-            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) = term_expr.left.as_ref() {
+            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
+                term_expr.left.as_ref()
+            {
                 assert_eq!(left_id.name.as_ref(), "x");
             } else {
                 panic!("Expected identifier 'x' on left side of addition");
             }
-            
+
             // Operator should be Add
             assert_eq!(term_expr.operator, ast::TermOperator::Add);
-            
+
             // Right side should be identifier 'y'
-            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) = term_expr.right.as_ref() {
+            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) =
+                term_expr.right.as_ref()
+            {
                 assert_eq!(right_id.name.as_ref(), "y");
             } else {
                 panic!("Expected identifier 'y' on right side of addition");
@@ -1186,5 +1202,29 @@ fn test_expression_statements() {
         }
     } else {
         panic!("Expected third expression statement");
+    }
+}
+
+#[test]
+fn test_comments_ignored() {
+    let source_code = r#"
+            // This is a comment
+            var x = 5; // Another comment
+            /* Multi-line
+               comment */
+            var y = 10;
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 2);
+
+    for decl in program.decls {
+        match decl {
+            ast::Decl::Variable(_) => (),
+            _ => panic!("Expected variable statement."),
+        }
     }
 }

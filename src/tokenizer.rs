@@ -343,9 +343,7 @@ impl<'a> Tokenizer<'a> {
         }
 
         self.advance(); // Consume closing quote 
-        let token = self.make_token(TokenType::String, start);
-
-        token
+        self.make_token(TokenType::String, start)
     }
 
     /// Advances cursor without treating characters as line breaks (for use in strings)

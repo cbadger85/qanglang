@@ -185,11 +185,10 @@ impl<'a> Parser<'a> {
     fn is_lambda_start(&mut self) -> bool {
         if let Some(token) = self.tokens.peek() {
             if token.token_type == TokenType::RightParen {
-                return self
-                    .tokens
+                self.tokens
                     .peek_ahead(1)
                     .map(|t| t.token_type == TokenType::Arrow)
-                    .unwrap_or(false);
+                    .unwrap_or(false)
             } else {
                 let mut offset = 1;
                 while self
@@ -200,11 +199,10 @@ impl<'a> Parser<'a> {
                 {
                     offset += 1;
                 }
-                return self
-                    .tokens
+                self.tokens
                     .peek_ahead(offset + 1)
                     .map(|t| t.token_type == TokenType::Arrow)
-                    .unwrap_or(false);
+                    .unwrap_or(false)
             }
         } else {
             false

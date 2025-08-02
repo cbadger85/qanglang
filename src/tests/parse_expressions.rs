@@ -14,9 +14,90 @@ fn test_object_declaration() {
     "#;
     let source_map = SourceMap::new(source_code.to_string());
 
-    let (_program, errors) = parse_source(&source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 4);
+
+    // First object: empty_obj = :{}
+    if let ast::Decl::Variable(var_decl) = &program.decls[0] {
+        assert_eq!(var_decl.name.name.as_ref(), "empty_obj");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) = &var_decl.initializer {
+            assert_eq!(object.entries.len(), 0);
+        } else {
+            panic!("Expected empty object literal");
+        }
+    } else {
+        panic!("Expected variable declaration for empty_obj");
+    }
+
+    // Second object: basic_obj = :{ field_1 = 1, field_2 = 2 }
+    if let ast::Decl::Variable(var_decl) = &program.decls[1] {
+        assert_eq!(var_decl.name.name.as_ref(), "basic_obj");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) = &var_decl.initializer {
+            assert_eq!(object.entries.len(), 2);
+
+            // First entry: field_1 = 1
+            assert_eq!(object.entries[0].key.name.as_ref(), "field_1");
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = object.entries[0].value.as_ref() {
+                assert_eq!(num.value, 1.0);
+            } else {
+                panic!("Expected number literal '1' for field_1");
+            }
+
+            // Second entry: field_2 = 2
+            assert_eq!(object.entries[1].key.name.as_ref(), "field_2");
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = object.entries[1].value.as_ref() {
+                assert_eq!(num.value, 2.0);
+            } else {
+                panic!("Expected number literal '2' for field_2");
+            }
+        } else {
+            panic!("Expected object literal for basic_obj");
+        }
+    } else {
+        panic!("Expected variable declaration for basic_obj");
+    }
+
+    // Third declaration: other_field = "other value"
+    if let ast::Decl::Variable(var_decl) = &program.decls[2] {
+        assert_eq!(var_decl.name.name.as_ref(), "other_field");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::String(str_lit))) = &var_decl.initializer {
+            assert_eq!(str_lit.value.as_ref(), "other value");
+        } else {
+            panic!("Expected string literal for other_field");
+        }
+    } else {
+        panic!("Expected variable declaration for other_field");
+    }
+
+    // Fourth object: obj = :{ field = "value", other_field }
+    if let ast::Decl::Variable(var_decl) = &program.decls[3] {
+        assert_eq!(var_decl.name.name.as_ref(), "obj");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) = &var_decl.initializer {
+            assert_eq!(object.entries.len(), 2);
+
+            // First entry: field = "value"
+            assert_eq!(object.entries[0].key.name.as_ref(), "field");
+            if let ast::Expr::Primary(ast::PrimaryExpr::String(str_lit)) = object.entries[0].value.as_ref() {
+                assert_eq!(str_lit.value.as_ref(), "value");
+            } else {
+                panic!("Expected string literal '\"value\"' for field");
+            }
+
+            // Second entry: other_field (shorthand)
+            assert_eq!(object.entries[1].key.name.as_ref(), "other_field");
+            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(id)) = object.entries[1].value.as_ref() {
+                assert_eq!(id.name.as_ref(), "other_field");
+            } else {
+                panic!("Expected identifier 'other_field' for shorthand property");
+            }
+        } else {
+            panic!("Expected object literal for obj");
+        }
+    } else {
+        panic!("Expected variable declaration for obj");
+    }
 }
 
 #[test]
@@ -31,9 +112,78 @@ fn test_object_declaration_with_trailing_comma() {
     "#;
     let source_map = SourceMap::new(source_code.to_string());
 
-    let (_program, errors) = parse_source(&source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 3);
+
+    // First object: basic_obj = :{ field_1 = 1, field_2 = 2, }
+    if let ast::Decl::Variable(var_decl) = &program.decls[0] {
+        assert_eq!(var_decl.name.name.as_ref(), "basic_obj");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) = &var_decl.initializer {
+            assert_eq!(object.entries.len(), 2);
+
+            // First entry: field_1 = 1
+            assert_eq!(object.entries[0].key.name.as_ref(), "field_1");
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = object.entries[0].value.as_ref() {
+                assert_eq!(num.value, 1.0);
+            } else {
+                panic!("Expected number literal '1' for field_1");
+            }
+
+            // Second entry: field_2 = 2
+            assert_eq!(object.entries[1].key.name.as_ref(), "field_2");
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = object.entries[1].value.as_ref() {
+                assert_eq!(num.value, 2.0);
+            } else {
+                panic!("Expected number literal '2' for field_2");
+            }
+        } else {
+            panic!("Expected object literal for basic_obj");
+        }
+    } else {
+        panic!("Expected variable declaration for basic_obj");
+    }
+
+    // Second declaration: other_field = "other value"
+    if let ast::Decl::Variable(var_decl) = &program.decls[1] {
+        assert_eq!(var_decl.name.name.as_ref(), "other_field");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::String(str_lit))) = &var_decl.initializer {
+            assert_eq!(str_lit.value.as_ref(), "other value");
+        } else {
+            panic!("Expected string literal for other_field");
+        }
+    } else {
+        panic!("Expected variable declaration for other_field");
+    }
+
+    // Third object: shorthand_obj = :{ field = "value", other_field, }
+    if let ast::Decl::Variable(var_decl) = &program.decls[2] {
+        assert_eq!(var_decl.name.name.as_ref(), "shorthand_obj");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) = &var_decl.initializer {
+            assert_eq!(object.entries.len(), 2);
+
+            // First entry: field = "value"
+            assert_eq!(object.entries[0].key.name.as_ref(), "field");
+            if let ast::Expr::Primary(ast::PrimaryExpr::String(str_lit)) = object.entries[0].value.as_ref() {
+                assert_eq!(str_lit.value.as_ref(), "value");
+            } else {
+                panic!("Expected string literal '\"value\"' for field");
+            }
+
+            // Second entry: other_field (shorthand with trailing comma)
+            assert_eq!(object.entries[1].key.name.as_ref(), "other_field");
+            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(id)) = object.entries[1].value.as_ref() {
+                assert_eq!(id.name.as_ref(), "other_field");
+            } else {
+                panic!("Expected identifier 'other_field' for shorthand property");
+            }
+        } else {
+            panic!("Expected object literal for shorthand_obj");
+        }
+    } else {
+        panic!("Expected variable declaration for shorthand_obj");
+    }
 }
 
 #[test]

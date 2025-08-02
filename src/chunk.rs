@@ -1,4 +1,5 @@
 use crate::{
+    HeapObjectValue, ObjectHeap,
     ast::{self, SourceSpan},
     heap::ObjectHandle,
 };
@@ -11,9 +12,34 @@ pub enum Value {
     String(ObjectHandle),
 }
 
+impl Value {
+    pub fn print(&self, heap: &ObjectHeap) {
+        match self {
+            Value::Nil => print!("nil"),
+            Value::Number(number) => print!("{}", number),
+            Value::String(handle) => {
+                if let Some(object) = heap.get(*handle) {
+                    if let HeapObjectValue::String(str) = &object.value {
+                        print!("\"{}\"", str);
+                        return;
+                    }
+                }
+                print!("nil")
+            }
+            Value::Boolean(boolean) => print!("{}", boolean),
+        }
+    }
+}
+
 impl From<f64> for Value {
     fn from(num: f64) -> Self {
         Value::Number(num)
+    }
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Self::Nil
     }
 }
 
@@ -118,7 +144,7 @@ impl From<OpCode> for u8 {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Chunk {
-    code: Vec<OpCode>,
+    code: Vec<u8>,
     spans: Vec<SourceSpan>,
     constants: Vec<Value>,
 }
@@ -133,16 +159,32 @@ impl Chunk {
     }
 
     pub fn write(&mut self, byte: u8, span: SourceSpan) {
-        self.write_opcode(byte.into(), span);
+        self.code.push(byte);
+        self.spans.push(span);
     }
 
     pub fn write_opcode(&mut self, opcode: OpCode, span: SourceSpan) {
-        self.code.push(opcode);
-        self.spans.push(span);
+        self.write(opcode as u8, span);
     }
 
     pub fn add_constant(&mut self, value: Value) -> usize {
         self.constants.push(value);
         self.constants.len() - 1
+    }
+
+    pub fn count(&self) -> usize {
+        self.code.len()
+    }
+
+    pub fn code(&self) -> &[u8] {
+        &self.code
+    }
+
+    pub fn constants(&self) -> &[Value] {
+        &self.constants
+    }
+
+    pub fn spans(&self) -> &[SourceSpan] {
+        &self.spans
     }
 }

@@ -1,4 +1,4 @@
-use crate::{ErrorReporter, tokenizer::Token};
+use crate::{ErrorReporter, SourceMap, tokenizer::Token};
 
 /// Represents a position in the source code for error reporting and debugging
 #[derive(Debug, Clone, PartialEq, Default, Copy)]
@@ -24,6 +24,10 @@ impl SourceSpan {
             start: start.start,
             end: end.end,
         }
+    }
+
+    pub fn print(&self, source_map: &SourceMap) {
+        print!("{:04} ", source_map.get_line_number(self.start),);
     }
 }
 

@@ -56,6 +56,11 @@ where
     }
 }
 
+pub struct CompilerArtifact {
+    pub chunk: Chunk,
+    pub heap: ObjectHeap,
+}
+
 pub struct Compiler<'a> {
     source_map: &'a SourceMap,
     current_chunk: Chunk,
@@ -102,7 +107,7 @@ impl<'a> Compiler<'a> {
         self
     }
 
-    pub fn compile(mut self) -> QangResult<Chunk> {
+    pub fn compile(mut self) -> QangResult<CompilerArtifact> {
         let mut parser = Parser::new(self.source_map);
         let mut program = parser.parse();
         let mut errors = parser.into_reporter();
@@ -121,7 +126,17 @@ impl<'a> Compiler<'a> {
         if errors.has_errors() {
             Err(errors.into_errors())
         } else {
-            Ok(self.current_chunk)
+            self.emit_opcode(
+                OpCode::Return,
+                SourceSpan::new(
+                    self.source_map.get_source().len(),
+                    self.source_map.get_source().len(),
+                ),
+            );
+            Ok(CompilerArtifact {
+                chunk: self.current_chunk,
+                heap: self.heap,
+            })
         }
     }
 

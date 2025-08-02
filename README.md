@@ -227,13 +227,25 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>primary</td>
       <td>=</td>
-      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral</td>
+      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral | objectLiteral</td>
       <td>;</td>
     </tr>
     <tr>
       <td>arrayLiteral</td>
       <td>=</td>
       <td>"[" ( expression ( "," expression )* ","? )? "]" | "[" expression ";" expression? "]"</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>objectLiteral</td>
+      <td>=</td>
+      <td>":{" ( objectField ( "," objectField )* ","? )? "}"</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>objectField</td>
+      <td>=</td>
+      <td>IDENTIFIER ( "=" expression )?</td>
       <td>;</td>
     </tr>
   </tbody>

@@ -169,3 +169,27 @@ fn test_missing_parentheses_in_for() {
 
     assert_parse_error(&errors, "Expect '(' after 'for'");
 }
+
+#[test]
+fn test_unterminated_array() {
+    let source = r#"var array = [1, 2, 3"#;
+    let source_map = SourceMap::new(source.to_string());
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_parse_error(
+        &errors,
+        "Syntax Error at line 1, column 1: Expect ']' after array elements.",
+    );
+}
+
+#[test]
+fn test_unterminated_with_trailing_comma() {
+    let source = r#"var array = [1, 2, 3,"#;
+    let source_map = SourceMap::new(source.to_string());
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_parse_error(
+        &errors,
+        "Syntax Error at line 1, column 1: Expected expression.",
+    );
+}

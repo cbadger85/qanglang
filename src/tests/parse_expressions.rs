@@ -4,14 +4,31 @@ use crate::{SourceMap, ast};
 #[test]
 #[ignore]
 fn test_object_declaration() {
-    // TODO support this syntax for creating an anonymous class
     let source_code = r#"
+       var other_field = "other value";
         var obj = :{
-            field = "value";
-            other_field;
+            field = "value",
+            other_field
         };
 
         var empty_obj = :{};
+    "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+#[ignore]
+fn test_object_declaration_with_trailing_comma() {
+    let source_code = r#"
+       var other_field = "other value";
+        var obj = :{
+            field = "value",
+            other_field,
+        };
     "#;
     let source_map = SourceMap::new(source_code.to_string());
 
@@ -653,6 +670,75 @@ fn test_function_calls() {
 }
 
 #[test]
+fn test_function_calls_with_trailing_comma() {
+    let source_code = r#"
+            result2 = func(a, b, c,);
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 1);
+
+    // Second call: result2 = func(a, b, c,);
+    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
+        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+            // Target should be identifier 'result2'
+            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                assert_eq!(target_id.name.as_ref(), "result2");
+            } else {
+                panic!("Expected identifier target 'result2'");
+            }
+
+            // Value should be function call func(a, b, c,)
+            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                // Callee should be identifier 'func'
+                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
+                    call_expr.callee.as_ref()
+                {
+                    assert_eq!(func_id.name.as_ref(), "func");
+                } else {
+                    panic!("Expected identifier 'func'");
+                }
+
+                // Operation should be call with 3 arguments
+                if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                    assert_eq!(args.len(), 3);
+
+                    // First argument should be 'a'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(a_id)) = &args[0] {
+                        assert_eq!(a_id.name.as_ref(), "a");
+                    } else {
+                        panic!("Expected identifier 'a' as first argument");
+                    }
+
+                    // Second argument should be 'b'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(b_id)) = &args[1] {
+                        assert_eq!(b_id.name.as_ref(), "b");
+                    } else {
+                        panic!("Expected identifier 'b' as second argument");
+                    }
+
+                    // Third argument should be 'c'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(c_id)) = &args[2] {
+                        assert_eq!(c_id.name.as_ref(), "c");
+                    } else {
+                        panic!("Expected identifier 'c' as third argument");
+                    }
+                } else {
+                    panic!("Expected call operation");
+                }
+            } else {
+                panic!("Expected call expression");
+            }
+        } else {
+            panic!("Expected assignment expression");
+        }
+    }
+}
+
+#[test]
 fn test_property_access() {
     let source_code = r#"
             value = obj.property;
@@ -1159,6 +1245,55 @@ fn test_array_literals() {
                 // Expected nil
             } else {
                 panic!("Expected nil literal");
+            }
+        } else {
+            panic!("Expected array literal");
+        }
+    }
+}
+
+#[test]
+fn test_array_literals_with_trailing_commas() {
+    let source_code = r#"numbers = [1, 2, 3, 4,];"#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 1);
+
+    // Second array: numbers = [1, 2, 3, 4,];
+    if let ast::Decl::Variable(var_decl) = &program.decls[0] {
+        assert_eq!(var_decl.name.name.as_ref(), "numbers");
+        if let Some(ast::Expr::Primary(ast::PrimaryExpr::Array(array))) = &var_decl.initializer {
+            assert_eq!(array.elements.len(), 4);
+
+            // First element should be number 1
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num1)) = &array.elements[0] {
+                assert_eq!(num1.value, 1.0);
+            } else {
+                panic!("Expected number literal '1'");
+            }
+
+            // Second element should be number 2
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num2)) = &array.elements[1] {
+                assert_eq!(num2.value, 2.0);
+            } else {
+                panic!("Expected number literal '2'");
+            }
+
+            // Third element should be number 3
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num3)) = &array.elements[2] {
+                assert_eq!(num3.value, 3.0);
+            } else {
+                panic!("Expected number literal '3'");
+            }
+
+            // Fourth element should be number 4
+            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num4)) = &array.elements[3] {
+                assert_eq!(num4.value, 4.0);
+            } else {
+                panic!("Expected number literal '4'");
             }
         } else {
             panic!("Expected array literal");

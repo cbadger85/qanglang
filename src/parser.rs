@@ -183,7 +183,6 @@ impl<'a> Parser<'a> {
     }
 
     fn is_lambda_start(&mut self) -> bool {
-        // Case 1: () ->
         if let Some(token) = self.tokens.peek() {
             if token.token_type == TokenType::RightParen {
                 return self
@@ -191,36 +190,24 @@ impl<'a> Parser<'a> {
                     .peek_ahead(1)
                     .map(|t| t.token_type == TokenType::Arrow)
                     .unwrap_or(false);
+            } else {
+                let mut offset = 1;
+                while self
+                    .tokens
+                    .peek_ahead(offset)
+                    .map(|t| t.token_type != TokenType::RightParen)
+                    .unwrap_or(false)
+                {
+                    offset += 1;
+                }
+                return self
+                    .tokens
+                    .peek_ahead(offset + 1)
+                    .map(|t| t.token_type == TokenType::Arrow)
+                    .unwrap_or(false);
             }
-        }
-
-        // Case 2: (id) -> or (id, id, ...) ->
-        let mut offset = 0;
-        let mut expecting_identifier = true;
-
-        loop {
-            match self.tokens.peek_ahead(offset) {
-                Some(token) => match token.token_type {
-                    TokenType::Identifier if expecting_identifier => {
-                        expecting_identifier = false;
-                        offset += 1;
-                    }
-                    TokenType::Comma if !expecting_identifier => {
-                        expecting_identifier = true;
-                        offset += 1;
-                    }
-                    TokenType::RightParen if !expecting_identifier => {
-                        // Found valid param list, check for arrow
-                        return self
-                            .tokens
-                            .peek_ahead(offset + 1)
-                            .map(|t| t.token_type == TokenType::Arrow)
-                            .unwrap_or(false);
-                    }
-                    _ => return false, // Invalid pattern
-                },
-                None => return false, // Hit EOF
-            }
+        } else {
+            false
         }
     }
 
@@ -671,22 +658,7 @@ impl<'a> Parser<'a> {
     fn lambda_expression(&mut self) -> ParseResult<ast::LambdaExpr> {
         let start_span = self.get_current_span();
 
-        // We should be at '('
-        self.consume(TokenType::LeftParen, "Expect '(' at start of lambda.")?;
-
-        let mut parameters = Vec::new();
-        if !self.check(TokenType::RightParen) {
-            loop {
-                self.consume(TokenType::Identifier, "Expect parameter name.")?;
-                parameters.push(self.get_identifier()?);
-
-                if !self.match_token(TokenType::Comma) {
-                    break;
-                }
-            }
-        }
-
-        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+        let parameters = self.argument_parameters()?;
         self.consume(TokenType::Arrow, "Expect '->' after lambda parameters.")?;
 
         let body = if self.check(TokenType::LeftBrace) {
@@ -764,15 +736,23 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::LeftParen, "Expect '(' before parameters.")?;
 
         let mut parameters = Vec::new();
-        if !self.check(TokenType::RightParen) {
-            loop {
-                self.consume(TokenType::Identifier, "Expect parameter name.")?;
-                parameters.push(self.get_identifier()?);
 
-                if !self.match_token(TokenType::Comma) {
-                    break;
-                }
+        if self.match_token(TokenType::RightParen) {
+            return Ok(parameters);
+        }
+        println!("current_token {:?}", self.current_token);
+
+        self.advance();
+        parameters.push(self.get_identifier()?);
+
+        println!("current_token {:?}", self.current_token);
+
+        while self.match_token(TokenType::Comma) {
+            if self.check(TokenType::RightParen) {
+                break;
             }
+            self.advance();
+            parameters.push(self.get_identifier()?);
         }
 
         self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
@@ -995,9 +975,17 @@ mod expression_parser {
         let mut elements = vec![first_expr];
 
         // Continue parsing comma-separated elements
-        while parser.match_token(tokenizer::TokenType::Comma) {
+        while parser.match_token(tokenizer::TokenType::Comma)
+            && parser
+                .current_token
+                .as_ref()
+                .map(|t| t.token_type != TokenType::RightSquareBracket)
+                .unwrap_or(false)
+        {
             elements.push(parser.expression()?);
         }
+
+        let _ = parser.match_token(TokenType::Comma);
 
         parser.consume(
             tokenizer::TokenType::RightSquareBracket,
@@ -1249,9 +1237,17 @@ mod expression_parser {
 
         arguments.push(parser.expression()?);
 
-        while parser.match_token(tokenizer::TokenType::Comma) {
+        while parser.match_token(tokenizer::TokenType::Comma)
+            && parser
+                .current_token
+                .as_ref()
+                .map(|t| t.token_type != TokenType::RightParen)
+                .unwrap_or(false)
+        {
             arguments.push(parser.expression()?);
         }
+
+        let _ = parser.match_token(TokenType::Comma);
 
         Ok(arguments)
     }

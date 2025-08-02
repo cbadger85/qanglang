@@ -762,7 +762,7 @@ impl<'a> Parser<'a> {
 
 mod expression_parser {
     use super::*;
-    use crate::{ast, tokenizer};
+    use crate::tokenizer;
 
     #[derive(Debug, PartialEq, PartialOrd)]
     #[repr(u8)]
@@ -996,6 +996,64 @@ mod expression_parser {
 
         Ok(ast::Expr::Primary(ast::PrimaryExpr::Array(
             ast::ArrayLiteral { elements, span },
+        )))
+    }
+
+    fn object(parser: &mut Parser) -> ParseResult<ast::Expr> {
+        let start_span = parser.get_previous_span();
+        let mut entries: Vec<ast::ObjectEntry> = Vec::new();
+
+        // Handle empty array case
+        if parser.check(tokenizer::TokenType::RightBrace) {
+            parser.advance();
+            let end_span = parser.get_previous_span();
+            let span = ast::SourceSpan::combine(start_span, end_span);
+            return Ok(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(
+                ast::ObjectLiteral { entries, span },
+            )));
+        }
+
+        while !parser.check(tokenizer::TokenType::RightBrace) && !parser.is_at_end() {
+            let key = parser.get_identifier()?;
+            let key_span = key.span;
+            parser.advance();
+
+            if parser.match_token(tokenizer::TokenType::Equals) {
+                let value = parser.expression()?;
+                let value_span = value.span();
+                entries.push(ast::ObjectEntry {
+                    key,
+                    value: Box::new(value),
+                    span: SourceSpan::combine(key_span, value_span),
+                });
+
+                if !parser.match_token(tokenizer::TokenType::Comma) {
+                    break;
+                }
+            } else {
+                if parser.match_token(tokenizer::TokenType::Comma)
+                    || parser.check(tokenizer::TokenType::RightBrace)
+                {
+                    let value = ast::Expr::Primary(ast::PrimaryExpr::Identifier(key.clone()));
+                    entries.push(ast::ObjectEntry {
+                        key,
+                        value: Box::new(value),
+                        span: key_span,
+                    });
+                } else {
+                    break;
+                }
+            }
+        }
+
+        parser.consume(tokenizer::TokenType::RightBrace, "Expected '}'.")?;
+        let end_span = parser.get_previous_span();
+
+        Ok(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(
+            ast::ObjectLiteral {
+                entries,
+                span: SourceSpan::combine(start_span, end_span),
+            },
         )))
     }
 
@@ -1418,6 +1476,11 @@ mod expression_parser {
                 prefix: None,
                 infix: Some(call),
                 precedence: Precedence::Call,
+            },
+            tokenizer::TokenType::ColonBrace => ParseRule {
+                prefix: Some(object),
+                infix: None,
+                precedence: Precedence::None,
             },
             _ => ParseRule {
                 prefix: None,

@@ -519,6 +519,7 @@ pub enum PrimaryExpr {
     Lambda(Box<LambdaExpr>),
     Array(ArrayLiteral),
     ArrayOfLength(ArrayOfLength),
+    ObjectLiteral(ObjectLiteral),
 }
 
 impl PrimaryExpr {
@@ -535,6 +536,7 @@ impl PrimaryExpr {
             PrimaryExpr::Lambda(lambda) => lambda.span,
             PrimaryExpr::Array(array) => array.span,
             PrimaryExpr::ArrayOfLength(array) => array.span,
+            PrimaryExpr::ObjectLiteral(object) => object.span,
         }
     }
 }
@@ -609,6 +611,19 @@ pub struct GroupingExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrayLiteral {
     pub elements: Vec<Expr>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectLiteral {
+    pub entries: Vec<ObjectEntry>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectEntry {
+    pub key: Identifier,
+    pub value: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -1130,6 +1145,7 @@ pub trait AstVisitor {
             PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda, errors),
             PrimaryExpr::Array(array) => self.visit_array_literal(array, errors),
             PrimaryExpr::ArrayOfLength(array) => self.visit_array_of_length(array, errors),
+            PrimaryExpr::ObjectLiteral(object) => self.visit_object_literal(object, errors),
         }
     }
 
@@ -1217,6 +1233,29 @@ pub trait AstVisitor {
         if let Some(initializer) = &array.initializer {
             self.visit_expression(initializer, errors)?;
         }
+        Ok(())
+    }
+
+    fn visit_object_literal(
+        &mut self,
+        object: &ObjectLiteral,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        for entry in &object.entries {
+            self.visit_object_entry(entry, errors)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_object_entry(
+        &mut self,
+        entry: &ObjectEntry,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(&entry.key, errors)?;
+        self.visit_expression(&entry.value, errors)?;
+
         Ok(())
     }
 }
@@ -1527,22 +1566,35 @@ pub trait AstTransformer {
     }
 
     fn transform_statement_to_single(&mut self, stmt: Stmt) -> Stmt {
+        let start_span = stmt.span();
         match self.transform_statement(stmt) {
             StatementResult::Keep(stmt) => *stmt,
             StatementResult::Replace(stmts) => {
                 // Wrap multiple statements in a block
+                let decls: Vec<Decl> = stmts.into_iter().map(Decl::Stmt).collect();
+                let end_span = decls.last().map(|d| d.span()).unwrap_or(start_span);
+
                 Stmt::Block(BlockStmt {
-                    decls: stmts.into_iter().map(Decl::Stmt).collect(),
-                    span: SourceSpan::default(), // You might want better span handling
+                    decls,
+                    span: SourceSpan::combine(start_span, end_span),
                 })
             }
-            StatementResult::Remove => {
-                // Return empty block for removed statements
-                Stmt::Block(BlockStmt {
-                    decls: Vec::new(),
-                    span: SourceSpan::default(),
-                })
-            }
+            StatementResult::Remove => Stmt::Block(BlockStmt {
+                decls: Vec::new(),
+                span: start_span,
+            }),
+        }
+    }
+
+    fn transform_object_entry(&mut self, entry: ObjectEntry) -> ObjectEntry {
+        let key = self.transform_identifier(entry.key);
+        let value = self.transform_expression(*entry.value);
+        let span = SourceSpan::combine(key.span, value.span());
+
+        ObjectEntry {
+            span,
+            key,
+            value: Box::new(value),
         }
     }
 
@@ -1707,8 +1759,20 @@ pub trait AstTransformer {
             PrimaryExpr::ArrayOfLength(array) => {
                 Expr::Primary(PrimaryExpr::ArrayOfLength(ArrayOfLength {
                     length: Box::new(self.transform_expression(*array.length)),
-                    initializer: array.initializer.map(|init| Box::new(self.transform_expression(*init))),
+                    initializer: array
+                        .initializer
+                        .map(|init| Box::new(self.transform_expression(*init))),
                     span: array.span,
+                }))
+            }
+            PrimaryExpr::ObjectLiteral(object) => {
+                let mut transformed_entries = Vec::new();
+                for entry in object.entries {
+                    transformed_entries.push(self.transform_object_entry(entry))
+                }
+                Expr::Primary(PrimaryExpr::ObjectLiteral(ObjectLiteral {
+                    entries: transformed_entries,
+                    span: object.span,
                 }))
             }
         }

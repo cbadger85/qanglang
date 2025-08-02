@@ -2,9 +2,9 @@ use super::{assert_no_parse_errors, parse_source};
 use crate::{SourceMap, ast};
 
 #[test]
-#[ignore]
 fn test_object_declaration() {
     let source_code = r#"
+    var basic_obj = :{ field_1 = 1, field_2 = 2 };
        var other_field = "other value";
         var obj = :{
             field = "value",
@@ -21,11 +21,11 @@ fn test_object_declaration() {
 }
 
 #[test]
-#[ignore]
 fn test_object_declaration_with_trailing_comma() {
     let source_code = r#"
-       var other_field = "other value";
-        var obj = :{
+        var basic_obj = :{ field_1 = 1, field_2 = 2, };
+        var other_field = "other value";
+        var shorthand_obj = :{
             field = "value",
             other_field,
         };

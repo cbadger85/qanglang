@@ -35,7 +35,6 @@ pub enum TokenType {
     Identifier,         // any identifier that is not covered by the other types
     String,             // any string literal
     Number,             // any number literal
-    Comment,            // // or /*/
     And,                // and
     Class,              // class
     Else,               // else
@@ -400,19 +399,16 @@ impl<'a> Tokenizer<'a> {
 
     /// Creates a single line comment token.
     fn single_line_comment(&mut self) -> Option<Token> {
-        let start = self.location - 2;
-
         while self.peek_char() != '\n' && !self.is_at_end() {
             self.advance();
         }
 
-        self.make_token(TokenType::Comment, start)
+        // Continue to next token after consuming comment
+        self.next_token()
     }
 
     /// Creates a multi-line comment token.
     fn multi_line_comment(&mut self) -> Option<Token> {
-        let start = self.location - 2;
-
         while !self.is_at_end() {
             if self.peek_char() == '*' && self.peek_next_char() == '/' {
                 self.advance(); // consume *
@@ -429,7 +425,8 @@ impl<'a> Tokenizer<'a> {
             return self.error_token("Unterminated comment.");
         }
 
-        self.make_token(TokenType::Comment, start)
+        // Continue to next token after consuming comment
+        self.next_token()
     }
 }
 

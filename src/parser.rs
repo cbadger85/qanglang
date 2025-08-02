@@ -41,10 +41,6 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            if token.token_type == TokenType::Comment {
-                continue;
-            }
-
             self.current_token = Some(token);
             break;
         }

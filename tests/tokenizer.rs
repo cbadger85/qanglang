@@ -179,8 +179,6 @@ fn test_comments() {
         TokenType::Equals,
         TokenType::Number,
         TokenType::Semicolon,
-        TokenType::Comment,
-        TokenType::Comment,
         TokenType::Identifier,
         TokenType::Equals,
         TokenType::Number,
@@ -194,7 +192,6 @@ fn test_comments() {
         TokenType::Var,
         TokenType::Identifier,
         TokenType::Equals,
-        TokenType::Comment,
         TokenType::Number,
         TokenType::Semicolon,
         TokenType::Eof,
@@ -674,7 +671,6 @@ fn test_nested_unterminated_constructs() {
         tokens2[0].error_message.as_ref().unwrap(),
         "Unterminated string."
     );
-    assert_eq!(tokens2[1].token_type, TokenType::Comment);
 
     let source_map3 = &SourceMap::new("/* unterminated with // inside".to_string());
     let tokens3 = tokenize_all(source_map3);
@@ -954,56 +950,6 @@ fn test_keyword_lexeme_token_contentt() {
         let lexeme: String = tokens[0].lexeme(source_map).iter().collect();
         assert_eq!(lexeme, keyword_str);
     }
-}
-
-#[test]
-fn test_comment_token_content() {
-    let source_map1 = &SourceMap::new("// this is a comment".to_string());
-    let tokens1 = tokenize_all(source_map1);
-    assert_eq!(tokens1[0].token_type, TokenType::Comment);
-    let lexeme1: String = tokens1[0].lexeme(source_map1).iter().collect();
-    assert_eq!(lexeme1, "// this is a comment");
-
-    let source_map2 = &SourceMap::new("//".to_string());
-    let tokens2 = tokenize_all(source_map2);
-    assert_eq!(tokens2[0].token_type, TokenType::Comment);
-    let lexeme2: String = tokens2[0].lexeme(source_map2).iter().collect();
-    assert_eq!(lexeme2, "//");
-
-    let source_map3 = &SourceMap::new("// TODO: fix this @#$%^&*()".to_string());
-    let tokens3 = tokenize_all(source_map3);
-    assert_eq!(tokens3[0].token_type, TokenType::Comment);
-    let lexeme3: String = tokens3[0].lexeme(source_map3).iter().collect();
-    assert_eq!(lexeme3, "// TODO: fix this @#$%^&*()");
-
-    let source_map4 = &SourceMap::new("/* multi-line comment */".to_string());
-    let tokens4 = tokenize_all(source_map4);
-    assert_eq!(tokens4[0].token_type, TokenType::Comment);
-    let lexeme4: String = tokens4[0].lexeme(source_map4).iter().collect();
-    assert_eq!(lexeme4, "/* multi-line comment */");
-
-    let source_map5 = &SourceMap::new("/**/".to_string());
-    let tokens5 = tokenize_all(source_map5);
-    assert_eq!(tokens5[0].token_type, TokenType::Comment);
-    let lexeme5: String = tokens5[0].lexeme(source_map5).iter().collect();
-    assert_eq!(lexeme5, "/**/");
-
-    let source_map6 = &SourceMap::new(
-        "/* line 1\n   line 2\n   // nested comment syntax\n   line 3 */".to_string(),
-    );
-    let tokens6 = tokenize_all(source_map6);
-    assert_eq!(tokens6[0].token_type, TokenType::Comment);
-    let lexeme6: String = tokens6[0].lexeme(source_map6).iter().collect();
-    assert_eq!(
-        lexeme6,
-        "/* line 1\n   line 2\n   // nested comment syntax\n   line 3 */"
-    );
-
-    let source_map7 = &SourceMap::new("/* comment with * asterisks * inside */".to_string());
-    let tokens7 = tokenize_all(source_map7);
-    assert_eq!(tokens7[0].token_type, TokenType::Comment);
-    let lexeme7: String = tokens7[0].lexeme(source_map7).iter().collect();
-    assert_eq!(lexeme7, "/* comment with * asterisks * inside */");
 }
 
 #[test]

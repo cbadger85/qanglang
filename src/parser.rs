@@ -740,7 +740,6 @@ impl<'a> Parser<'a> {
         if self.match_token(TokenType::RightParen) {
             return Ok(parameters);
         }
-        println!("current_token {:?}", self.current_token);
 
         self.advance();
         parameters.push(self.get_identifier()?);
@@ -1160,7 +1159,7 @@ mod expression_parser {
                 ast::CallOperation::Property(property)
             }
             tokenizer::TokenType::LeftSquareBracket => {
-                let index = parse(parser, Precedence::None)?;
+                let index = parser.expression()?;
                 parser.consume(
                     tokenizer::TokenType::RightSquareBracket,
                     "Expect ']' after array index.",
@@ -1191,7 +1190,7 @@ mod expression_parser {
                     }
                     TokenType::LeftSquareBracket => {
                         parser.advance();
-                        let index = parse(parser, Precedence::None)?;
+                        let index = parser.expression()?;
                         parser.consume(
                             tokenizer::TokenType::RightSquareBracket,
                             "Expect ']' after array index.",

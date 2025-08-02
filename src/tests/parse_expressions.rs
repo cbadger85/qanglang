@@ -4,14 +4,13 @@ use crate::{SourceMap, ast};
 #[test]
 fn test_object_declaration() {
     let source_code = r#"
-    var basic_obj = :{ field_1 = 1, field_2 = 2 };
-       var other_field = "other value";
+        var empty_obj = :{};
+        var basic_obj = :{ field_1 = 1, field_2 = 2 };
+        var other_field = "other value";
         var obj = :{
             field = "value",
             other_field
         };
-
-        var empty_obj = :{};
     "#;
     let source_map = SourceMap::new(source_code.to_string());
 

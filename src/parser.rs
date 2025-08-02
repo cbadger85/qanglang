@@ -1014,9 +1014,9 @@ mod expression_parser {
         }
 
         while !parser.check(tokenizer::TokenType::RightBrace) && !parser.is_at_end() {
+            parser.advance();
             let key = parser.get_identifier()?;
             let key_span = key.span;
-            parser.advance();
 
             if parser.match_token(tokenizer::TokenType::Equals) {
                 let value = parser.expression()?;

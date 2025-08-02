@@ -65,7 +65,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>parameters</td>
       <td>=</td>
-      <td>IDENTIFIER ( "," IDENTIFIER )*</td>
+      <td>IDENTIFIER ( "," IDENTIFIER )* ","?</td>
       <td>;</td>
     </tr>
     <tr>
@@ -221,7 +221,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>arguments</td>
       <td>=</td>
-      <td>expression ( "," expression )*</td>
+      <td>expression ( "," expression )* ","?</td>
       <td>;</td>
     </tr>
     <tr>
@@ -233,7 +233,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>arrayLiteral</td>
       <td>=</td>
-      <td>"[" ( expression ( "," expression )* )? "]" | "[" expression ";" expression? "]"</td>
+      <td>"[" ( expression ( "," expression )* ","? )? "]" | "[" expression ";" expression? "]"</td>
       <td>;</td>
     </tr>
   </tbody>

@@ -103,24 +103,20 @@ impl CompilerArtifact {
     }
 }
 
-pub struct Compiler {
+pub struct CompilerPipeline {
     source_map: Rc<SourceMap>,
-    current_chunk: Chunk,
     transformers: Vec<Box<dyn TransformerMiddleware>>,
     analyzers: Vec<Box<dyn AnalysisMiddleware>>,
     is_silent: bool,
-    heap: ObjectHeap,
 }
 
-impl Compiler {
+impl CompilerPipeline {
     pub fn new(source_map: SourceMap) -> Self {
         Self {
             source_map: Rc::new(source_map),
-            current_chunk: Chunk::new(),
             transformers: Vec::new(),
             analyzers: Vec::new(),
             is_silent: false,
-            heap: ObjectHeap::new(),
         }
     }
 
@@ -149,7 +145,7 @@ impl Compiler {
         self
     }
 
-    pub fn compile(mut self) -> QangResult<CompilerArtifact> {
+    pub fn run(mut self) -> QangResult<CompilerArtifact> {
         let mut parser = Parser::new(self.source_map.clone());
         let mut program = parser.parse();
         let mut errors = parser.into_reporter();
@@ -162,6 +158,32 @@ impl Compiler {
             program = transformer.as_mut().run(program);
         }
 
+        Compiler::new(self.source_map.clone(), self.is_silent).compile(program, errors)
+    }
+}
+
+pub struct Compiler {
+    source_map: Rc<SourceMap>,
+    current_chunk: Chunk,
+    is_silent: bool,
+    heap: ObjectHeap,
+}
+
+impl Compiler {
+    pub fn new(source_map: Rc<SourceMap>, is_silent: bool) -> Self {
+        Self {
+            source_map,
+            current_chunk: Chunk::new(),
+            is_silent,
+            heap: ObjectHeap::new(),
+        }
+    }
+
+    pub fn compile(
+        mut self,
+        program: ast::Program,
+        mut errors: ErrorReporter,
+    ) -> QangResult<CompilerArtifact> {
         self.visit_program(&program, &mut errors)
             .map_err(|err| QangErrors(vec![err]))?;
 

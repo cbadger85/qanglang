@@ -1,4 +1,4 @@
-use crate::{Compiler, SourceMap, Vm, debug::disassemble_chunk, error::pretty_print_error};
+use crate::{CompilerPipeline, SourceMap, Vm, debug::disassemble_chunk, error::pretty_print_error};
 use std::rc::Rc;
 
 #[test]
@@ -8,7 +8,7 @@ fn test_display() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         disassemble_chunk(&artifact, &source_map, "script.ql");
     } else {
         panic!("Compiler errors.")
@@ -22,7 +22,7 @@ fn test_run() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok((value, updated_artifact)) => {
                 value.print(&updated_artifact.heap);
@@ -43,7 +43,7 @@ fn math_operations() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok((value, updated_artifact)) => {
                 value.print(&updated_artifact.heap);
@@ -64,7 +64,7 @@ fn test_runtime_error_with_source_span() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
@@ -88,7 +88,7 @@ fn test_booleans() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok((value, updated_artifact)) => {
                 value.print(&updated_artifact.heap);
@@ -109,7 +109,7 @@ fn test_type_error_with_source_span_for_left_operand() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok(_) => {
                 panic!("Expected runtime error for adding number and string")
@@ -132,7 +132,7 @@ fn test_type_error_with_source_span_for_right_operand() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok(_) => {
                 panic!("Expected runtime error for adding string and boolean")
@@ -155,7 +155,7 @@ fn test_targeted_type_error_spans() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok(_) => {
                 panic!("Expected runtime error for adding number and string")
@@ -182,7 +182,7 @@ fn test_left_operand_error_span() {
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
-    if let Ok(artifact) = Compiler::new((*source_map).clone()).compile() {
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
             Ok(_) => {
                 panic!("Expected runtime error for adding boolean and number")

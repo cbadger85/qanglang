@@ -10,7 +10,7 @@ mod tokenizer;
 mod vm;
 
 pub use chunk::{Chunk, OpCode, Value};
-pub use compiler::Compiler;
+pub use compiler::CompilerPipeline;
 pub use error::{ErrorReporter, QangError, QangErrors, QangResult};
 pub use heap::{HeapObject, HeapObjectValue, ObjectHeap};
 pub use parser::Parser;

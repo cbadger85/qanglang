@@ -22,11 +22,9 @@ fn test_run() {
     let source_map = SourceMap::new(source.to_string());
 
     if let Ok(artifact) = Compiler::new(&source_map).compile() {
-        // disassemble_chunk(&artifact, &source_map, "script.ql");
-        let heap_clone = artifact.heap.clone();
         match Vm::new(&source_map).interpret(artifact) {
-            Ok(value) => {
-                value.print(&heap_clone);
+            Ok((value, updated_artifact)) => {
+                value.print(&updated_artifact.heap);
             }
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -45,10 +43,9 @@ fn math_operations() {
     let source_map = SourceMap::new(source.to_string());
 
     if let Ok(artifact) = Compiler::new(&source_map).compile() {
-        let heap_clone = artifact.heap.clone();
         match Vm::new(&source_map).interpret(artifact) {
-            Ok(value) => {
-                value.print(&heap_clone);
+            Ok((value, updated_artifact)) => {
+                value.print(&updated_artifact.heap);
             }
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))

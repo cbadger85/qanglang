@@ -24,11 +24,15 @@ impl<'a> Vm<'a> {
         }
     }
 
-    pub fn interpret(&mut self, artifact: CompilerArtifact) -> RuntimeResult<Value> {
-        Ok(self.run(artifact)?.clone())
+    pub fn interpret(
+        &mut self,
+        artifact: CompilerArtifact,
+    ) -> RuntimeResult<(Value, CompilerArtifact)> {
+        let result = self.run(artifact)?;
+        Ok(result)
     }
 
-    fn run(&mut self, mut artifact: CompilerArtifact) -> RuntimeResult<Value> {
+    fn run(&mut self, mut artifact: CompilerArtifact) -> RuntimeResult<(Value, CompilerArtifact)> {
         loop {
             let opcode: OpCode = self.read_byte(&artifact.chunk)?.into();
 
@@ -49,50 +53,50 @@ impl<'a> Vm<'a> {
                     }
                 }
                 OpCode::Add => {
-                    self.debug(&artifact);
-
-                    self.binary_operation(&artifact.chunk, |a, b| match (a, b) {
-                        (Value::Number(num1), Value::Number(num2)) => {
-                            Ok(Value::Number(num1 + num2))
-                        }
-                        (Value::String(handle1), Value::String(handle2)) => {
-                            let str1 = artifact
-                                .heap
-                                .get(handle1)
-                                .and_then(|h| match &h.value {
-                                    HeapObjectValue::String(str) => Some(str),
-                                    _ => None,
-                                })
-                                .ok_or(QangError::runtime_error(
-                                    "Expected string.",
+                    self.binary_operation(
+                        &mut artifact.chunk,
+                        &mut artifact.heap,
+                        |a, b, heap| match (a, b) {
+                            (Value::Number(num1), Value::Number(num2)) => {
+                                Ok(Value::Number(num1 + num2))
+                            }
+                            (Value::String(handle1), Value::String(handle2)) => {
+                                let str1 = heap
+                                    .get(handle1)
+                                    .and_then(|h| match &h.value {
+                                        HeapObjectValue::String(str) => Some(str),
+                                        _ => None,
+                                    })
+                                    .ok_or(QangError::runtime_error(
+                                        "Expected string.",
+                                        SourceSpan::default(),
+                                    ))?;
+                                let str2 = heap
+                                    .get(handle2)
+                                    .and_then(|h| match &h.value {
+                                        HeapObjectValue::String(str) => Some(str),
+                                        _ => None,
+                                    })
+                                    .ok_or(QangError::runtime_error(
+                                        "Expected string.",
+                                        SourceSpan::default(),
+                                    ))?;
+                                let result = heap
+                                    .intern_string(format!("{}{}", str1, str2).into_boxed_str());
+                                Ok(Value::String(result))
+                            }
+                            _ => {
+                                return Err(QangError::runtime_error(
+                                    "Both operands must be numbers or strings.",
                                     SourceSpan::default(),
-                                ))?;
-                            let str2 = artifact
-                                .heap
-                                .get(handle2)
-                                .and_then(|h| match &h.value {
-                                    HeapObjectValue::String(str) => Some(str),
-                                    _ => None,
-                                })
-                                .ok_or(QangError::runtime_error(
-                                    "Expected string.",
-                                    SourceSpan::default(),
-                                ))?;
-                            let result = artifact
-                                .heap
-                                .intern_string(format!("{}{}", str1, str2).into_boxed_str());
-                            Ok(Value::String(result))
-                        }
-                        _ => {
-                            return Err(QangError::runtime_error(
-                                "Both operands must be numbers or numbers.",
-                                SourceSpan::default(),
-                            ));
-                        }
-                    })?;
+                                ));
+                            }
+                        },
+                    )?;
                 }
                 OpCode::Return => {
-                    return Ok(self.pop(&artifact.chunk)?);
+                    let value = self.pop(&artifact.chunk)?;
+                    return Ok((value, artifact));
                 }
                 _ => (),
             }
@@ -145,18 +149,20 @@ impl<'a> Vm<'a> {
         &self.stack[self.stack_top - 1 - distance]
     }
 
-    fn binary_operation<F>(&mut self, chunk: &Chunk, op: F) -> RuntimeResult<()>
+    fn binary_operation<F>(
+        &mut self,
+        chunk: &Chunk,
+        heap: &mut ObjectHeap,
+        op: F,
+    ) -> RuntimeResult<()>
     where
-        F: FnOnce(Value, Value) -> RuntimeResult<Value>,
+        F: FnOnce(Value, Value, &mut ObjectHeap) -> RuntimeResult<Value>,
     {
-        println!("test 1");
         let b = self.pop(chunk)?;
-        println!("test 2");
         let a = self.pop(chunk)?;
 
-        let value = op(a, b)?;
+        let value = op(a, b, heap)?;
 
-        println!("test 3");
         self.push(value);
         Ok(())
     }

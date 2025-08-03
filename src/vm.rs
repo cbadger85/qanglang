@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, Value,
     ast::SourceSpan,
@@ -20,18 +22,16 @@ const fn get_value_type(value: &Value) -> &'static str {
 
 pub struct Vm {
     is_debug: bool,
-    pub ip: usize,
-    pub stack_top: usize,
-    pub stack: [Value; STACK_MAX],
+    ip: usize,
+    stack_top: usize,
+    stack: [Value; STACK_MAX],
+    globals: HashMap<usize, Value>,
 }
 
 impl Vm {
     pub fn new() -> Self {
         Self {
-            is_debug: false,
-            ip: 0,
-            stack_top: 0,
-            stack: std::array::from_fn(|_| Value::default()),
+            ..Default::default()
         }
     }
 
@@ -231,9 +231,7 @@ impl Vm {
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
                     let value = self.pop(&mut artifact)?;
-                    artifact
-                        .globals
-                        .insert(identifier_handle.identifier(), value);
+                    self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
                     let span = self.get_previous_span(&artifact);
@@ -241,7 +239,7 @@ impl Vm {
                         .pop(&mut artifact)?
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
-                    let value = *artifact
+                    let value = *self
                         .globals
                         .get(&identifier_handle.identifier())
                         .ok_or_else(|| {
@@ -266,10 +264,7 @@ impl Vm {
                         .pop(&mut artifact)?
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
-                    if !artifact
-                        .globals
-                        .contains_key(&identifier_handle.identifier())
-                    {
+                    if !self.globals.contains_key(&identifier_handle.identifier()) {
                         let identifier_name = artifact
                             .heap
                             .get(identifier_handle)
@@ -284,9 +279,7 @@ impl Vm {
                         ));
                     }
                     let value = self.peek(0);
-                    artifact
-                        .globals
-                        .insert(identifier_handle.identifier(), value);
+                    self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::Print => {
                     let value = self.peek(0);
@@ -385,6 +378,7 @@ impl Default for Vm {
             ip: 0,
             stack_top: 0,
             stack: std::array::from_fn(|_| Value::default()),
+            globals: HashMap::new(),
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
@@ -58,9 +58,9 @@ where
     }
 }
 
-struct Local {
-    name: ObjectHandle,
-    depth: Option<usize>,
+pub struct Local {
+    pub name: ObjectHandle,
+    pub depth: Option<usize>,
 }
 
 pub const STACK_MAX: usize = 256;
@@ -69,23 +69,21 @@ pub struct CompilerArtifact {
     pub source_map: Rc<SourceMap>,
     pub chunk: Chunk,
     pub heap: ObjectHeap,
-    pub globals: HashMap<usize, Value>,
     pub locals: [Option<Local>; STACK_MAX],
-    local_count: usize,
-    scope_depth: usize,
 }
 
 impl CompilerArtifact {
-    pub fn new(source_map: Rc<SourceMap>, chunk: Chunk, heap: ObjectHeap) -> Self {
+    pub fn new(
+        source_map: Rc<SourceMap>,
+        chunk: Chunk,
+        heap: ObjectHeap,
+        locals: [Option<Local>; STACK_MAX],
+    ) -> Self {
         Self {
             source_map,
             chunk,
             heap,
-
-            globals: HashMap::new(),
-            locals: std::array::from_fn(|_| None),
-            local_count: 0,
-            scope_depth: 0,
+            locals,
         }
     }
 }
@@ -154,6 +152,9 @@ pub struct Compiler {
     current_chunk: Chunk,
     is_silent: bool,
     heap: ObjectHeap,
+    locals: [Option<Local>; STACK_MAX],
+    local_count: usize,
+    scope_depth: usize,
 }
 
 impl Compiler {
@@ -163,6 +164,9 @@ impl Compiler {
             current_chunk: Chunk::new(),
             is_silent,
             heap: ObjectHeap::new(),
+            locals: std::array::from_fn(|_| None),
+            local_count: 0,
+            scope_depth: 0,
         }
     }
 
@@ -184,6 +188,7 @@ impl Compiler {
                 self.source_map,
                 self.current_chunk,
                 self.heap,
+                self.locals,
             ))
         }
     }
@@ -223,13 +228,13 @@ impl Compiler {
         }
     }
 
-    // fn begin_scope(&mut self) {
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
 
-    // }
-
-    // fn end_scop(&mut self) {
-
-    // }
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+    }
 }
 
 impl AstVisitor for Compiler {

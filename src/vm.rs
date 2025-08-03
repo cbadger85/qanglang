@@ -1,11 +1,9 @@
 use crate::{
-    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, SourceMap, Value, ast::SourceSpan,
+    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, Value, ast::SourceSpan,
     compiler::CompilerArtifact, debug::disassemble_instruction,
 };
 
 pub type RuntimeResult<T> = Result<T, QangError>;
-
-const STACK_MAX: usize = 256;
 
 pub struct Vm;
 
@@ -54,20 +52,18 @@ impl Vm {
                                     HeapObjectValue::String(str) => Some(str),
                                     _ => None,
                                 })
-                                .ok_or_else(|| QangError::runtime_error(
-                                    "Expected string.",
-                                    span,
-                                ))?;
+                                .ok_or_else(|| {
+                                    QangError::runtime_error("Expected string.", span)
+                                })?;
                             let str2 = heap
                                 .get(handle2)
                                 .and_then(|h| match &h.value {
                                     HeapObjectValue::String(str) => Some(str),
                                     _ => None,
                                 })
-                                .ok_or_else(|| QangError::runtime_error(
-                                    "Expected string.",
-                                    span,
-                                ))?;
+                                .ok_or_else(|| {
+                                    QangError::runtime_error("Expected string.", span)
+                                })?;
                             let result =
                                 heap.intern_string(format!("{}{}", str1, str2).into_boxed_str());
                             Ok(Value::String(result))

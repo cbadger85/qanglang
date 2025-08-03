@@ -15,11 +15,18 @@ const fn get_value_type(value: &Value) -> &'static str {
 }
 
 #[derive(Default)]
-pub struct Vm;
+pub struct Vm {
+    is_debug: bool,
+}
 
 impl Vm {
     pub fn new() -> Self {
-        Self
+        Self { is_debug: false }
+    }
+
+    pub fn set_debug(mut self, is_debug: bool) -> Self {
+        self.is_debug = is_debug;
+        self
     }
 
     pub fn interpret(
@@ -32,6 +39,9 @@ impl Vm {
 
     fn run(&mut self, mut artifact: CompilerArtifact) -> RuntimeResult<(Value, CompilerArtifact)> {
         loop {
+            if self.is_debug {
+                self.debug(&artifact);
+            }
             let opcode: OpCode = self.read_byte(&mut artifact)?.into();
 
             match opcode {
@@ -137,10 +147,48 @@ impl Vm {
 
                     Ok((a % b).into())
                 })?,
-                OpCode::Equal => {
-                    let a = self.pop(&mut artifact)?;
-                    let b = self.pop(&mut artifact)?;
-                    self.push(&mut artifact, Value::Boolean(a.eq(&b)));
+                OpCode::Equal => self.binary_operation(&mut artifact, |a, b, _heap, _span| {
+                    Ok(Value::Boolean(a == b))
+                })?,
+                OpCode::Greater => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                    let a: f64 = a.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    let b: f64 = b.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    Ok(Value::Boolean(a > b))
+                })?,
+                OpCode::GreaterEqual => {
+                    self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                        let a: f64 = a.try_into().map_err(|_| {
+                            QangError::runtime_error("Both operands must be a number.", span)
+                        })?;
+                        let b: f64 = b.try_into().map_err(|_| {
+                            QangError::runtime_error("Both operands must be a number.", span)
+                        })?;
+                        Ok(Value::Boolean(a >= b))
+                    })?
+                }
+                OpCode::Less => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                    let a: f64 = a.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    let b: f64 = b.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    Ok(Value::Boolean(a < b))
+                })?,
+                OpCode::LessEqual => {
+                    self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                        let a: f64 = a.try_into().map_err(|_| {
+                            QangError::runtime_error("Both operands must be a number.", span)
+                        })?;
+                        let b: f64 = b.try_into().map_err(|_| {
+                            QangError::runtime_error("Both operands must be a number.", span)
+                        })?;
+                        Ok(Value::Boolean(a <= b))
+                    })?
                 }
                 OpCode::Return => {
                     let value = self.pop(&mut artifact)?;

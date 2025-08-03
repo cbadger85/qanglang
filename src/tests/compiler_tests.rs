@@ -60,13 +60,35 @@ fn math_operations_test() {
 #[test]
 fn equality_operations_test() {
     let source = r#"
-        "true" != "!true";
+        "true" != "true";
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         disassemble_chunk(&artifact, &source_map, "script.ql");
         match Vm::new().interpret(artifact) {
+            Ok((value, updated_artifact)) => {
+                value.print(&updated_artifact.heap);
+            }
+            Err(error) => {
+                panic!("{}", pretty_print_error(source_map.clone(), &error))
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn comparison_operations_test() {
+    let source = r#"
+        10 >= 9;
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
+        disassemble_chunk(&artifact, &source_map, "script.ql");
+        match Vm::new().set_debug(true).interpret(artifact) {
             Ok((value, updated_artifact)) => {
                 value.print(&updated_artifact.heap);
             }

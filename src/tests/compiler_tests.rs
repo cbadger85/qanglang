@@ -9,7 +9,7 @@ fn test_display() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(&artifact, &source_map, "script.ql");
+        disassemble_chunk(&artifact, "script.ql");
     } else {
         panic!("Compiler errors.")
     }
@@ -66,7 +66,7 @@ fn equality_operations_test() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(&artifact, &source_map, "script.ql");
+        disassemble_chunk(&artifact, "script.ql");
         match Vm::new().interpret(artifact) {
             Ok(_) => (),
             Err(error) => {
@@ -86,7 +86,7 @@ fn comparison_operations_test() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(&artifact, &source_map, "script.ql");
+        disassemble_chunk(&artifact, "script.ql");
         match Vm::new().set_debug(true).interpret(artifact) {
             Ok(_) => (),
             Err(error) => {

@@ -4,7 +4,7 @@ use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
     ast::{self, AstTransformer, AstVisitor, PrimaryExpr, SourceSpan},
     chunk::{Chunk, OpCode},
-    heap::ObjectHeap,
+    heap::{ObjectHandle, ObjectHeap},
     parser::Parser,
 };
 
@@ -58,16 +58,21 @@ where
     }
 }
 
-const STACK_MAX: usize = 256;
+struct Local {
+    name: ObjectHandle,
+    depth: Option<usize>,
+}
+
+pub const STACK_MAX: usize = 256;
 
 pub struct CompilerArtifact {
     pub source_map: Rc<SourceMap>,
     pub chunk: Chunk,
     pub heap: ObjectHeap,
-    pub ip: usize,
-    pub stack_top: usize,
-    pub stack: [Value; STACK_MAX],
     pub globals: HashMap<usize, Value>,
+    pub locals: [Option<Local>; STACK_MAX],
+    local_count: usize,
+    scope_depth: usize,
 }
 
 impl CompilerArtifact {
@@ -76,32 +81,12 @@ impl CompilerArtifact {
             source_map,
             chunk,
             heap,
-            ip: 0,
-            stack_top: 0,
-            stack: std::array::from_fn(|_| Value::default()),
+
             globals: HashMap::new(),
+            locals: std::array::from_fn(|_| None),
+            local_count: 0,
+            scope_depth: 0,
         }
-    }
-
-    pub fn get_current_span(&self) -> SourceSpan {
-        self.get_span_at(self.ip)
-    }
-
-    pub fn get_previous_span(&self) -> SourceSpan {
-        if self.ip > 0 {
-            self.get_span_at(self.ip - 1)
-        } else {
-            SourceSpan::default()
-        }
-    }
-
-    pub fn get_span_at(&self, index: usize) -> SourceSpan {
-        self.chunk.spans().get(index).copied().unwrap_or_else(|| {
-            SourceSpan::new(
-                self.source_map.get_source().len(),
-                self.source_map.get_source().len(),
-            )
-        })
     }
 }
 
@@ -237,6 +222,14 @@ impl Compiler {
             index as u8
         }
     }
+
+    // fn begin_scope(&mut self) {
+
+    // }
+
+    // fn end_scop(&mut self) {
+
+    // }
 }
 
 impl AstVisitor for Compiler {

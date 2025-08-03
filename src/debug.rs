@@ -1,29 +1,29 @@
-use crate::{OpCode, SourceMap, compiler::CompilerArtifact};
+use crate::{OpCode, compiler::CompilerArtifact};
 
 #[allow(dead_code)]
-pub fn disassemble_chunk(artifact: &CompilerArtifact, source_map: &SourceMap, name: &str) {
+pub fn disassemble_chunk(artifact: &CompilerArtifact, name: &str) {
     println!("== {} ==", name);
 
     let mut offset = 0;
     while offset < artifact.chunk.count() {
-        offset = disassemble_instruction(artifact, offset, source_map);
+        offset = disassemble_instruction(artifact, offset);
     }
 }
 
-pub fn disassemble_instruction(
-    artifact: &CompilerArtifact,
-    offset: usize,
-    source_map: &SourceMap,
-) -> usize {
+pub fn disassemble_instruction(artifact: &CompilerArtifact, offset: usize) -> usize {
     print!("{:04} ", offset);
 
     if offset > 0
-        && source_map.get_line_number(artifact.chunk.spans()[offset].end)
-            == source_map.get_line_number(artifact.chunk.spans()[offset - 1].start)
+        && artifact
+            .source_map
+            .get_line_number(artifact.chunk.spans()[offset].end)
+            == artifact
+                .source_map
+                .get_line_number(artifact.chunk.spans()[offset - 1].start)
     {
         print!("   | ");
     } else {
-        artifact.chunk.spans()[offset].print(source_map);
+        artifact.chunk.spans()[offset].print(&artifact.source_map);
     }
 
     let instruction = artifact.chunk.code()[offset];

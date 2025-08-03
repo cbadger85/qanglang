@@ -1,6 +1,9 @@
 use crate::{
-    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, Value, ast::SourceSpan,
-    compiler::CompilerArtifact, debug::disassemble_instruction, error::ValueConversionError,
+    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, Value,
+    ast::SourceSpan,
+    compiler::{CompilerArtifact, STACK_MAX},
+    debug::disassemble_instruction,
+    error::ValueConversionError,
     heap::ObjectHandle,
 };
 
@@ -15,19 +18,52 @@ const fn get_value_type(value: &Value) -> &'static str {
     }
 }
 
-#[derive(Default)]
 pub struct Vm {
     is_debug: bool,
+    pub ip: usize,
+    pub stack_top: usize,
+    pub stack: [Value; STACK_MAX],
 }
 
 impl Vm {
     pub fn new() -> Self {
-        Self { is_debug: false }
+        Self {
+            is_debug: false,
+            ip: 0,
+            stack_top: 0,
+            stack: std::array::from_fn(|_| Value::default()),
+        }
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
         self.is_debug = is_debug;
         self
+    }
+
+    fn get_current_span(&self, artifact: &CompilerArtifact) -> SourceSpan {
+        self.get_span_at(artifact, self.ip)
+    }
+
+    fn get_previous_span(&self, artifact: &CompilerArtifact) -> SourceSpan {
+        if self.ip > 0 {
+            self.get_span_at(artifact, self.ip - 1)
+        } else {
+            SourceSpan::default()
+        }
+    }
+
+    fn get_span_at(&self, artifact: &CompilerArtifact, index: usize) -> SourceSpan {
+        artifact
+            .chunk
+            .spans()
+            .get(index)
+            .copied()
+            .unwrap_or_else(|| {
+                SourceSpan::new(
+                    artifact.source_map.get_source().len(),
+                    artifact.source_map.get_source().len(),
+                )
+            })
     }
 
     pub fn interpret(&mut self, artifact: CompilerArtifact) -> RuntimeResult<CompilerArtifact> {
@@ -46,30 +82,30 @@ impl Vm {
                 OpCode::Constant => {
                     let constant_index = self.read_byte(&mut artifact)? as usize;
                     let constant = self.read_constant(constant_index, &artifact.chunk);
-                    self.push(&mut artifact, constant);
+                    self.push(constant);
                 }
                 OpCode::Negate => {
-                    if let Value::Number(number) = self.peek(&mut artifact, 0) {
-                        artifact.stack[artifact.stack_top - 1] = Value::Number(-number);
+                    if let Value::Number(number) = self.peek(0) {
+                        self.stack[self.stack_top - 1] = Value::Number(-number);
                     } else {
                         return Err(QangError::runtime_error(
                             "Operand must be a number.",
-                            artifact.get_previous_span(),
+                            self.get_previous_span(&artifact),
                         ));
                     }
                 }
                 OpCode::Not => {
-                    let value = self.peek(&mut artifact, 0);
-                    artifact.stack[artifact.stack_top - 1] = Value::Boolean(!self.is_truthy(value));
+                    let value = self.peek(0);
+                    self.stack[self.stack_top - 1] = Value::Boolean(!self.is_truthy(value));
                 }
                 OpCode::True => {
-                    self.push(&mut artifact, Value::Boolean(true));
+                    self.push(Value::Boolean(true));
                 }
                 OpCode::False => {
-                    self.push(&mut artifact, Value::Boolean(false));
+                    self.push(Value::Boolean(false));
                 }
                 OpCode::Nil => {
-                    self.push(&mut artifact, Value::Nil);
+                    self.push(Value::Nil);
                 }
                 OpCode::Add => {
                     self.binary_operation(&mut artifact, |a, b, heap, span| match (&a, &b) {
@@ -189,7 +225,7 @@ impl Vm {
                     })?
                 }
                 OpCode::DefineGlobal => {
-                    let span = artifact.get_previous_span();
+                    let span = self.get_previous_span(&artifact);
                     let identifier_handle: ObjectHandle = self
                         .pop(&mut artifact)?
                         .try_into()
@@ -200,7 +236,7 @@ impl Vm {
                         .insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
-                    let span = artifact.get_previous_span();
+                    let span = self.get_previous_span(&artifact);
                     let identifier_handle: ObjectHandle = self
                         .pop(&mut artifact)?
                         .try_into()
@@ -222,10 +258,10 @@ impl Vm {
                                 span,
                             )
                         })?;
-                    self.push(&mut artifact, value);
+                    self.push(value);
                 }
                 OpCode::SetGlobal => {
-                    let span = artifact.get_previous_span();
+                    let span = self.get_previous_span(&artifact);
                     let identifier_handle: ObjectHandle = self
                         .pop(&mut artifact)?
                         .try_into()
@@ -247,13 +283,13 @@ impl Vm {
                             span,
                         ));
                     }
-                    let value = *self.peek(&mut artifact, 0);
+                    let value = self.peek(0);
                     artifact
                         .globals
                         .insert(identifier_handle.identifier(), value);
                 }
                 OpCode::Print => {
-                    let value = *self.peek(&mut artifact, 0);
+                    let value = self.peek(0);
                     value.print(&artifact.heap);
                     println!();
                 }
@@ -266,7 +302,7 @@ impl Vm {
     }
 
     fn read_byte(&mut self, artifact: &mut CompilerArtifact) -> RuntimeResult<u8> {
-        if artifact.ip >= artifact.chunk.count() {
+        if self.ip >= artifact.chunk.count() {
             return Err(QangError::runtime_error(
                 "Instruction pointer out of bounds.",
                 SourceSpan::new(
@@ -276,8 +312,8 @@ impl Vm {
             ));
         }
 
-        let byte = artifact.chunk.code()[artifact.ip];
-        artifact.ip += 1;
+        let byte = artifact.chunk.code()[self.ip];
+        self.ip += 1;
         Ok(byte)
     }
 
@@ -285,45 +321,45 @@ impl Vm {
         *chunk.constants().get(index).unwrap_or(&Value::Nil)
     }
 
-    fn push(&mut self, artifact: &mut CompilerArtifact, value: Value) {
-        artifact.stack[artifact.stack_top] = value;
-        artifact.stack_top += 1;
+    fn push(&mut self, value: Value) {
+        self.stack[self.stack_top] = value;
+        self.stack_top += 1;
     }
 
     fn pop(&mut self, artifact: &mut CompilerArtifact) -> RuntimeResult<Value> {
-        if artifact.stack_top > 0 {
-            artifact.stack_top -= 1;
-            let value = std::mem::take(&mut artifact.stack[artifact.stack_top]);
+        if self.stack_top > 0 {
+            self.stack_top -= 1;
+            let value = std::mem::take(&mut self.stack[self.stack_top]);
             Ok(value)
         } else {
             Err(QangError::runtime_error(
                 "No value found, unexpected empty stack.",
-                artifact.get_current_span(),
+                self.get_current_span(artifact),
             ))
         }
     }
 
-    fn peek<'a>(&self, artifact: &'a mut CompilerArtifact, distance: usize) -> &'a Value {
-        &artifact.stack[artifact.stack_top - 1 - distance]
+    fn peek(&self, distance: usize) -> Value {
+        self.stack[self.stack_top - 1 - distance]
     }
 
     fn binary_operation<F>(&mut self, artifact: &mut CompilerArtifact, op: F) -> RuntimeResult<()>
     where
         F: FnOnce(Value, Value, &mut ObjectHeap, SourceSpan) -> RuntimeResult<Value>,
     {
-        let op_span = artifact.get_previous_span();
+        let op_span = self.get_previous_span(artifact);
         let b = self.pop(artifact)?;
         let a = self.pop(artifact)?;
 
         let value = op(a, b, &mut artifact.heap, op_span)?;
 
-        self.push(artifact, value);
+        self.push(value);
         Ok(())
     }
 
-    fn is_truthy(&self, value: &Value) -> bool {
+    fn is_truthy(&self, value: Value) -> bool {
         match value {
-            Value::Boolean(boolean) => *boolean,
+            Value::Boolean(boolean) => boolean,
             Value::Nil => false,
             _ => true,
         }
@@ -332,12 +368,23 @@ impl Vm {
     #[allow(dead_code)]
     fn debug(&self, artifact: &CompilerArtifact) {
         print!("          ");
-        for i in 0..artifact.stack_top {
-            artifact.stack[i].print(&artifact.heap);
+        for i in 0..self.stack_top {
+            self.stack[i].print(&artifact.heap);
             print!(" ");
         }
         println!();
 
-        disassemble_instruction(artifact, artifact.ip, &artifact.source_map);
+        disassemble_instruction(artifact, self.ip);
+    }
+}
+
+impl Default for Vm {
+    fn default() -> Self {
+        Self {
+            is_debug: false,
+            ip: 0,
+            stack_top: 0,
+            stack: std::array::from_fn(|_| Value::default()),
+        }
     }
 }

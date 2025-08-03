@@ -112,6 +112,12 @@ impl CompilerArtifact {
             self.get_previous_span()
         }
     }
+
+    pub fn get_binary_operand_spans(&self) -> (SourceSpan, SourceSpan) {
+        let right_span = self.get_span_for_stack_value(0);
+        let left_span = self.get_span_for_stack_value(1);
+        (left_span, right_span)
+    }
 }
 
 pub struct Compiler<'a> {
@@ -276,8 +282,20 @@ impl<'a> AstVisitor for Compiler<'a> {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.visit_expression(&comparison.left, errors)?;
-        self.emit_opcode(comparison.operator.into(), comparison.span);
         self.visit_expression(&comparison.right, errors)?;
+        self.emit_opcode(comparison.operator.into(), comparison.span);
+        Ok(())
+    }
+
+    fn visit_equality_expression(
+        &mut self,
+        equality: &ast::EqualityExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        // TODO
+        // self.visit_expression(&equality.left, errors)?;
+        // self.visit_expression(&equality.right, errors)?;
+        // self.emit_opcode(equality.operator.into(), equality.span);
         Ok(())
     }
 
@@ -298,8 +316,8 @@ impl<'a> AstVisitor for Compiler<'a> {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.visit_expression(&factor.left, errors)?;
-        self.emit_opcode(factor.operator.into(), factor.span);
         self.visit_expression(&factor.right, errors)?;
+        self.emit_opcode(factor.operator.into(), factor.span);
         Ok(())
     }
 

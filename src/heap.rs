@@ -13,6 +13,21 @@ pub enum HeapObjectValue {
     String(Box<str>),
 }
 
+pub const fn get_object_value_type(value: &HeapObjectValue) -> &'static str {
+    match value {
+        HeapObjectValue::String(_) => "string",
+    }
+}
+
+impl Into<Box<str>> for HeapObjectValue {
+    fn into(self) -> Box<str> {
+        match self {
+            HeapObjectValue::String(string) => string,
+            _ => panic!("Expected string, found {}.", get_object_value_type(&self)),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
     objects: Vec<Option<HeapObject>>,

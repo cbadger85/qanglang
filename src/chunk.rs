@@ -1,8 +1,17 @@
 use crate::{
-    HeapObjectValue, ObjectHeap,
+    HeapObjectValue, ObjectHeap, QangError,
     ast::{self, SourceSpan},
     heap::ObjectHandle,
 };
+
+pub const fn get_value_type(value: &Value) -> &'static str {
+    match value {
+        Value::Nil => "nil",
+        Value::Boolean(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -29,11 +38,52 @@ impl Value {
             Value::Boolean(boolean) => print!("{}", boolean),
         }
     }
+
+    pub fn into_string(self, heap: &ObjectHeap, span: SourceSpan) -> Result<Box<str>, QangError> {
+        match self {
+            Value::String(handle) => {
+                heap.get(handle)
+                    .map(|h| h.value.clone().into())
+                    .ok_or(QangError::runtime_error(
+                        "Expected string, found nil.",
+                        span,
+                    ))
+            }
+            _ => Err(QangError::runtime_error(
+                format!("Expected string, found {}.", get_value_type(&self)).as_str(),
+                span,
+            )),
+        }
+    }
 }
 
 impl From<f64> for Value {
     fn from(num: f64) -> Self {
         Value::Number(num)
+    }
+}
+
+impl Into<f64> for Value {
+    fn into(self) -> f64 {
+        match self {
+            Value::Number(number) => number,
+            _ => panic!("Expected number, found {}", get_value_type(&self)),
+        }
+    }
+}
+
+impl From<bool> for Value {
+    fn from(boolean: bool) -> Self {
+        Value::Boolean(boolean)
+    }
+}
+
+impl Into<bool> for Value {
+    fn into(self) -> bool {
+        match self {
+            Value::Boolean(boolean) => boolean,
+            _ => panic!("Expected boolean, found {}", get_value_type(&self)),
+        }
     }
 }
 

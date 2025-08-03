@@ -38,7 +38,7 @@ fn test_run() {
 #[test]
 fn math_operations() {
     let source = r#"
-  -4 + 2 + 3;
+  1 / 1 + 2 * (12 % 5);
   "#;
     let source_map = SourceMap::new(source.to_string());
 
@@ -81,7 +81,28 @@ fn test_runtime_error_with_source_span() {
 }
 
 #[test]
-fn test_type_error_with_source_span() {
+fn test_booleans() {
+    let source = r#"
+  !true;
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+
+    if let Ok(artifact) = Compiler::new(&source_map).compile() {
+        match Vm::new().interpret(artifact) {
+            Ok((value, updated_artifact)) => {
+                value.print(&updated_artifact.heap);
+            }
+            Err(error) => {
+                panic!("{}", pretty_print_error(&source_map, &error))
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn test_type_error_with_source_span_for_left_operand() {
     let source = r#"
   1 + "hello";
   "#;
@@ -94,8 +115,86 @@ fn test_type_error_with_source_span() {
             }
             Err(error) => {
                 let error_message = pretty_print_error(&source_map, &error);
-                assert!(error_message.contains("Both operands must be numbers or strings"));
+                assert!(error_message.contains("Cannot add number to string."));
                 println!("Error correctly includes source span: {}", error_message);
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn test_type_error_with_source_span_for_right_operand() {
+    let source = r#"
+  "hello" + boolean;
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+
+    if let Ok(artifact) = Compiler::new(&source_map).compile() {
+        match Vm::new().interpret(artifact) {
+            Ok(_) => {
+                panic!("Expected runtime error for adding string and boolean")
+            }
+            Err(error) => {
+                let error_message = pretty_print_error(&source_map, &error);
+                println!("{}", error_message);
+                assert!(error_message.contains("Cannot add boolean to string."));
+                println!("Error correctly includes source span: {}", error_message);
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn test_targeted_type_error_spans() {
+    let source = r#"
+  42 + "hello";
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+
+    if let Ok(artifact) = Compiler::new(&source_map).compile() {
+        match Vm::new().interpret(artifact) {
+            Ok(_) => {
+                panic!("Expected runtime error for adding number and string")
+            }
+            Err(error) => {
+                let error_message = pretty_print_error(&source_map, &error);
+                assert!(error_message.contains("Cannot add number to string"));
+                assert!(error_message.contains("hello"));
+                println!(
+                    "Targeted error correctly points to string operand: {}",
+                    error_message
+                );
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn test_left_operand_error_span() {
+    let source = r#"
+  true + 5;
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+
+    if let Ok(artifact) = Compiler::new(&source_map).compile() {
+        match Vm::new().interpret(artifact) {
+            Ok(_) => {
+                panic!("Expected runtime error for adding boolean and number")
+            }
+            Err(error) => {
+                let error_message = pretty_print_error(&source_map, &error);
+                assert!(error_message.contains("Cannot add boolean to number"));
+                assert!(error_message.contains("true"));
+                println!(
+                    "Targeted error correctly points to boolean operand: {}",
+                    error_message
+                );
             }
         }
     } else {

@@ -99,6 +99,19 @@ impl std::error::Error for QangErrors {}
 
 pub type QangResult<T> = Result<T, QangErrors>;
 
+#[derive(Debug, Clone)]
+pub struct ValueConversionError(String);
+
+impl ValueConversionError {
+    pub fn new(message: String) -> Self {
+        Self(message)
+    }
+
+    pub fn into_qang_error(self, span: SourceSpan) -> QangError {
+        QangError::runtime_error(&self.0, span)
+    }
+}
+
 /// Handles error reporting and pretty printing for the QangLang compiler.
 pub struct ErrorReporter {
     source_map: Rc<SourceMap>,

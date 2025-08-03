@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map::Entry};
 
-use crate::chunk::ValueConversionError;
+use crate::error::ValueConversionError;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);
@@ -27,7 +27,7 @@ impl TryFrom<HeapObjectValue> for Box<str> {
     fn try_from(value: HeapObjectValue) -> Result<Self, Self::Error> {
         match value {
             HeapObjectValue::String(string) => Ok(string),
-            _ => Err(ValueConversionError(format!(
+            _ => Err(ValueConversionError::new(format!(
                 "Expected string, found {}.",
                 get_object_value_type(&value)
             ))),
@@ -96,7 +96,10 @@ impl ObjectHeap {
     pub fn garbage_collect(&mut self) {
         for (index, obj) in self.objects.iter().enumerate() {
             match obj {
-                Some(obj) => todo!("Check if object is in use, if it is not, free it"),
+                Some(_obj) => todo!(
+                    "Check if object is in use, if it is not, free it using the index of {}",
+                    index
+                ),
                 _ => {
                     continue;
                 }

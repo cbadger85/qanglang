@@ -1,6 +1,7 @@
 use crate::{
     HeapObjectValue, ObjectHeap, QangError,
     ast::{self, SourceSpan},
+    error::ValueConversionError,
     heap::ObjectHandle,
 };
 
@@ -49,24 +50,14 @@ impl Value {
                     span,
                 ))
                 .and_then(|v| {
-                    v.try_into().map_err(|e: ValueConversionError| {
-                        QangError::runtime_error(e.message(), span)
-                    })
+                    v.try_into()
+                        .map_err(|e: ValueConversionError| e.into_qang_error(span))
                 }),
             _ => Err(QangError::runtime_error(
                 format!("Expected string, found {}.", get_value_type(&self)).as_str(),
                 span,
             )),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ValueConversionError(pub String);
-
-impl ValueConversionError {
-    pub fn message(&self) -> &str {
-        &self.0
     }
 }
 
@@ -82,7 +73,7 @@ impl TryFrom<Value> for f64 {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
             Value::Number(number) => Ok(number),
-            _ => Err(ValueConversionError(format!(
+            _ => Err(ValueConversionError::new(format!(
                 "Expected number, found {}.",
                 get_value_type(&value)
             ))),
@@ -96,7 +87,7 @@ impl TryFrom<Value> for bool {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
             Value::Boolean(boolean) => Ok(boolean),
-            _ => Err(ValueConversionError(format!(
+            _ => Err(ValueConversionError::new(format!(
                 "Expected boolean, found {}.",
                 get_value_type(&value)
             ))),

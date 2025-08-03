@@ -210,6 +210,7 @@ impl Vm {
         }
     }
 
+    #[allow(dead_code)]
     fn debug(&self, artifact: &CompilerArtifact) {
         print!("          ");
         for i in 0..artifact.stack_top {

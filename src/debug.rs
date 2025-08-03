@@ -1,5 +1,6 @@
-use crate::{Chunk, ObjectHeap, OpCode, SourceMap, compiler::CompilerArtifact};
+use crate::{OpCode, SourceMap, compiler::CompilerArtifact};
 
+#[allow(dead_code)]
 pub fn disassemble_chunk(artifact: &CompilerArtifact, source_map: &SourceMap, name: &str) {
     println!("== {} ==", name);
 

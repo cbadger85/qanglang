@@ -268,8 +268,8 @@ impl AstVisitor for Compiler {
 
     fn visit_equality_expression(
         &mut self,
-        equality: &ast::EqualityExpr,
-        errors: &mut ErrorReporter,
+        _equality: &ast::EqualityExpr,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         // TODO
         // self.visit_expression(&equality.left, errors)?;

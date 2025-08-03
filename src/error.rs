@@ -151,14 +151,14 @@ impl<'a> ErrorReporter<'a> {
     #[allow(dead_code)]
     pub fn print_errors(&self) {
         for error in &self.errors.0 {
-            eprintln!("{}", self.pretty_print_error(error));
+            eprintln!("{}", pretty_print_error(self.source_map, error));
         }
     }
 
     /// Print a specific error with pretty formatting
     #[allow(dead_code)]
     pub fn print_error(&self, error: &QangError) {
-        eprintln!("{}", self.pretty_print_error(error));
+        eprintln!("{}", pretty_print_error(self.source_map, error));
     }
 
     /// Get a pretty printed string for all errors
@@ -167,91 +167,9 @@ impl<'a> ErrorReporter<'a> {
         self.errors
             .all()
             .iter()
-            .map(|error| self.pretty_print_error(error))
+            .map(|error| pretty_print_error(self.source_map, error))
             .collect::<Vec<_>>()
             .join("\n")
-    }
-
-    /// Pretty print a single error with source context
-    pub fn pretty_print_error(&self, error: &QangError) -> String {
-        let mut output = String::new();
-
-        let line_num = self.source_map.get_line_number(error.span.start);
-        let col_num = self.source_map.get_column_number(error.span.start);
-
-        // Error header with kind
-        output.push_str(&format!(
-            "{} at line {}, column {}: {}\n",
-            error.kind, line_num, col_num, error.message
-        ));
-
-        // Get the problematic line
-        let line_chars = self.source_map.get_line(line_num);
-        let line_str: String = line_chars.iter().collect();
-
-        // Line number padding for alignment
-        let line_num_str = line_num.to_string();
-        let padding = " ".repeat(line_num_str.len());
-
-        // Show the line with line number
-        output.push_str(&format!(" {} | {}\n", line_num, line_str));
-
-        // Create the error pointer
-        let error_pointer = self.create_error_pointer(error, &line_str, col_num);
-        output.push_str(&format!(" {} | {}\n", padding, error_pointer));
-
-        // Add additional context for runtime errors (e.g., call stack)
-        if error.kind == ErrorKind::Runtime {
-            // TODO This should also hold a stack trace.
-            output.push_str(&format!(
-                " {} | Note: Error occurred during execution\n",
-                padding
-            ));
-        }
-
-        output
-    }
-
-    /// Create a visual pointer to the error location
-    fn create_error_pointer(&self, error: &QangError, line_str: &str, col_num: u32) -> String {
-        let mut pointer = String::new();
-
-        // Add spaces up to the error column
-        for i in 1..col_num {
-            if i <= line_str.len() as u32 {
-                let ch = line_str.chars().nth((i - 1) as usize).unwrap_or(' ');
-                if ch == '\t' {
-                    pointer.push('\t');
-                } else {
-                    pointer.push(' ');
-                }
-            } else {
-                pointer.push(' ');
-            }
-        }
-
-        // Calculate the span length within the line
-        let start_col = self.source_map.get_column_number(error.span.start) as usize;
-        let end_col = self
-            .source_map
-            .get_column_number(error.span.end.saturating_sub(1)) as usize;
-
-        // Add the error indicators
-        if start_col == end_col || error.span.start == error.span.end {
-            pointer.push('^');
-        } else {
-            // Multi-character span
-            let span_length = (end_col - start_col + 1).max(1);
-            for i in 0..span_length {
-                if i == 0 {
-                    pointer.push('^');
-                } else {
-                    pointer.push('~');
-                }
-            }
-        }
-
-        pointer
     }
 
     /// Create a summary of all errors
@@ -270,6 +188,91 @@ impl<'a> ErrorReporter<'a> {
     pub fn into_errors(self) -> QangErrors {
         self.errors
     }
+}
+
+/// Pretty print a single error with source context
+pub fn pretty_print_error(source_map: &SourceMap, error: &QangError) -> String {
+    let mut output = String::new();
+
+    let line_num = source_map.get_line_number(error.span.start);
+    let col_num = source_map.get_column_number(error.span.start);
+
+    // Error header with kind
+    output.push_str(&format!(
+        "{} at line {}, column {}: {}\n",
+        error.kind, line_num, col_num, error.message
+    ));
+
+    // Get the problematic line
+    let line_chars = source_map.get_line(line_num);
+    let line_str: String = line_chars.iter().collect();
+
+    // Line number padding for alignment
+    let line_num_str = line_num.to_string();
+    let padding = " ".repeat(line_num_str.len());
+
+    // Show the line with line number
+    output.push_str(&format!(" {} | {}\n", line_num, line_str));
+
+    // Create the error pointer
+    let error_pointer = create_error_pointer(source_map, error, &line_str, col_num);
+    output.push_str(&format!(" {} | {}\n", padding, error_pointer));
+
+    // Add additional context for runtime errors (e.g., call stack)
+    if error.kind == ErrorKind::Runtime {
+        // TODO This should also hold a stack trace.
+        output.push_str(&format!(
+            " {} | Note: Error occurred during execution\n",
+            padding
+        ));
+    }
+
+    output
+}
+
+/// Create a visual pointer to the error location
+fn create_error_pointer(
+    source_map: &SourceMap,
+    error: &QangError,
+    line_str: &str,
+    col_num: u32,
+) -> String {
+    let mut pointer = String::new();
+
+    // Add spaces up to the error column
+    for i in 1..col_num {
+        if i <= line_str.len() as u32 {
+            let ch = line_str.chars().nth((i - 1) as usize).unwrap_or(' ');
+            if ch == '\t' {
+                pointer.push('\t');
+            } else {
+                pointer.push(' ');
+            }
+        } else {
+            pointer.push(' ');
+        }
+    }
+
+    // Calculate the span length within the line
+    let start_col = source_map.get_column_number(error.span.start) as usize;
+    let end_col = source_map.get_column_number(error.span.end.saturating_sub(1)) as usize;
+
+    // Add the error indicators
+    if start_col == end_col || error.span.start == error.span.end {
+        pointer.push('^');
+    } else {
+        // Multi-character span
+        let span_length = (end_col - start_col + 1).max(1);
+        for i in 0..span_length {
+            if i == 0 {
+                pointer.push('^');
+            } else {
+                pointer.push('~');
+            }
+        }
+    }
+
+    pointer
 }
 
 #[cfg(test)]

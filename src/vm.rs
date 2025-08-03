@@ -1,4 +1,7 @@
-use crate::{Chunk, ObjectHeap, OpCode, QangError, SourceMap, Value, ast::SourceSpan};
+use crate::{
+    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, SourceMap, Value, ast::SourceSpan,
+    compiler::CompilerArtifact, debug::disassemble_instruction,
+};
 
 pub type RuntimeResult<T> = Result<T, QangError>;
 
@@ -6,49 +9,102 @@ const STACK_MAX: usize = 256;
 
 pub struct Vm<'a> {
     source_map: &'a SourceMap,
-    chunk: Chunk,
     ip: usize,
-    heap: ObjectHeap,
     stack: [Value; STACK_MAX],
     stack_top: usize,
 }
 
 impl<'a> Vm<'a> {
-    pub fn new(source_map: &'a SourceMap, chunk: Chunk, heap: ObjectHeap) -> Self {
+    pub fn new(source_map: &'a SourceMap) -> Self {
         Self {
             source_map,
-            chunk,
             ip: 0,
-            heap,
             stack_top: 0,
             stack: std::array::from_fn(|_| Value::default()),
         }
     }
 
-    pub fn interpret(mut self) -> RuntimeResult<Value> {
-        self.run()
+    pub fn interpret(&mut self, artifact: CompilerArtifact) -> RuntimeResult<Value> {
+        Ok(self.run(artifact)?.clone())
     }
 
-    fn run(&mut self) -> RuntimeResult<Value> {
+    fn run(&mut self, mut artifact: CompilerArtifact) -> RuntimeResult<Value> {
         loop {
-            let opcode: OpCode = self.read_byte()?.into();
+            let opcode: OpCode = self.read_byte(&artifact.chunk)?.into();
 
             match opcode {
                 OpCode::Constant => {
-                    let constant_index = self.read_byte()? as usize;
-                    let constant = self.read_constant(constant_index)?;
+                    let constant_index = self.read_byte(&artifact.chunk)? as usize;
+                    let constant = self.read_constant(constant_index, &artifact.chunk);
                     self.push(constant);
                 }
+                OpCode::Negate => {
+                    if let Value::Number(number) = self.peek(0) {
+                        self.stack[self.stack_top - 1] = Value::Number(-number);
+                    } else {
+                        return Err(QangError::runtime_error(
+                            "Operand must be a number.",
+                            artifact.chunk.spans()[self.ip - 1],
+                        ));
+                    }
+                }
+                OpCode::Add => {
+                    self.debug(&artifact);
+
+                    self.binary_operation(&artifact.chunk, |a, b| match (a, b) {
+                        (Value::Number(num1), Value::Number(num2)) => {
+                            Ok(Value::Number(num1 + num2))
+                        }
+                        (Value::String(handle1), Value::String(handle2)) => {
+                            let str1 = artifact
+                                .heap
+                                .get(handle1)
+                                .and_then(|h| match &h.value {
+                                    HeapObjectValue::String(str) => Some(str),
+                                    _ => None,
+                                })
+                                .ok_or(QangError::runtime_error(
+                                    "Expected string.",
+                                    SourceSpan::default(),
+                                ))?;
+                            let str2 = artifact
+                                .heap
+                                .get(handle2)
+                                .and_then(|h| match &h.value {
+                                    HeapObjectValue::String(str) => Some(str),
+                                    _ => None,
+                                })
+                                .ok_or(QangError::runtime_error(
+                                    "Expected string.",
+                                    SourceSpan::default(),
+                                ))?;
+                            let result = artifact
+                                .heap
+                                .intern_string(format!("{}{}", str1, str2).into_boxed_str());
+                            Ok(Value::String(result))
+                        }
+                        _ => {
+                            return Err(QangError::runtime_error(
+                                "Both operands must be numbers or numbers.",
+                                SourceSpan::default(),
+                            ));
+                        }
+                    })?;
+                }
                 OpCode::Return => {
-                    return Ok(self.pop()?);
+                    return Ok(self.pop(&artifact.chunk)?);
                 }
                 _ => (),
             }
         }
     }
 
-    fn read_byte(&mut self) -> RuntimeResult<u8> {
-        if self.ip >= self.chunk.count() {
+    fn get_current_span(&self, chunk: &Chunk) -> SourceSpan {
+        chunk.spans()[self.ip]
+    }
+
+    fn read_byte(&mut self, chunk: &Chunk) -> RuntimeResult<u8> {
+        if self.ip >= chunk.count() {
             return Err(QangError::runtime_error(
                 "Instruction pointer out of bounds.",
                 SourceSpan::new(
@@ -58,20 +114,13 @@ impl<'a> Vm<'a> {
             ));
         }
 
-        let byte = self.chunk.code()[self.ip];
+        let byte = chunk.code()[self.ip];
         self.ip += 1;
         Ok(byte)
     }
 
-    fn read_constant(&self, index: usize) -> RuntimeResult<Value> {
-        self.chunk
-            .constants()
-            .get(index)
-            .cloned()
-            .ok_or(QangError::runtime_error(
-                "Missing value.",
-                self.chunk.spans()[self.ip],
-            ))
+    fn read_constant(&self, index: usize, chunk: &Chunk) -> Value {
+        chunk.constants().get(index).cloned().unwrap_or(Value::Nil)
     }
 
     fn push(&mut self, value: Value) {
@@ -79,20 +128,47 @@ impl<'a> Vm<'a> {
         self.stack_top += 1;
     }
 
-    fn pop(&mut self) -> RuntimeResult<Value> {
+    fn pop(&mut self, chunk: &Chunk) -> RuntimeResult<Value> {
         if self.stack_top > 0 {
             self.stack_top -= 1;
             let value = std::mem::replace(&mut self.stack[self.stack_top], Value::default());
             Ok(value)
         } else {
             Err(QangError::runtime_error(
-                "Unexpected empty stack.",
-                self.chunk.spans()[self.ip],
+                "No value found, unexpected empty stack.",
+                self.get_current_span(chunk),
             ))
         }
     }
 
     fn peek(&self, distance: usize) -> &Value {
         &self.stack[self.stack_top - 1 - distance]
+    }
+
+    fn binary_operation<F>(&mut self, chunk: &Chunk, op: F) -> RuntimeResult<()>
+    where
+        F: FnOnce(Value, Value) -> RuntimeResult<Value>,
+    {
+        println!("test 1");
+        let b = self.pop(chunk)?;
+        println!("test 2");
+        let a = self.pop(chunk)?;
+
+        let value = op(a, b)?;
+
+        println!("test 3");
+        self.push(value);
+        Ok(())
+    }
+
+    fn debug(&self, artifact: &CompilerArtifact) {
+        print!("          ");
+        for i in 0..self.stack_top {
+            self.stack[i].print(&artifact.heap);
+            print!(" ");
+        }
+        println!();
+
+        disassemble_instruction(artifact, self.ip, self.source_map);
     }
 }

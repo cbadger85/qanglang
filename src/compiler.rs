@@ -233,8 +233,8 @@ impl<'a> AstVisitor for Compiler<'a> {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.visit_expression(&term.left, errors)?;
-        self.emit_opcode(term.operator.into(), term.span);
         self.visit_expression(&term.right, errors)?;
+        self.emit_opcode(term.operator.into(), term.span);
         Ok(())
     }
 
@@ -254,8 +254,8 @@ impl<'a> AstVisitor for Compiler<'a> {
         unary: &ast::UnaryExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.emit_opcode(unary.operator.into(), unary.span);
         self.visit_expression(&unary.operand, errors)?;
+        self.emit_opcode(unary.operator.into(), unary.span);
         Ok(())
     }
 

@@ -1,36 +1,35 @@
-use crate::{Chunk, ObjectHeap, OpCode, SourceMap};
+use crate::{Chunk, ObjectHeap, OpCode, SourceMap, compiler::CompilerArtifact};
 
-pub fn disassemble_chunk(heap: &ObjectHeap, chunk: &Chunk, source_map: &SourceMap, name: &str) {
+pub fn disassemble_chunk(artifact: &CompilerArtifact, source_map: &SourceMap, name: &str) {
     println!("== {} ==", name);
 
     let mut offset = 0;
-    while offset < chunk.count() {
-        offset = disassemble_instruction(heap, chunk, offset, source_map);
+    while offset < artifact.chunk.count() {
+        offset = disassemble_instruction(artifact, offset, source_map);
     }
 }
 
 pub fn disassemble_instruction(
-    heap: &ObjectHeap,
-    chunk: &Chunk,
+    artifact: &CompilerArtifact,
     offset: usize,
     source_map: &SourceMap,
 ) -> usize {
     print!("{:04} ", offset);
 
     if offset > 0
-        && source_map.get_line_number(chunk.spans()[offset].end)
-            == source_map.get_line_number(chunk.spans()[offset - 1].start)
+        && source_map.get_line_number(artifact.chunk.spans()[offset].end)
+            == source_map.get_line_number(artifact.chunk.spans()[offset - 1].start)
     {
         print!("   | ");
     } else {
-        chunk.spans()[offset].print(source_map);
+        artifact.chunk.spans()[offset].print(source_map);
     }
 
-    let instruction = chunk.code()[offset];
+    let instruction = artifact.chunk.code()[offset];
     let opcode = OpCode::from(instruction);
 
     match opcode {
-        OpCode::Constant => constant_instruction("OP_CONSTANT", heap, chunk, offset),
+        OpCode::Constant => constant_instruction("OP_CONSTANT", artifact, offset),
         OpCode::Return => simple_instruction("OP_RETURN", offset),
         OpCode::Negate => simple_instruction("OP_NEGATE", offset),
         OpCode::Add => simple_instruction("OP_ADD", offset),
@@ -50,16 +49,17 @@ pub fn disassemble_instruction(
     }
 }
 
-fn constant_instruction(name: &str, heap: &ObjectHeap, chunk: &Chunk, offset: usize) -> usize {
-    let constant = chunk.code()[offset + 1] as usize;
+fn constant_instruction(name: &str, artifact: &CompilerArtifact, offset: usize) -> usize {
+    let constant = artifact.chunk.code()[offset + 1] as usize;
     print!("{:<16} {:4} '", name, constant);
 
-    chunk
+    artifact
+        .chunk
         .constants()
         .get(constant)
         .cloned()
         .unwrap_or_default()
-        .print(heap);
+        .print(&artifact.heap);
 
     println!("'");
     offset + 2

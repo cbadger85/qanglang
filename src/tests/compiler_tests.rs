@@ -1,4 +1,4 @@
-use crate::{Compiler, SourceMap, Vm, debug::disassemble_chunk};
+use crate::{Compiler, SourceMap, Vm, debug::disassemble_chunk, error::pretty_print_error};
 
 #[test]
 fn test_display() {
@@ -8,7 +8,7 @@ fn test_display() {
     let source_map = SourceMap::new(source.to_string());
 
     if let Ok(artifact) = Compiler::new(&source_map).compile() {
-        disassemble_chunk(&artifact.heap, &artifact.chunk, &source_map, "script.ql");
+        disassemble_chunk(&artifact, &source_map, "script.ql");
     } else {
         panic!("Compiler errors.")
     }
@@ -17,15 +17,42 @@ fn test_display() {
 #[test]
 fn test_run() {
     let source = r#"
-  "hello world!";
+  "hello" + " " + "world!";
   "#;
     let source_map = SourceMap::new(source.to_string());
 
     if let Ok(artifact) = Compiler::new(&source_map).compile() {
-        if let Ok(value) = Vm::new(&source_map, artifact.chunk, artifact.heap.clone()).interpret() {
-            value.print(&artifact.heap);
-        } else {
-            panic!("Runtime errors.")
+        // disassemble_chunk(&artifact, &source_map, "script.ql");
+        let heap_clone = artifact.heap.clone();
+        match Vm::new(&source_map).interpret(artifact) {
+            Ok(value) => {
+                value.print(&heap_clone);
+            }
+            Err(error) => {
+                panic!("{}", pretty_print_error(&source_map, &error))
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn math_operations() {
+    let source = r#"
+  -4 + 2 + 3;
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+
+    if let Ok(artifact) = Compiler::new(&source_map).compile() {
+        let heap_clone = artifact.heap.clone();
+        match Vm::new(&source_map).interpret(artifact) {
+            Ok(value) => {
+                value.print(&heap_clone);
+            }
+            Err(error) => {
+                panic!("{}", pretty_print_error(&source_map, &error))
+            }
         }
     } else {
         panic!("Compiler errors.")

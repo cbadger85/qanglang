@@ -38,12 +38,12 @@ impl Vm {
                     } else {
                         return Err(QangError::runtime_error(
                             "Operand must be a number.",
-                            artifact.chunk.spans()[artifact.ip - 1],
+                            artifact.get_previous_span(),
                         ));
                     }
                 }
                 OpCode::Add => {
-                    self.binary_operation(&mut artifact, |a, b, heap| match (a, b) {
+                    self.binary_operation(&mut artifact, |a, b, heap, span| match (a, b) {
                         (Value::Number(num1), Value::Number(num2)) => {
                             Ok(Value::Number(num1 + num2))
                         }
@@ -54,9 +54,9 @@ impl Vm {
                                     HeapObjectValue::String(str) => Some(str),
                                     _ => None,
                                 })
-                                .ok_or(QangError::runtime_error(
+                                .ok_or_else(|| QangError::runtime_error(
                                     "Expected string.",
-                                    SourceSpan::default(),
+                                    span,
                                 ))?;
                             let str2 = heap
                                 .get(handle2)
@@ -64,9 +64,9 @@ impl Vm {
                                     HeapObjectValue::String(str) => Some(str),
                                     _ => None,
                                 })
-                                .ok_or(QangError::runtime_error(
+                                .ok_or_else(|| QangError::runtime_error(
                                     "Expected string.",
-                                    SourceSpan::default(),
+                                    span,
                                 ))?;
                             let result =
                                 heap.intern_string(format!("{}{}", str1, str2).into_boxed_str());
@@ -75,7 +75,7 @@ impl Vm {
                         _ => {
                             return Err(QangError::runtime_error(
                                 "Both operands must be numbers or strings.",
-                                SourceSpan::default(),
+                                span,
                             ));
                         }
                     })?;
@@ -134,12 +134,13 @@ impl Vm {
 
     fn binary_operation<F>(&mut self, artifact: &mut CompilerArtifact, op: F) -> RuntimeResult<()>
     where
-        F: FnOnce(Value, Value, &mut ObjectHeap) -> RuntimeResult<Value>,
+        F: FnOnce(Value, Value, &mut ObjectHeap, SourceSpan) -> RuntimeResult<Value>,
     {
         let b = self.pop(artifact)?;
         let a = self.pop(artifact)?;
+        let span = artifact.get_previous_span();
 
-        let value = op(a, b, &mut artifact.heap)?;
+        let value = op(a, b, &mut artifact.heap, span)?;
 
         self.push(artifact, value);
         Ok(())

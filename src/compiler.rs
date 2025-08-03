@@ -80,7 +80,37 @@ impl CompilerArtifact {
     }
 
     pub fn get_current_span(&self) -> SourceSpan {
-        self.chunk.spans()[self.ip]
+        self.get_span_at(self.ip)
+    }
+
+    pub fn get_previous_span(&self) -> SourceSpan {
+        if self.ip > 0 {
+            self.get_span_at(self.ip - 1)
+        } else {
+            SourceSpan::default()
+        }
+    }
+
+    pub fn get_span_at(&self, index: usize) -> SourceSpan {
+        self.chunk.spans().get(index).copied().unwrap_or_else(|| {
+            SourceSpan::new(
+                self.source_map.get_source().len(),
+                self.source_map.get_source().len(),
+            )
+        })
+    }
+
+    pub fn get_span_for_stack_value(&self, stack_distance: usize) -> SourceSpan {
+        if self.stack_top > stack_distance {
+            let stack_index = self.stack_top - 1 - stack_distance;
+            if stack_index < self.ip {
+                self.get_span_at(stack_index)
+            } else {
+                self.get_previous_span()
+            }
+        } else {
+            self.get_previous_span()
+        }
     }
 }
 

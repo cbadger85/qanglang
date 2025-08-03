@@ -55,3 +55,50 @@ fn math_operations() {
         panic!("Compiler errors.")
     }
 }
+
+#[test]
+fn test_runtime_error_with_source_span() {
+    let source = r#"
+  -"hello";
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+
+    if let Ok(artifact) = Compiler::new(&source_map).compile() {
+        match Vm::new().interpret(artifact) {
+            Ok(_) => {
+                panic!("Expected runtime error for negating a string")
+            }
+            Err(error) => {
+                let error_message = pretty_print_error(&source_map, &error);
+                assert!(error_message.contains("Operand must be a number"));
+                assert!(error_message.contains("hello"));
+                println!("Error correctly includes source span: {}", error_message);
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn test_type_error_with_source_span() {
+    let source = r#"
+  1 + "hello";
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+
+    if let Ok(artifact) = Compiler::new(&source_map).compile() {
+        match Vm::new().interpret(artifact) {
+            Ok(_) => {
+                panic!("Expected runtime error for adding number and string")
+            }
+            Err(error) => {
+                let error_message = pretty_print_error(&source_map, &error);
+                assert!(error_message.contains("Both operands must be numbers or strings"));
+                println!("Error correctly includes source span: {}", error_message);
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}

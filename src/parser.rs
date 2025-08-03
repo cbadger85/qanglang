@@ -1024,19 +1024,17 @@ mod expression_parser {
                 if !parser.match_token(tokenizer::TokenType::Comma) {
                     break;
                 }
+            } else if parser.match_token(tokenizer::TokenType::Comma)
+                || parser.check(tokenizer::TokenType::RightBrace)
+            {
+                let value = ast::Expr::Primary(ast::PrimaryExpr::Identifier(key.clone()));
+                entries.push(ast::ObjectEntry {
+                    key,
+                    value: Box::new(value),
+                    span: key_span,
+                });
             } else {
-                if parser.match_token(tokenizer::TokenType::Comma)
-                    || parser.check(tokenizer::TokenType::RightBrace)
-                {
-                    let value = ast::Expr::Primary(ast::PrimaryExpr::Identifier(key.clone()));
-                    entries.push(ast::ObjectEntry {
-                        key,
-                        value: Box::new(value),
-                        span: key_span,
-                    });
-                } else {
-                    break;
-                }
+                break;
             }
         }
 

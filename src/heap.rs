@@ -3,16 +3,17 @@ use std::collections::{HashMap, hash_map::Entry};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HeapObject {
     pub value: HeapObjectValue,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HeapObjectValue {
     String(Box<str>),
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
     objects: Vec<Option<HeapObject>>,
     free_list: Vec<usize>,

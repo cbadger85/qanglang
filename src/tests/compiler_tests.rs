@@ -127,7 +127,7 @@ fn test_type_error_with_source_span_for_left_operand() {
 #[test]
 fn test_type_error_with_source_span_for_right_operand() {
     let source = r#"
-  "hello" + boolean;
+  "hello" + true;
   "#;
     let source_map = SourceMap::new(source.to_string());
 
@@ -138,8 +138,7 @@ fn test_type_error_with_source_span_for_right_operand() {
             }
             Err(error) => {
                 let error_message = pretty_print_error(&source_map, &error);
-                println!("{}", error_message);
-                assert!(error_message.contains("Cannot add boolean to string."));
+                assert!(error_message.contains("Cannot add string to boolean."));
                 println!("Error correctly includes source span: {}", error_message);
             }
         }

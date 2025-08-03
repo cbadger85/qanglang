@@ -14,7 +14,7 @@ pub const fn get_value_type(value: &Value) -> &'static str {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Value {
     Nil,
     Boolean(bool),

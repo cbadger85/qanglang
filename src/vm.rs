@@ -205,10 +205,9 @@ impl Vm {
                         .pop(&mut artifact)?
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
-                    let value = artifact
+                    let value = *artifact
                         .globals
                         .get(&identifier_handle.identifier())
-                        .cloned()
                         .ok_or_else(|| {
                             let identifier_name = artifact
                                 .heap
@@ -219,7 +218,7 @@ impl Vm {
                                 })
                                 .unwrap_or("unknown".to_string().into_boxed_str());
                             QangError::runtime_error(
-                                format!("Undefined variable: {}", identifier_name).as_str(),
+                                format!("Undefined variable: {}.", identifier_name).as_str(),
                                 span,
                             )
                         })?;
@@ -244,17 +243,18 @@ impl Vm {
                             })
                             .unwrap_or("unknown".to_string().into_boxed_str());
                         return Err(QangError::runtime_error(
-                            format!("Undefined variable: {}", identifier_name).as_str(),
+                            format!("Undefined variable: {}.", identifier_name).as_str(),
                             span,
                         ));
                     }
-                    let value = self.peek(&mut artifact, 0).clone();
+                    let value = *self.peek(&mut artifact, 0);
                     artifact
                         .globals
-                        .insert(identifier_handle.identifier(), value.clone());
+                        .insert(identifier_handle.identifier(), value);
                 }
                 OpCode::Print => {
-                    self.peek(&mut artifact, 0).clone().print(&artifact.heap);
+                    let value = *self.peek(&mut artifact, 0);
+                    value.print(&artifact.heap);
                     println!();
                 }
                 OpCode::Return => {
@@ -282,7 +282,7 @@ impl Vm {
     }
 
     fn read_constant(&self, index: usize, chunk: &Chunk) -> Value {
-        chunk.constants().get(index).cloned().unwrap_or(Value::Nil)
+        *chunk.constants().get(index).unwrap_or(&Value::Nil)
     }
 
     fn push(&mut self, artifact: &mut CompilerArtifact, value: Value) {

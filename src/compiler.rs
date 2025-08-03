@@ -56,9 +56,32 @@ where
     }
 }
 
+const STACK_MAX: usize = 256;
+
 pub struct CompilerArtifact {
+    pub source_map: SourceMap,
     pub chunk: Chunk,
     pub heap: ObjectHeap,
+    pub ip: usize,
+    pub stack_top: usize,
+    pub stack: [Value; STACK_MAX],
+}
+
+impl CompilerArtifact {
+    pub fn new(source_map: SourceMap, chunk: Chunk, heap: ObjectHeap) -> Self {
+        Self {
+            source_map,
+            chunk,
+            heap,
+            ip: 0,
+            stack_top: 0,
+            stack: std::array::from_fn(|_| Value::default()),
+        }
+    }
+
+    pub fn get_current_span(&self) -> SourceSpan {
+        self.chunk.spans()[self.ip]
+    }
 }
 
 pub struct Compiler<'a> {
@@ -133,10 +156,11 @@ impl<'a> Compiler<'a> {
                     self.source_map.get_source().len(),
                 ),
             );
-            Ok(CompilerArtifact {
-                chunk: self.current_chunk,
-                heap: self.heap,
-            })
+            Ok(CompilerArtifact::new(
+                self.source_map.to_owned(),
+                self.current_chunk,
+                self.heap,
+            ))
         }
     }
 

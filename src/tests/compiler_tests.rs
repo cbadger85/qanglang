@@ -22,7 +22,7 @@ fn test_run() {
     let source_map = SourceMap::new(source.to_string());
 
     if let Ok(artifact) = Compiler::new(&source_map).compile() {
-        match Vm::new(&source_map).interpret(artifact) {
+        match Vm::new().interpret(artifact) {
             Ok((value, updated_artifact)) => {
                 value.print(&updated_artifact.heap);
             }
@@ -43,7 +43,7 @@ fn math_operations() {
     let source_map = SourceMap::new(source.to_string());
 
     if let Ok(artifact) = Compiler::new(&source_map).compile() {
-        match Vm::new(&source_map).interpret(artifact) {
+        match Vm::new().interpret(artifact) {
             Ok((value, updated_artifact)) => {
                 value.print(&updated_artifact.heap);
             }

@@ -37,13 +37,35 @@ fn test_run() {
 }
 
 #[test]
-fn math_operations() {
+fn math_operations_test() {
     let source = r#"
   1 / 1 + 2 * (12 % 5);
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
+        match Vm::new().interpret(artifact) {
+            Ok((value, updated_artifact)) => {
+                value.print(&updated_artifact.heap);
+            }
+            Err(error) => {
+                panic!("{}", pretty_print_error(source_map.clone(), &error))
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn equality_operations_test() {
+    let source = r#"
+        "true" != "!true";
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
+        disassemble_chunk(&artifact, &source_map, "script.ql");
         match Vm::new().interpret(artifact) {
             Ok((value, updated_artifact)) => {
                 value.print(&updated_artifact.heap);

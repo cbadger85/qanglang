@@ -290,13 +290,17 @@ impl AstVisitor for Compiler {
 
     fn visit_equality_expression(
         &mut self,
-        _equality: &ast::EqualityExpr,
-        _errors: &mut ErrorReporter,
+        equality: &ast::EqualityExpr,
+        errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        // TODO
-        // self.visit_expression(&equality.left, errors)?;
-        // self.visit_expression(&equality.right, errors)?;
-        // self.emit_opcode(equality.operator.into(), equality.span);
+        self.visit_expression(&equality.left, errors)?;
+        self.visit_expression(&equality.right, errors)?;
+        self.emit_opcode(equality.operator.into(), equality.span);
+
+        if let ast::EqualityOperator::NotEqual = equality.operator {
+            self.emit_opcode(OpCode::Pop, equality.span);
+            self.emit_opcode(OpCode::Not, equality.span);
+        }
         Ok(())
     }
 

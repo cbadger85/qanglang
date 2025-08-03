@@ -47,6 +47,7 @@ pub fn disassemble_instruction(
         OpCode::GreaterEqual => simple_instruction("OP_GREATER_EQUAL", offset),
         OpCode::LessEqual => simple_instruction("OP_LESS_EQUAL", offset),
         OpCode::Modulo => simple_instruction("OP_MODULO", offset),
+        OpCode::Pop => simple_instruction("OP_POP", offset),
     }
 }
 

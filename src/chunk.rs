@@ -122,6 +122,7 @@ pub enum OpCode {
     GreaterEqual,
     LessEqual,
     Modulo,
+    Pop,
 }
 
 impl From<u8> for OpCode {
@@ -144,6 +145,7 @@ impl From<u8> for OpCode {
             14 => OpCode::GreaterEqual,
             15 => OpCode::LessEqual,
             16 => OpCode::Modulo,
+            17 => OpCode::Pop,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }
@@ -191,6 +193,12 @@ impl From<ast::UnaryOperator> for OpCode {
             ast::UnaryOperator::Minus => OpCode::Negate,
             ast::UnaryOperator::Not => OpCode::Not,
         }
+    }
+}
+
+impl From<ast::EqualityOperator> for OpCode {
+    fn from(_value: ast::EqualityOperator) -> Self {
+        OpCode::Equal
     }
 }
 

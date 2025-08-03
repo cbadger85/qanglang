@@ -137,6 +137,11 @@ impl Vm {
 
                     Ok((a % b).into())
                 })?,
+                OpCode::Equal => {
+                    let a = self.pop(&mut artifact)?;
+                    let b = self.pop(&mut artifact)?;
+                    self.push(&mut artifact, Value::Boolean(a.eq(&b)));
+                }
                 OpCode::Return => {
                     let value = self.pop(&mut artifact)?;
                     return Ok((value, artifact));

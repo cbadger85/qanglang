@@ -1,6 +1,7 @@
 use crate::SourceMap;
 use crate::ast::SourceSpan;
 use std::fmt;
+use std::rc::Rc;
 
 /// Represents different types of errors that can occur during language processing
 #[derive(Debug, Clone, PartialEq)]
@@ -99,20 +100,20 @@ impl std::error::Error for QangErrors {}
 pub type QangResult<T> = Result<T, QangErrors>;
 
 /// Handles error reporting and pretty printing for the QangLang compiler.
-pub struct ErrorReporter<'a> {
-    source_map: &'a SourceMap,
+pub struct ErrorReporter {
+    source_map: Rc<SourceMap>,
     errors: QangErrors,
 }
 
-impl<'a> ErrorReporter<'a> {
-    pub fn new(source_map: &'a SourceMap) -> Self {
+impl ErrorReporter {
+    pub fn new(source_map: Rc<SourceMap>) -> Self {
         Self {
             source_map,
             errors: QangErrors::new(),
         }
     }
 
-    pub fn from_errors(source_map: &'a SourceMap, errors: Vec<QangError>) -> Self {
+    pub fn from_errors(source_map: Rc<SourceMap>, errors: Vec<QangError>) -> Self {
         Self {
             source_map,
             errors: QangErrors(errors),
@@ -151,14 +152,14 @@ impl<'a> ErrorReporter<'a> {
     #[allow(dead_code)]
     pub fn print_errors(&self) {
         for error in &self.errors.0 {
-            eprintln!("{}", pretty_print_error(self.source_map, error));
+            eprintln!("{}", pretty_print_error(self.source_map.clone(), error));
         }
     }
 
     /// Print a specific error with pretty formatting
     #[allow(dead_code)]
     pub fn print_error(&self, error: &QangError) {
-        eprintln!("{}", pretty_print_error(self.source_map, error));
+        eprintln!("{}", pretty_print_error(self.source_map.clone(), error));
     }
 
     /// Get a pretty printed string for all errors
@@ -167,7 +168,7 @@ impl<'a> ErrorReporter<'a> {
         self.errors
             .all()
             .iter()
-            .map(|error| pretty_print_error(self.source_map, error))
+            .map(|error| pretty_print_error(self.source_map.clone(), error))
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -191,7 +192,7 @@ impl<'a> ErrorReporter<'a> {
 }
 
 /// Pretty print a single error with source context
-pub fn pretty_print_error(source_map: &SourceMap, error: &QangError) -> String {
+pub fn pretty_print_error(source_map: Rc<SourceMap>, error: &QangError) -> String {
     let mut output = String::new();
 
     let line_num = source_map.get_line_number(error.span.start);
@@ -232,7 +233,7 @@ pub fn pretty_print_error(source_map: &SourceMap, error: &QangError) -> String {
 
 /// Create a visual pointer to the error location
 fn create_error_pointer(
-    source_map: &SourceMap,
+    source_map: Rc<SourceMap>,
     error: &QangError,
     line_str: &str,
     col_num: u32,
@@ -284,7 +285,7 @@ mod tests {
     fn test_error_reporter_basic_functionality() {
         let source = "var x = 5 +\nvar y = 10;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(&source_map);
+        let mut reporter = ErrorReporter::new(Rc::new(source_map));
 
         // Report an error
         reporter.report_runtime_error("Expected expression after '+'", SourceSpan::new(11, 11));
@@ -302,7 +303,7 @@ mod tests {
     fn test_multiple_errors() {
         let source = "var x = 5 +\nvar y = 10 *\nvar z;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(&source_map);
+        let mut reporter = ErrorReporter::new(Rc::new(source_map));
 
         // Report multiple errors
         reporter.report_runtime_error("Missing operand after '+'", SourceSpan::new(11, 11));
@@ -319,7 +320,7 @@ mod tests {
     fn test_multichar_span_error() {
         let source = "var invalidIdentifier123! = 5;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(&source_map);
+        let mut reporter = ErrorReporter::new(Rc::new(source_map));
 
         // Error spanning the invalid identifier
         reporter.report_runtime_error(
@@ -335,7 +336,7 @@ mod tests {
     fn test_tokenizer_error_integration() {
         let source = "var x = \"unterminated string";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(&source_map);
+        let mut reporter = ErrorReporter::new(Rc::new(source_map));
 
         // Simulate a tokenizer error
         reporter.report_runtime_error("Unterminated string", SourceSpan::new(8, 28));
@@ -349,7 +350,7 @@ mod tests {
     fn test_error_summary_no_errors() {
         let source = "var x = 5;";
         let source_map = SourceMap::new(source.to_string());
-        let reporter = ErrorReporter::new(&source_map);
+        let reporter = ErrorReporter::new(Rc::new(source_map));
 
         let summary = reporter.error_summary();
         assert!(summary.contains("No errors found."));
@@ -359,7 +360,7 @@ mod tests {
     fn test_error_summary_single_errors() {
         let source = "var x = 5;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(&source_map);
+        let mut reporter = ErrorReporter::new(Rc::new(source_map));
 
         reporter.report_parse_error("Syntax error 1", SourceSpan::new(0, 3));
 
@@ -371,7 +372,7 @@ mod tests {
     fn test_error_summary_multiple_errors() {
         let source = "var x = 5;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(&source_map);
+        let mut reporter = ErrorReporter::new(Rc::new(source_map));
 
         reporter.report_parse_error("Syntax error 1", SourceSpan::new(0, 3));
         reporter.report_parse_error("Syntax error 2", SourceSpan::new(4, 5));
@@ -384,7 +385,7 @@ mod tests {
     fn test_pretty_printing_with_kinds() {
         let source = "var x = 5 + y;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(&source_map);
+        let mut reporter = ErrorReporter::new(Rc::new(source_map));
 
         reporter.report_runtime_error("Undefined variable 'y'", SourceSpan::new(12, 13));
 

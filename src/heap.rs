@@ -1,5 +1,7 @@
 use std::collections::{HashMap, hash_map::Entry};
 
+use crate::chunk::ValueConversionError;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);
 
@@ -19,11 +21,16 @@ pub const fn get_object_value_type(value: &HeapObjectValue) -> &'static str {
     }
 }
 
-impl Into<Box<str>> for HeapObjectValue {
-    fn into(self) -> Box<str> {
-        match self {
-            HeapObjectValue::String(string) => string,
-            _ => panic!("Expected string, found {}.", get_object_value_type(&self)),
+impl TryFrom<HeapObjectValue> for Box<str> {
+    type Error = ValueConversionError;
+
+    fn try_from(value: HeapObjectValue) -> Result<Self, Self::Error> {
+        match value {
+            HeapObjectValue::String(string) => Ok(string),
+            _ => Err(ValueConversionError(format!(
+                "Expected string, found {}.",
+                get_object_value_type(&value)
+            ))),
         }
     }
 }

@@ -5,8 +5,10 @@ pub mod parse_statements;
 pub mod parser_errors;
 pub mod tokenizing;
 
-pub fn parse_source(source_map: &crate::SourceMap) -> (crate::ast::Program, crate::ErrorReporter) {
-    let mut parser = crate::Parser::new(&source_map);
+pub fn parse_source(
+    source_map: std::rc::Rc<crate::SourceMap>,
+) -> (crate::ast::Program, crate::ErrorReporter) {
+    let mut parser = crate::Parser::new(source_map);
     let program = parser.parse();
     let errors = parser.into_reporter();
     (program, errors)

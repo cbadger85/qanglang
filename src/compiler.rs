@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
     ast::{self, AstTransformer, AstVisitor, SourceSpan},
@@ -59,7 +61,7 @@ where
 const STACK_MAX: usize = 256;
 
 pub struct CompilerArtifact {
-    pub source_map: SourceMap,
+    pub source_map: Rc<SourceMap>,
     pub chunk: Chunk,
     pub heap: ObjectHeap,
     pub ip: usize,
@@ -68,7 +70,7 @@ pub struct CompilerArtifact {
 }
 
 impl CompilerArtifact {
-    pub fn new(source_map: SourceMap, chunk: Chunk, heap: ObjectHeap) -> Self {
+    pub fn new(source_map: Rc<SourceMap>, chunk: Chunk, heap: ObjectHeap) -> Self {
         Self {
             source_map,
             chunk,
@@ -101,8 +103,8 @@ impl CompilerArtifact {
     }
 }
 
-pub struct Compiler<'a> {
-    source_map: &'a SourceMap,
+pub struct Compiler {
+    source_map: Rc<SourceMap>,
     current_chunk: Chunk,
     transformers: Vec<Box<dyn TransformerMiddleware>>,
     analyzers: Vec<Box<dyn AnalysisMiddleware>>,
@@ -110,10 +112,10 @@ pub struct Compiler<'a> {
     heap: ObjectHeap,
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(source_map: &'a SourceMap) -> Self {
+impl Compiler {
+    pub fn new(source_map: SourceMap) -> Self {
         Self {
-            source_map,
+            source_map: Rc::new(source_map),
             current_chunk: Chunk::new(),
             transformers: Vec::new(),
             analyzers: Vec::new(),
@@ -148,7 +150,7 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile(mut self) -> QangResult<CompilerArtifact> {
-        let mut parser = Parser::new(self.source_map);
+        let mut parser = Parser::new(self.source_map.clone());
         let mut program = parser.parse();
         let mut errors = parser.into_reporter();
 
@@ -166,15 +168,11 @@ impl<'a> Compiler<'a> {
         if errors.has_errors() {
             Err(errors.into_errors())
         } else {
-            self.emit_opcode(
-                OpCode::Return,
-                SourceSpan::new(
-                    self.source_map.get_source().len(),
-                    self.source_map.get_source().len(),
-                ),
-            );
+            let span = self.source_map.get_source().len();
+
+            self.emit_opcode(OpCode::Return, SourceSpan::new(span, span));
             Ok(CompilerArtifact::new(
-                self.source_map.to_owned(),
+                self.source_map,
                 self.current_chunk,
                 self.heap,
             ))
@@ -217,7 +215,7 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl<'a> AstVisitor for Compiler<'a> {
+impl AstVisitor for Compiler {
     type Error = QangError;
 
     fn visit_number_literal(

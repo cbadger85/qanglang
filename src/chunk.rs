@@ -41,19 +41,32 @@ impl Value {
 
     pub fn into_string(self, heap: &ObjectHeap, span: SourceSpan) -> Result<Box<str>, QangError> {
         match self {
-            Value::String(handle) => {
-                heap.get(handle)
-                    .map(|h| h.value.clone().into())
-                    .ok_or(QangError::runtime_error(
-                        "Expected string, found nil.",
-                        span,
-                    ))
-            }
+            Value::String(handle) => heap
+                .get(handle)
+                .map(|h| h.value.clone())
+                .ok_or(QangError::runtime_error(
+                    "Expected string, found nil.",
+                    span,
+                ))
+                .and_then(|v| {
+                    v.try_into().map_err(|e: ValueConversionError| {
+                        QangError::runtime_error(e.message(), span)
+                    })
+                }),
             _ => Err(QangError::runtime_error(
                 format!("Expected string, found {}.", get_value_type(&self)).as_str(),
                 span,
             )),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ValueConversionError(pub String);
+
+impl ValueConversionError {
+    pub fn message(&self) -> &str {
+        &self.0
     }
 }
 
@@ -63,26 +76,30 @@ impl From<f64> for Value {
     }
 }
 
-impl Into<f64> for Value {
-    fn into(self) -> f64 {
-        match self {
-            Value::Number(number) => number,
-            _ => panic!("Expected number, found {}", get_value_type(&self)),
+impl TryFrom<Value> for f64 {
+    type Error = ValueConversionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Number(number) => Ok(number),
+            _ => Err(ValueConversionError(format!(
+                "Expected number, found {}.",
+                get_value_type(&value)
+            ))),
         }
     }
 }
 
-impl From<bool> for Value {
-    fn from(boolean: bool) -> Self {
-        Value::Boolean(boolean)
-    }
-}
+impl TryFrom<Value> for bool {
+    type Error = ValueConversionError;
 
-impl Into<bool> for Value {
-    fn into(self) -> bool {
-        match self {
-            Value::Boolean(boolean) => boolean,
-            _ => panic!("Expected boolean, found {}", get_value_type(&self)),
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Boolean(boolean) => Ok(boolean),
+            _ => Err(ValueConversionError(format!(
+                "Expected boolean, found {}.",
+                get_value_type(&value)
+            ))),
         }
     }
 }

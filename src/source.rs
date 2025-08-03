@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SourceMap {
     source: Vec<char>,
     line_indices: Vec<usize>,

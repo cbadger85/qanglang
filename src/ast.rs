@@ -1799,6 +1799,8 @@ pub enum StatementResult {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use crate::SourceMap;
 
     use super::*;
@@ -1835,7 +1837,7 @@ mod tests {
         let identifier = Identifier::new("test_var".into(), SourceSpan::new(0, 8));
 
         let source_map = SourceMap::new("".to_string());
-        let mut errors = ErrorReporter::new(&source_map);
+        let mut errors = ErrorReporter::new(Rc::new(source_map));
         collector
             .visit_identifier(&identifier, &mut errors)
             .unwrap();
@@ -1854,7 +1856,7 @@ mod tests {
         }));
 
         let source_map = SourceMap::new("".to_owned());
-        let mut errors = ErrorReporter::new(&source_map);
+        let mut errors = ErrorReporter::new(Rc::new(source_map));
 
         collector.visit_expression(&expr, &mut errors).unwrap();
 
@@ -1916,7 +1918,7 @@ mod tests {
         };
 
         let source_map = SourceMap::new("".to_string());
-        let mut errors = ErrorReporter::new(&source_map);
+        let mut errors = ErrorReporter::new(Rc::new(source_map));
         validator
             .visit_return_statement(&return_stmt, &mut errors)
             .unwrap();

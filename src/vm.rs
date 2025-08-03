@@ -14,6 +14,7 @@ const fn get_value_type(value: &Value) -> &'static str {
     }
 }
 
+#[derive(Default)]
 pub struct Vm;
 
 impl Vm {
@@ -173,8 +174,7 @@ impl Vm {
     fn pop(&mut self, artifact: &mut CompilerArtifact) -> RuntimeResult<Value> {
         if artifact.stack_top > 0 {
             artifact.stack_top -= 1;
-            let value =
-                std::mem::replace(&mut artifact.stack[artifact.stack_top], Value::default());
+            let value = std::mem::take(&mut artifact.stack[artifact.stack_top]);
             Ok(value)
         } else {
             Err(QangError::runtime_error(

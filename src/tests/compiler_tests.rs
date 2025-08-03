@@ -18,15 +18,18 @@ fn test_display() {
 #[test]
 fn test_run() {
     let source = r#"
-  "hello" + " " + "world!";
+        var hello_world = "hello" + " " + "world!";
+        print(hello_world);
+        var two = nil;
+        print(two);
+        two = 2;
+        print(two);
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
-            Ok((value, updated_artifact)) => {
-                value.print(&updated_artifact.heap);
-            }
+            Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
             }
@@ -45,9 +48,7 @@ fn math_operations_test() {
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
-            Ok((value, updated_artifact)) => {
-                value.print(&updated_artifact.heap);
-            }
+            Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
             }
@@ -67,9 +68,7 @@ fn equality_operations_test() {
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         disassemble_chunk(&artifact, &source_map, "script.ql");
         match Vm::new().interpret(artifact) {
-            Ok((value, updated_artifact)) => {
-                value.print(&updated_artifact.heap);
-            }
+            Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
             }
@@ -89,9 +88,7 @@ fn comparison_operations_test() {
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         disassemble_chunk(&artifact, &source_map, "script.ql");
         match Vm::new().set_debug(true).interpret(artifact) {
-            Ok((value, updated_artifact)) => {
-                value.print(&updated_artifact.heap);
-            }
+            Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
             }
@@ -134,9 +131,7 @@ fn test_booleans() {
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
         match Vm::new().interpret(artifact) {
-            Ok((value, updated_artifact)) => {
-                value.print(&updated_artifact.heap);
-            }
+            Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
             }

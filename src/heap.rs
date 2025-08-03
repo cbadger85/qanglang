@@ -5,6 +5,12 @@ use crate::error::ValueConversionError;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);
 
+impl ObjectHandle {
+    pub fn identifier(&self) -> usize {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct HeapObject {
     pub value: HeapObjectValue,
@@ -39,7 +45,7 @@ impl TryFrom<HeapObjectValue> for Box<str> {
 pub struct ObjectHeap {
     objects: Vec<Option<HeapObject>>,
     free_list: Vec<usize>,
-    string_interner: HashMap<Box<str>, ObjectHandle>,
+    string_interner: HashMap<Box<str>, usize>,
 }
 
 impl ObjectHeap {
@@ -53,13 +59,13 @@ impl ObjectHeap {
 
     pub fn intern_string(&mut self, s: Box<str>) -> ObjectHandle {
         match self.string_interner.entry(s) {
-            Entry::Occupied(entry) => *entry.get(),
+            Entry::Occupied(entry) => ObjectHandle(*entry.get()),
             Entry::Vacant(entry) => {
                 let s = entry.into_key();
                 let handle = self.allocate_object(HeapObject {
                     value: HeapObjectValue::String(s.clone()),
                 });
-                self.string_interner.insert(s, handle);
+                self.string_interner.insert(s, handle.identifier());
                 handle
             }
         }

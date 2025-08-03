@@ -48,6 +48,10 @@ pub fn disassemble_instruction(
         OpCode::LessEqual => simple_instruction("OP_LESS_EQUAL", offset),
         OpCode::Modulo => simple_instruction("OP_MODULO", offset),
         OpCode::Pop => simple_instruction("OP_POP", offset),
+        OpCode::DefineGlobal => simple_instruction("OP_DEFINE_GLOBAL", offset),
+        OpCode::GetGlobal => simple_instruction("OP_GET_GLOBAL", offset),
+        OpCode::SetGlobal => simple_instruction("OP_SET_GLOBAL", offset),
+        OpCode::Print => simple_instruction("OP_PRINT", offset),
     }
 }
 

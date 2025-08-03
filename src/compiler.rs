@@ -1,8 +1,8 @@
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
-    ast::{self, AstTransformer, AstVisitor, SourceSpan},
+    ast::{self, AstTransformer, AstVisitor, PrimaryExpr, SourceSpan},
     chunk::{Chunk, OpCode},
     heap::ObjectHeap,
     parser::Parser,
@@ -67,6 +67,7 @@ pub struct CompilerArtifact {
     pub ip: usize,
     pub stack_top: usize,
     pub stack: [Value; STACK_MAX],
+    pub globals: HashMap<usize, Value>,
 }
 
 impl CompilerArtifact {
@@ -78,6 +79,7 @@ impl CompilerArtifact {
             ip: 0,
             stack_top: 0,
             stack: std::array::from_fn(|_| Value::default()),
+            globals: HashMap::new(),
         }
     }
 
@@ -338,17 +340,67 @@ impl AstVisitor for Compiler {
 
     fn visit_assignment_expression(
         &mut self,
-        _assignment: &ast::AssignmentExpr,
-        _errors: &mut ErrorReporter,
+        assignment: &ast::AssignmentExpr,
+        errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
+        self.visit_expression(&assignment.value, errors)?;
+        self.visit_assignment_target(&assignment.target, errors)?;
+        self.emit_opcode(OpCode::SetGlobal, assignment.span);
+
+        Ok(())
+    }
+
+    fn visit_assignment_target(
+        &mut self,
+        target: &ast::AssignmentTarget,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        match &target {
+            ast::AssignmentTarget::Identifier(identifier) => {
+                let handle = self.heap.intern_string(identifier.name.to_owned());
+                self.emit_constant(Value::String(handle), identifier.span, errors);
+                Ok(())
+            }
+            _ => Err(QangError::parse_error("Invalid expression.", target.span())),
+        }
+    }
+
+    fn visit_expression_statement(
+        &mut self,
+        expr_stmt: &ast::ExprStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&expr_stmt.expr, errors)?;
+        self.emit_opcode(OpCode::Pop, expr_stmt.span);
         Ok(())
     }
 
     fn visit_variable_declaration(
         &mut self,
-        _var_decl: &ast::VariableDecl,
-        _errors: &mut ErrorReporter,
+        var_decl: &ast::VariableDecl,
+        errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
+        if let Some(expr) = &var_decl.initializer {
+            self.visit_expression(expr, errors)?;
+        } else {
+            self.emit_opcode(OpCode::Nil, var_decl.span);
+        }
+
+        let handle = self.heap.intern_string(var_decl.name.name.to_owned());
+        self.emit_constant(Value::String(handle), var_decl.name.span, errors);
+
+        self.emit_opcode(OpCode::DefineGlobal, var_decl.span);
+        Ok(())
+    }
+
+    fn visit_identifier(
+        &mut self,
+        identifier: &ast::Identifier,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        let handle = self.heap.intern_string(identifier.name.to_owned());
+        self.emit_constant(Value::String(handle), identifier.span, errors);
+        self.emit_opcode(OpCode::GetGlobal, identifier.span);
         Ok(())
     }
 
@@ -374,5 +426,31 @@ impl AstVisitor for Compiler {
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         Ok(())
+    }
+
+    fn visit_call_expression(
+        &mut self,
+        call: &ast::CallExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        match call.callee.as_ref() {
+            ast::Expr::Primary(PrimaryExpr::Identifier(identifier)) => {
+                if identifier.name.as_ref() == "print" {
+                    match call.operation.as_ref() {
+                        ast::CallOperation::Call(args) => {
+                            for arg in args {
+                                self.visit_expression(arg, errors)?;
+                                self.emit_opcode(OpCode::Print, call.span);
+                            }
+                            Ok(())
+                        }
+                        _ => Err(QangError::parse_error("Expected function call.", call.span)),
+                    }
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Ok(()),
+        }
     }
 }

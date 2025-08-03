@@ -81,6 +81,20 @@ impl TryFrom<Value> for f64 {
     }
 }
 
+impl TryFrom<Value> for ObjectHandle {
+    type Error = ValueConversionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::String(handle) => Ok(handle),
+            _ => Err(ValueConversionError::new(format!(
+                "Expected referenced value, found {}.",
+                get_value_type(&value)
+            ))),
+        }
+    }
+}
+
 impl TryFrom<Value> for bool {
     type Error = ValueConversionError;
 
@@ -123,6 +137,10 @@ pub enum OpCode {
     LessEqual,
     Modulo,
     Pop,
+    DefineGlobal,
+    GetGlobal,
+    SetGlobal,
+    Print,
 }
 
 impl From<u8> for OpCode {
@@ -146,6 +164,10 @@ impl From<u8> for OpCode {
             15 => OpCode::LessEqual,
             16 => OpCode::Modulo,
             17 => OpCode::Pop,
+            18 => OpCode::DefineGlobal,
+            19 => OpCode::GetGlobal,
+            20 => OpCode::SetGlobal,
+            21 => OpCode::Print,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

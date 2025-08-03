@@ -1,6 +1,7 @@
 use crate::{
-    Chunk, ObjectHeap, OpCode, QangError, Value, ast::SourceSpan, compiler::CompilerArtifact,
-    debug::disassemble_instruction,
+    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, Value, ast::SourceSpan,
+    compiler::CompilerArtifact, debug::disassemble_instruction, error::ValueConversionError,
+    heap::ObjectHandle,
 };
 
 pub type RuntimeResult<T> = Result<T, QangError>;
@@ -29,15 +30,12 @@ impl Vm {
         self
     }
 
-    pub fn interpret(
-        &mut self,
-        artifact: CompilerArtifact,
-    ) -> RuntimeResult<(Value, CompilerArtifact)> {
+    pub fn interpret(&mut self, artifact: CompilerArtifact) -> RuntimeResult<CompilerArtifact> {
         let result = self.run(artifact)?;
         Ok(result)
     }
 
-    fn run(&mut self, mut artifact: CompilerArtifact) -> RuntimeResult<(Value, CompilerArtifact)> {
+    fn run(&mut self, mut artifact: CompilerArtifact) -> RuntimeResult<CompilerArtifact> {
         loop {
             if self.is_debug {
                 self.debug(&artifact);
@@ -190,9 +188,77 @@ impl Vm {
                         Ok(Value::Boolean(a <= b))
                     })?
                 }
-                OpCode::Return => {
+                OpCode::DefineGlobal => {
+                    let span = artifact.get_previous_span();
+                    let identifier_handle: ObjectHandle = self
+                        .pop(&mut artifact)?
+                        .try_into()
+                        .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
                     let value = self.pop(&mut artifact)?;
-                    return Ok((value, artifact));
+                    artifact
+                        .globals
+                        .insert(identifier_handle.identifier(), value);
+                }
+                OpCode::GetGlobal => {
+                    let span = artifact.get_previous_span();
+                    let identifier_handle: ObjectHandle = self
+                        .pop(&mut artifact)?
+                        .try_into()
+                        .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                    let value = artifact
+                        .globals
+                        .get(&identifier_handle.identifier())
+                        .cloned()
+                        .ok_or_else(|| {
+                            let identifier_name = artifact
+                                .heap
+                                .get(identifier_handle)
+                                .map(|obj| match &obj.value {
+                                    HeapObjectValue::String(string) => string.clone(),
+                                    _ => "unknown".to_string().into_boxed_str(),
+                                })
+                                .unwrap_or("unknown".to_string().into_boxed_str());
+                            QangError::runtime_error(
+                                format!("Undefined variable: {}", identifier_name).as_str(),
+                                span,
+                            )
+                        })?;
+                    self.push(&mut artifact, value);
+                }
+                OpCode::SetGlobal => {
+                    let span = artifact.get_previous_span();
+                    let identifier_handle: ObjectHandle = self
+                        .pop(&mut artifact)?
+                        .try_into()
+                        .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                    if !artifact
+                        .globals
+                        .contains_key(&identifier_handle.identifier())
+                    {
+                        let identifier_name = artifact
+                            .heap
+                            .get(identifier_handle)
+                            .map(|obj| match &obj.value {
+                                HeapObjectValue::String(string) => string.clone(),
+                                _ => "unknown".to_string().into_boxed_str(),
+                            })
+                            .unwrap_or("unknown".to_string().into_boxed_str());
+                        return Err(QangError::runtime_error(
+                            format!("Undefined variable: {}", identifier_name).as_str(),
+                            span,
+                        ));
+                    }
+                    let value = self.peek(&mut artifact, 0).clone();
+                    artifact
+                        .globals
+                        .insert(identifier_handle.identifier(), value.clone());
+                }
+                OpCode::Print => {
+                    self.peek(&mut artifact, 0).clone().print(&artifact.heap);
+                    println!();
+                }
+                OpCode::Return => {
+                    return Ok(artifact);
                 }
                 _ => (),
             }

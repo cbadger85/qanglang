@@ -99,25 +99,6 @@ impl CompilerArtifact {
             )
         })
     }
-
-    pub fn get_span_for_stack_value(&self, stack_distance: usize) -> SourceSpan {
-        if self.stack_top > stack_distance {
-            let stack_index = self.stack_top - 1 - stack_distance;
-            if stack_index < self.ip {
-                self.get_span_at(stack_index)
-            } else {
-                self.get_previous_span()
-            }
-        } else {
-            self.get_previous_span()
-        }
-    }
-
-    pub fn get_binary_operand_spans(&self) -> (SourceSpan, SourceSpan) {
-        let right_span = self.get_span_for_stack_value(0);
-        let left_span = self.get_span_for_stack_value(1);
-        (left_span, right_span)
-    }
 }
 
 pub struct Compiler<'a> {

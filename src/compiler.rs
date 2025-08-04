@@ -68,11 +68,6 @@ impl Local {
     fn new(name: Box<str>) -> Self {
         Self { name, depth: None }
     }
-
-    fn with_depth(mut self, depth: usize) -> Self {
-        self.depth = Some(depth);
-        self
-    }
 }
 
 pub const STACK_MAX: usize = 256;
@@ -252,22 +247,18 @@ impl Compiler {
         }
     }
 
-    fn add_local(&mut self, handle: Box<str>, span: SourceSpan) -> Result<(), QangError> {
+    fn add_local(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangError> {
         if self.local_count >= STACK_MAX {
             Err(QangError::parse_error("", span))
         } else {
-            let local = Local::new(handle);
+            let local = Local::new(handle.into());
             self.locals[self.local_count] = Some(local);
             self.local_count += 1;
             Ok(())
         }
     }
 
-    fn declare_local_variable(
-        &mut self,
-        handle: &Box<str>,
-        span: SourceSpan,
-    ) -> Result<(), QangError> {
+    fn declare_local_variable(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangError> {
         for i in (0..self.local_count).rev() {
             if let Some(local) = self.locals[i].as_ref() {
                 if local
@@ -278,7 +269,7 @@ impl Compiler {
                     break;
                 }
 
-                if &local.name == handle {
+                if *local.name == *handle {
                     return Err(QangError::parse_error(
                         "Already a variable with this name in this scope.",
                         span,
@@ -287,18 +278,18 @@ impl Compiler {
             }
         }
 
-        self.add_local(handle.clone(), span)?;
+        self.add_local(handle, span)?;
         Ok(())
     }
 
     fn resolve_local_variable(
         &mut self,
-        handle: &Box<str>,
+        handle: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangError> {
         for i in (0..self.local_count).rev() {
             if let Some(local) = self.locals[i].as_ref() {
-                if &local.name == handle {
+                if *local.name == *handle {
                     if local.depth.is_none() {
                         return Err(QangError::runtime_error(
                             "Cannot read local variable during its initialization.",

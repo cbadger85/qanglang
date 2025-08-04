@@ -32,6 +32,7 @@ pub enum OpCode {
     SetLocal,
     JumpIfFalse,
     Jump,
+    Loop,
     Print,
 }
 
@@ -63,7 +64,8 @@ impl From<u8> for OpCode {
             22 => OpCode::SetLocal,
             23 => OpCode::JumpIfFalse,
             24 => OpCode::Jump,
-            25 => OpCode::Print,
+            25 => OpCode::Loop,
+            26 => OpCode::Print,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

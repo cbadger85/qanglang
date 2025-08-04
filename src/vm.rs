@@ -88,14 +88,14 @@ impl Vm {
     }
 
     pub fn interpret(&mut self) -> RuntimeResult<()> {
-        if self.is_debug {
-            self.debug();
-        }
         self.run()
     }
 
     fn run(&mut self) -> RuntimeResult<()> {
         loop {
+            if self.is_debug {
+                self.debug();
+            }
             let opcode: OpCode = self.read_byte()?.into();
 
             match opcode {
@@ -316,6 +316,10 @@ impl Vm {
                 OpCode::Jump => {
                     let offset = self.read_short()?;
                     self.ip += offset;
+                }
+                OpCode::Loop => {
+                    let offset = self.read_short()?;
+                    self.ip -= offset;
                 }
                 OpCode::Print => {
                     let value = self.pop()?;

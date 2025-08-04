@@ -56,6 +56,73 @@ fn test_run() {
 }
 
 #[test]
+fn test_while() {
+    let source = r#"
+        var a = 10;
+
+        while (a > 0) {
+            print(a);
+            a = a - 1;
+        } 
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    match CompilerPipeline::new((*source_map).clone()).run() {
+        Ok(artifact) => {
+            disassemble_chunk(
+                &artifact.source_map,
+                &artifact.chunk,
+                &artifact.heap,
+                "script.ql",
+            );
+            match Vm::new(artifact).set_debug(false).interpret() {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", pretty_print_error(&source_map, &error))
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                pretty_print_error(&source_map, error);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_subtraction() {
+    let source = r#"
+        var a = 3;
+        a = 1 - a;
+        print(a - -3);
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    match CompilerPipeline::new((*source_map).clone()).run() {
+        Ok(artifact) => {
+            disassemble_chunk(
+                &artifact.source_map,
+                &artifact.chunk,
+                &artifact.heap,
+                "script.ql",
+            );
+            match Vm::new(artifact).set_debug(false).interpret() {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", pretty_print_error(&source_map, &error))
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                pretty_print_error(&source_map, error);
+            }
+        }
+    }
+}
+
+#[test]
 fn test_locals() {
     let source = r#"
         var two = "two";
@@ -262,7 +329,18 @@ fn equality_operations_test() {
 #[test]
 fn comparison_operations_test() {
     let source = r#"
-        10 >= 9;
+        print(10 >= 9);     // true
+        print(10 >= 10);    // true
+        print(10 >= 11);    // false
+        print(10 > 9);      // true
+        print(9 > 9);       // false
+        print(10 > 11);     // false
+        print(9 <= 10);     // true
+        print(10 <= 10);    // true
+        print(11 <= 10);    // false
+        print(9 < 10);      // true
+        print(9 < 9);       // false
+        print(11 < 10);     // false
   "#;
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
@@ -273,7 +351,7 @@ fn comparison_operations_test() {
             &artifact.heap,
             "script.ql",
         );
-        match Vm::new(artifact).set_debug(true).interpret() {
+        match Vm::new(artifact).set_debug(false).interpret() {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))

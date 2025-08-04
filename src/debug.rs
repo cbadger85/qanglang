@@ -56,6 +56,7 @@ pub fn disassemble_instruction(
         OpCode::SetLocal => simple_instruction("OP_SET_LOCAL", offset),
         OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
         OpCode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
+        OpCode::Loop => jump_instruction("OP_LOOP", 1, chunk, offset),
         OpCode::Print => simple_instruction("OP_PRINT", offset),
     }
 }

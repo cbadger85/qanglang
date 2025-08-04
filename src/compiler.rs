@@ -225,6 +225,19 @@ impl Compiler {
         Ok(())
     }
 
+    fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangError> {
+        self.emit_opcode(OpCode::Loop, span);
+        let offset = self.current_chunk.code().len() - loop_start + 2;
+        if offset > u16::MAX as usize {
+            return Err(QangError::runtime_error("Loop body too large.", span));
+        }
+
+        self.emit_byte((offset >> 8 & 0xff) as u8, span);
+        self.emit_byte((offset & 0xff) as u8, span);
+
+        Ok(())
+    }
+
     fn emit_opcode_and_byte(&mut self, opcode: OpCode, byte: u8, span: SourceSpan) {
         self.emit_opcode(opcode, span);
         self.emit_byte(byte, span);
@@ -640,6 +653,25 @@ impl AstVisitor for Compiler {
         _lambda_decl: &ast::LambdaDecl,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn visit_while_statement(
+        &mut self,
+        while_stmt: &ast::WhileStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        let loop_start = self.current_chunk.code().len();
+        self.visit_expression(&while_stmt.condition, errors)?;
+
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse, while_stmt.body.span());
+        self.emit_opcode(OpCode::Pop, while_stmt.body.span());
+        self.visit_statement(&while_stmt.body, errors)?;
+        self.emit_loop(loop_start, while_stmt.body.span())?;
+
+        self.patch_jump(exit_jump, while_stmt.body.span())?;
+        self.emit_opcode(OpCode::Pop, while_stmt.span);
+
         Ok(())
     }
 

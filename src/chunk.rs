@@ -140,6 +140,8 @@ pub enum OpCode {
     DefineGlobal,
     GetGlobal,
     SetGlobal,
+    GetLocal,
+    SetLocal,
     Print,
 }
 
@@ -167,7 +169,9 @@ impl From<u8> for OpCode {
             18 => OpCode::DefineGlobal,
             19 => OpCode::GetGlobal,
             20 => OpCode::SetGlobal,
-            21 => OpCode::Print,
+            21 => OpCode::GetLocal,
+            22 => OpCode::SetLocal,
+            23 => OpCode::Print,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

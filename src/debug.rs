@@ -52,6 +52,8 @@ pub fn disassemble_instruction(
         OpCode::DefineGlobal => simple_instruction("OP_DEFINE_GLOBAL", offset),
         OpCode::GetGlobal => simple_instruction("OP_GET_GLOBAL", offset),
         OpCode::SetGlobal => simple_instruction("OP_SET_GLOBAL", offset),
+        OpCode::GetLocal => simple_instruction("OP_GET_LOCAL", offset),
+        OpCode::SetLocal => simple_instruction("OP_SET_LOCAL", offset),
         OpCode::Print => simple_instruction("OP_PRINT", offset),
     }
 }

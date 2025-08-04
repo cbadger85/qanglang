@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
-    ast::{self, AstTransformer, AstVisitor, PrimaryExpr, SourceSpan},
+    ast::{self, AstTransformer, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode},
-    heap::{ObjectHandle, ObjectHeap},
+    heap::ObjectHeap,
     parser::Parser,
 };
 
@@ -58,13 +58,26 @@ where
     }
 }
 
-pub struct Local {
-    pub name: ObjectHandle,
-    pub depth: Option<usize>,
+#[derive(Debug, Clone)]
+struct Local {
+    name: Box<str>,
+    depth: Option<usize>,
+}
+
+impl Local {
+    fn new(name: Box<str>) -> Self {
+        Self { name, depth: None }
+    }
+
+    fn with_depth(mut self, depth: usize) -> Self {
+        self.depth = Some(depth);
+        self
+    }
 }
 
 pub const STACK_MAX: usize = 256;
 
+#[derive(Debug, Clone)]
 pub struct CompilerArtifact {
     pub source_map: Rc<SourceMap>,
     pub heap: ObjectHeap,
@@ -224,8 +237,86 @@ impl Compiler {
         self.scope_depth += 1;
     }
 
-    fn end_scope(&mut self) {
+    fn end_scope(&mut self, span: SourceSpan) {
         self.scope_depth -= 1;
+
+        while self.local_count > 0
+            && self.locals[self.local_count - 1]
+                .as_ref()
+                .and_then(|l| l.depth)
+                .map(|local_depth| local_depth > self.scope_depth)
+                .unwrap_or(false)
+        {
+            self.emit_opcode(OpCode::Pop, span);
+            self.local_count -= 1;
+        }
+    }
+
+    fn add_local(&mut self, handle: Box<str>, span: SourceSpan) -> Result<(), QangError> {
+        if self.local_count >= STACK_MAX {
+            Err(QangError::parse_error("", span))
+        } else {
+            let local = Local::new(handle);
+            self.locals[self.local_count] = Some(local);
+            self.local_count += 1;
+            Ok(())
+        }
+    }
+
+    fn declare_local_variable(
+        &mut self,
+        handle: &Box<str>,
+        span: SourceSpan,
+    ) -> Result<(), QangError> {
+        for i in (0..self.local_count).rev() {
+            if let Some(local) = self.locals[i].as_ref() {
+                if local
+                    .depth
+                    .map(|local_depth| local_depth < self.scope_depth)
+                    .unwrap_or(false)
+                {
+                    break;
+                }
+
+                if &local.name == handle {
+                    return Err(QangError::parse_error(
+                        "Already a variable with this name in this scope.",
+                        span,
+                    ));
+                }
+            }
+        }
+
+        self.add_local(handle.clone(), span)?;
+        Ok(())
+    }
+
+    fn resolve_local_variable(
+        &mut self,
+        handle: &Box<str>,
+        span: SourceSpan,
+    ) -> Result<Option<usize>, QangError> {
+        for i in (0..self.local_count).rev() {
+            if let Some(local) = self.locals[i].as_ref() {
+                if &local.name == handle {
+                    if local.depth.is_none() {
+                        return Err(QangError::runtime_error(
+                            "Cannot read local variable during its initialization.",
+                            span,
+                        ));
+                    }
+                    return Ok(Some(i));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn mark_local_initialized(&mut self) {
+        if let Some(local) = self.locals[self.local_count - 1].as_mut() {
+            local.depth = Some(self.scope_depth)
+        }
     }
 }
 
@@ -333,26 +424,31 @@ impl AstVisitor for Compiler {
         assignment: &ast::AssignmentExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
+        println!("handle {:?}", assignment.target);
+
         self.visit_expression(&assignment.value, errors)?;
-        self.visit_assignment_target(&assignment.target, errors)?;
-        self.emit_opcode(OpCode::SetGlobal, assignment.span);
+
+        match &assignment.target {
+            ast::AssignmentTarget::Identifier(identifier) => {
+                if let Some(index) =
+                    self.resolve_local_variable(&identifier.name, assignment.target.span())?
+                {
+                    self.emit_opcode_and_byte(OpCode::SetLocal, index as u8, identifier.span);
+                } else {
+                    let handle = self.heap.intern_string(identifier.name.to_owned());
+                    self.emit_constant(Value::String(handle), identifier.span, errors);
+                    self.emit_opcode(OpCode::SetGlobal, assignment.span);
+                };
+            }
+            _ => {
+                return Err(QangError::parse_error(
+                    "Invalid expression.",
+                    assignment.target.span(),
+                ));
+            }
+        }
 
         Ok(())
-    }
-
-    fn visit_assignment_target(
-        &mut self,
-        target: &ast::AssignmentTarget,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        match &target {
-            ast::AssignmentTarget::Identifier(identifier) => {
-                let handle = self.heap.intern_string(identifier.name.to_owned());
-                self.emit_constant(Value::String(handle), identifier.span, errors);
-                Ok(())
-            }
-            _ => Err(QangError::parse_error("Invalid expression.", target.span())),
-        }
     }
 
     fn visit_expression_statement(
@@ -370,16 +466,27 @@ impl AstVisitor for Compiler {
         var_decl: &ast::VariableDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
+        let is_local = self.scope_depth > 0;
+        if is_local {
+            self.declare_local_variable(&var_decl.name.name, var_decl.name.span)?;
+        }
+
         if let Some(expr) = &var_decl.initializer {
             self.visit_expression(expr, errors)?;
         } else {
             self.emit_opcode(OpCode::Nil, var_decl.span);
         }
 
-        let handle = self.heap.intern_string(var_decl.name.name.to_owned());
-        self.emit_constant(Value::String(handle), var_decl.name.span, errors);
+        if is_local {
+            self.mark_local_initialized();
+            self.emit_opcode_and_byte(OpCode::SetLocal, self.local_count as u8 - 1, var_decl.span);
+        } else {
+            let handle = self.heap.intern_string(var_decl.name.name.to_owned());
 
-        self.emit_opcode(OpCode::DefineGlobal, var_decl.span);
+            self.emit_constant(Value::String(handle), var_decl.name.span, errors);
+
+            self.emit_opcode(OpCode::DefineGlobal, var_decl.span);
+        }
         Ok(())
     }
 
@@ -388,9 +495,45 @@ impl AstVisitor for Compiler {
         identifier: &ast::Identifier,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let handle = self.heap.intern_string(identifier.name.to_owned());
-        self.emit_constant(Value::String(handle), identifier.span, errors);
-        self.emit_opcode(OpCode::GetGlobal, identifier.span);
+        if let Some(index) = self.resolve_local_variable(&identifier.name, identifier.span)? {
+            self.emit_opcode_and_byte(OpCode::GetLocal, index as u8, identifier.span);
+        } else {
+            let handle = self.heap.intern_string(identifier.name.to_owned());
+            self.emit_constant(Value::String(handle), identifier.span, errors);
+            self.emit_opcode(OpCode::GetGlobal, identifier.span);
+        };
+
+        Ok(())
+    }
+
+    fn visit_block_statement(
+        &mut self,
+        block_stmt: &ast::BlockStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+        for decl in &block_stmt.decls {
+            self.visit_declaration(decl, errors)?;
+        }
+        self.end_scope(block_stmt.span);
+        Ok(())
+    }
+
+    fn visit_declaration(
+        &mut self,
+        decl: &ast::Decl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        let result = match decl {
+            ast::Decl::Class(class_decl) => self.visit_class_declaration(class_decl, errors),
+            ast::Decl::Function(func_decl) => self.visit_function_declaration(func_decl, errors),
+            ast::Decl::Lambda(lambda_decl) => self.visit_lambda_declaration(lambda_decl, errors),
+            ast::Decl::Variable(var_decl) => self.visit_variable_declaration(var_decl, errors),
+            ast::Decl::Stmt(stmt) => self.visit_statement(stmt, errors),
+        };
+        if let Err(error) = result {
+            errors.report_error(error);
+        }
         Ok(())
     }
 
@@ -424,7 +567,7 @@ impl AstVisitor for Compiler {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         match call.callee.as_ref() {
-            ast::Expr::Primary(PrimaryExpr::Identifier(identifier)) => {
+            ast::Expr::Primary(ast::PrimaryExpr::Identifier(identifier)) => {
                 if identifier.name.as_ref() == "print" {
                     match call.operation.as_ref() {
                         ast::CallOperation::Call(args) => {

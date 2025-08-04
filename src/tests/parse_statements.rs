@@ -1229,3 +1229,25 @@ fn test_comments_ignored() {
         }
     }
 }
+
+#[test]
+fn test_block_scope_variables() {
+    let source_code = r#"
+        var two = "two";
+        print(two);
+        two = 2;
+        {
+            var two = "2";
+            print(two);
+            print("TEST");
+        }
+        print(two);
+  "#;
+    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+
+    let (program, errors) = parse_source(source_map);
+
+    println!("{:?}", program);
+
+    assert_no_parse_errors(&errors);
+}

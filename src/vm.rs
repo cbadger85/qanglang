@@ -281,8 +281,20 @@ impl Vm {
                     let value = self.peek(0);
                     self.globals.insert(identifier_handle.identifier(), value);
                 }
-                OpCode::Print => {
+                OpCode::GetLocal => {
+                    let slot = self.read_byte()?;
+                    self.push(self.stack[slot as usize]);
+                }
+                OpCode::SetLocal => {
+                    let slot = self.read_byte()?;
                     let value = self.peek(0);
+                    print!("Assigning value: ");
+                    value.print(&self.heap);
+                    println!();
+                    self.stack[slot as usize] = value;
+                }
+                OpCode::Print => {
+                    let value = self.pop()?;
                     value.print(&self.heap);
                     println!();
                 }
@@ -368,6 +380,10 @@ impl Vm {
 
     pub fn heap(&self) -> &ObjectHeap {
         &self.heap
+    }
+
+    pub fn stack(&self) -> &[Value; STACK_MAX] {
+        &self.stack
     }
 
     #[allow(dead_code)]

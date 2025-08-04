@@ -165,14 +165,14 @@ impl ErrorReporter {
     #[allow(dead_code)]
     pub fn print_errors(&self) {
         for error in &self.errors.0 {
-            eprintln!("{}", pretty_print_error(self.source_map.clone(), error));
+            eprintln!("{}", pretty_print_error(&self.source_map.clone(), error));
         }
     }
 
     /// Print a specific error with pretty formatting
     #[allow(dead_code)]
     pub fn print_error(&self, error: &QangError) {
-        eprintln!("{}", pretty_print_error(self.source_map.clone(), error));
+        eprintln!("{}", pretty_print_error(&self.source_map.clone(), error));
     }
 
     /// Get a pretty printed string for all errors
@@ -181,7 +181,7 @@ impl ErrorReporter {
         self.errors
             .all()
             .iter()
-            .map(|error| pretty_print_error(self.source_map.clone(), error))
+            .map(|error| pretty_print_error(&self.source_map.clone(), error))
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -205,7 +205,7 @@ impl ErrorReporter {
 }
 
 /// Pretty print a single error with source context
-pub fn pretty_print_error(source_map: Rc<SourceMap>, error: &QangError) -> String {
+pub fn pretty_print_error(source_map: &SourceMap, error: &QangError) -> String {
     let mut output = String::new();
 
     let line_num = source_map.get_line_number(error.span.start);
@@ -246,7 +246,7 @@ pub fn pretty_print_error(source_map: Rc<SourceMap>, error: &QangError) -> Strin
 
 /// Create a visual pointer to the error location
 fn create_error_pointer(
-    source_map: Rc<SourceMap>,
+    source_map: &SourceMap,
     error: &QangError,
     line_str: &str,
     col_num: u32,

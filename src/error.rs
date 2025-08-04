@@ -103,8 +103,8 @@ pub type QangResult<T> = Result<T, QangErrors>;
 pub struct ValueConversionError(String);
 
 impl ValueConversionError {
-    pub fn new(message: String) -> Self {
-        Self(message)
+    pub fn new(message: &str) -> Self {
+        Self(message.to_string())
     }
 
     pub fn into_qang_error(self, span: SourceSpan) -> QangError {

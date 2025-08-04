@@ -1,24 +1,18 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, SourceMap, Value,
+    Chunk, HeapObject, HeapObjectValue, ObjectHeap, OpCode, QangError, SourceMap, Value,
     ast::SourceSpan,
     compiler::{CompilerArtifact, STACK_MAX},
     debug::disassemble_instruction,
     error::ValueConversionError,
-    heap::ObjectHandle,
+    heap::{NativeFunction, ObjectHandle},
+    value::get_value_type,
 };
 
 pub type RuntimeResult<T> = Result<T, QangError>;
 
-const fn get_value_type(value: &Value) -> &'static str {
-    match value {
-        Value::Nil => "nil",
-        Value::Boolean(_) => "boolean",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-    }
-}
+pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, QangError>;
 
 pub struct Vm {
     is_debug: bool,
@@ -48,6 +42,28 @@ impl Vm {
     pub fn set_debug(mut self, is_debug: bool) -> Self {
         self.is_debug = is_debug;
         self
+    }
+
+    pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
+        let identifier_handle = self.heap.intern_string(name.to_string().into_boxed_str());
+        let native_function = NativeFunction {
+            name: identifier_handle,
+            arity,
+            function,
+        };
+
+        let handle = self.heap.allocate_object(HeapObject {
+            value: HeapObjectValue::NativeFunction(native_function),
+        });
+
+        self.globals
+            .insert(identifier_handle.identifier(), Value::Function(handle));
+
+        self
+    }
+
+    fn call_native_function(function: NativeFn) -> Result<Value, QangError> {
+        Ok(Value::Nil)
     }
 
     fn get_current_span(&self) -> SourceSpan {
@@ -117,8 +133,12 @@ impl Vm {
                             Ok(Value::Number(num1 + num2))
                         }
                         (Value::String(_), Value::String(_)) => {
-                            let str1: Box<str> = a.into_string(heap, span)?;
-                            let str2: Box<str> = b.into_string(heap, span)?;
+                            let str1: Box<str> = a
+                                .into_string(heap)
+                                .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                            let str2: Box<str> = b
+                                .into_string(heap)
+                                .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
                             let result =
                                 heap.intern_string(format!("{}{}", str1, str2).into_boxed_str());
                             Ok(Value::String(result))
@@ -264,15 +284,12 @@ impl Vm {
                         .pop()?
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+
                     if !self.globals.contains_key(&identifier_handle.identifier()) {
                         let identifier_name = self
-                            .heap
-                            .get(identifier_handle)
-                            .map(|obj| match &obj.value {
-                                HeapObjectValue::String(string) => string.clone(),
-                                _ => "unknown".to_string().into_boxed_str(),
-                            })
-                            .unwrap_or("unknown".to_string().into_boxed_str());
+                            .get_identifier_name(identifier_handle)
+                            .unwrap_or("<unknown>".to_string().into_boxed_str());
+
                         return Err(QangError::runtime_error(
                             format!("Undefined variable: {}.", identifier_name).as_str(),
                             span,
@@ -368,6 +385,15 @@ impl Vm {
             Value::Nil => false,
             _ => true,
         }
+    }
+
+    fn get_identifier_name(&self, handle: ObjectHandle) -> Option<Box<str>> {
+        self.heap
+            .get(handle)
+            .and_then(|obj: &HeapObject| match &obj.value {
+                HeapObjectValue::String(identifier) => Some(identifier.clone()),
+                _ => None,
+            })
     }
 
     pub fn chunk(&self) -> &Chunk {

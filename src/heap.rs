@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map::Entry};
 
-use crate::error::ValueConversionError;
+use crate::{error::ValueConversionError, vm::NativeFn};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);
@@ -17,13 +17,22 @@ pub struct HeapObject {
 }
 
 #[derive(Debug, Clone)]
+pub struct NativeFunction {
+    pub function: NativeFn,
+    pub arity: usize,
+    pub name: ObjectHandle,
+}
+
+#[derive(Debug, Clone)]
 pub enum HeapObjectValue {
     String(Box<str>),
+    NativeFunction(NativeFunction),
 }
 
 pub const fn get_object_value_type(value: &HeapObjectValue) -> &'static str {
     match value {
         HeapObjectValue::String(_) => "string",
+        HeapObjectValue::NativeFunction(_) => "function",
     }
 }
 
@@ -33,10 +42,26 @@ impl TryFrom<HeapObjectValue> for Box<str> {
     fn try_from(value: HeapObjectValue) -> Result<Self, Self::Error> {
         match value {
             HeapObjectValue::String(string) => Ok(string),
-            _ => Err(ValueConversionError::new(format!(
-                "Expected string, found {}.",
-                get_object_value_type(&value)
-            ))),
+            _ => Err(ValueConversionError::new(
+                format!("Expected string, found {}.", get_object_value_type(&value)).as_str(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<HeapObjectValue> for NativeFn {
+    type Error = ValueConversionError;
+
+    fn try_from(value: HeapObjectValue) -> Result<Self, Self::Error> {
+        match value {
+            HeapObjectValue::NativeFunction(native_function) => Ok(native_function.function),
+            _ => Err(ValueConversionError::new(
+                format!(
+                    "Expected function, found {}.",
+                    get_object_value_type(&value)
+                )
+                .as_str(),
+            )),
         }
     }
 }
@@ -93,7 +118,7 @@ impl ObjectHeap {
     pub fn free(&mut self, handle: ObjectHandle) {
         if let Some(obj) = self.objects[handle.0].take() {
             match obj.value {
-                HeapObjectValue::String(_) => {}
+                HeapObjectValue::String(_) | HeapObjectValue::NativeFunction(_) => {}
                 _ => self.free_list.push(handle.0),
             }
         }

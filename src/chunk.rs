@@ -30,6 +30,8 @@ pub enum OpCode {
     SetGlobal,
     GetLocal,
     SetLocal,
+    JumpIfFalse,
+    Jump,
     Print,
 }
 
@@ -59,7 +61,9 @@ impl From<u8> for OpCode {
             20 => OpCode::SetGlobal,
             21 => OpCode::GetLocal,
             22 => OpCode::SetLocal,
-            23 => OpCode::Print,
+            23 => OpCode::JumpIfFalse,
+            24 => OpCode::Jump,
+            25 => OpCode::Print,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

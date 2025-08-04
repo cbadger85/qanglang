@@ -415,8 +415,6 @@ impl AstVisitor for Compiler {
         assignment: &ast::AssignmentExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        println!("handle {:?}", assignment.target);
-
         self.visit_expression(&assignment.value, errors)?;
 
         match &assignment.target {

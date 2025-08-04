@@ -742,8 +742,6 @@ impl Parser {
         self.advance();
         parameters.push(self.get_identifier()?);
 
-        println!("current_token {:?}", self.current_token);
-
         while self.match_token(TokenType::Comma) {
             if self.check(TokenType::RightParen) {
                 break;

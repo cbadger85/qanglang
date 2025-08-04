@@ -90,6 +90,132 @@ fn test_locals() {
 }
 
 #[test]
+fn test_conditionals() {
+    let source = r#"
+        if (true) {
+            print("It's true!");
+        } else {
+            "This should not print" + true;
+            }
+            
+        if (false) {
+            "This should not print" + true;
+        } else {
+            print("It's false!"); 
+        }
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
+        disassemble_chunk(
+            &artifact.source_map,
+            &artifact.chunk,
+            &artifact.heap,
+            "script.ql",
+        );
+        let mut vm = Vm::new(artifact);
+        match vm.interpret() {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", pretty_print_error(&source_map, &error))
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn test_ternary_expressions() {
+    let source = r#"
+        var result1 = true ? "correct" : "wrong";
+        print(result1);
+        
+        var result2 = false ? "wrong" : "correct";
+        print(result2);
+        
+        var result3 = nil ? "wrong" : "correct";
+        print(result3);
+
+        var result4 = true ? "should do this" : false ? "don't do this" : "nope";
+        print(result4);
+
+        var result5 = false ? "should not do this" : true ? "do this" : "nope";
+        print(result5);
+
+        var result6 = false ? "should not do this" : false ? "don't do this" : "yup";
+        print(result6);
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
+        disassemble_chunk(
+            &artifact.source_map,
+            &artifact.chunk,
+            &artifact.heap,
+            "script.ql",
+        );
+        let mut vm = Vm::new(artifact);
+        match vm.interpret() {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", pretty_print_error(&source_map, &error))
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
+fn test_logical_expressions() {
+    let source = r#"
+        var result1 = true or false;
+        print(result1);
+        
+        var result2 = false or true;
+        print(result2);
+        
+        var result3 = false or false;
+        print(result3);
+        
+        var result4 = true and false;
+        print(result4);
+        
+        var result5 = true and true;
+        print(result5);
+        
+        var result6 = false and true;
+        print(result6);
+        
+        var result7 = "hello" or nil;
+        print(result7);
+        
+        var result8 = nil and "world";
+        print(result8);
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
+        disassemble_chunk(
+            &artifact.source_map,
+            &artifact.chunk,
+            &artifact.heap,
+            "script.ql",
+        );
+        let mut vm = Vm::new(artifact);
+        match vm.interpret() {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", pretty_print_error(&source_map, &error))
+            }
+        }
+    } else {
+        panic!("Compiler errors.")
+    }
+}
+
+#[test]
 fn math_operations_test() {
     let source = r#"
   1 / 1 + 2 * (12 % 5);

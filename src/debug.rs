@@ -54,8 +54,8 @@ pub fn disassemble_instruction(
         OpCode::SetGlobal => simple_instruction("OP_SET_GLOBAL", offset),
         OpCode::GetLocal => simple_instruction("OP_GET_LOCAL", offset),
         OpCode::SetLocal => simple_instruction("OP_SET_LOCAL", offset),
-        OpCode::JumpIfFalse => simple_instruction("OP_JUMP_IF_FALSE", offset),
-        OpCode::Jump => simple_instruction("OP_JUMP", offset),
+        OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
+        OpCode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
         OpCode::Print => simple_instruction("OP_PRINT", offset),
     }
 }
@@ -78,4 +78,11 @@ fn constant_instruction(name: &str, chunk: &Chunk, heap: &ObjectHeap, offset: us
 fn simple_instruction(name: &str, offset: usize) -> usize {
     println!("{}", name);
     offset + 1
+}
+
+fn jump_instruction(name: &str, sign: i32, chunk: &Chunk, offset: usize) -> usize {
+    let jump = ((chunk.code()[offset + 1] as u16) << 8) | (chunk.code()[offset + 2] as u16);
+    let target = offset as i32 + 3 + sign * (jump as i32);
+    println!("{:<16} {:4} -> {}", name, offset, target);
+    offset + 3
 }

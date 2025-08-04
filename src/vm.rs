@@ -307,6 +307,16 @@ impl Vm {
                     let value = self.peek(0);
                     self.stack[slot as usize] = value;
                 }
+                OpCode::JumpIfFalse => {
+                    let offset = self.read_short()?;
+                    if !self.is_truthy(self.peek(0)) {
+                        self.ip += offset;
+                    }
+                }
+                OpCode::Jump => {
+                    let offset = self.read_short()?;
+                    self.ip += offset;
+                }
                 OpCode::Print => {
                     let value = self.pop()?;
                     value.print(&self.heap);
@@ -338,6 +348,12 @@ impl Vm {
 
     fn read_constant(&self, index: usize, chunk: &Chunk) -> Value {
         *chunk.constants().get(index).unwrap_or(&Value::Nil)
+    }
+
+    fn read_short(&mut self) -> RuntimeResult<usize> {
+        let high_byte = self.read_byte()? as usize;
+        let low_byte = self.read_byte()? as usize;
+        Ok((high_byte << 8) | low_byte)
     }
 
     fn push(&mut self, value: Value) {

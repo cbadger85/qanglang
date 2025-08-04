@@ -164,6 +164,10 @@ impl Chunk {
         &self.code
     }
 
+    pub fn code_mut(&mut self) -> &mut [u8] {
+        &mut self.code
+    }
+
     pub fn constants(&self) -> &[Value] {
         &self.constants
     }

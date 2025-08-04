@@ -205,6 +205,26 @@ impl Compiler {
         }
     }
 
+    fn emit_jump(&mut self, opcode: OpCode, span: SourceSpan) -> usize {
+        self.emit_opcode(opcode, span);
+        self.emit_byte(0xff, span);
+        self.emit_byte(0xff, span);
+        self.current_chunk.code().len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangError> {
+        let jump = self.current_chunk.code().len() - offset - 2;
+
+        if jump > u16::MAX as usize {
+            return Err(QangError::parse_error("Too much code to jump over.", span));
+        }
+
+        self.current_chunk.code_mut()[offset] = ((jump >> 8) & 0xff) as u8;
+        self.current_chunk.code_mut()[offset + 1] = (jump & 0xff) as u8;
+
+        Ok(())
+    }
+
     fn emit_opcode_and_byte(&mut self, opcode: OpCode, byte: u8, span: SourceSpan) {
         self.emit_opcode(opcode, span);
         self.emit_byte(byte, span);
@@ -523,6 +543,95 @@ impl AstVisitor for Compiler {
         if let Err(error) = result {
             errors.report_error(error);
         }
+        Ok(())
+    }
+
+    fn visit_if_statement(
+        &mut self,
+        if_stmt: &ast::IfStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&if_stmt.condition, errors)?;
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse, if_stmt.then_branch.span());
+        self.emit_opcode(OpCode::Pop, if_stmt.then_branch.span());
+        self.visit_statement(&if_stmt.then_branch, errors)?;
+
+        let else_jump = self.emit_jump(OpCode::Jump, if_stmt.span);
+        self.patch_jump(then_jump, if_stmt.then_branch.span())?;
+        self.emit_opcode(OpCode::Pop, if_stmt.span);
+
+        if let Some(else_branch) = if_stmt.else_branch.as_ref() {
+            self.visit_statement(&else_branch, errors)?;
+        }
+        self.patch_jump(else_jump, if_stmt.span)?;
+
+        Ok(())
+    }
+
+    fn visit_ternary_expression(
+        &mut self,
+        ternary: &ast::TernaryExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&ternary.condition, errors)?;
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse, ternary.span);
+        self.emit_opcode(OpCode::Pop, ternary.span);
+
+        if let Some(then_expr) = &ternary.then_expr {
+            self.visit_expression(then_expr, errors)?;
+        } else {
+            self.emit_opcode(OpCode::Nil, ternary.span);
+        }
+
+        let else_jump = self.emit_jump(OpCode::Jump, ternary.span);
+        self.patch_jump(then_jump, ternary.span)?;
+        self.emit_opcode(OpCode::Pop, ternary.span);
+
+        if let Some(else_expr) = &ternary.else_expr {
+            self.visit_expression(else_expr, errors)?;
+        } else {
+            self.emit_opcode(OpCode::Nil, ternary.span);
+        }
+
+        self.patch_jump(else_jump, ternary.span)?;
+
+        Ok(())
+    }
+
+    fn visit_logical_or_expression(
+        &mut self,
+        logical_or: &ast::LogicalOrExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&logical_or.left, errors)?;
+
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse, logical_or.span);
+        let end_jump = self.emit_jump(OpCode::Jump, logical_or.span);
+
+        self.patch_jump(else_jump, logical_or.span)?;
+        self.emit_opcode(OpCode::Pop, logical_or.span);
+
+        self.visit_expression(&logical_or.right, errors)?;
+        self.patch_jump(end_jump, logical_or.span)?;
+
+        Ok(())
+    }
+
+    fn visit_logical_and_expression(
+        &mut self,
+        logical_and: &ast::LogicalAndExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&logical_and.left, errors)?;
+
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse, logical_and.span);
+        self.emit_opcode(OpCode::Pop, logical_and.span);
+
+        self.visit_expression(&logical_and.right, errors)?;
+        self.patch_jump(end_jump, logical_and.span)?;
+
         Ok(())
     }
 

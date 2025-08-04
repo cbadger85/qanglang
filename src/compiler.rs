@@ -67,23 +67,16 @@ pub const STACK_MAX: usize = 256;
 
 pub struct CompilerArtifact {
     pub source_map: Rc<SourceMap>,
-    pub chunk: Chunk,
     pub heap: ObjectHeap,
-    pub locals: [Option<Local>; STACK_MAX],
+    pub chunk: Chunk,
 }
 
 impl CompilerArtifact {
-    pub fn new(
-        source_map: Rc<SourceMap>,
-        chunk: Chunk,
-        heap: ObjectHeap,
-        locals: [Option<Local>; STACK_MAX],
-    ) -> Self {
+    pub fn new(source_map: Rc<SourceMap>, chunk: Chunk, heap: ObjectHeap) -> Self {
         Self {
             source_map,
             chunk,
             heap,
-            locals,
         }
     }
 }
@@ -188,7 +181,6 @@ impl Compiler {
                 self.source_map,
                 self.current_chunk,
                 self.heap,
-                self.locals,
             ))
         }
     }

@@ -9,7 +9,12 @@ fn test_display() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(&artifact, "script.ql");
+        disassemble_chunk(
+            &artifact.source_map,
+            &artifact.chunk,
+            &artifact.heap,
+            "script.ql",
+        );
     } else {
         panic!("Compiler errors.")
     }
@@ -28,7 +33,7 @@ fn test_run() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
@@ -47,7 +52,7 @@ fn math_operations_test() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
@@ -66,8 +71,13 @@ fn equality_operations_test() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(&artifact, "script.ql");
-        match Vm::new().interpret(artifact) {
+        disassemble_chunk(
+            &artifact.source_map,
+            &artifact.chunk,
+            &artifact.heap,
+            "script.ql",
+        );
+        match Vm::new(artifact).interpret() {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
@@ -86,8 +96,13 @@ fn comparison_operations_test() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(&artifact, "script.ql");
-        match Vm::new().set_debug(true).interpret(artifact) {
+        disassemble_chunk(
+            &artifact.source_map,
+            &artifact.chunk,
+            &artifact.heap,
+            "script.ql",
+        );
+        match Vm::new(artifact).set_debug(true).interpret() {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
@@ -106,7 +121,7 @@ fn test_runtime_error_with_source_span() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
             }
@@ -130,7 +145,7 @@ fn test_booleans() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(source_map.clone(), &error))
@@ -149,7 +164,7 @@ fn test_type_error_with_source_span_for_left_operand() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => {
                 panic!("Expected runtime error for adding number and string")
             }
@@ -172,7 +187,7 @@ fn test_type_error_with_source_span_for_right_operand() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => {
                 panic!("Expected runtime error for adding string and boolean")
             }
@@ -195,7 +210,7 @@ fn test_targeted_type_error_spans() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => {
                 panic!("Expected runtime error for adding number and string")
             }
@@ -222,7 +237,7 @@ fn test_left_operand_error_span() {
     let source_map = Rc::new(SourceMap::new(source.to_string()));
 
     if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new().interpret(artifact) {
+        match Vm::new(artifact).interpret() {
             Ok(_) => {
                 panic!("Expected runtime error for adding boolean and number")
             }

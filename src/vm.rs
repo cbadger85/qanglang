@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, Value,
+    Chunk, HeapObjectValue, ObjectHeap, OpCode, QangError, SourceMap, Value,
     ast::SourceSpan,
     compiler::{CompilerArtifact, STACK_MAX},
     debug::disassemble_instruction,
@@ -26,12 +26,22 @@ pub struct Vm {
     stack_top: usize,
     stack: [Value; STACK_MAX],
     globals: HashMap<usize, Value>,
+    source_map: Rc<SourceMap>,
+    heap: ObjectHeap,
+    chunk: Chunk,
 }
 
 impl Vm {
-    pub fn new() -> Self {
+    pub fn new(artifact: CompilerArtifact) -> Self {
         Self {
-            ..Default::default()
+            is_debug: false,
+            ip: 0,
+            stack_top: 0,
+            stack: std::array::from_fn(|_| Value::default()),
+            globals: HashMap::new(),
+            source_map: artifact.source_map,
+            heap: artifact.heap,
+            chunk: artifact.chunk,
         }
     }
 
@@ -40,48 +50,42 @@ impl Vm {
         self
     }
 
-    fn get_current_span(&self, artifact: &CompilerArtifact) -> SourceSpan {
-        self.get_span_at(artifact, self.ip)
+    fn get_current_span(&self) -> SourceSpan {
+        self.get_span_at(self.ip)
     }
 
-    fn get_previous_span(&self, artifact: &CompilerArtifact) -> SourceSpan {
+    fn get_previous_span(&self) -> SourceSpan {
         if self.ip > 0 {
-            self.get_span_at(artifact, self.ip - 1)
+            self.get_span_at(self.ip - 1)
         } else {
             SourceSpan::default()
         }
     }
 
-    fn get_span_at(&self, artifact: &CompilerArtifact, index: usize) -> SourceSpan {
-        artifact
-            .chunk
-            .spans()
-            .get(index)
-            .copied()
-            .unwrap_or_else(|| {
-                SourceSpan::new(
-                    artifact.source_map.get_source().len(),
-                    artifact.source_map.get_source().len(),
-                )
-            })
+    fn get_span_at(&self, index: usize) -> SourceSpan {
+        self.chunk.spans().get(index).copied().unwrap_or_else(|| {
+            SourceSpan::new(
+                self.source_map.get_source().len(),
+                self.source_map.get_source().len(),
+            )
+        })
     }
 
-    pub fn interpret(&mut self, artifact: CompilerArtifact) -> RuntimeResult<CompilerArtifact> {
-        let result = self.run(artifact)?;
-        Ok(result)
+    pub fn interpret(&mut self) -> RuntimeResult<()> {
+        self.run()
     }
 
-    fn run(&mut self, mut artifact: CompilerArtifact) -> RuntimeResult<CompilerArtifact> {
+    fn run(&mut self) -> RuntimeResult<()> {
         loop {
             if self.is_debug {
-                self.debug(&artifact);
+                self.debug();
             }
-            let opcode: OpCode = self.read_byte(&mut artifact)?.into();
+            let opcode: OpCode = self.read_byte()?.into();
 
             match opcode {
                 OpCode::Constant => {
-                    let constant_index = self.read_byte(&mut artifact)? as usize;
-                    let constant = self.read_constant(constant_index, &artifact.chunk);
+                    let constant_index = self.read_byte()? as usize;
+                    let constant = self.read_constant(constant_index, &self.chunk);
                     self.push(constant);
                 }
                 OpCode::Negate => {
@@ -90,7 +94,7 @@ impl Vm {
                     } else {
                         return Err(QangError::runtime_error(
                             "Operand must be a number.",
-                            self.get_previous_span(&artifact),
+                            self.get_previous_span(),
                         ));
                     }
                 }
@@ -108,7 +112,7 @@ impl Vm {
                     self.push(Value::Nil);
                 }
                 OpCode::Add => {
-                    self.binary_operation(&mut artifact, |a, b, heap, span| match (&a, &b) {
+                    self.binary_operation(|a, b, heap, span| match (&a, &b) {
                         (Value::Number(num1), Value::Number(num2)) => {
                             Ok(Value::Number(num1 + num2))
                         }
@@ -141,7 +145,7 @@ impl Vm {
                         )),
                     })?;
                 }
-                OpCode::Subtract => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                OpCode::Subtract => self.binary_operation(|a, b, _heap, span| {
                     let a: f64 = a.try_into().map_err(|_| {
                         QangError::runtime_error("Both operands must be a number.", span)
                     })?;
@@ -151,7 +155,7 @@ impl Vm {
 
                     Ok((a - b).into())
                 })?,
-                OpCode::Multiply => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                OpCode::Multiply => self.binary_operation(|a, b, _heap, span| {
                     let a: f64 = a.try_into().map_err(|_| {
                         QangError::runtime_error("Both operands must be a number.", span)
                     })?;
@@ -161,7 +165,7 @@ impl Vm {
 
                     Ok((a * b).into())
                 })?,
-                OpCode::Divide => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                OpCode::Divide => self.binary_operation(|a, b, _heap, span| {
                     let a: f64 = a.try_into().map_err(|_| {
                         QangError::runtime_error("Both operands must be a number.", span)
                     })?;
@@ -171,7 +175,7 @@ impl Vm {
 
                     Ok((a / b).into())
                 })?,
-                OpCode::Modulo => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                OpCode::Modulo => self.binary_operation(|a, b, _heap, span| {
                     let a: f64 = a.try_into().map_err(|_| {
                         QangError::runtime_error("Both operands must be a number.", span)
                     })?;
@@ -181,10 +185,10 @@ impl Vm {
 
                     Ok((a % b).into())
                 })?,
-                OpCode::Equal => self.binary_operation(&mut artifact, |a, b, _heap, _span| {
-                    Ok(Value::Boolean(a == b))
-                })?,
-                OpCode::Greater => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                OpCode::Equal => {
+                    self.binary_operation(|a, b, _heap, _span| Ok(Value::Boolean(a == b)))?
+                }
+                OpCode::Greater => self.binary_operation(|a, b, _heap, span| {
                     let a: f64 = a.try_into().map_err(|_| {
                         QangError::runtime_error("Both operands must be a number.", span)
                     })?;
@@ -193,18 +197,16 @@ impl Vm {
                     })?;
                     Ok(Value::Boolean(a > b))
                 })?,
-                OpCode::GreaterEqual => {
-                    self.binary_operation(&mut artifact, |a, b, _heap, span| {
-                        let a: f64 = a.try_into().map_err(|_| {
-                            QangError::runtime_error("Both operands must be a number.", span)
-                        })?;
-                        let b: f64 = b.try_into().map_err(|_| {
-                            QangError::runtime_error("Both operands must be a number.", span)
-                        })?;
-                        Ok(Value::Boolean(a >= b))
-                    })?
-                }
-                OpCode::Less => self.binary_operation(&mut artifact, |a, b, _heap, span| {
+                OpCode::GreaterEqual => self.binary_operation(|a, b, _heap, span| {
+                    let a: f64 = a.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    let b: f64 = b.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    Ok(Value::Boolean(a >= b))
+                })?,
+                OpCode::Less => self.binary_operation(|a, b, _heap, span| {
                     let a: f64 = a.try_into().map_err(|_| {
                         QangError::runtime_error("Both operands must be a number.", span)
                     })?;
@@ -213,37 +215,35 @@ impl Vm {
                     })?;
                     Ok(Value::Boolean(a < b))
                 })?,
-                OpCode::LessEqual => {
-                    self.binary_operation(&mut artifact, |a, b, _heap, span| {
-                        let a: f64 = a.try_into().map_err(|_| {
-                            QangError::runtime_error("Both operands must be a number.", span)
-                        })?;
-                        let b: f64 = b.try_into().map_err(|_| {
-                            QangError::runtime_error("Both operands must be a number.", span)
-                        })?;
-                        Ok(Value::Boolean(a <= b))
-                    })?
-                }
+                OpCode::LessEqual => self.binary_operation(|a, b, _heap, span| {
+                    let a: f64 = a.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    let b: f64 = b.try_into().map_err(|_| {
+                        QangError::runtime_error("Both operands must be a number.", span)
+                    })?;
+                    Ok(Value::Boolean(a <= b))
+                })?,
                 OpCode::DefineGlobal => {
-                    let span = self.get_previous_span(&artifact);
+                    let span = self.get_previous_span();
                     let identifier_handle: ObjectHandle = self
-                        .pop(&mut artifact)?
+                        .pop()?
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
-                    let value = self.pop(&mut artifact)?;
+                    let value = self.pop()?;
                     self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
-                    let span = self.get_previous_span(&artifact);
+                    let span = self.get_previous_span();
                     let identifier_handle: ObjectHandle = self
-                        .pop(&mut artifact)?
+                        .pop()?
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
                     let value = *self
                         .globals
                         .get(&identifier_handle.identifier())
                         .ok_or_else(|| {
-                            let identifier_name = artifact
+                            let identifier_name = self
                                 .heap
                                 .get(identifier_handle)
                                 .map(|obj| match &obj.value {
@@ -259,13 +259,13 @@ impl Vm {
                     self.push(value);
                 }
                 OpCode::SetGlobal => {
-                    let span = self.get_previous_span(&artifact);
+                    let span = self.get_previous_span();
                     let identifier_handle: ObjectHandle = self
-                        .pop(&mut artifact)?
+                        .pop()?
                         .try_into()
                         .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
                     if !self.globals.contains_key(&identifier_handle.identifier()) {
-                        let identifier_name = artifact
+                        let identifier_name = self
                             .heap
                             .get(identifier_handle)
                             .map(|obj| match &obj.value {
@@ -283,29 +283,29 @@ impl Vm {
                 }
                 OpCode::Print => {
                     let value = self.peek(0);
-                    value.print(&artifact.heap);
+                    value.print(&self.heap);
                     println!();
                 }
                 OpCode::Return => {
-                    return Ok(artifact);
+                    return Ok(());
                 }
                 _ => (),
             }
         }
     }
 
-    fn read_byte(&mut self, artifact: &mut CompilerArtifact) -> RuntimeResult<u8> {
-        if self.ip >= artifact.chunk.count() {
+    fn read_byte(&mut self) -> RuntimeResult<u8> {
+        if self.ip >= self.chunk.count() {
             return Err(QangError::runtime_error(
                 "Instruction pointer out of bounds.",
                 SourceSpan::new(
-                    artifact.source_map.get_source().len(),
-                    artifact.source_map.get_source().len(),
+                    self.source_map.get_source().len(),
+                    self.source_map.get_source().len(),
                 ),
             ));
         }
 
-        let byte = artifact.chunk.code()[self.ip];
+        let byte = self.chunk.code()[self.ip];
         self.ip += 1;
         Ok(byte)
     }
@@ -319,7 +319,7 @@ impl Vm {
         self.stack_top += 1;
     }
 
-    fn pop(&mut self, artifact: &mut CompilerArtifact) -> RuntimeResult<Value> {
+    fn pop(&mut self) -> RuntimeResult<Value> {
         if self.stack_top > 0 {
             self.stack_top -= 1;
             let value = std::mem::take(&mut self.stack[self.stack_top]);
@@ -327,7 +327,7 @@ impl Vm {
         } else {
             Err(QangError::runtime_error(
                 "No value found, unexpected empty stack.",
-                self.get_current_span(artifact),
+                self.get_current_span(),
             ))
         }
     }
@@ -336,15 +336,15 @@ impl Vm {
         self.stack[self.stack_top - 1 - distance]
     }
 
-    fn binary_operation<F>(&mut self, artifact: &mut CompilerArtifact, op: F) -> RuntimeResult<()>
+    fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
     where
         F: FnOnce(Value, Value, &mut ObjectHeap, SourceSpan) -> RuntimeResult<Value>,
     {
-        let op_span = self.get_previous_span(artifact);
-        let b = self.pop(artifact)?;
-        let a = self.pop(artifact)?;
+        let op_span = self.get_previous_span();
+        let b = self.pop()?;
+        let a = self.pop()?;
 
-        let value = op(a, b, &mut artifact.heap, op_span)?;
+        let value = op(a, b, &mut self.heap, op_span)?;
 
         self.push(value);
         Ok(())
@@ -358,27 +358,27 @@ impl Vm {
         }
     }
 
+    pub fn chunk(&self) -> &Chunk {
+        &self.chunk
+    }
+
+    pub fn source_map(&self) -> &SourceMap {
+        &self.source_map
+    }
+
+    pub fn heap(&self) -> &ObjectHeap {
+        &self.heap
+    }
+
     #[allow(dead_code)]
-    fn debug(&self, artifact: &CompilerArtifact) {
+    fn debug(&self) {
         print!("          ");
         for i in 0..self.stack_top {
-            self.stack[i].print(&artifact.heap);
+            self.stack[i].print(&self.heap);
             print!(" ");
         }
         println!();
 
-        disassemble_instruction(artifact, self.ip);
-    }
-}
-
-impl Default for Vm {
-    fn default() -> Self {
-        Self {
-            is_debug: false,
-            ip: 0,
-            stack_top: 0,
-            stack: std::array::from_fn(|_| Value::default()),
-            globals: HashMap::new(),
-        }
+        disassemble_instruction(&self.source_map, &self.chunk, &self.heap, self.ip);
     }
 }

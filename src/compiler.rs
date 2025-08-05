@@ -151,7 +151,7 @@ impl<'a> CompilerPipeline<'a> {
             program = transformer.as_mut().run(program);
         }
 
-        let function = Compiler::new(self.source_map.clone(), &mut self.heap, self.is_silent)
+        let function = Compiler::new(self.source_map.clone(), self.heap, self.is_silent)
             .compile(program, errors)?;
 
         Ok(function)
@@ -294,7 +294,9 @@ impl<'a> Compiler<'a> {
         self.scope_depth -= 1;
 
         while self.local_count > 0
-            && self.locals.get(self.local_count - 1)
+            && self
+                .locals
+                .get(self.local_count - 1)
                 .and_then(|l| l.depth)
                 .map(|local_depth| local_depth > self.scope_depth)
                 .unwrap_or(false)
@@ -607,7 +609,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.emit_opcode(OpCode::Pop, if_stmt.span);
 
         if let Some(else_branch) = if_stmt.else_branch.as_ref() {
-            self.visit_statement(&else_branch, errors)?;
+            self.visit_statement(else_branch, errors)?;
         }
         self.patch_jump(else_jump, if_stmt.span)?;
 
@@ -717,7 +719,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         if let Some(initializer) = &for_stmt.initializer {
             match initializer {
                 ForInitializer::Variable(var_decl) => {
-                    self.visit_variable_declaration(&var_decl, errors)?
+                    self.visit_variable_declaration(var_decl, errors)?
                 }
                 ForInitializer::Expr(expr) => {
                     self.visit_expression(expr, errors)?;
@@ -740,7 +742,7 @@ impl<'a> AstVisitor for Compiler<'a> {
             }
 
             self.patch_jump(condition_jump, condition.span())?;
-            self.visit_expression(&condition, errors)?;
+            self.visit_expression(condition, errors)?;
             exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse, condition.span()));
             self.emit_opcode(OpCode::Pop, condition.span());
             self.emit_loop(loop_start, for_stmt.body.span())?;

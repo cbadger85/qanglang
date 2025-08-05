@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{
     ErrorReporter, QangSyntaxError, SourceMap,
     ast::{self, SourceSpan},
@@ -8,17 +6,17 @@ use crate::{
 
 type ParseResult<T> = Result<T, QangSyntaxError>;
 
-pub struct Parser {
-    source_map: Rc<SourceMap>,
-    tokens: Tokenizer,
+pub struct Parser<'a> {
+    source_map: &'a SourceMap,
+    tokens: Tokenizer<'a>,
     previous_token: Option<Token>,
     current_token: Option<Token>,
     errors: ErrorReporter,
 }
 
-impl Parser {
-    pub fn new(source_map: Rc<SourceMap>) -> Self {
-        let tokens = Tokenizer::new(source_map.clone());
+impl<'a> Parser<'a> {
+    pub fn new(source_map: &'a SourceMap) -> Self {
+        let tokens = Tokenizer::new(source_map);
         let errors = ErrorReporter::new();
         let mut parser = Self {
             source_map,
@@ -97,7 +95,7 @@ impl Parser {
         self.errors.report_error(QangSyntaxError::new_formatted(
             message,
             ast::SourceSpan::from_token(token),
-            &self.source_map,
+            self.source_map,
         ));
     }
 
@@ -122,7 +120,7 @@ impl Parser {
             .unwrap_or(ast::SourceSpan { start: 0, end: 0 });
 
         if let Some(token) = token {
-            let name = token.lexeme(&self.source_map);
+            let name = token.lexeme(self.source_map);
             Ok(ast::Identifier::new(
                 name.iter().collect::<String>().into_boxed_str(),
                 span,
@@ -252,11 +250,8 @@ impl Parser {
         match result {
             Ok(decl) => Some(decl),
             Err(error) => {
-                let formatted_error = QangSyntaxError::new_formatted(
-                    &error.message,
-                    error.span,
-                    &self.source_map,
-                );
+                let formatted_error =
+                    QangSyntaxError::new_formatted(&error.message, error.span, self.source_map);
                 self.errors.report_error(formatted_error);
                 self.synchronize();
                 None
@@ -829,7 +824,7 @@ mod expression_parser {
         let span = ast::SourceSpan::from_token(token);
 
         let value = token
-            .lexeme(&parser.source_map)
+            .lexeme(parser.source_map)
             .iter()
             .collect::<String>()
             .parse::<f64>()
@@ -920,7 +915,7 @@ mod expression_parser {
     fn string(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let token = get_previous_token(parser);
 
-        let value = token.lexeme(&parser.source_map);
+        let value = token.lexeme(parser.source_map);
 
         let span = ast::SourceSpan::from_token(token);
 
@@ -1228,7 +1223,7 @@ mod expression_parser {
                 let property_name = parser
                     .previous_token
                     .as_ref()
-                    .map(|t| t.lexeme(&parser.source_map))
+                    .map(|t| t.lexeme(parser.source_map))
                     .unwrap();
                 let property = ast::Identifier::new(
                     property_name.iter().collect::<String>().into_boxed_str(),
@@ -1257,7 +1252,7 @@ mod expression_parser {
                         let property_name = parser
                             .previous_token
                             .as_ref()
-                            .map(|t| t.lexeme(&parser.source_map))
+                            .map(|t| t.lexeme(parser.source_map))
                             .unwrap();
                         let property = ast::Identifier::new(
                             property_name.iter().collect::<String>().into_boxed_str(),
@@ -1329,14 +1324,12 @@ mod expression_parser {
         Ok(arguments)
     }
 
-    fn get_previous_token(parser: &Parser) -> &Token {
+    fn get_previous_token<'a>(parser: &'a Parser) -> &'a Token {
         // This should never panic because the expression parser will always have a previous token available to it.
-        let token: &&Token = &parser
+        parser
             .previous_token
             .as_ref()
-            .expect("Expected token but found none.");
-
-        token
+            .expect("Expected token but found none.")
     }
 
     pub struct ParseRule {

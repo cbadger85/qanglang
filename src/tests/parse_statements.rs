@@ -1,6 +1,5 @@
 use super::{assert_no_parse_errors, parse_source};
 use crate::{SourceMap, ast};
-use std::rc::Rc;
 
 #[test]
 fn test_if_statement() {
@@ -11,9 +10,9 @@ fn test_if_statement() {
                 return false;
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 1);
@@ -96,9 +95,9 @@ fn test_if_statement_without_else() {
                 doSomething();
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -155,9 +154,9 @@ fn test_while_statement() {
                 i = i + 1;
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 1);
@@ -247,9 +246,9 @@ fn test_for_statement_with_all_clauses() {
                 print(i);
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -383,9 +382,9 @@ fn test_for_statement_with_expression_initializer() {
                 print(i);
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -491,9 +490,9 @@ fn test_for_statement_minimal() {
                 break;
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -531,9 +530,9 @@ fn test_break_and_continue_statements() {
                 doWork();
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 1);
@@ -648,9 +647,9 @@ fn test_return_statement() {
                 return 42;
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -684,9 +683,9 @@ fn test_return_statement_without_value() {
                 return;
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -710,9 +709,9 @@ fn test_try_catch_finally() {
                 cleanup();
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -822,9 +821,9 @@ fn test_try_catch_without_parameter() {
                 handleError();
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -895,9 +894,9 @@ fn test_try_finally_without_catch() {
                 cleanup();
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -963,9 +962,9 @@ fn test_throw_statement() {
     let source_code = r#"
             throw Error("Something went wrong");
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -1003,9 +1002,9 @@ fn test_throw_statement() {
 #[test]
 fn test_throw_statement_without_value() {
     let source_code = r#"throw;"#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -1025,9 +1024,9 @@ fn test_block_statements() {
                 x + y;
             }
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 
@@ -1106,9 +1105,9 @@ fn test_expression_statements() {
             obj.method();
             x + y;
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 3);
@@ -1215,9 +1214,9 @@ fn test_comments_ignored() {
                comment */
             var y = 10;
         "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 2);
@@ -1243,9 +1242,9 @@ fn test_block_scope_variables() {
         }
         print(two);
   "#;
-    let source_map = Rc::new(SourceMap::new(source_code.to_string()));
+    let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(source_map);
+    let (program, errors) = parse_source(&source_map);
 
     println!("{:?}", program);
 

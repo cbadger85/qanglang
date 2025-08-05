@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, rc::Rc};
+use std::collections::VecDeque;
 
 use phf::phf_map;
 
@@ -115,8 +115,8 @@ impl Token {
 }
 
 #[derive(Debug, Clone)]
-pub struct Tokenizer {
-    source_map: Rc<SourceMap>,
+pub struct Tokenizer<'a> {
+    source_map: &'a SourceMap,
     line: u32,
     col: u32,
     location: usize,
@@ -124,9 +124,9 @@ pub struct Tokenizer {
     lookahead_buffer: VecDeque<Token>,
 }
 
-impl Tokenizer {
+impl<'a> Tokenizer<'a> {
     /// Creates a new tokenizer for the source map.
-    pub fn new(source_map: Rc<SourceMap>) -> Self {
+    pub fn new(source_map: &'a SourceMap) -> Self {
         Self {
             source_map,
             line: 1,
@@ -430,7 +430,7 @@ impl Tokenizer {
     }
 }
 
-impl Iterator for Tokenizer {
+impl<'a> Iterator for Tokenizer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {

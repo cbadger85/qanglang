@@ -63,7 +63,7 @@ fn constant_instruction(name: &str, chunk: &Chunk, heap: &ObjectHeap, offset: us
     chunk
         .constants()
         .get(constant)
-        .cloned()
+        .copied()
         .unwrap_or_default()
         .print(heap);
 

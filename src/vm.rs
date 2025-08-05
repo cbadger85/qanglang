@@ -336,7 +336,7 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.read_byte()?;
-                    let value = self.stack.get(slot as usize).cloned().unwrap_or(Value::Nil);
+                    let value = self.stack.get(slot as usize).copied().unwrap_or(Value::Nil);
                     self.push(value);
                 }
                 OpCode::SetLocal => {
@@ -438,7 +438,7 @@ impl Vm {
         if self.stack_top > distance {
             self.stack
                 .get(self.stack_top - 1 - distance)
-                .cloned()
+                .copied()
                 .unwrap_or(Value::Nil)
         } else {
             Value::Nil

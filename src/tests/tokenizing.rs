@@ -1,16 +1,15 @@
 use crate::{SourceMap, Token, TokenType, Tokenizer};
-use std::rc::Rc;
 
 /// Tokenizes all source code in the given SourceMap and returns a vector of Tokens.
-fn tokenize_all(source_map: Rc<SourceMap>) -> Vec<Token> {
-    let tokenizer = Tokenizer::new(source_map.clone());
+fn tokenize_all(source_map: &SourceMap) -> Vec<Token> {
+    let tokenizer = Tokenizer::new(source_map);
     tokenizer.collect()
 }
 
 /// Asserts that the token types produced from tokenizing the source string match the expected types.
 fn assert_token_types(source: &str, expected: &[TokenType]) {
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
-    let tokens = tokenize_all(source_map.clone());
+    let source_map = SourceMap::new(source.to_string());
+    let tokens = tokenize_all(&source_map);
     let actual: Vec<TokenType> = tokens.into_iter().map(|t| t.token_type).collect();
     assert_eq!(actual, expected);
 }
@@ -33,8 +32,8 @@ fn assert_single_token(source: &str, expected: Token) {
 
 /// Asserts that the tokens produced from tokenizing the source string match the expected types.
 fn assert_tokens(source: &str, expected: &[Token]) {
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
-    let tokens = tokenize_all(source_map.clone());
+    let source_map = SourceMap::new(source.to_string());
+    let tokens = tokenize_all(&source_map);
     assert_eq!(&tokens, expected);
 }
 
@@ -503,8 +502,8 @@ fn test_throw_try_catch_finally() {
 
 #[test]
 fn test_unterminated_string() {
-    let source_map = Rc::new(SourceMap::new("\"unterminated".to_string()));
-    let tokens = tokenize_all(source_map.clone());
+    let source_map = SourceMap::new("\"unterminated".to_string());
+    let tokens = tokenize_all(&source_map);
     assert_eq!(tokens.len(), 2);
     match &tokens[0].token_type {
         TokenType::Error => {
@@ -519,8 +518,8 @@ fn test_unterminated_string() {
 
 #[test]
 fn test_unterminated_string_with_following_code() {
-    let source_map = Rc::new(SourceMap::new("\"unterminated\nvar x = 5;".to_string()));
-    let mut tokenizer = Tokenizer::new(source_map.clone());
+    let source_map = SourceMap::new("\"unterminated\nvar x = 5;".to_string());
+    let mut tokenizer = Tokenizer::new(&source_map);
 
     let first_token = tokenizer.next().unwrap();
     assert_eq!(first_token.token_type, TokenType::Error);
@@ -537,8 +536,8 @@ fn test_unterminated_string_with_following_code() {
 
 #[test]
 fn test_unexpected_character() {
-    let source_map = Rc::new(SourceMap::new("@".to_string()));
-    let tokens = tokenize_all(source_map.clone());
+    let source_map = SourceMap::new("@".to_string());
+    let tokens = tokenize_all(&source_map);
     assert_eq!(tokens.len(), 2);
     match &tokens[0].token_type {
         TokenType::Error => assert_eq!(
@@ -578,10 +577,7 @@ fn test_malformed_numbers() {
         TokenType::Number, // .456
         TokenType::Eof,
     ];
-    println!(
-        "{:?}",
-        tokenize_all(Rc::new(SourceMap::new(source4.to_owned())))
-    );
+    println!("{:?}", tokenize_all(&SourceMap::new(source4.to_owned())));
     assert_token_types(source4, &expected4); // <- This assertion fails.
 
     let source5 = "..123";
@@ -607,40 +603,40 @@ fn test_malformed_numbers() {
 
 #[test]
 fn test_invalid_characters_in_different_contexts() {
-    let source_map1 = Rc::new(SourceMap::new("@variable".to_string()));
-    let tokens1 = tokenize_all(source_map1.clone());
+    let source_map1 = SourceMap::new("@variable".to_string());
+    let tokens1 = tokenize_all(&source_map1);
     assert_eq!(tokens1[0].token_type, TokenType::Error);
     assert_eq!(
         tokens1[0].error_message.as_ref().unwrap(),
         "Unexpected character: '@'."
     );
 
-    let source_map2 = Rc::new(SourceMap::new("var x = #123".to_string()));
-    let tokens2 = tokenize_all(source_map2.clone());
+    let source_map2 = SourceMap::new("var x = #123".to_string());
+    let tokens2 = tokenize_all(&source_map2);
     assert_eq!(tokens2[3].token_type, TokenType::Error);
     assert_eq!(
         tokens2[3].error_message.as_ref().unwrap(),
         "Unexpected character: '#'."
     );
 
-    let source_map3 = Rc::new(SourceMap::new("func($arg)".to_string()));
-    let tokens3 = tokenize_all(source_map3.clone());
+    let source_map3 = SourceMap::new("func($arg)".to_string());
+    let tokens3 = tokenize_all(&source_map3);
     assert_eq!(tokens3[2].token_type, TokenType::Error);
     assert_eq!(
         tokens3[2].error_message.as_ref().unwrap(),
         "Unexpected character: '$'."
     );
 
-    let source_map4 = Rc::new(SourceMap::new("var result = 10 & 5;".to_string()));
-    let tokens4 = tokenize_all(source_map4.clone());
+    let source_map4 = SourceMap::new("var result = 10 & 5;".to_string());
+    let tokens4 = tokenize_all(&source_map4);
     assert_eq!(tokens4[4].token_type, TokenType::Error);
     assert_eq!(
         tokens4[4].error_message.as_ref().unwrap(),
         "Unexpected character: '&'."
     );
 
-    let source_map5 = Rc::new(SourceMap::new("@#$".to_string()));
-    let tokens5 = tokenize_all(source_map5.clone());
+    let source_map5 = SourceMap::new("@#$".to_string());
+    let tokens5 = tokenize_all(&source_map5);
     assert_eq!(tokens5[0].token_type, TokenType::Error);
     assert_eq!(
         tokens5[0].error_message.as_ref().unwrap(),
@@ -660,48 +656,40 @@ fn test_invalid_characters_in_different_contexts() {
 
 #[test]
 fn test_nested_unterminated_constructs() {
-    let source_map1 = Rc::new(SourceMap::new(
-        "\"unterminated string with 'single quotes'".to_string(),
-    ));
-    let tokens1 = tokenize_all(source_map1.clone());
+    let source_map1 = SourceMap::new("\"unterminated string with 'single quotes'".to_string());
+    let tokens1 = tokenize_all(&source_map1);
     assert_eq!(tokens1[0].token_type, TokenType::Error);
     assert_eq!(
         tokens1[0].error_message.as_ref().unwrap(),
         "Unterminated string."
     );
 
-    let source_map2 = Rc::new(SourceMap::new(
-        "\"unterminated\n// comment after".to_string(),
-    ));
-    let tokens2 = tokenize_all(source_map2.clone());
+    let source_map2 = SourceMap::new("\"unterminated\n// comment after".to_string());
+    let tokens2 = tokenize_all(&source_map2);
     assert_eq!(tokens2[0].token_type, TokenType::Error);
     assert_eq!(
         tokens2[0].error_message.as_ref().unwrap(),
         "Unterminated string."
     );
 
-    let source_map3 = Rc::new(SourceMap::new("/* unterminated with // inside".to_string()));
-    let tokens3 = tokenize_all(source_map3.clone());
+    let source_map3 = SourceMap::new("/* unterminated with // inside".to_string());
+    let tokens3 = tokenize_all(&source_map3);
     assert_eq!(tokens3[0].token_type, TokenType::Error);
     assert_eq!(
         tokens3[0].error_message.as_ref().unwrap(),
         "Unterminated comment."
     );
 
-    let source_map4 = Rc::new(SourceMap::new(
-        "/* outer comment /* nested start but no end".to_string(),
-    ));
-    let tokens4 = tokenize_all(source_map4.clone());
+    let source_map4 = SourceMap::new("/* outer comment /* nested start but no end".to_string());
+    let tokens4 = tokenize_all(&source_map4);
     assert_eq!(tokens4[0].token_type, TokenType::Error);
     assert_eq!(
         tokens4[0].error_message.as_ref().unwrap(),
         "Unterminated comment."
     );
 
-    let source_map5 = Rc::new(SourceMap::new(
-        "\"escaped \\\" quote but still unterminated".to_string(),
-    ));
-    let tokens5 = tokenize_all(source_map5.clone());
+    let source_map5 = SourceMap::new("\"escaped \\\" quote but still unterminated".to_string());
+    let tokens5 = tokenize_all(&source_map5);
     assert_eq!(tokens5[0].token_type, TokenType::Error);
     assert_eq!(
         tokens5[0].error_message.as_ref().unwrap(),
@@ -711,79 +699,77 @@ fn test_nested_unterminated_constructs() {
 
 #[test]
 fn test_invalid_escape_sequences() {
-    let source_map1 = Rc::new(SourceMap::new("\"hello\\qworld\"".to_string()));
-    let tokens1 = tokenize_all(source_map1.clone());
+    let source_map1 = SourceMap::new("\"hello\\qworld\"".to_string());
+    let tokens1 = tokenize_all(&source_map1);
     assert_eq!(tokens1[0].token_type, TokenType::Error);
     assert_eq!(
         tokens1[0].error_message.as_ref().unwrap(),
         "Invalid escape sequence: \\q"
     );
 
-    let source_map2 = Rc::new(SourceMap::new("\"\\x invalid escape\"".to_string()));
-    let tokens2 = tokenize_all(source_map2.clone());
+    let source_map2 = SourceMap::new("\"\\x invalid escape\"".to_string());
+    let tokens2 = tokenize_all(&source_map2);
     assert_eq!(tokens2[0].token_type, TokenType::Error);
     assert_eq!(
         tokens2[0].error_message.as_ref().unwrap(),
         "Invalid escape sequence: \\x"
     );
 
-    let source_map3 = Rc::new(SourceMap::new("\"\\z another invalid\"".to_string()));
-    let tokens3 = tokenize_all(source_map3.clone());
+    let source_map3 = SourceMap::new("\"\\z another invalid\"".to_string());
+    let tokens3 = tokenize_all(&source_map3);
     assert_eq!(tokens3[0].token_type, TokenType::Error);
     assert_eq!(
         tokens3[0].error_message.as_ref().unwrap(),
         "Invalid escape sequence: \\z"
     );
 
-    let source_map4 = Rc::new(SourceMap::new(
-        "\"hello\\nworld\\t\\\"test\\\\\"".to_string(),
-    ));
-    let tokens4 = tokenize_all(source_map4.clone());
+    let source_map4 = SourceMap::new("\"hello\\nworld\\t\\\"test\\\\\"".to_string());
+    let tokens4 = tokenize_all(&source_map4);
     assert_eq!(tokens4[0].token_type, TokenType::String);
     assert!(tokens4[0].error_message.is_none());
 }
 
 #[test]
 fn test_unterminated_multiline_comment() {
-    let source_map = Rc::new(SourceMap::new("/* unterminated comment".to_string()));
-    let tokens = tokenize_all(source_map.clone());
+    let source_map = SourceMap::new("/* unterminated comment".to_string());
+    let tokens = tokenize_all(&source_map);
     assert!(matches!(tokens[0].token_type, TokenType::Error));
 }
 
 #[test]
 fn test_number_lexeme_content() {
-    let source_map1 = Rc::new(SourceMap::new("123".to_string()));
-    let tokens1 = tokenize_all(source_map1.clone());
+    let source_map1 = SourceMap::new("123".to_string());
+    let tokens1 = tokenize_all(&source_map1);
     assert_eq!(tokens1[0].token_type, TokenType::Number);
     let lexeme1: String = tokens1[0].lexeme(&source_map1).iter().collect();
     assert_eq!(lexeme1, "123");
 
-    let source_map2 = Rc::new(SourceMap::new("123.456".to_string()));
-    let tokens2 = tokenize_all(source_map2.clone());
+    let source_map2 = SourceMap::new("123.456".to_string());
+    let tokens2 = tokenize_all(&source_map2);
     assert_eq!(tokens2[0].token_type, TokenType::Number);
     let lexeme2: String = tokens2[0].lexeme(&source_map2).iter().collect();
     assert_eq!(lexeme2, "123.456");
 
-    let source_map3 = Rc::new(SourceMap::new(".789".to_string()));
-    let tokens3 = tokenize_all(source_map3.clone());
+    let source_map3 = SourceMap::new(".789".to_string());
+    let tokens3 = tokenize_all(&source_map3);
     assert_eq!(tokens3[0].token_type, TokenType::Number);
     let lexeme3: String = tokens3[0].lexeme(&source_map3).iter().collect();
     assert_eq!(lexeme3, ".789");
 
-    let source_map4 = Rc::new(SourceMap::new("0".to_string()));
-    let tokens4 = tokenize_all(source_map4.clone());
+    let source_map4 = SourceMap::new("0".to_string());
+    let tokens4 = tokenize_all(&source_map4);
     assert_eq!(tokens4[0].token_type, TokenType::Number);
     let lexeme4: String = tokens4[0].lexeme(&source_map4).iter().collect();
     assert_eq!(lexeme4, "0");
 
-    let source_map5 = Rc::new(SourceMap::new("999999999".to_string()));
-    let tokens5 = tokenize_all(source_map5.clone());
+    let source_map5 = SourceMap::new("999999999".to_string());
+    let tokens5 = tokenize_all(&source_map5);
     assert_eq!(tokens5[0].token_type, TokenType::Number);
     let lexeme5: String = tokens5[0].lexeme(&source_map5).iter().collect();
     assert_eq!(lexeme5, "999999999");
 
-    let source_map6 = Rc::new(SourceMap::new("0.0".to_string()));
-    let tokens6 = tokenize_all(source_map6.clone());
+    let source_map6 = SourceMap::new("0.0".to_string());
+    let tokens6 = tokenize_all(&source_map6);
     assert_eq!(tokens6[0].token_type, TokenType::Number);
     let lexeme6: String = tokens6[0].lexeme(&source_map6).iter().collect();
     assert_eq!(lexeme6, "0.0");
@@ -791,44 +777,44 @@ fn test_number_lexeme_content() {
 
 #[test]
 fn test_string_lexeme_content() {
-    let source_map1 = Rc::new(SourceMap::new("\"hello\"".to_string()));
-    let tokens1 = tokenize_all(source_map1.clone());
+    let source_map1 = SourceMap::new("\"hello\"".to_string());
+    let tokens1 = tokenize_all(&source_map1);
     assert_eq!(tokens1[0].token_type, TokenType::String);
     let lexeme1: String = tokens1[0].lexeme(&source_map1).iter().collect();
     assert_eq!(lexeme1, "\"hello\"");
 
-    let source_map2 = Rc::new(SourceMap::new("\"\"".to_string()));
-    let tokens2 = tokenize_all(source_map2.clone());
+    let source_map2 = SourceMap::new("\"\"".to_string());
+    let tokens2 = tokenize_all(&source_map2);
     assert_eq!(tokens2[0].token_type, TokenType::String);
     let lexeme2: String = tokens2[0].lexeme(&source_map2).iter().collect();
     assert_eq!(lexeme2, "\"\"");
 
-    let source_map3 = Rc::new(SourceMap::new("\"hello\\nworld\\t\"".to_string()));
-    let tokens3 = tokenize_all(source_map3.clone());
+    let source_map3 = SourceMap::new("\"hello\\nworld\\t\"".to_string());
+    let tokens3 = tokenize_all(&source_map3);
     assert_eq!(tokens3[0].token_type, TokenType::String);
     let lexeme3: String = tokens3[0].lexeme(&source_map3).iter().collect();
     assert_eq!(lexeme3, "\"hello\\nworld\\t\"");
 
-    let source_map4 = Rc::new(SourceMap::new("\"say \\\"hello\\\"\"".to_string()));
-    let tokens4 = tokenize_all(source_map4.clone());
+    let source_map4 = SourceMap::new("\"say \\\"hello\\\"\"".to_string());
+    let tokens4 = tokenize_all(&source_map4);
     assert_eq!(tokens4[0].token_type, TokenType::String);
     let lexeme4: String = tokens4[0].lexeme(&source_map4).iter().collect();
     assert_eq!(lexeme4, "\"say \\\"hello\\\"\"");
 
-    let source_map5 = Rc::new(SourceMap::new("\"café 🦀\"".to_string()));
-    let tokens5 = tokenize_all(source_map5.clone());
+    let source_map5 = SourceMap::new("\"café 🦀\"".to_string());
+    let tokens5 = tokenize_all(&source_map5);
     assert_eq!(tokens5[0].token_type, TokenType::String);
     let lexeme5: String = tokens5[0].lexeme(&source_map5).iter().collect();
     assert_eq!(lexeme5, "\"café 🦀\"");
 
-    let source_map6 = Rc::new(SourceMap::new("\"hello world! @#$%^&*()\"".to_string()));
-    let tokens6 = tokenize_all(source_map6.clone());
+    let source_map6 = SourceMap::new("\"hello world! @#$%^&*()\"".to_string());
+    let tokens6 = tokenize_all(&source_map6);
     assert_eq!(tokens6[0].token_type, TokenType::String);
     let lexeme6: String = tokens6[0].lexeme(&source_map6).iter().collect();
     assert_eq!(lexeme6, "\"hello world! @#$%^&*()\"");
 
-    let source_map7 = Rc::new(SourceMap::new("\"path\\\\to\\\\file\"".to_string()));
-    let tokens7 = tokenize_all(source_map7.clone());
+    let source_map7 = SourceMap::new("\"path\\\\to\\\\file\"".to_string());
+    let tokens7 = tokenize_all(&source_map7);
     assert_eq!(tokens7[0].token_type, TokenType::String);
     let lexeme7: String = tokens7[0].lexeme(&source_map7).iter().collect();
     assert_eq!(lexeme7, "\"path\\\\to\\\\file\"");
@@ -836,44 +822,44 @@ fn test_string_lexeme_content() {
 
 #[test]
 fn test_identifier_lexem_content() {
-    let source_map1 = Rc::new(SourceMap::new("hello".to_string()));
-    let tokens1 = tokenize_all(source_map1.clone());
+    let source_map1 = SourceMap::new("hello".to_string());
+    let tokens1 = tokenize_all(&source_map1);
     assert_eq!(tokens1[0].token_type, TokenType::Identifier);
     let lexeme1: String = tokens1[0].lexeme(&source_map1).iter().collect();
     assert_eq!(lexeme1, "hello");
 
-    let source_map2 = Rc::new(SourceMap::new("_underscore".to_string()));
-    let tokens2 = tokenize_all(source_map2.clone());
+    let source_map2 = SourceMap::new("_underscore".to_string());
+    let tokens2 = tokenize_all(&source_map2);
     assert_eq!(tokens2[0].token_type, TokenType::Identifier);
     let lexeme2: String = tokens2[0].lexeme(&source_map2).iter().collect();
     assert_eq!(lexeme2, "_underscore");
 
-    let source_map3 = Rc::new(SourceMap::new("var123".to_string()));
-    let tokens3 = tokenize_all(source_map3.clone());
+    let source_map3 = SourceMap::new("var123".to_string());
+    let tokens3 = tokenize_all(&source_map3);
     assert_eq!(tokens3[0].token_type, TokenType::Identifier);
     let lexeme3: String = tokens3[0].lexeme(&source_map3).iter().collect();
     assert_eq!(lexeme3, "var123");
 
-    let source_map4 = Rc::new(SourceMap::new("_".to_string()));
-    let tokens4 = tokenize_all(source_map4.clone());
+    let source_map4 = SourceMap::new("_".to_string());
+    let tokens4 = tokenize_all(&source_map4);
     assert_eq!(tokens4[0].token_type, TokenType::Identifier);
     let lexeme4: String = tokens4[0].lexeme(&source_map4).iter().collect();
     assert_eq!(lexeme4, "_");
 
-    let source_map5 = Rc::new(SourceMap::new("CamelCaseVar".to_string()));
-    let tokens5 = tokenize_all(source_map5.clone());
+    let source_map5 = SourceMap::new("CamelCaseVar".to_string());
+    let tokens5 = tokenize_all(&source_map5);
     assert_eq!(tokens5[0].token_type, TokenType::Identifier);
     let lexeme5: String = tokens5[0].lexeme(&source_map5).iter().collect();
     assert_eq!(lexeme5, "CamelCaseVar");
 
-    let source_map6 = Rc::new(SourceMap::new("myVar123_test".to_string()));
-    let tokens6 = tokenize_all(source_map6.clone());
+    let source_map6 = SourceMap::new("myVar123_test".to_string());
+    let tokens6 = tokenize_all(&source_map6);
     assert_eq!(tokens6[0].token_type, TokenType::Identifier);
     let lexeme6: String = tokens6[0].lexeme(&source_map6).iter().collect();
     assert_eq!(lexeme6, "myVar123_test");
 
-    let source_map7 = Rc::new(SourceMap::new("x".to_string()));
-    let tokens7 = tokenize_all(source_map7.clone());
+    let source_map7 = SourceMap::new("x".to_string());
+    let tokens7 = tokenize_all(&source_map7);
     assert_eq!(tokens7[0].token_type, TokenType::Identifier);
     let lexeme7: String = tokens7[0].lexeme(&source_map7).iter().collect();
     assert_eq!(lexeme7, "x");
@@ -905,8 +891,8 @@ fn test_operator_lexeme_content() {
     ];
 
     for (op_str, expected_type) in operators {
-        let source_map = Rc::new(SourceMap::new(op_str.to_string()));
-        let tokens = tokenize_all(source_map.clone());
+        let source_map = SourceMap::new(op_str.to_string());
+        let tokens = tokenize_all(&source_map);
         assert_eq!(tokens[0].token_type, expected_type);
         let lexeme: String = tokens[0].lexeme(&source_map).iter().collect();
         assert_eq!(lexeme, op_str);
@@ -923,8 +909,8 @@ fn test_operator_lexeme_content() {
     ];
 
     for (op_str, expected_type) in multi_operators {
-        let source_map = Rc::new(SourceMap::new(op_str.to_string()));
-        let tokens = tokenize_all(source_map.clone());
+        let source_map = SourceMap::new(op_str.to_string());
+        let tokens = tokenize_all(&source_map);
         assert_eq!(tokens[0].token_type, expected_type);
         let lexeme: String = tokens[0].lexeme(&source_map).iter().collect();
         assert_eq!(lexeme, op_str);
@@ -958,8 +944,8 @@ fn test_keyword_lexeme_token_contentt() {
     ];
 
     for (keyword_str, expected_type) in keywords {
-        let source_map = Rc::new(SourceMap::new(keyword_str.to_string()));
-        let tokens = tokenize_all(source_map.clone());
+        let source_map = SourceMap::new(keyword_str.to_string());
+        let tokens = tokenize_all(&source_map);
         assert_eq!(tokens[0].token_type, expected_type);
         let lexeme: String = tokens[0].lexeme(&source_map).iter().collect();
         assert_eq!(lexeme, keyword_str);
@@ -968,8 +954,8 @@ fn test_keyword_lexeme_token_contentt() {
 
 #[test]
 fn test_line_and_column_tracking() {
-    let source_map = Rc::new(SourceMap::new("first\nsecond line".to_string()));
-    let tokens = tokenize_all(source_map.clone());
+    let source_map = SourceMap::new("first\nsecond line".to_string());
+    let tokens = tokenize_all(&source_map);
 
     assert_eq!(tokens[0].line(&source_map), 1);
     assert_eq!(tokens[0].col(&source_map), 1);
@@ -981,10 +967,8 @@ fn test_line_and_column_tracking() {
 
 #[test]
 fn test_get_line_multiple_lines() {
-    let source_map = Rc::new(SourceMap::new(
-        "first line\nsecond line\nthird line".to_string(),
-    ));
-    let tokenizer = Tokenizer::new(source_map.clone());
+    let source_map = SourceMap::new("first line\nsecond line\nthird line".to_string());
+    let tokenizer = Tokenizer::new(&source_map);
     tokenizer.for_each(drop);
     let line1: String = source_map.get_line(1).iter().collect();
     let line2: String = source_map.get_line(2).iter().collect();

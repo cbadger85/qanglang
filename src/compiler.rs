@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{
     ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
@@ -78,7 +76,7 @@ impl CompilerArtifact {
 }
 
 pub struct CompilerPipeline<'a> {
-    source_map: Rc<SourceMap>,
+    source_map: SourceMap,
     analyzers: Vec<Box<dyn AnalysisMiddleware>>,
     is_silent: bool,
     heap: &'a mut ObjectHeap,
@@ -87,7 +85,7 @@ pub struct CompilerPipeline<'a> {
 impl<'a> CompilerPipeline<'a> {
     pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
         Self {
-            source_map: Rc::new(source_map),
+            source_map,
             analyzers: Vec::new(),
             is_silent: false,
             heap,
@@ -110,7 +108,7 @@ impl<'a> CompilerPipeline<'a> {
     }
 
     pub fn run(mut self) -> Result<KangFunction, CompilerError> {
-        let mut parser = Parser::new(self.source_map.clone());
+        let mut parser = Parser::new(&self.source_map);
         let program = parser.parse();
         let mut errors = parser.into_reporter();
 
@@ -118,15 +116,15 @@ impl<'a> CompilerPipeline<'a> {
             analyzer.analyze(&program, &mut errors);
         }
 
-        let function = Compiler::new(self.source_map.clone(), self.heap, self.is_silent)
-            .compile(program, errors)?;
+        let function =
+            Compiler::new(self.heap, self.is_silent).compile(program, self.source_map, errors)?;
 
         Ok(function)
     }
 }
 
 pub struct Compiler<'a> {
-    source_map: Rc<SourceMap>,
+    source_map: SourceMap,
     heap: &'a mut ObjectHeap,
     is_silent: bool,
     locals: Vec<Local>,
@@ -136,12 +134,12 @@ pub struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(source_map: Rc<SourceMap>, heap: &'a mut ObjectHeap, is_silent: bool) -> Self {
+    pub fn new(heap: &'a mut ObjectHeap, is_silent: bool) -> Self {
         let handle = heap.intern_string("<script>".to_string().into_boxed_str());
         let locals = Vec::with_capacity(STACK_MAX);
 
         Self {
-            source_map,
+            source_map: SourceMap::default(),
             is_silent,
             heap,
             locals,
@@ -153,6 +151,22 @@ impl<'a> Compiler<'a> {
                 0,
             )],
         }
+    }
+
+    fn reset(&mut self) {
+        let handle = self
+            .heap
+            .intern_string("<script>".to_string().into_boxed_str());
+
+        self.source_map = SourceMap::default();
+        self.locals = Vec::with_capacity(STACK_MAX);
+        self.local_count = 0;
+        self.scope_depth = 0;
+        self.artifacts = vec![CompilerArtifact::new(
+            handle,
+            CompilerArtifactKind::Script,
+            0,
+        )];
     }
 
     fn get_current_chunk(&mut self) -> &mut Chunk {
@@ -167,10 +181,13 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile(
-        mut self,
+        &mut self,
         program: ast::Program,
+        source_map: SourceMap,
         mut errors: ErrorReporter,
     ) -> Result<KangFunction, CompilerError> {
+        self.source_map = source_map;
+
         self.visit_program(&program, &mut errors)
             .map_err(|err| CompilerError(vec![err]))?;
 
@@ -181,7 +198,11 @@ impl<'a> Compiler<'a> {
 
             self.emit_opcode(OpCode::Return, SourceSpan::new(span, span));
 
-            Ok(self.pop_artifact().function)
+            let artifact = self.pop_artifact();
+
+            self.reset();
+
+            Ok(artifact.function)
         }
     }
 

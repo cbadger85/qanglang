@@ -1,12 +1,12 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{
     Chunk, HeapObject, HeapObjectValue, ObjectHeap, OpCode, QangError, SourceMap, Value,
     ast::SourceSpan,
-    compiler::{CompilerArtifact, STACK_MAX},
+    compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::ValueConversionError,
-    heap::{NativeFunction, ObjectHandle},
+    heap::{KangFunction, NativeFunction, ObjectHandle},
     value::get_value_type,
 };
 
@@ -14,28 +14,42 @@ pub type RuntimeResult<T> = Result<T, QangError>;
 
 pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, QangError>;
 
+#[derive(Debug, Clone)]
+struct CallFrame {
+    function: KangFunction,
+    ip: usize,
+    value_slot: usize,
+}
+
 pub struct Vm {
     is_debug: bool,
-    ip: usize,
     stack_top: usize,
+    frame_count: usize,
     stack: [Value; STACK_MAX],
+    frames: [CallFrame; FRAME_MAX],
     globals: HashMap<usize, Value>,
-    source_map: Rc<SourceMap>,
     heap: ObjectHeap,
-    chunk: Chunk,
+    source_map: Option<SourceMap>,
 }
 
 impl Vm {
-    pub fn new(artifact: CompilerArtifact) -> Self {
+    pub fn new(mut heap: ObjectHeap) -> Self {
+        let default_handle = heap.intern_string("".to_string().into_boxed_str());
+        let default_frame = CallFrame {
+            function: KangFunction::new(default_handle, 0),
+            ip: 0,
+            value_slot: 0,
+        };
+
         Self {
             is_debug: false,
-            ip: 0,
+            frame_count: 0,
             stack_top: 0,
             stack: std::array::from_fn(|_| Value::default()),
+            frames: std::array::from_fn(|_| default_frame.clone()),
             globals: HashMap::new(),
-            source_map: artifact.source_map,
-            heap: artifact.heap,
-            chunk: artifact.chunk,
+            heap,
+            source_map: None,
         }
     }
 
@@ -66,28 +80,51 @@ impl Vm {
         Ok(Value::Nil)
     }
 
+    fn get_current_frame(&self) -> &CallFrame {
+        &self.frames[self.frame_count - 1]
+    }
+
+    fn get_current_frame_mut(&mut self) -> &mut CallFrame {
+        &mut self.frames[self.frame_count - 1]
+    }
+
     fn get_current_span(&self) -> SourceSpan {
-        self.get_span_at(self.ip)
+        self.get_span_at(self.get_current_frame().ip)
+    }
+
+    fn get_current_chunk(&self) -> &Chunk {
+        &self.get_current_frame().function.chunk
     }
 
     fn get_previous_span(&self) -> SourceSpan {
-        if self.ip > 0 {
-            self.get_span_at(self.ip - 1)
+        if self.get_current_frame().ip > 0 {
+            self.get_span_at(self.get_current_frame().ip - 1)
         } else {
             SourceSpan::default()
         }
     }
 
     fn get_span_at(&self, index: usize) -> SourceSpan {
-        self.chunk.spans().get(index).copied().unwrap_or_else(|| {
-            SourceSpan::new(
-                self.source_map.get_source().len(),
-                self.source_map.get_source().len(),
-            )
-        })
+        self.get_current_frame()
+            .function
+            .chunk
+            .spans()
+            .get(index)
+            .copied()
+            .unwrap_or_default()
     }
 
-    pub fn interpret(&mut self) -> RuntimeResult<()> {
+    pub fn interpret(
+        &mut self,
+        function: KangFunction,
+        source_map: Option<SourceMap>,
+    ) -> RuntimeResult<()> {
+        self.source_map = source_map;
+        self.frames[0] = CallFrame {
+            function,
+            ip: 0,
+            value_slot: 0,
+        };
         self.run()
     }
 
@@ -101,7 +138,7 @@ impl Vm {
             match opcode {
                 OpCode::Constant => {
                     let constant_index = self.read_byte()? as usize;
-                    let constant = self.read_constant(constant_index, &self.chunk);
+                    let constant = self.read_constant(constant_index, self.get_current_chunk());
                     self.push(constant);
                 }
                 OpCode::Negate => {
@@ -310,16 +347,16 @@ impl Vm {
                 OpCode::JumpIfFalse => {
                     let offset = self.read_short()?;
                     if !self.is_truthy(self.peek(0)) {
-                        self.ip += offset;
+                        self.get_current_frame_mut().ip += offset;
                     }
                 }
                 OpCode::Jump => {
                     let offset = self.read_short()?;
-                    self.ip += offset;
+                    self.get_current_frame_mut().ip += offset;
                 }
                 OpCode::Loop => {
                     let offset = self.read_short()?;
-                    self.ip -= offset;
+                    self.get_current_frame_mut().ip -= offset;
                 }
                 OpCode::Print => {
                     let value = self.pop()?;
@@ -335,18 +372,15 @@ impl Vm {
     }
 
     fn read_byte(&mut self) -> RuntimeResult<u8> {
-        if self.ip >= self.chunk.count() {
+        if self.get_current_frame().ip >= self.get_current_chunk().count() {
             return Err(QangError::runtime_error(
                 "Instruction pointer out of bounds.",
-                SourceSpan::new(
-                    self.source_map.get_source().len(),
-                    self.source_map.get_source().len(),
-                ),
+                SourceSpan::default(),
             ));
         }
 
-        let byte = self.chunk.code()[self.ip];
-        self.ip += 1;
+        let byte = self.get_current_chunk().code()[self.get_current_frame().ip];
+        self.get_current_frame_mut().ip += 1;
         Ok(byte)
     }
 
@@ -413,14 +447,6 @@ impl Vm {
             })
     }
 
-    pub fn chunk(&self) -> &Chunk {
-        &self.chunk
-    }
-
-    pub fn source_map(&self) -> &SourceMap {
-        &self.source_map
-    }
-
     pub fn heap(&self) -> &ObjectHeap {
         &self.heap
     }
@@ -431,13 +457,22 @@ impl Vm {
 
     #[allow(dead_code)]
     fn debug(&self) {
-        print!("          ");
-        for i in 0..self.stack_top {
-            self.stack[i].print(&self.heap);
-            print!(" ");
-        }
-        println!();
+        if let Some(source_map) = self.source_map.as_ref() {
+            print!("          ");
+            for i in 0..self.stack_top {
+                self.stack[i].print(&self.heap);
+                print!(" ");
+            }
+            println!();
 
-        disassemble_instruction(&self.source_map, &self.chunk, &self.heap, self.ip);
+            disassemble_instruction(
+                source_map,
+                self.get_current_chunk(),
+                &self.heap,
+                self.get_current_frame().ip,
+            );
+        } else {
+            println!("No source code loaded. Unable to disassemble instructions.")
+        }
     }
 }

@@ -4,7 +4,7 @@ use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
     ast::{self, AstTransformer, AstVisitor, ForInitializer, SourceSpan},
     chunk::{Chunk, OpCode},
-    heap::ObjectHeap,
+    heap::{KangFunction, ObjectHandle, ObjectHeap},
     parser::Parser,
 };
 
@@ -70,39 +70,46 @@ impl Local {
     }
 }
 
-pub const STACK_MAX: usize = 256;
+pub const FRAME_MAX: usize = 64;
+pub const STACK_MAX: usize = FRAME_MAX * 256;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CompilerArtifactKind {
+    Script,
+    Function,
+}
 
 #[derive(Debug, Clone)]
-pub struct CompilerArtifact {
-    pub source_map: Rc<SourceMap>,
-    pub heap: ObjectHeap,
-    pub chunk: Chunk,
+struct CompilerArtifact {
+    pub function: KangFunction,
+    pub kind: CompilerArtifactKind,
 }
 
 impl CompilerArtifact {
-    pub fn new(source_map: Rc<SourceMap>, chunk: Chunk, heap: ObjectHeap) -> Self {
+    pub fn new(name: ObjectHandle, kind: CompilerArtifactKind, arity: usize) -> Self {
         Self {
-            source_map,
-            chunk,
-            heap,
+            function: KangFunction::new(name, arity),
+            kind,
         }
     }
 }
 
-pub struct CompilerPipeline {
+pub struct CompilerPipeline<'a> {
     source_map: Rc<SourceMap>,
     transformers: Vec<Box<dyn TransformerMiddleware>>,
     analyzers: Vec<Box<dyn AnalysisMiddleware>>,
     is_silent: bool,
+    heap: &'a mut ObjectHeap,
 }
 
-impl CompilerPipeline {
-    pub fn new(source_map: SourceMap) -> Self {
+impl<'a> CompilerPipeline<'a> {
+    pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
         Self {
             source_map: Rc::new(source_map),
             transformers: Vec::new(),
             analyzers: Vec::new(),
             is_silent: false,
+            heap,
         }
     }
 
@@ -131,7 +138,7 @@ impl CompilerPipeline {
         self
     }
 
-    pub fn run(mut self) -> QangResult<CompilerArtifact> {
+    pub fn run(mut self) -> QangResult<KangFunction> {
         let mut parser = Parser::new(self.source_map.clone());
         let mut program = parser.parse();
         let mut errors = parser.into_reporter();
@@ -144,38 +151,60 @@ impl CompilerPipeline {
             program = transformer.as_mut().run(program);
         }
 
-        Compiler::new(self.source_map.clone(), self.is_silent).compile(program, errors)
+        let function = Compiler::new(self.source_map.clone(), &mut self.heap, self.is_silent)
+            .compile(program, errors)?;
+
+        Ok(function)
     }
 }
 
-pub struct Compiler {
+pub struct Compiler<'a> {
     source_map: Rc<SourceMap>,
-    current_chunk: Chunk,
+    heap: &'a mut ObjectHeap,
     is_silent: bool,
-    heap: ObjectHeap,
     locals: [Option<Local>; STACK_MAX],
     local_count: usize,
     scope_depth: usize,
+    artifacts: Vec<CompilerArtifact>,
 }
 
-impl Compiler {
-    pub fn new(source_map: Rc<SourceMap>, is_silent: bool) -> Self {
+impl<'a> Compiler<'a> {
+    pub fn new(source_map: Rc<SourceMap>, heap: &'a mut ObjectHeap, is_silent: bool) -> Self {
+        let handle = heap.intern_string("<script>".to_string().into_boxed_str());
+        let mut locals = std::array::from_fn(|_| None);
+        locals[0] = Some(Local::new("".into()));
+
         Self {
             source_map,
-            current_chunk: Chunk::new(),
             is_silent,
-            heap: ObjectHeap::new(),
-            locals: std::array::from_fn(|_| None),
-            local_count: 0,
+            heap,
+            locals,
+            local_count: 1,
             scope_depth: 0,
+            artifacts: vec![CompilerArtifact::new(
+                handle,
+                CompilerArtifactKind::Script,
+                0,
+            )],
         }
+    }
+
+    fn get_current_chunk(&mut self) -> &mut Chunk {
+        let last_index = self.artifacts.len() - 1;
+        &mut self.artifacts[last_index].function.chunk
+    }
+
+    fn pop_artifact(&mut self) -> CompilerArtifact {
+        self.artifacts
+            .pop()
+            .expect("Expected compiler artifact and found none.")
     }
 
     pub fn compile(
         mut self,
         program: ast::Program,
         mut errors: ErrorReporter,
-    ) -> QangResult<CompilerArtifact> {
+    ) -> QangResult<KangFunction> {
         self.visit_program(&program, &mut errors)
             .map_err(|err| QangErrors(vec![err]))?;
 
@@ -185,23 +214,20 @@ impl Compiler {
             let span = self.source_map.get_source().len();
 
             self.emit_opcode(OpCode::Return, SourceSpan::new(span, span));
-            Ok(CompilerArtifact::new(
-                self.source_map,
-                self.current_chunk,
-                self.heap,
-            ))
+
+            Ok(self.pop_artifact().function)
         }
     }
 
     fn emit_opcode(&mut self, opcode: OpCode, span: SourceSpan) {
         if !self.is_silent {
-            self.current_chunk.write_opcode(opcode, span);
+            self.get_current_chunk().write_opcode(opcode, span);
         }
     }
 
     fn emit_byte(&mut self, byte: u8, span: SourceSpan) {
         if !self.is_silent {
-            self.current_chunk.write(byte, span);
+            self.get_current_chunk().write(byte, span);
         }
     }
 
@@ -209,25 +235,25 @@ impl Compiler {
         self.emit_opcode(opcode, span);
         self.emit_byte(0xff, span);
         self.emit_byte(0xff, span);
-        self.current_chunk.code().len() - 2
+        self.get_current_chunk().code().len() - 2
     }
 
     fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangError> {
-        let jump = self.current_chunk.code().len() - offset - 2;
+        let jump = self.get_current_chunk().code().len() - offset - 2;
 
         if jump > u16::MAX as usize {
             return Err(QangError::parse_error("Too much code to jump over.", span));
         }
 
-        self.current_chunk.code_mut()[offset] = ((jump >> 8) & 0xff) as u8;
-        self.current_chunk.code_mut()[offset + 1] = (jump & 0xff) as u8;
+        self.get_current_chunk().code_mut()[offset] = ((jump >> 8) & 0xff) as u8;
+        self.get_current_chunk().code_mut()[offset + 1] = (jump & 0xff) as u8;
 
         Ok(())
     }
 
     fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangError> {
         self.emit_opcode(OpCode::Loop, span);
-        let offset = self.current_chunk.code().len() - loop_start + 2;
+        let offset = self.get_current_chunk().code().len() - loop_start + 2;
         if offset > u16::MAX as usize {
             return Err(QangError::runtime_error("Loop body too large.", span));
         }
@@ -250,7 +276,7 @@ impl Compiler {
     }
 
     fn make_constant(&mut self, value: Value, span: SourceSpan, errors: &mut ErrorReporter) -> u8 {
-        let index = self.current_chunk.add_constant(value);
+        let index = self.get_current_chunk().add_constant(value);
 
         if index > u8::MAX as usize {
             self.is_silent = true;
@@ -344,7 +370,7 @@ impl Compiler {
     }
 }
 
-impl AstVisitor for Compiler {
+impl<'a> AstVisitor for Compiler<'a> {
     type Error = QangError;
 
     fn visit_number_literal(
@@ -661,7 +687,7 @@ impl AstVisitor for Compiler {
         while_stmt: &ast::WhileStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let loop_start = self.current_chunk.code().len();
+        let loop_start = self.get_current_chunk().code().len();
         self.visit_expression(&while_stmt.condition, errors)?;
 
         let exit_jump = self.emit_jump(OpCode::JumpIfFalse, while_stmt.body.span());
@@ -694,12 +720,12 @@ impl AstVisitor for Compiler {
             }
         }
 
-        let mut loop_start = self.current_chunk.code().len();
+        let mut loop_start = self.get_current_chunk().code().len();
         let mut exit_jump: Option<usize> = None;
 
         if let Some(condition) = &for_stmt.condition {
             let condition_jump = self.emit_jump(OpCode::Jump, condition.span());
-            loop_start = self.current_chunk.code().len();
+            loop_start = self.get_current_chunk().code().len();
             self.visit_statement(&for_stmt.body, errors)?;
 
             if let Some(increment) = &for_stmt.increment {
@@ -714,12 +740,12 @@ impl AstVisitor for Compiler {
             self.emit_loop(loop_start, for_stmt.body.span())?;
         } else {
             self.visit_statement(&for_stmt.body, errors)?;
-            
+
             if let Some(increment) = &for_stmt.increment {
                 self.visit_expression(increment, errors)?;
                 self.emit_opcode(OpCode::Pop, increment.span());
             }
-            
+
             self.emit_loop(loop_start, for_stmt.body.span())?;
         }
 

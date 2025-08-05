@@ -1,20 +1,18 @@
-use crate::{CompilerPipeline, SourceMap, Vm, debug::disassemble_chunk, error::pretty_print_error};
-use std::rc::Rc;
+use crate::{
+    CompilerPipeline, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk,
+    error::pretty_print_error,
+};
 
 #[test]
 fn test_display() {
     let source = r#"
   1 * 2 / 3 + 4 - 5 + -1;
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
     } else {
         panic!("Compiler errors.")
     }
@@ -35,16 +33,12 @@ fn test_run() {
             print(two);
         }   
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -65,17 +59,16 @@ fn test_while() {
             a = a - 1;
         } 
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    match CompilerPipeline::new((*source_map).clone()).run() {
-        Ok(artifact) => {
-            disassemble_chunk(
-                &artifact.source_map,
-                &artifact.chunk,
-                &artifact.heap,
-                "script.ql",
-            );
-            match Vm::new(artifact).set_debug(false).interpret() {
+    match CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        Ok(function) => {
+            disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+            match Vm::new(heap)
+                .set_debug(false)
+                .interpret(function, Some(source_map.clone()))
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", pretty_print_error(&source_map, &error))
@@ -98,17 +91,16 @@ fn test_subtraction() {
         a = 1 - a;
         print(a - -3);
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    match CompilerPipeline::new((*source_map).clone()).run() {
-        Ok(artifact) => {
-            disassemble_chunk(
-                &artifact.source_map,
-                &artifact.chunk,
-                &artifact.heap,
-                "script.ql",
-            );
-            match Vm::new(artifact).set_debug(false).interpret() {
+    match CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        Ok(function) => {
+            disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+            match Vm::new(heap)
+                .set_debug(false)
+                .interpret(function, Some(source_map.clone()))
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", pretty_print_error(&source_map, &error))
@@ -136,17 +128,13 @@ fn test_locals() {
         }
         print(two);
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
-        let mut vm = Vm::new(artifact);
-        match vm.interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+        let mut vm = Vm::new(heap);
+        match vm.interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -172,17 +160,13 @@ fn test_conditionals() {
             print("It's false!"); 
         }
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
-        let mut vm = Vm::new(artifact);
-        match vm.interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+        let mut vm = Vm::new(heap);
+        match vm.interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -214,17 +198,13 @@ fn test_ternary_expressions() {
         var result6 = false ? "should not do this" : false ? "don't do this" : "yup";
         print(result6);
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
-        let mut vm = Vm::new(artifact);
-        match vm.interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+        let mut vm = Vm::new(heap);
+        match vm.interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -262,17 +242,13 @@ fn test_logical_expressions() {
         var result8 = nil and "world";
         print(result8);
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
-        let mut vm = Vm::new(artifact);
-        match vm.interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+        let mut vm = Vm::new(heap);
+        match vm.interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -288,10 +264,11 @@ fn math_operations_test() {
     let source = r#"
   1 / 1 + 2 * (12 % 5);
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -307,16 +284,12 @@ fn equality_operations_test() {
     let source = r#"
         "true" != "true";
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -343,16 +316,15 @@ fn comparison_operations_test() {
         print(9 < 9);       // false
         print(11 < 10);     // false
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        disassemble_chunk(
-            &artifact.source_map,
-            &artifact.chunk,
-            &artifact.heap,
-            "script.ql",
-        );
-        match Vm::new(artifact).set_debug(false).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        disassemble_chunk(&source_map, &function.chunk, &heap, "script.ql");
+        match Vm::new(heap)
+            .set_debug(false)
+            .interpret(function, Some(source_map.clone()))
+        {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -368,10 +340,11 @@ fn test_runtime_error_with_source_span() {
     let source = r#"
   -"hello";
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
             }
@@ -392,10 +365,11 @@ fn test_booleans() {
     let source = r#"
   !true;
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", pretty_print_error(&source_map, &error))
@@ -411,10 +385,11 @@ fn test_type_error_with_source_span_for_left_operand() {
     let source = r#"
   1 + "hello";
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => {
                 panic!("Expected runtime error for adding number and string")
             }
@@ -434,10 +409,11 @@ fn test_type_error_with_source_span_for_right_operand() {
     let source = r#"
   "hello" + true;
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => {
                 panic!("Expected runtime error for adding string and boolean")
             }
@@ -457,10 +433,11 @@ fn test_targeted_type_error_spans() {
     let source = r#"
   42 + "hello";
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => {
                 panic!("Expected runtime error for adding number and string")
             }
@@ -484,10 +461,11 @@ fn test_left_operand_error_span() {
     let source = r#"
   true + 5;
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
 
-    if let Ok(artifact) = CompilerPipeline::new((*source_map).clone()).run() {
-        match Vm::new(artifact).interpret() {
+    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        match Vm::new(heap).interpret(function, Some(source_map.clone())) {
             Ok(_) => {
                 panic!("Expected runtime error for adding boolean and number")
             }
@@ -516,9 +494,10 @@ fn test_initializing_local_variable_with_itself() {
             }
         }
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
 
-    match CompilerPipeline::new((*source_map).clone()).run() {
+    match CompilerPipeline::new(source_map.clone(), &mut heap).run() {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);
@@ -540,17 +519,16 @@ fn test_for_loop() {
         }
         print(sum);
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
 
-    match CompilerPipeline::new((*source_map).clone()).run() {
-        Ok(artifact) => {
-            disassemble_chunk(
-                &artifact.source_map,
-                &artifact.chunk,
-                &artifact.heap,
-                "for_loop_test.ql",
-            );
-            match Vm::new(artifact).set_debug(false).interpret() {
+    match CompilerPipeline::new(source_map.clone(), &mut heap).run() {
+        Ok(function) => {
+            disassemble_chunk(&source_map, &function.chunk, &heap, "for_loop_test.ql");
+            match Vm::new(heap)
+                .set_debug(false)
+                .interpret(function, Some(source_map.clone()))
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", pretty_print_error(&source_map, &error))
@@ -574,9 +552,10 @@ fn test_initializing_local_variable_with_same_name() {
             var a = "b";
         }
   "#;
-    let source_map = Rc::new(SourceMap::new(source.to_string()));
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
 
-    match CompilerPipeline::new((*source_map).clone()).run() {
+    match CompilerPipeline::new(source_map.clone(), &mut heap).run() {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);

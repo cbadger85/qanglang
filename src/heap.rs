@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map::Entry};
 
-use crate::{error::ValueConversionError, vm::NativeFn};
+use crate::{Chunk, error::ValueConversionError, vm::NativeFn};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);
@@ -24,15 +24,33 @@ pub struct NativeFunction {
 }
 
 #[derive(Debug, Clone)]
+pub struct KangFunction {
+    pub arity: usize,
+    pub name: ObjectHandle,
+    pub chunk: Chunk,
+}
+
+impl KangFunction {
+    pub fn new(name: ObjectHandle, arity: usize) -> Self {
+        Self {
+            name,
+            arity,
+            chunk: Chunk::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum HeapObjectValue {
     String(Box<str>),
     NativeFunction(NativeFunction),
+    Function(KangFunction),
 }
 
 pub const fn get_object_value_type(value: &HeapObjectValue) -> &'static str {
     match value {
         HeapObjectValue::String(_) => "string",
-        HeapObjectValue::NativeFunction(_) => "function",
+        HeapObjectValue::NativeFunction(_) | HeapObjectValue::Function(_) => "function",
     }
 }
 

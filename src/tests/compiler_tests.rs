@@ -84,8 +84,9 @@ fn test_while() {
         }
         Err(errors) => {
             for error in errors.all() {
-                pretty_print_error(&source_map, error);
+                println!("{}", pretty_print_error(&source_map, error));
             }
+            panic!("Failed with compiler errors.")
         }
     }
 }
@@ -525,6 +526,42 @@ fn test_initializing_local_variable_with_itself() {
             assert!(
                 error_message.contains("Cannot read local variable during its initialization.")
             );
+        }
+    }
+}
+
+#[test]
+fn test_for_loop() {
+    let source = r#"
+        var sum = 0;
+        for (var i = 1; i <= 3; i = i + 1) {
+            print(i);
+            sum = sum + i;
+        }
+        print(sum);
+  "#;
+    let source_map = Rc::new(SourceMap::new(source.to_string()));
+
+    match CompilerPipeline::new((*source_map).clone()).run() {
+        Ok(artifact) => {
+            disassemble_chunk(
+                &artifact.source_map,
+                &artifact.chunk,
+                &artifact.heap,
+                "for_loop_test.ql",
+            );
+            match Vm::new(artifact).set_debug(false).interpret() {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", pretty_print_error(&source_map, &error))
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", pretty_print_error(&source_map, error));
+            }
+            panic!("Failed with compiler errors.")
         }
     }
 }

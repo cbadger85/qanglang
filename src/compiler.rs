@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
-    ast::{self, AstTransformer, AstVisitor, SourceSpan},
+    ast::{self, AstTransformer, AstVisitor, ForInitializer, SourceSpan},
     chunk::{Chunk, OpCode},
     heap::ObjectHeap,
     parser::Parser,
@@ -671,6 +671,64 @@ impl AstVisitor for Compiler {
 
         self.patch_jump(exit_jump, while_stmt.body.span())?;
         self.emit_opcode(OpCode::Pop, while_stmt.span);
+
+        Ok(())
+    }
+
+    fn visit_for_statement(
+        &mut self,
+        for_stmt: &ast::ForStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
+        if let Some(initializer) = &for_stmt.initializer {
+            match initializer {
+                ForInitializer::Variable(var_decl) => {
+                    self.visit_variable_declaration(&var_decl, errors)?
+                }
+                ForInitializer::Expr(expr) => {
+                    self.visit_expression(expr, errors)?;
+                    self.emit_opcode(OpCode::Pop, expr.span());
+                }
+            }
+        }
+
+        let mut loop_start = self.current_chunk.code().len();
+        let mut exit_jump: Option<usize> = None;
+
+        if let Some(condition) = &for_stmt.condition {
+            let condition_jump = self.emit_jump(OpCode::Jump, condition.span());
+            loop_start = self.current_chunk.code().len();
+            self.visit_statement(&for_stmt.body, errors)?;
+
+            if let Some(increment) = &for_stmt.increment {
+                self.visit_expression(increment, errors)?;
+                self.emit_opcode(OpCode::Pop, increment.span());
+            }
+
+            self.patch_jump(condition_jump, condition.span())?;
+            self.visit_expression(&condition, errors)?;
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse, condition.span()));
+            self.emit_opcode(OpCode::Pop, condition.span());
+            self.emit_loop(loop_start, for_stmt.body.span())?;
+        } else {
+            self.visit_statement(&for_stmt.body, errors)?;
+            
+            if let Some(increment) = &for_stmt.increment {
+                self.visit_expression(increment, errors)?;
+                self.emit_opcode(OpCode::Pop, increment.span());
+            }
+            
+            self.emit_loop(loop_start, for_stmt.body.span())?;
+        }
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump, for_stmt.span)?;
+            self.emit_opcode(OpCode::Pop, for_stmt.span);
+        }
+
+        self.end_scope(for_stmt.span);
 
         Ok(())
     }

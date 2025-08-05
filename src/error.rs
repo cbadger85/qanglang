@@ -2,7 +2,6 @@ use crate::SourceMap;
 use crate::ast::SourceSpan;
 use crate::chunk::SourceLocation;
 
-// TODO impl std::fmt::Error and std::fmt::Format
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangSyntaxError {
     pub message: String,
@@ -24,18 +23,39 @@ impl QangSyntaxError {
     }
 }
 
+impl std::fmt::Display for QangSyntaxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for QangSyntaxError {}
+
 // TODO impl std::fmt::Error and std::fmt::Format
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangRuntimeError {
-    pub loc: SourceLocation,
     pub message: String,
 }
 
 impl QangRuntimeError {
     pub fn new(message: String, loc: SourceLocation) -> Self {
-        Self { message, loc }
+        Self {
+            message: format!(
+                "Runtime Error at line {}, column {}: {}",
+                loc.line, loc.col, message
+            )
+            .to_string(),
+        }
     }
 }
+
+impl std::fmt::Display for QangRuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for QangRuntimeError {}
 
 #[derive(Debug, Clone)]
 pub struct ValueConversionError(String);
@@ -71,33 +91,6 @@ impl ErrorReporter {
         !self.errors.is_empty()
     }
 
-    /// Get the number of errors
-    #[allow(dead_code)]
-    pub fn error_count(&self) -> usize {
-        self.errors.len()
-    }
-
-    /// Print all errors with pretty formatting to stderr
-    #[allow(dead_code)]
-    pub fn print_errors(&self) {
-        for error in &self.errors {
-            eprintln!("{}", error.message);
-        }
-    }
-
-    /// Create a summary of all errors
-    #[allow(dead_code)]
-    pub fn error_summary(&self) -> String {
-        if self.errors.is_empty() {
-            "No errors found.".to_string()
-        } else if self.errors.len() == 1 {
-            "Found 1 error.".to_string()
-        } else {
-            format!("Found {} errors.", self.errors.len())
-        }
-    }
-
-    /// Convert accumulated errors into QangErrors for returning as a result
     pub fn errors(&self) -> &[QangSyntaxError] {
         &self.errors
     }
@@ -192,6 +185,16 @@ mod tests {
     use super::*;
     use crate::SourceMap;
 
+    fn error_summary(errors: &[QangSyntaxError]) -> String {
+        if errors.is_empty() {
+            "No errors found.".to_string()
+        } else if errors.len() == 1 {
+            "Found 1 error.".to_string()
+        } else {
+            format!("Found {} errors.", errors.len())
+        }
+    }
+
     #[test]
     fn test_error_reporter_basic_functionality() {
         let source = "var x = 5 +\nvar y = 10;";
@@ -206,7 +209,7 @@ mod tests {
         ));
 
         assert!(reporter.has_errors());
-        assert_eq!(reporter.error_count(), 1);
+        assert_eq!(reporter.errors().len(), 1);
     }
 
     #[test]
@@ -228,9 +231,9 @@ mod tests {
             &source_map,
         ));
 
-        assert_eq!(reporter.error_count(), 2);
+        assert_eq!(reporter.errors().len(), 2);
 
-        let summary = reporter.error_summary();
+        let summary = error_summary(reporter.errors());
         assert_eq!(summary, "Found 2 errors.");
     }
 
@@ -238,7 +241,7 @@ mod tests {
     fn test_error_summary_no_errors() {
         let reporter = ErrorReporter::new();
 
-        let summary = reporter.error_summary();
+        let summary = error_summary(reporter.errors());
         assert!(summary.contains("No errors found."));
     }
 
@@ -254,7 +257,7 @@ mod tests {
             &source_map,
         ));
 
-        let summary = reporter.error_summary();
+        let summary = error_summary(reporter.errors());
         assert!(summary.contains("Found 1 error."));
     }
 
@@ -275,7 +278,7 @@ mod tests {
             &source_map,
         ));
 
-        let summary = reporter.error_summary();
+        let summary = error_summary(reporter.errors());
         assert!(summary.contains("Found 2 errors."));
     }
 }

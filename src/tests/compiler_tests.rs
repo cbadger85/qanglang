@@ -368,54 +368,6 @@ fn test_booleans() {
 }
 
 #[test]
-fn test_type_error_with_source_span_for_left_operand() {
-    let source = r#"
-  1 + "hello";
-  "#;
-    let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
-
-    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
-        match Vm::new(heap).interpret(function) {
-            Ok(_) => {
-                panic!("Expected runtime error for adding number and string")
-            }
-            Err(error) => {
-                let error_message = error.message;
-                assert!(error_message.contains("Cannot add number to string."));
-                println!("Error correctly includes source span: {}", error_message);
-            }
-        }
-    } else {
-        panic!("Compiler errors.")
-    }
-}
-
-#[test]
-fn test_type_error_with_source_span_for_right_operand() {
-    let source = r#"
-  "hello" + true;
-  "#;
-    let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
-
-    if let Ok(function) = CompilerPipeline::new(source_map.clone(), &mut heap).run() {
-        match Vm::new(heap).interpret(function) {
-            Ok(_) => {
-                panic!("Expected runtime error for adding string and boolean")
-            }
-            Err(error) => {
-                let error_message = error.message;
-                assert!(error_message.contains("Cannot add string to boolean."));
-                println!("Error correctly includes source span: {}", error_message);
-            }
-        }
-    } else {
-        panic!("Compiler errors.")
-    }
-}
-
-#[test]
 fn test_targeted_type_error_spans() {
     let source = r#"
   42 + "hello";

@@ -10,10 +10,9 @@ mod tokenizer;
 mod value;
 mod vm;
 
-pub use chunk::{Chunk, OpCode};
-pub use compiler::CompilerPipeline;
+pub use compiler::{CompilerError, CompilerPipeline};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError};
-pub use heap::{HeapObject, HeapObjectValue, ObjectHeap};
+pub use heap::{HeapObject, HeapObjectValue, KangFunction, ObjectHeap};
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};

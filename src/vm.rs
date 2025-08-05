@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    Chunk, HeapObject, HeapObjectValue, ObjectHeap, OpCode, QangRuntimeError, Value,
-    chunk::SourceLocation,
+    HeapObject, HeapObjectValue, ObjectHeap, QangRuntimeError, Value,
+    chunk::{Chunk, OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::ValueConversionError,
@@ -180,19 +180,19 @@ impl Vm {
                             Ok(Value::String(result))
                         }
                         (Value::Number(_), _) => Err(QangRuntimeError::new(
-                            format!("Cannot add number to {}.", get_value_type(&b)).to_string(),
+                            format!("Cannot add number to {}.", get_value_type(&b)),
                             loc,
                         )),
                         (Value::String(_), _) => Err(QangRuntimeError::new(
-                            format!("Cannot add string to {}.", get_value_type(&b)).to_string(),
+                            format!("Cannot add string to {}.", get_value_type(&b)),
                             loc,
                         )),
                         (_, Value::Number(_)) => Err(QangRuntimeError::new(
-                            format!("Cannot add {} to number.", get_value_type(&a)).to_string(),
+                            format!("Cannot add {} to number.", get_value_type(&a)),
                             loc,
                         )),
                         (_, Value::String(_)) => Err(QangRuntimeError::new(
-                            format!("Cannot add {} to string.", get_value_type(&a).to_string()),
+                            format!("Cannot add {} to string.", get_value_type(&a)),
                             loc,
                         )),
                         _ => Err(QangRuntimeError::new(
@@ -480,11 +480,6 @@ impl Vm {
         &self.heap
     }
 
-    pub fn stack(&self) -> &[Value] {
-        &self.stack
-    }
-
-    #[allow(dead_code)]
     fn debug(&self) {
         print!("          ");
         for i in 0..self.stack_top {

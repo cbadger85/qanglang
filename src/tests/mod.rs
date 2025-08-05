@@ -16,7 +16,9 @@ pub fn parse_source(
 
 pub fn assert_no_parse_errors(errors: &crate::ErrorReporter) {
     if errors.has_errors() {
-        errors.print_errors();
+        for error in errors.errors() {
+            eprintln!("{}", error.message);
+        }
         panic!("Unexpected parse errors.");
     }
 }

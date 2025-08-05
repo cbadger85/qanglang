@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map::Entry};
 
-use crate::{Chunk, error::ValueConversionError, vm::NativeFn};
+use crate::{chunk::Chunk, error::ValueConversionError, vm::NativeFn};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectHandle(usize);

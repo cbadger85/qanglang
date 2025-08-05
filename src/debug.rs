@@ -1,4 +1,7 @@
-use crate::{Chunk, ObjectHeap, OpCode};
+use crate::{
+    ObjectHeap,
+    chunk::{Chunk, OpCode},
+};
 
 #[allow(dead_code)]
 pub fn disassemble_chunk(chunk: &Chunk, heap: &ObjectHeap, name: &str) {

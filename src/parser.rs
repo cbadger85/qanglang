@@ -252,7 +252,12 @@ impl Parser {
         match result {
             Ok(decl) => Some(decl),
             Err(error) => {
-                self.errors.report_error(error);
+                let formatted_error = QangSyntaxError::new_formatted(
+                    &error.message,
+                    error.span,
+                    &self.source_map,
+                );
+                self.errors.report_error(formatted_error);
                 self.synchronize();
                 None
             }

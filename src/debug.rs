@@ -1,30 +1,22 @@
-use crate::{Chunk, ObjectHeap, OpCode, SourceMap};
+use crate::{Chunk, ObjectHeap, OpCode};
 
 #[allow(dead_code)]
-pub fn disassemble_chunk(source_map: &SourceMap, chunk: &Chunk, heap: &ObjectHeap, name: &str) {
+pub fn disassemble_chunk(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
     println!("== {} ==", name);
 
     let mut offset = 0;
     while offset < chunk.count() {
-        offset = disassemble_instruction(source_map, chunk, heap, offset);
+        offset = disassemble_instruction(chunk, heap, offset);
     }
 }
 
-pub fn disassemble_instruction(
-    source_map: &SourceMap,
-    chunk: &Chunk,
-    heap: &ObjectHeap,
-    offset: usize,
-) -> usize {
+pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) -> usize {
     print!("{:04} ", offset);
 
-    if offset > 0
-        && source_map.get_line_number(chunk.spans()[offset].end)
-            == source_map.get_line_number(chunk.spans()[offset - 1].start)
-    {
+    if offset > 0 && chunk.locs()[offset].line == chunk.locs()[offset - 1].line {
         print!("   | ");
     } else {
-        chunk.spans()[offset].print(source_map);
+        print!("{:04} ", chunk.locs()[offset].line);
     }
 
     let instruction = chunk.code()[offset];

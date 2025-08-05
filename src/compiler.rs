@@ -1,12 +1,20 @@
 use std::rc::Rc;
 
 use crate::{
-    ErrorReporter, QangError, QangErrors, QangResult, SourceMap, Value,
+    ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstTransformer, AstVisitor, ForInitializer, SourceSpan},
-    chunk::{Chunk, OpCode},
+    chunk::{Chunk, OpCode, SourceLocation},
     heap::{KangFunction, ObjectHandle, ObjectHeap},
     parser::Parser,
 };
+
+pub struct CompilerError(Vec<QangSyntaxError>);
+
+impl CompilerError {
+    pub fn all(&self) -> &[QangSyntaxError] {
+        &self.0
+    }
+}
 
 trait TransformerMiddleware {
     fn run(&mut self, program: ast::Program) -> ast::Program {
@@ -49,7 +57,7 @@ impl<T> VisitorAdapter<T> {
 
 impl<T> AnalysisMiddleware for VisitorAdapter<T>
 where
-    T: AstVisitor<Error = QangError>,
+    T: AstVisitor<Error = QangSyntaxError>,
 {
     fn analyze(&mut self, program: &ast::Program, errors: &mut ErrorReporter) {
         if let Err(error) = self.visitor.visit_program(program, errors) {
@@ -115,7 +123,7 @@ impl<'a> CompilerPipeline<'a> {
 
     pub fn add_analyzer<T>(mut self, analyzer: T) -> Self
     where
-        T: AstVisitor<Error = QangError> + 'static,
+        T: AstVisitor<Error = QangSyntaxError> + 'static,
     {
         self.analyzers.push(Box::new(VisitorAdapter::new(analyzer)));
 
@@ -138,7 +146,7 @@ impl<'a> CompilerPipeline<'a> {
         self
     }
 
-    pub fn run(mut self) -> QangResult<KangFunction> {
+    pub fn run(mut self) -> Result<KangFunction, CompilerError> {
         let mut parser = Parser::new(self.source_map.clone());
         let mut program = parser.parse();
         let mut errors = parser.into_reporter();
@@ -203,12 +211,12 @@ impl<'a> Compiler<'a> {
         mut self,
         program: ast::Program,
         mut errors: ErrorReporter,
-    ) -> QangResult<KangFunction> {
+    ) -> Result<KangFunction, CompilerError> {
         self.visit_program(&program, &mut errors)
-            .map_err(|err| QangErrors(vec![err]))?;
+            .map_err(|err| CompilerError(vec![err]))?;
 
         if errors.has_errors() {
-            Err(errors.into_errors())
+            Err(CompilerError(errors.take_errors()))
         } else {
             let span = self.source_map.get_source().len();
 
@@ -219,14 +227,20 @@ impl<'a> Compiler<'a> {
     }
 
     fn emit_opcode(&mut self, opcode: OpCode, span: SourceSpan) {
+        let line = self.source_map.get_line_number(span.start);
+        let col = self.source_map.get_column_number(span.start);
         if !self.is_silent {
-            self.get_current_chunk().write_opcode(opcode, span);
+            self.get_current_chunk()
+                .write_opcode(opcode, SourceLocation::new(line, col));
         }
     }
 
     fn emit_byte(&mut self, byte: u8, span: SourceSpan) {
+        let line = self.source_map.get_line_number(span.start);
+        let col = self.source_map.get_column_number(span.start);
         if !self.is_silent {
-            self.get_current_chunk().write(byte, span);
+            self.get_current_chunk()
+                .write(byte, SourceLocation::new(line, col));
         }
     }
 
@@ -237,11 +251,15 @@ impl<'a> Compiler<'a> {
         self.get_current_chunk().code().len() - 2
     }
 
-    fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangError> {
+    fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
         let jump = self.get_current_chunk().code().len() - offset - 2;
 
         if jump > u16::MAX as usize {
-            return Err(QangError::parse_error("Too much code to jump over.", span));
+            return Err(QangSyntaxError::new_formatted(
+                "Too much code to jump over.",
+                span,
+                &self.source_map,
+            ));
         }
 
         self.get_current_chunk().code_mut()[offset] = ((jump >> 8) & 0xff) as u8;
@@ -250,11 +268,15 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangError> {
+    fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
         self.emit_opcode(OpCode::Loop, span);
         let offset = self.get_current_chunk().code().len() - loop_start + 2;
         if offset > u16::MAX as usize {
-            return Err(QangError::runtime_error("Loop body too large.", span));
+            return Err(QangSyntaxError::new_formatted(
+                "Loop body too large.",
+                span,
+                &self.source_map,
+            ));
         }
 
         self.emit_byte((offset >> 8 & 0xff) as u8, span);
@@ -279,7 +301,11 @@ impl<'a> Compiler<'a> {
 
         if index > u8::MAX as usize {
             self.is_silent = true;
-            errors.report_parse_error("Constant index out of range", span);
+            errors.report_error(QangSyntaxError::new_formatted(
+                "Constant index out of range",
+                span,
+                &self.source_map,
+            ));
             0
         } else {
             index as u8
@@ -306,9 +332,13 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn add_local(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangError> {
+    fn add_local(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
         if self.local_count >= STACK_MAX {
-            Err(QangError::parse_error("", span))
+            Err(QangSyntaxError::new_formatted(
+                "Too many local variables in scope.",
+                span,
+                &self.source_map,
+            ))
         } else {
             let local = Local::new(handle.into());
             if self.local_count < self.locals.len() {
@@ -323,7 +353,11 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn declare_local_variable(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangError> {
+    fn declare_local_variable(
+        &mut self,
+        handle: &str,
+        span: SourceSpan,
+    ) -> Result<(), QangSyntaxError> {
         for i in (0..self.local_count).rev() {
             if let Some(local) = self.locals.get(i) {
                 if local
@@ -335,9 +369,10 @@ impl<'a> Compiler<'a> {
                 }
 
                 if *local.name == *handle {
-                    return Err(QangError::parse_error(
+                    return Err(QangSyntaxError::new_formatted(
                         "Already a variable with this name in this scope.",
                         span,
+                        &self.source_map,
                     ));
                 }
             }
@@ -351,14 +386,15 @@ impl<'a> Compiler<'a> {
         &mut self,
         handle: &str,
         span: SourceSpan,
-    ) -> Result<Option<usize>, QangError> {
+    ) -> Result<Option<usize>, QangSyntaxError> {
         for i in (0..self.local_count).rev() {
             if let Some(local) = self.locals.get(i) {
                 if *local.name == *handle {
                     if local.depth.is_none() {
-                        return Err(QangError::runtime_error(
+                        return Err(QangSyntaxError::new_formatted(
                             "Cannot read local variable during its initialization.",
                             span,
+                            &self.source_map,
                         ));
                     }
                     return Ok(Some(i));
@@ -379,7 +415,7 @@ impl<'a> Compiler<'a> {
 }
 
 impl<'a> AstVisitor for Compiler<'a> {
-    type Error = QangError;
+    type Error = QangSyntaxError;
 
     fn visit_number_literal(
         &mut self,
@@ -497,8 +533,8 @@ impl<'a> AstVisitor for Compiler<'a> {
                 };
             }
             _ => {
-                return Err(QangError::parse_error(
-                    "Invalid expression.",
+                return Err(QangSyntaxError::new(
+                    "Invalid expression.".to_string(),
                     assignment.target.span(),
                 ));
             }
@@ -799,7 +835,10 @@ impl<'a> AstVisitor for Compiler<'a> {
                             }
                             Ok(())
                         }
-                        _ => Err(QangError::parse_error("Expected function call.", call.span)),
+                        _ => Err(QangSyntaxError::new(
+                            "Expected function call.".to_string(),
+                            call.span,
+                        )),
                     }
                 } else {
                     Ok(())

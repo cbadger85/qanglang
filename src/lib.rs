@@ -12,7 +12,7 @@ mod vm;
 
 pub use chunk::{Chunk, OpCode};
 pub use compiler::CompilerPipeline;
-pub use error::{ErrorReporter, QangError, QangErrors, QangResult};
+pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError};
 pub use heap::{HeapObject, HeapObjectValue, ObjectHeap};
 pub use parser::Parser;
 pub use source::SourceMap;

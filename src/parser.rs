@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
 use crate::{
-    ErrorReporter, QangError, SourceMap,
+    ErrorReporter, QangSyntaxError, SourceMap,
     ast::{self, SourceSpan},
     tokenizer::{Token, TokenType, Tokenizer},
 };
 
-type ParseResult<T> = Result<T, QangError>;
+type ParseResult<T> = Result<T, QangSyntaxError>;
 
 pub struct Parser {
     source_map: Rc<SourceMap>,
@@ -19,7 +19,7 @@ pub struct Parser {
 impl Parser {
     pub fn new(source_map: Rc<SourceMap>) -> Self {
         let tokens = Tokenizer::new(source_map.clone());
-        let errors = ErrorReporter::new(source_map.clone());
+        let errors = ErrorReporter::new();
         let mut parser = Self {
             source_map,
             tokens,
@@ -68,7 +68,7 @@ impl Parser {
             self.advance();
         }
 
-        Err(QangError::parse_error(message, span))
+        Err(QangSyntaxError::new(message.to_string(), span))
     }
 
     fn match_token(&mut self, token_type: TokenType) -> bool {
@@ -94,8 +94,11 @@ impl Parser {
             .as_deref()
             .unwrap_or("Tokenization error");
 
-        self.errors
-            .report_parse_error(message, ast::SourceSpan::from_token(token));
+        self.errors.report_error(QangSyntaxError::new_formatted(
+            message,
+            ast::SourceSpan::from_token(token),
+            &self.source_map,
+        ));
     }
 
     fn get_current_span(&self) -> ast::SourceSpan {
@@ -125,7 +128,10 @@ impl Parser {
                 span,
             ))
         } else {
-            Err(QangError::parse_error("Expected identifier.", span))
+            Err(QangSyntaxError::new(
+                "Expected identifier.".to_string(),
+                span,
+            ))
         }
     }
 
@@ -332,8 +338,8 @@ impl Parser {
                 Ok(ast::ClassMember::Field(self.field_declaration()?))
             }
         } else {
-            Err(QangError::parse_error(
-                "Expected field or method declaration.",
+            Err(QangSyntaxError::new(
+                "Expected field or method declaration.".to_string(),
                 self.get_current_span(),
             ))
         }
@@ -375,8 +381,8 @@ impl Parser {
         let current_token_type = self
             .current_token
             .as_ref()
-            .ok_or(QangError::parse_error(
-                "Expected statement.",
+            .ok_or(QangSyntaxError::new(
+                "Expected statement.".to_string(),
                 self.previous_token
                     .as_ref()
                     .map(SourceSpan::from_token)
@@ -480,8 +486,8 @@ impl Parser {
             if let ast::Decl::Variable(var_decl) = var_decl {
                 Some(ast::ForInitializer::Variable(var_decl))
             } else {
-                return Err(QangError::parse_error(
-                    "Expected variable declaration.",
+                return Err(QangSyntaxError::new(
+                    "Expected variable declaration.".to_string(),
                     self.get_current_span(),
                 ));
             }
@@ -612,8 +618,8 @@ impl Parser {
 
         // Validate that we have at least catch or finally
         if catch_clause.is_none() && finally_block.is_none() {
-            return Err(QangError::parse_error(
-                "Expected 'catch' or 'finally' after try block.",
+            return Err(QangSyntaxError::new(
+                "Expected 'catch' or 'finally' after try block.".to_string(),
                 self.get_current_span(),
             ));
         }
@@ -720,10 +726,16 @@ impl Parser {
                             span,
                         }))
                     } else {
-                        Err(QangError::parse_error("Invalid assignment target", span))
+                        Err(QangSyntaxError::new(
+                            "Invalid assignment target".to_string(),
+                            span,
+                        ))
                     }
                 }
-                _ => Err(QangError::parse_error("Invalid assignment target", span)),
+                _ => Err(QangSyntaxError::new(
+                    "Invalid assignment target".to_string(),
+                    span,
+                )),
             }
         } else {
             Ok(expr)
@@ -816,7 +828,7 @@ mod expression_parser {
             .iter()
             .collect::<String>()
             .parse::<f64>()
-            .map_err(|_| crate::QangError::parse_error("Expected number.", span))?;
+            .map_err(|_| crate::QangSyntaxError::new("Expected number.".to_string(), span))?;
 
         Ok(ast::Expr::Primary(ast::PrimaryExpr::Number(
             ast::NumberLiteral { value, span },
@@ -861,7 +873,10 @@ mod expression_parser {
                 operand,
                 span,
             })),
-            _ => Err(crate::QangError::parse_error("Unknown operator.", span)),
+            _ => Err(crate::QangSyntaxError::new(
+                "Unknown operator.".to_string(),
+                span,
+            )),
         }
     }
 
@@ -890,7 +905,10 @@ mod expression_parser {
             tokenizer::TokenType::Super => Ok(ast::Expr::Primary(ast::PrimaryExpr::Super(
                 ast::SuperExpr { span },
             ))),
-            _ => Err(crate::QangError::parse_error("Unknown literal.", span)),
+            _ => Err(crate::QangSyntaxError::new(
+                "Unknown literal.".to_string(),
+                span,
+            )),
         }
     }
 
@@ -1059,8 +1077,8 @@ mod expression_parser {
         let rule = get_rule(token_type);
 
         if rule.is_empty() {
-            return Err(QangError::parse_error(
-                "Unexpected token.",
+            return Err(QangSyntaxError::new(
+                "Unexpected token.".to_string(),
                 ast::SourceSpan::from_token(token),
             ));
         }
@@ -1147,7 +1165,10 @@ mod expression_parser {
                 right: Box::new(right),
                 span,
             })),
-            _ => Err(crate::QangError::parse_error("Unknown operator.", span)),
+            _ => Err(crate::QangSyntaxError::new(
+                "Unknown operator.".to_string(),
+                span,
+            )),
         }
     }
 
@@ -1259,8 +1280,8 @@ mod expression_parser {
                         ast::CallOperation::OptionalCall(arguments)
                     }
                     _ => {
-                        return Err(QangError::parse_error(
-                            "Expected call expression or identifier.",
+                        return Err(QangSyntaxError::new(
+                            "Expected call expression or identifier.".to_string(),
                             parser.get_current_span(),
                         ));
                     }
@@ -1503,7 +1524,10 @@ mod expression_parser {
                     .map(ast::SourceSpan::from_token)
                     .unwrap_or_default();
 
-                return Err(crate::QangError::parse_error("Expected expression.", span));
+                return Err(crate::QangSyntaxError::new(
+                    "Expected expression.".to_string(),
+                    span,
+                ));
             }
         };
 
@@ -1540,8 +1564,8 @@ mod expression_parser {
                     // We have an expression-like token that couldn't be parsed as part of the current expression
                     // This suggests a syntax error like missing operator
                     let span = ast::SourceSpan::from_token(current_token);
-                    return Err(crate::QangError::parse_error(
-                        "Unexpected token in expression. Missing operator?",
+                    return Err(crate::QangSyntaxError::new(
+                        "Unexpected token in expression. Missing operator?".to_string(),
                         span,
                     ));
                 }

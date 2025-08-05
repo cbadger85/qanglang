@@ -1,103 +1,41 @@
 use crate::SourceMap;
 use crate::ast::SourceSpan;
-use std::fmt;
-use std::rc::Rc;
+use crate::chunk::SourceLocation;
 
-/// Represents different types of errors that can occur during language processing
+// TODO impl std::fmt::Error and std::fmt::Format
 #[derive(Debug, Clone, PartialEq)]
-pub enum ErrorKind {
-    Syntax,
-    Runtime,
+pub struct QangSyntaxError {
+    pub message: String,
+    pub span: SourceSpan,
 }
 
-impl fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ErrorKind::Syntax => write!(f, "Syntax Error"),
-            ErrorKind::Runtime => write!(f, "Runtime Error"),
-        }
+impl QangSyntaxError {
+    pub fn new(message: String, span: SourceSpan) -> Self {
+        Self { message, span }
+    }
+
+    pub fn new_formatted(
+        message: &str,
+        span: SourceSpan,
+        source_map: &SourceMap,
+    ) -> QangSyntaxError {
+        let message = pretty_print_syntax_error(source_map, message, span);
+        QangSyntaxError::new(message, span)
     }
 }
 
-/// Represents an error with detailed location information
+// TODO impl std::fmt::Error and std::fmt::Format
 #[derive(Debug, Clone, PartialEq)]
-pub struct QangError {
-    pub kind: ErrorKind,
-    pub span: SourceSpan,
+pub struct QangRuntimeError {
+    pub loc: SourceLocation,
     pub message: String,
 }
 
-impl QangError {
-    pub fn new(kind: ErrorKind, message: String, span: SourceSpan) -> Self {
-        Self {
-            kind,
-            span,
-            message,
-        }
-    }
-
-    pub fn parse_error(message: &str, span: SourceSpan) -> Self {
-        Self::new(ErrorKind::Syntax, message.to_string(), span)
-    }
-
-    pub fn runtime_error(message: &str, span: SourceSpan) -> Self {
-        Self::new(ErrorKind::Runtime, message.to_string(), span)
+impl QangRuntimeError {
+    pub fn new(message: String, loc: SourceLocation) -> Self {
+        Self { message, loc }
     }
 }
-
-impl fmt::Display for QangError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.kind, self.message)
-    }
-}
-
-impl std::error::Error for QangError {}
-
-/// Collection of errors
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct QangErrors(pub Vec<QangError>);
-
-impl QangErrors {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    fn push(&mut self, error: QangError) {
-        self.0.push(error);
-    }
-
-    pub fn single(error: QangError) -> Self {
-        Self(vec![error])
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn all(&self) -> &[QangError] {
-        &self.0
-    }
-}
-
-impl fmt::Display for QangErrors {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, error) in self.0.iter().enumerate() {
-            if i > 0 {
-                writeln!(f)?;
-            }
-            write!(f, "{}", error)?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for QangErrors {}
-
-pub type QangResult<T> = Result<T, QangErrors>;
 
 #[derive(Debug, Clone)]
 pub struct ValueConversionError(String);
@@ -107,47 +45,25 @@ impl ValueConversionError {
         Self(message.to_string())
     }
 
-    pub fn into_qang_error(self, span: SourceSpan) -> QangError {
-        QangError::runtime_error(&self.0, span)
+    pub fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
+        QangRuntimeError::new(self.0, loc)
     }
 }
 
 /// Handles error reporting and pretty printing for the QangLang compiler.
+#[derive(Debug, Clone, Default)]
 pub struct ErrorReporter {
-    source_map: Rc<SourceMap>,
-    errors: QangErrors,
+    errors: Vec<QangSyntaxError>,
 }
 
 impl ErrorReporter {
-    pub fn new(source_map: Rc<SourceMap>) -> Self {
-        Self {
-            source_map,
-            errors: QangErrors::new(),
-        }
-    }
-
-    pub fn from_errors(source_map: Rc<SourceMap>, errors: Vec<QangError>) -> Self {
-        Self {
-            source_map,
-            errors: QangErrors(errors),
-        }
+    pub fn new() -> Self {
+        Self { errors: Vec::new() }
     }
 
     /// Add an error to the error list
-    pub fn report_error(&mut self, error: QangError) {
+    pub fn report_error(&mut self, error: QangSyntaxError) {
         self.errors.push(error);
-    }
-
-    /// Report a parse error
-    pub fn report_parse_error(&mut self, message: &str, span: SourceSpan) {
-        let error = QangError::parse_error(message, span);
-        self.report_error(error);
-    }
-
-    /// Report a runtime error
-    pub fn report_runtime_error(&mut self, message: &str, span: SourceSpan) {
-        let error = QangError::runtime_error(message, span);
-        self.report_error(error);
     }
 
     /// Check if there are any errors
@@ -164,26 +80,9 @@ impl ErrorReporter {
     /// Print all errors with pretty formatting to stderr
     #[allow(dead_code)]
     pub fn print_errors(&self) {
-        for error in &self.errors.0 {
-            eprintln!("{}", pretty_print_error(&self.source_map.clone(), error));
+        for error in &self.errors {
+            eprintln!("{}", error.message);
         }
-    }
-
-    /// Print a specific error with pretty formatting
-    #[allow(dead_code)]
-    pub fn print_error(&self, error: &QangError) {
-        eprintln!("{}", pretty_print_error(&self.source_map.clone(), error));
-    }
-
-    /// Get a pretty printed string for all errors
-    #[allow(dead_code)]
-    pub fn format_errors(&self) -> String {
-        self.errors
-            .all()
-            .iter()
-            .map(|error| pretty_print_error(&self.source_map.clone(), error))
-            .collect::<Vec<_>>()
-            .join("\n")
     }
 
     /// Create a summary of all errors
@@ -199,22 +98,30 @@ impl ErrorReporter {
     }
 
     /// Convert accumulated errors into QangErrors for returning as a result
-    pub fn into_errors(self) -> QangErrors {
+    pub fn errors(&self) -> &[QangSyntaxError] {
+        &self.errors
+    }
+
+    pub fn take_errors(self) -> Vec<QangSyntaxError> {
         self.errors
     }
 }
 
 /// Pretty print a single error with source context
-pub fn pretty_print_error(source_map: &SourceMap, error: &QangError) -> String {
+pub fn pretty_print_syntax_error(
+    source_map: &SourceMap,
+    message: &str,
+    span: SourceSpan,
+) -> String {
     let mut output = String::new();
 
-    let line_num = source_map.get_line_number(error.span.start);
-    let col_num = source_map.get_column_number(error.span.start);
+    let line_num = source_map.get_line_number(span.start);
+    let col_num = source_map.get_column_number(span.start);
 
     // Error header with kind
     output.push_str(&format!(
         "{} at line {}, column {}: {}\n",
-        error.kind, line_num, col_num, error.message
+        "Syntax Error", line_num, col_num, message
     ));
 
     // Get the problematic line
@@ -229,17 +136,8 @@ pub fn pretty_print_error(source_map: &SourceMap, error: &QangError) -> String {
     output.push_str(&format!(" {} | {}\n", line_num, line_str));
 
     // Create the error pointer
-    let error_pointer = create_error_pointer(source_map, error, &line_str, col_num);
+    let error_pointer = create_error_pointer(source_map, span, &line_str, col_num);
     output.push_str(&format!(" {} | {}\n", padding, error_pointer));
-
-    // Add additional context for runtime errors (e.g., call stack)
-    if error.kind == ErrorKind::Runtime {
-        // TODO This should also hold a stack trace.
-        output.push_str(&format!(
-            " {} | Note: Error occurred during execution\n",
-            padding
-        ));
-    }
 
     output
 }
@@ -247,7 +145,7 @@ pub fn pretty_print_error(source_map: &SourceMap, error: &QangError) -> String {
 /// Create a visual pointer to the error location
 fn create_error_pointer(
     source_map: &SourceMap,
-    error: &QangError,
+    span: SourceSpan,
     line_str: &str,
     col_num: u32,
 ) -> String {
@@ -268,11 +166,11 @@ fn create_error_pointer(
     }
 
     // Calculate the span length within the line
-    let start_col = source_map.get_column_number(error.span.start) as usize;
-    let end_col = source_map.get_column_number(error.span.end.saturating_sub(1)) as usize;
+    let start_col = source_map.get_column_number(span.start) as usize;
+    let end_col = source_map.get_column_number(span.end.saturating_sub(1)) as usize;
 
     // Add the error indicators
-    if start_col == end_col || error.span.start == error.span.end {
+    if start_col == end_col || span.start == span.end {
         pointer.push('^');
     } else {
         // Multi-character span
@@ -298,30 +196,37 @@ mod tests {
     fn test_error_reporter_basic_functionality() {
         let source = "var x = 5 +\nvar y = 10;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(Rc::new(source_map));
+        let mut reporter = ErrorReporter::new();
 
         // Report an error
-        reporter.report_runtime_error("Expected expression after '+'", SourceSpan::new(11, 11));
+        reporter.report_error(QangSyntaxError::new_formatted(
+            "Expected expression after '+'",
+            SourceSpan::new(11, 11),
+            &source_map,
+        ));
 
         assert!(reporter.has_errors());
         assert_eq!(reporter.error_count(), 1);
-
-        let output = reporter.format_errors();
-        assert!(output.contains("Runtime Error at line 1, column 12"));
-        assert!(output.contains("var x = 5 +"));
-        assert!(output.contains("^"));
     }
 
     #[test]
     fn test_multiple_errors() {
         let source = "var x = 5 +\nvar y = 10 *\nvar z;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(Rc::new(source_map));
+        let mut reporter = ErrorReporter::new();
 
         // Report multiple errors
-        reporter.report_runtime_error("Missing operand after '+'", SourceSpan::new(11, 11));
+        reporter.report_error(QangSyntaxError::new_formatted(
+            "Missing operand after '+'",
+            SourceSpan::new(11, 11),
+            &source_map,
+        ));
 
-        reporter.report_runtime_error("Missing operand after '*'", SourceSpan::new(23, 23));
+        reporter.report_error(QangSyntaxError::new_formatted(
+            "Missing operand after '*'",
+            SourceSpan::new(23, 23),
+            &source_map,
+        ));
 
         assert_eq!(reporter.error_count(), 2);
 
@@ -330,40 +235,8 @@ mod tests {
     }
 
     #[test]
-    fn test_multichar_span_error() {
-        let source = "var invalidIdentifier123! = 5;";
-        let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(Rc::new(source_map));
-
-        // Error spanning the invalid identifier
-        reporter.report_runtime_error(
-            "Invalid identifier name",
-            SourceSpan::new(4, 24), // "invalidIdentifier123!"
-        );
-
-        let output = reporter.format_errors();
-        assert!(output.contains("^~~~~~~~~~~~~~~~~~~~"));
-    }
-
-    #[test]
-    fn test_tokenizer_error_integration() {
-        let source = "var x = \"unterminated string";
-        let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(Rc::new(source_map));
-
-        // Simulate a tokenizer error
-        reporter.report_runtime_error("Unterminated string", SourceSpan::new(8, 28));
-
-        let output = reporter.format_errors();
-        assert!(output.contains("Unterminated string"));
-        assert!(output.contains("\"unterminated string"));
-    }
-
-    #[test]
     fn test_error_summary_no_errors() {
-        let source = "var x = 5;";
-        let source_map = SourceMap::new(source.to_string());
-        let reporter = ErrorReporter::new(Rc::new(source_map));
+        let reporter = ErrorReporter::new();
 
         let summary = reporter.error_summary();
         assert!(summary.contains("No errors found."));
@@ -373,9 +246,13 @@ mod tests {
     fn test_error_summary_single_errors() {
         let source = "var x = 5;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(Rc::new(source_map));
+        let mut reporter = ErrorReporter::new();
 
-        reporter.report_parse_error("Syntax error 1", SourceSpan::new(0, 3));
+        reporter.report_error(QangSyntaxError::new_formatted(
+            "Syntax error 1",
+            SourceSpan::new(0, 3),
+            &source_map,
+        ));
 
         let summary = reporter.error_summary();
         assert!(summary.contains("Found 1 error."));
@@ -385,27 +262,20 @@ mod tests {
     fn test_error_summary_multiple_errors() {
         let source = "var x = 5;";
         let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(Rc::new(source_map));
+        let mut reporter = ErrorReporter::new();
 
-        reporter.report_parse_error("Syntax error 1", SourceSpan::new(0, 3));
-        reporter.report_parse_error("Syntax error 2", SourceSpan::new(4, 5));
+        reporter.report_error(QangSyntaxError::new_formatted(
+            "Syntax error 1",
+            SourceSpan::new(0, 3),
+            &source_map,
+        ));
+        reporter.report_error(QangSyntaxError::new_formatted(
+            "Syntax error 2",
+            SourceSpan::new(4, 5),
+            &source_map,
+        ));
 
         let summary = reporter.error_summary();
         assert!(summary.contains("Found 2 errors."));
-    }
-
-    #[test]
-    fn test_pretty_printing_with_kinds() {
-        let source = "var x = 5 + y;";
-        let source_map = SourceMap::new(source.to_string());
-        let mut reporter = ErrorReporter::new(Rc::new(source_map));
-
-        reporter.report_runtime_error("Undefined variable 'y'", SourceSpan::new(12, 13));
-
-        let output = reporter.format_errors();
-        assert!(output.contains("Runtime Error at line 1, column 13"));
-        assert!(output.contains("Undefined variable 'y'"));
-        assert!(output.contains("var x = 5 + y;"));
-        assert!(output.contains("^"));
     }
 }

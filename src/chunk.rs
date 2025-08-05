@@ -1,7 +1,4 @@
-use crate::{
-    Value,
-    ast::{self, SourceSpan},
-};
+use crate::{Value, ast};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
@@ -128,10 +125,22 @@ impl From<OpCode> for u8 {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Default, Copy)]
+pub struct SourceLocation {
+    pub line: u32,
+    pub col: u32,
+}
+
+impl SourceLocation {
+    pub fn new(line: u32, col: u32) -> Self {
+        Self { line, col }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Chunk {
     code: Vec<u8>,
-    spans: Vec<SourceSpan>,
+    locs: Vec<SourceLocation>,
     constants: Vec<Value>,
 }
 
@@ -139,18 +148,18 @@ impl Chunk {
     pub fn new() -> Self {
         Self {
             code: Vec::new(),
-            spans: Vec::new(),
+            locs: Vec::new(),
             constants: Vec::new(),
         }
     }
 
-    pub fn write(&mut self, byte: u8, span: SourceSpan) {
+    pub fn write(&mut self, byte: u8, loc: SourceLocation) {
         self.code.push(byte);
-        self.spans.push(span);
+        self.locs.push(loc);
     }
 
-    pub fn write_opcode(&mut self, opcode: OpCode, span: SourceSpan) {
-        self.write(opcode as u8, span);
+    pub fn write_opcode(&mut self, opcode: OpCode, loc: SourceLocation) {
+        self.write(opcode as u8, loc);
     }
 
     pub fn add_constant(&mut self, value: Value) -> usize {
@@ -174,7 +183,7 @@ impl Chunk {
         &self.constants
     }
 
-    pub fn spans(&self) -> &[SourceSpan] {
-        &self.spans
+    pub fn locs(&self) -> &[SourceLocation] {
+        &self.locs
     }
 }

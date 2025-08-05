@@ -1,4 +1,4 @@
-use crate::{ErrorReporter, SourceMap, tokenizer::Token};
+use crate::{ErrorReporter, tokenizer::Token};
 
 /// Represents a position in the source code for error reporting and debugging
 #[derive(Debug, Clone, PartialEq, Default, Copy)]
@@ -24,10 +24,6 @@ impl SourceSpan {
             start: start.start,
             end: end.end,
         }
-    }
-
-    pub fn print(&self, source_map: &SourceMap) {
-        print!("{:04} ", source_map.get_line_number(self.start),);
     }
 }
 
@@ -1799,10 +1795,6 @@ pub enum StatementResult {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
-    use crate::SourceMap;
-
     use super::*;
 
     pub struct IdentifierCollector {
@@ -1818,7 +1810,7 @@ mod tests {
     }
 
     impl AstVisitor for IdentifierCollector {
-        type Error = crate::QangError;
+        type Error = crate::QangSyntaxError;
 
         fn visit_identifier(
             &mut self,
@@ -1836,8 +1828,7 @@ mod tests {
 
         let identifier = Identifier::new("test_var".into(), SourceSpan::new(0, 8));
 
-        let source_map = SourceMap::new("".to_string());
-        let mut errors = ErrorReporter::new(Rc::new(source_map));
+        let mut errors = ErrorReporter::new();
         collector
             .visit_identifier(&identifier, &mut errors)
             .unwrap();
@@ -1855,8 +1846,7 @@ mod tests {
             span: SourceSpan::new(0, 2),
         }));
 
-        let source_map = SourceMap::new("".to_owned());
-        let mut errors = ErrorReporter::new(Rc::new(source_map));
+        let mut errors = ErrorReporter::new();
 
         collector.visit_expression(&expr, &mut errors).unwrap();
 
@@ -1865,7 +1855,7 @@ mod tests {
     }
 
     pub struct AstValidator {
-        pub errors: Vec<crate::QangError>,
+        pub errors: Vec<crate::QangSyntaxError>,
     }
 
     impl AstValidator {
@@ -1879,7 +1869,7 @@ mod tests {
     }
 
     impl AstVisitor for AstValidator {
-        type Error = crate::QangError;
+        type Error = crate::QangSyntaxError;
 
         fn visit_return_statement(
             &mut self,
@@ -1917,8 +1907,7 @@ mod tests {
             span: SourceSpan::new(0, 6),
         };
 
-        let source_map = SourceMap::new("".to_string());
-        let mut errors = ErrorReporter::new(Rc::new(source_map));
+        let mut errors = ErrorReporter::new();
         validator
             .visit_return_statement(&return_stmt, &mut errors)
             .unwrap();

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    Chunk, HeapObject, HeapObjectValue, ObjectHeap, OpCode, QangError, SourceMap, Value,
-    ast::SourceSpan,
+    Chunk, HeapObject, HeapObjectValue, ObjectHeap, OpCode, QangRuntimeError, Value,
+    chunk::SourceLocation,
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::ValueConversionError,
@@ -10,9 +10,9 @@ use crate::{
     value::get_value_type,
 };
 
-pub type RuntimeResult<T> = Result<T, QangError>;
+pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
 
-pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, QangError>;
+pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, QangRuntimeError>;
 
 #[derive(Debug, Clone)]
 struct CallFrame {
@@ -29,7 +29,6 @@ pub struct Vm {
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<usize, Value>,
     heap: ObjectHeap,
-    source_map: Option<SourceMap>,
 }
 
 impl Vm {
@@ -49,7 +48,6 @@ impl Vm {
             frames: std::array::from_fn(|_| default_frame.clone()),
             globals: HashMap::new(),
             heap,
-            source_map: None,
         }
     }
 
@@ -76,7 +74,7 @@ impl Vm {
         self
     }
 
-    fn call_native_function(function: NativeFn) -> Result<Value, QangError> {
+    fn call_native_function(function: NativeFn) -> Result<Value, QangRuntimeError> {
         Ok(Value::Nil)
     }
 
@@ -88,39 +86,33 @@ impl Vm {
         &mut self.frames[self.frame_count - 1]
     }
 
-    fn get_current_span(&self) -> SourceSpan {
-        self.get_span_at(self.get_current_frame().ip)
+    fn get_current_loc(&self) -> SourceLocation {
+        self.get_loc_at(self.get_current_frame().ip)
     }
 
     fn get_current_chunk(&self) -> &Chunk {
         &self.get_current_frame().function.chunk
     }
 
-    fn get_previous_span(&self) -> SourceSpan {
+    fn get_previous_loc(&self) -> SourceLocation {
         if self.get_current_frame().ip > 0 {
-            self.get_span_at(self.get_current_frame().ip - 1)
+            self.get_loc_at(self.get_current_frame().ip - 1)
         } else {
-            SourceSpan::default()
+            SourceLocation::default()
         }
     }
 
-    fn get_span_at(&self, index: usize) -> SourceSpan {
+    fn get_loc_at(&self, index: usize) -> SourceLocation {
         self.get_current_frame()
             .function
             .chunk
-            .spans()
+            .locs()
             .get(index)
             .copied()
             .unwrap_or_default()
     }
 
-    pub fn interpret(
-        &mut self,
-        function: KangFunction,
-        source_map: Option<SourceMap>,
-    ) -> RuntimeResult<()> {
-        self.source_map = source_map;
-        
+    pub fn interpret(&mut self, function: KangFunction) -> RuntimeResult<()> {
         self.frames[0] = CallFrame {
             function,
             ip: 0,
@@ -149,9 +141,9 @@ impl Vm {
                             *stack_value = Value::Number(-number);
                         }
                     } else {
-                        return Err(QangError::runtime_error(
-                            "Operand must be a number.",
-                            self.get_previous_span(),
+                        return Err(QangRuntimeError::new(
+                            "Operand must be a number.".to_string(),
+                            self.get_previous_loc(),
                         ));
                     }
                 }
@@ -172,137 +164,137 @@ impl Vm {
                     self.push(Value::Nil);
                 }
                 OpCode::Add => {
-                    self.binary_operation(|a, b, heap, span| match (&a, &b) {
+                    self.binary_operation(|a, b, heap, loc| match (&a, &b) {
                         (Value::Number(num1), Value::Number(num2)) => {
                             Ok(Value::Number(num1 + num2))
                         }
                         (Value::String(_), Value::String(_)) => {
                             let str1: Box<str> = a
                                 .into_string(heap)
-                                .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                                .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
                             let str2: Box<str> = b
                                 .into_string(heap)
-                                .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                                .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
                             let result =
                                 heap.intern_string(format!("{}{}", str1, str2).into_boxed_str());
                             Ok(Value::String(result))
                         }
-                        (Value::Number(_), _) => Err(QangError::runtime_error(
-                            &format!("Cannot add number to {}.", get_value_type(&b)),
-                            span,
+                        (Value::Number(_), _) => Err(QangRuntimeError::new(
+                            format!("Cannot add number to {}.", get_value_type(&b)).to_string(),
+                            loc,
                         )),
-                        (Value::String(_), _) => Err(QangError::runtime_error(
-                            &format!("Cannot add string to {}.", get_value_type(&b)),
-                            span,
+                        (Value::String(_), _) => Err(QangRuntimeError::new(
+                            format!("Cannot add string to {}.", get_value_type(&b)).to_string(),
+                            loc,
                         )),
-                        (_, Value::Number(_)) => Err(QangError::runtime_error(
-                            &format!("Cannot add {} to number.", get_value_type(&a)),
-                            span,
+                        (_, Value::Number(_)) => Err(QangRuntimeError::new(
+                            format!("Cannot add {} to number.", get_value_type(&a)).to_string(),
+                            loc,
                         )),
-                        (_, Value::String(_)) => Err(QangError::runtime_error(
-                            &format!("Cannot add {} to string.", get_value_type(&a)),
-                            span,
+                        (_, Value::String(_)) => Err(QangRuntimeError::new(
+                            format!("Cannot add {} to string.", get_value_type(&a).to_string()),
+                            loc,
                         )),
-                        _ => Err(QangError::runtime_error(
-                            "Both operands must be a numbers or strings.",
-                            span,
+                        _ => Err(QangRuntimeError::new(
+                            "Both operands must be a numbers or strings.".to_string(),
+                            loc,
                         )),
                     })?;
                 }
-                OpCode::Subtract => self.binary_operation(|a, b, _heap, span| {
+                OpCode::Subtract => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
 
                     Ok((a - b).into())
                 })?,
-                OpCode::Multiply => self.binary_operation(|a, b, _heap, span| {
+                OpCode::Multiply => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
 
                     Ok((a * b).into())
                 })?,
-                OpCode::Divide => self.binary_operation(|a, b, _heap, span| {
+                OpCode::Divide => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
 
                     Ok((a / b).into())
                 })?,
-                OpCode::Modulo => self.binary_operation(|a, b, _heap, span| {
+                OpCode::Modulo => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
 
                     Ok((a % b).into())
                 })?,
                 OpCode::Equal => {
-                    self.binary_operation(|a, b, _heap, _span| Ok(Value::Boolean(a == b)))?
+                    self.binary_operation(|a, b, _heap, _loc| Ok(Value::Boolean(a == b)))?
                 }
-                OpCode::Greater => self.binary_operation(|a, b, _heap, span| {
+                OpCode::Greater => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     Ok(Value::Boolean(a > b))
                 })?,
-                OpCode::GreaterEqual => self.binary_operation(|a, b, _heap, span| {
+                OpCode::GreaterEqual => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     Ok(Value::Boolean(a >= b))
                 })?,
-                OpCode::Less => self.binary_operation(|a, b, _heap, span| {
+                OpCode::Less => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     Ok(Value::Boolean(a < b))
                 })?,
-                OpCode::LessEqual => self.binary_operation(|a, b, _heap, span| {
+                OpCode::LessEqual => self.binary_operation(|a, b, _heap, loc| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangError::runtime_error("Both operands must be a number.", span)
+                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
                     Ok(Value::Boolean(a <= b))
                 })?,
                 OpCode::DefineGlobal => {
-                    let span = self.get_previous_span();
+                    let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle = self
                         .pop()?
                         .try_into()
-                        .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                        .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
                     let value = self.pop()?;
                     self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
-                    let span = self.get_previous_span();
+                    let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle = self
                         .pop()?
                         .try_into()
-                        .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                        .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
                     let value = *self
                         .globals
                         .get(&identifier_handle.identifier())
@@ -315,28 +307,28 @@ impl Vm {
                                     _ => "unknown".to_string().into_boxed_str(),
                                 })
                                 .unwrap_or("unknown".to_string().into_boxed_str());
-                            QangError::runtime_error(
-                                format!("Undefined variable: {}.", identifier_name).as_str(),
-                                span,
+                            QangRuntimeError::new(
+                                format!("Undefined variable: {}.", identifier_name),
+                                loc,
                             )
                         })?;
                     self.push(value);
                 }
                 OpCode::SetGlobal => {
-                    let span = self.get_previous_span();
+                    let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle = self
                         .pop()?
                         .try_into()
-                        .map_err(|e: ValueConversionError| e.into_qang_error(span))?;
+                        .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
 
                     if !self.globals.contains_key(&identifier_handle.identifier()) {
                         let identifier_name = self
                             .get_identifier_name(identifier_handle)
                             .unwrap_or("<unknown>".to_string().into_boxed_str());
 
-                        return Err(QangError::runtime_error(
-                            format!("Undefined variable: {}.", identifier_name).as_str(),
-                            span,
+                        return Err(QangRuntimeError::new(
+                            format!("Undefined variable: {}.", identifier_name).to_string(),
+                            loc,
                         ));
                     }
                     let value = self.peek(0);
@@ -385,9 +377,9 @@ impl Vm {
 
     fn read_byte(&mut self) -> RuntimeResult<u8> {
         if self.get_current_frame().ip >= self.get_current_chunk().count() {
-            return Err(QangError::runtime_error(
-                "Instruction pointer out of bounds.",
-                SourceSpan::default(),
+            return Err(QangRuntimeError::new(
+                "Instruction pointer out of bounds.".to_string(),
+                SourceLocation::default(),
             ));
         }
 
@@ -408,14 +400,17 @@ impl Vm {
 
     fn push(&mut self, value: Value) {
         if self.stack_top >= STACK_MAX {
-            panic!("Stack overflow: maximum stack size of {} exceeded", STACK_MAX);
+            panic!(
+                "Stack overflow: maximum stack size of {} exceeded",
+                STACK_MAX
+            );
         }
-        
+
         // Ensure the vec is large enough
         while self.stack.len() <= self.stack_top {
             self.stack.push(Value::default());
         }
-        
+
         self.stack[self.stack_top] = value;
         self.stack_top += 1;
     }
@@ -426,22 +421,23 @@ impl Vm {
             if let Some(value) = self.stack.get_mut(self.stack_top) {
                 Ok(std::mem::take(value))
             } else {
-                Err(QangError::runtime_error(
-                    "Stack corruption: stack_top points to invalid location",
-                    self.get_current_span(),
+                Err(QangRuntimeError::new(
+                    "Stack corruption: stack_top points to invalid location".to_string(),
+                    self.get_current_loc(),
                 ))
             }
         } else {
-            Err(QangError::runtime_error(
-                "No value found, unexpected empty stack.",
-                self.get_current_span(),
+            Err(QangRuntimeError::new(
+                "No value found, unexpected empty stack.".to_string(),
+                self.get_current_loc(),
             ))
         }
     }
 
     fn peek(&self, distance: usize) -> Value {
         if self.stack_top > distance {
-            self.stack.get(self.stack_top - 1 - distance)
+            self.stack
+                .get(self.stack_top - 1 - distance)
                 .cloned()
                 .unwrap_or(Value::Nil)
         } else {
@@ -451,13 +447,13 @@ impl Vm {
 
     fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
     where
-        F: FnOnce(Value, Value, &mut ObjectHeap, SourceSpan) -> RuntimeResult<Value>,
+        F: FnOnce(Value, Value, &mut ObjectHeap, SourceLocation) -> RuntimeResult<Value>,
     {
-        let op_span = self.get_previous_span();
+        let op_loc = self.get_previous_loc();
         let b = self.pop()?;
         let a = self.pop()?;
 
-        let value = op(a, b, &mut self.heap, op_span)?;
+        let value = op(a, b, &mut self.heap, op_loc)?;
 
         self.push(value);
         Ok(())
@@ -490,24 +486,19 @@ impl Vm {
 
     #[allow(dead_code)]
     fn debug(&self) {
-        if let Some(source_map) = self.source_map.as_ref() {
-            print!("          ");
-            for i in 0..self.stack_top {
-                if let Some(value) = self.stack.get(i) {
-                    value.print(&self.heap);
-                    print!(" ");
-                }
+        print!("          ");
+        for i in 0..self.stack_top {
+            if let Some(value) = self.stack.get(i) {
+                value.print(&self.heap);
+                print!(" ");
             }
-            println!();
-
-            disassemble_instruction(
-                source_map,
-                self.get_current_chunk(),
-                &self.heap,
-                self.get_current_frame().ip,
-            );
-        } else {
-            println!("No source code loaded. Unable to disassemble instructions.")
         }
+        println!();
+
+        disassemble_instruction(
+            self.get_current_chunk(),
+            &self.heap,
+            self.get_current_frame().ip,
+        );
     }
 }

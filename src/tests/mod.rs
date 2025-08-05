@@ -16,7 +16,8 @@ pub fn parse_source(
 
 pub fn assert_no_parse_errors(errors: &crate::ErrorReporter) {
     if errors.has_errors() {
-        panic!("Unexpected parse errors:\n{}", errors.format_errors());
+        errors.print_errors();
+        panic!("Unexpected parse errors.");
     }
 }
 
@@ -25,7 +26,12 @@ pub fn assert_parse_error(errors: &crate::ErrorReporter, expected_message: &str)
         errors.has_errors(),
         "Expected parse error but none occurred"
     );
-    let error_text = errors.format_errors();
+    let error_text = errors
+        .errors()
+        .iter()
+        .map(|e| e.message.clone())
+        .collect::<Vec<String>>()
+        .join("\n");
     assert!(
         error_text.contains(expected_message),
         "Expected error message '{}' but got: {}",

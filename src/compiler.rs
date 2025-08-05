@@ -162,7 +162,7 @@ pub struct Compiler<'a> {
     source_map: Rc<SourceMap>,
     heap: &'a mut ObjectHeap,
     is_silent: bool,
-    locals: [Option<Local>; STACK_MAX],
+    locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
     artifacts: Vec<CompilerArtifact>,
@@ -171,15 +171,14 @@ pub struct Compiler<'a> {
 impl<'a> Compiler<'a> {
     pub fn new(source_map: Rc<SourceMap>, heap: &'a mut ObjectHeap, is_silent: bool) -> Self {
         let handle = heap.intern_string("<script>".to_string().into_boxed_str());
-        let mut locals = std::array::from_fn(|_| None);
-        locals[0] = Some(Local::new("".into()));
+        let locals = Vec::with_capacity(STACK_MAX);
 
         Self {
             source_map,
             is_silent,
             heap,
             locals,
-            local_count: 1,
+            local_count: 0,
             scope_depth: 0,
             artifacts: vec![CompilerArtifact::new(
                 handle,
@@ -295,8 +294,7 @@ impl<'a> Compiler<'a> {
         self.scope_depth -= 1;
 
         while self.local_count > 0
-            && self.locals[self.local_count - 1]
-                .as_ref()
+            && self.locals.get(self.local_count - 1)
                 .and_then(|l| l.depth)
                 .map(|local_depth| local_depth > self.scope_depth)
                 .unwrap_or(false)
@@ -311,7 +309,13 @@ impl<'a> Compiler<'a> {
             Err(QangError::parse_error("", span))
         } else {
             let local = Local::new(handle.into());
-            self.locals[self.local_count] = Some(local);
+            if self.local_count < self.locals.len() {
+                // Reuse inactive local slot
+                self.locals[self.local_count] = local;
+            } else {
+                // Grow vec
+                self.locals.push(local);
+            }
             self.local_count += 1;
             Ok(())
         }
@@ -319,7 +323,7 @@ impl<'a> Compiler<'a> {
 
     fn declare_local_variable(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangError> {
         for i in (0..self.local_count).rev() {
-            if let Some(local) = self.locals[i].as_ref() {
+            if let Some(local) = self.locals.get(i) {
                 if local
                     .depth
                     .map(|local_depth| local_depth < self.scope_depth)
@@ -347,7 +351,7 @@ impl<'a> Compiler<'a> {
         span: SourceSpan,
     ) -> Result<Option<usize>, QangError> {
         for i in (0..self.local_count).rev() {
-            if let Some(local) = self.locals[i].as_ref() {
+            if let Some(local) = self.locals.get(i) {
                 if *local.name == *handle {
                     if local.depth.is_none() {
                         return Err(QangError::runtime_error(
@@ -364,8 +368,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn mark_local_initialized(&mut self) {
-        if let Some(local) = self.locals[self.local_count - 1].as_mut() {
-            local.depth = Some(self.scope_depth)
+        if self.local_count > 0 {
+            if let Some(local) = self.locals.get_mut(self.local_count - 1) {
+                local.depth = Some(self.scope_depth)
+            }
         }
     }
 }

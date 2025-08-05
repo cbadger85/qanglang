@@ -25,7 +25,7 @@ pub struct Vm {
     is_debug: bool,
     stack_top: usize,
     frame_count: usize,
-    stack: [Value; STACK_MAX],
+    stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<usize, Value>,
     heap: ObjectHeap,
@@ -45,7 +45,7 @@ impl Vm {
             is_debug: false,
             frame_count: 0,
             stack_top: 0,
-            stack: std::array::from_fn(|_| Value::default()),
+            stack: Vec::with_capacity(STACK_MAX),
             frames: std::array::from_fn(|_| default_frame.clone()),
             globals: HashMap::new(),
             heap,
@@ -120,11 +120,13 @@ impl Vm {
         source_map: Option<SourceMap>,
     ) -> RuntimeResult<()> {
         self.source_map = source_map;
+        
         self.frames[0] = CallFrame {
             function,
             ip: 0,
             value_slot: 0,
         };
+        self.frame_count = 1;
         self.run()
     }
 
@@ -143,7 +145,9 @@ impl Vm {
                 }
                 OpCode::Negate => {
                     if let Value::Number(number) = self.peek(0) {
-                        self.stack[self.stack_top - 1] = Value::Number(-number);
+                        if let Some(stack_value) = self.stack.get_mut(self.stack_top - 1) {
+                            *stack_value = Value::Number(-number);
+                        }
                     } else {
                         return Err(QangError::runtime_error(
                             "Operand must be a number.",
@@ -153,7 +157,10 @@ impl Vm {
                 }
                 OpCode::Not => {
                     let value = self.peek(0);
-                    self.stack[self.stack_top - 1] = Value::Boolean(!self.is_truthy(value));
+                    let is_truthy = self.is_truthy(value);
+                    if let Some(stack_value) = self.stack.get_mut(self.stack_top - 1) {
+                        *stack_value = Value::Boolean(!is_truthy);
+                    }
                 }
                 OpCode::True => {
                     self.push(Value::Boolean(true));
@@ -337,11 +344,16 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.read_byte()?;
-                    self.push(self.stack[slot as usize]);
+                    let value = self.stack.get(slot as usize).cloned().unwrap_or(Value::Nil);
+                    self.push(value);
                 }
                 OpCode::SetLocal => {
                     let slot = self.read_byte()?;
                     let value = self.peek(0);
+                    // Ensure the stack is large enough for this slot
+                    while self.stack.len() <= slot as usize {
+                        self.stack.push(Value::default());
+                    }
                     self.stack[slot as usize] = value;
                 }
                 OpCode::JumpIfFalse => {
@@ -395,6 +407,15 @@ impl Vm {
     }
 
     fn push(&mut self, value: Value) {
+        if self.stack_top >= STACK_MAX {
+            panic!("Stack overflow: maximum stack size of {} exceeded", STACK_MAX);
+        }
+        
+        // Ensure the vec is large enough
+        while self.stack.len() <= self.stack_top {
+            self.stack.push(Value::default());
+        }
+        
         self.stack[self.stack_top] = value;
         self.stack_top += 1;
     }
@@ -402,8 +423,14 @@ impl Vm {
     fn pop(&mut self) -> RuntimeResult<Value> {
         if self.stack_top > 0 {
             self.stack_top -= 1;
-            let value = std::mem::take(&mut self.stack[self.stack_top]);
-            Ok(value)
+            if let Some(value) = self.stack.get_mut(self.stack_top) {
+                Ok(std::mem::take(value))
+            } else {
+                Err(QangError::runtime_error(
+                    "Stack corruption: stack_top points to invalid location",
+                    self.get_current_span(),
+                ))
+            }
         } else {
             Err(QangError::runtime_error(
                 "No value found, unexpected empty stack.",
@@ -413,7 +440,13 @@ impl Vm {
     }
 
     fn peek(&self, distance: usize) -> Value {
-        self.stack[self.stack_top - 1 - distance]
+        if self.stack_top > distance {
+            self.stack.get(self.stack_top - 1 - distance)
+                .cloned()
+                .unwrap_or(Value::Nil)
+        } else {
+            Value::Nil
+        }
     }
 
     fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
@@ -451,7 +484,7 @@ impl Vm {
         &self.heap
     }
 
-    pub fn stack(&self) -> &[Value; STACK_MAX] {
+    pub fn stack(&self) -> &[Value] {
         &self.stack
     }
 
@@ -460,8 +493,10 @@ impl Vm {
         if let Some(source_map) = self.source_map.as_ref() {
             print!("          ");
             for i in 0..self.stack_top {
-                self.stack[i].print(&self.heap);
-                print!(" ");
+                if let Some(value) = self.stack.get(i) {
+                    value.print(&self.heap);
+                    print!(" ");
+                }
             }
             println!();
 

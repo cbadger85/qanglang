@@ -1,6 +1,4 @@
-use crate::SourceMap;
-use crate::ast::SourceSpan;
-use crate::chunk::SourceLocation;
+use crate::{SourceMap, ast::SourceSpan, chunk::SourceLocation};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangSyntaxError {

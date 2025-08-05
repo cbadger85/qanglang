@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     ErrorReporter, QangSyntaxError, SourceMap, Value,
-    ast::{self, AstTransformer, AstVisitor, ForInitializer, SourceSpan},
+    ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
     heap::{KangFunction, ObjectHandle, ObjectHeap},
     parser::Parser,
@@ -13,31 +13,6 @@ pub struct CompilerError(Vec<QangSyntaxError>);
 impl CompilerError {
     pub fn all(&self) -> &[QangSyntaxError] {
         &self.0
-    }
-}
-
-trait TransformerMiddleware {
-    fn run(&mut self, program: ast::Program) -> ast::Program {
-        program
-    }
-}
-
-struct TransformerAdapter<T> {
-    transformer: T,
-}
-
-impl<T> TransformerAdapter<T> {
-    pub fn new(transformer: T) -> Self {
-        Self { transformer }
-    }
-}
-
-impl<T> TransformerMiddleware for TransformerAdapter<T>
-where
-    T: AstTransformer,
-{
-    fn run(&mut self, program: ast::Program) -> ast::Program {
-        self.transformer.transform_program(program)
     }
 }
 
@@ -104,7 +79,6 @@ impl CompilerArtifact {
 
 pub struct CompilerPipeline<'a> {
     source_map: Rc<SourceMap>,
-    transformers: Vec<Box<dyn TransformerMiddleware>>,
     analyzers: Vec<Box<dyn AnalysisMiddleware>>,
     is_silent: bool,
     heap: &'a mut ObjectHeap,
@@ -114,7 +88,6 @@ impl<'a> CompilerPipeline<'a> {
     pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
         Self {
             source_map: Rc::new(source_map),
-            transformers: Vec::new(),
             analyzers: Vec::new(),
             is_silent: false,
             heap,
@@ -130,16 +103,6 @@ impl<'a> CompilerPipeline<'a> {
         self
     }
 
-    pub fn add_transformer<T>(mut self, transformer: T) -> Self
-    where
-        T: AstTransformer + 'static,
-    {
-        self.transformers
-            .push(Box::new(TransformerAdapter::new(transformer)));
-
-        self
-    }
-
     pub fn set_silent(mut self, is_silent: bool) -> Self {
         self.is_silent = is_silent;
 
@@ -148,15 +111,11 @@ impl<'a> CompilerPipeline<'a> {
 
     pub fn run(mut self) -> Result<KangFunction, CompilerError> {
         let mut parser = Parser::new(self.source_map.clone());
-        let mut program = parser.parse();
+        let program = parser.parse();
         let mut errors = parser.into_reporter();
 
         for analyzer in &mut self.analyzers {
             analyzer.analyze(&program, &mut errors);
-        }
-
-        for transformer in &mut self.transformers {
-            program = transformer.as_mut().run(program);
         }
 
         let function = Compiler::new(self.source_map.clone(), self.heap, self.is_silent)
@@ -754,10 +713,10 @@ impl<'a> AstVisitor for Compiler<'a> {
 
         if let Some(initializer) = &for_stmt.initializer {
             match initializer {
-                ForInitializer::Variable(var_decl) => {
+                ast::ForInitializer::Variable(var_decl) => {
                     self.visit_variable_declaration(var_decl, errors)?
                 }
-                ForInitializer::Expr(expr) => {
+                ast::ForInitializer::Expr(expr) => {
                     self.visit_expression(expr, errors)?;
                     self.emit_opcode(OpCode::Pop, expr.span());
                 }

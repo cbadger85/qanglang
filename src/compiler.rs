@@ -14,28 +14,36 @@ impl CompilerError {
     }
 }
 
-pub trait AnalysisMiddleware {
-    fn analyze(&mut self, program: &ast::Program, errors: &mut ErrorReporter);
+pub struct CompilerPipeline<'a> {
+    source_map: SourceMap,
+    is_silent: bool,
+    heap: &'a mut ObjectHeap,
 }
 
-pub struct VisitorAdapter<T> {
-    visitor: T,
-}
-
-impl<T> VisitorAdapter<T> {
-    pub fn new(visitor: T) -> Self {
-        Self { visitor }
-    }
-}
-
-impl<T> AnalysisMiddleware for VisitorAdapter<T>
-where
-    T: AstVisitor<Error = QangSyntaxError>,
-{
-    fn analyze(&mut self, program: &ast::Program, errors: &mut ErrorReporter) {
-        if let Err(error) = self.visitor.visit_program(program, errors) {
-            errors.report_error(error);
+impl<'a> CompilerPipeline<'a> {
+    pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
+        Self {
+            source_map,
+            is_silent: false,
+            heap,
         }
+    }
+
+    pub fn set_silent(mut self, is_silent: bool) -> Self {
+        self.is_silent = is_silent;
+
+        self
+    }
+
+    pub fn run(self) -> Result<KangFunction, CompilerError> {
+        let mut parser = Parser::new(&self.source_map);
+        let program = parser.parse();
+        let errors = parser.into_reporter();
+
+        let function =
+            Compiler::new(self.heap, self.is_silent).compile(program, self.source_map, errors)?;
+
+        Ok(function)
     }
 }
 
@@ -72,54 +80,6 @@ impl CompilerArtifact {
             function: KangFunction::new(name, arity),
             kind,
         }
-    }
-}
-
-pub struct CompilerPipeline<'a> {
-    source_map: SourceMap,
-    analyzers: Vec<Box<dyn AnalysisMiddleware>>,
-    is_silent: bool,
-    heap: &'a mut ObjectHeap,
-}
-
-impl<'a> CompilerPipeline<'a> {
-    pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
-        Self {
-            source_map,
-            analyzers: Vec::new(),
-            is_silent: false,
-            heap,
-        }
-    }
-
-    pub fn add_analyzer<T>(mut self, analyzer: T) -> Self
-    where
-        T: AstVisitor<Error = QangSyntaxError> + 'static,
-    {
-        self.analyzers.push(Box::new(VisitorAdapter::new(analyzer)));
-
-        self
-    }
-
-    pub fn set_silent(mut self, is_silent: bool) -> Self {
-        self.is_silent = is_silent;
-
-        self
-    }
-
-    pub fn run(mut self) -> Result<KangFunction, CompilerError> {
-        let mut parser = Parser::new(&self.source_map);
-        let program = parser.parse();
-        let mut errors = parser.into_reporter();
-
-        for analyzer in &mut self.analyzers {
-            analyzer.analyze(&program, &mut errors);
-        }
-
-        let function =
-            Compiler::new(self.heap, self.is_silent).compile(program, self.source_map, errors)?;
-
-        Ok(function)
     }
 }
 

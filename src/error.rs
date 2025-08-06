@@ -29,10 +29,16 @@ impl std::fmt::Display for QangSyntaxError {
 
 impl std::error::Error for QangSyntaxError {}
 
-// TODO impl std::fmt::Error and std::fmt::Format
+#[derive(Debug, Clone, PartialEq)]
+pub struct Trace {
+    callee: Box<str>,
+    loc: SourceLocation,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangRuntimeError {
     pub message: String,
+    pub stack_trace: Vec<Trace>,
 }
 
 impl QangRuntimeError {
@@ -43,7 +49,24 @@ impl QangRuntimeError {
                 loc.line, loc.col, message
             )
             .to_string(),
+            stack_trace: Vec::new(),
         }
+    }
+
+    pub fn new_with_trace(message: String, loc: SourceLocation, stack_trace: Vec<Trace>) -> Self {
+        Self {
+            message: format!(
+                "Runtime Error at line {}, column {}: {}",
+                loc.line, loc.col, message
+            )
+            .to_string(),
+            stack_trace,
+        }
+    }
+
+    pub fn with_stack_trace(mut self, stack_trace: Vec<Trace>) -> Self {
+        self.stack_trace = stack_trace;
+        self
     }
 }
 
@@ -61,6 +84,14 @@ pub struct ValueConversionError(String);
 impl ValueConversionError {
     pub fn new(message: &str) -> Self {
         Self(message.to_string())
+    }
+
+    pub fn into_qang_error_with_trace(
+        self,
+        loc: SourceLocation,
+        stack_trace: Vec<Trace>,
+    ) -> QangRuntimeError {
+        QangRuntimeError::new_with_trace(self.0, loc, stack_trace)
     }
 
     pub fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {

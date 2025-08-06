@@ -1,4 +1,7 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    rc::Rc,
+};
 
 use crate::{chunk::Chunk, error::ValueConversionError, vm::NativeFn};
 
@@ -43,8 +46,8 @@ impl KangFunction {
 #[derive(Debug, Clone)]
 pub enum HeapObjectValue {
     String(Box<str>),
-    NativeFunction(NativeFunction),
-    Function(KangFunction),
+    NativeFunction(Rc<NativeFunction>),
+    Function(Rc<KangFunction>),
 }
 
 pub const fn get_object_value_type(value: &HeapObjectValue) -> &'static str {
@@ -83,6 +86,23 @@ impl TryFrom<HeapObjectValue> for NativeFn {
         }
     }
 }
+
+// impl TryFrom<&HeapObjectValue> for Rc<KangFunction> {
+//     type Error = ValueConversionError;
+
+//     fn try_from(value: &HeapObjectValue) -> Result<Self, Self::Error> {
+//         match value {
+//             HeapObjectValue::Function(function) => Ok(function.clone()),
+//             _ => Err(ValueConversionError::new(
+//                 format!(
+//                     "Expected function, found {}.",
+//                     get_object_value_type(&value)
+//                 )
+//                 .as_str(),
+//             )),
+//         }
+//     }
+// }
 
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {

@@ -1,22 +1,31 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     HeapObject, HeapObjectValue, ObjectHeap, QangRuntimeError, Value,
     chunk::{Chunk, OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
-    error::ValueConversionError,
+    error::{Trace, ValueConversionError},
     heap::{KangFunction, NativeFunction, ObjectHandle},
     value::get_value_type,
 };
 
+#[derive(Debug, Clone)]
+pub struct NativeFunctionError(String);
+
+impl NativeFunctionError {
+    fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
+        QangRuntimeError::new(self.0, loc)
+    }
+}
+
 pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
 
-pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, QangRuntimeError>;
+pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
 #[derive(Debug, Clone)]
 struct CallFrame {
-    function: KangFunction,
+    function: Rc<KangFunction>,
     ip: usize,
     value_slot: usize,
 }
@@ -35,7 +44,7 @@ impl Vm {
     pub fn new(mut heap: ObjectHeap) -> Self {
         let default_handle = heap.intern_string("".to_string().into_boxed_str());
         let default_frame = CallFrame {
-            function: KangFunction::new(default_handle, 0),
+            function: Rc::new(KangFunction::new(default_handle, 0)),
             ip: 0,
             value_slot: 0,
         };
@@ -65,17 +74,13 @@ impl Vm {
         };
 
         let handle = self.heap.allocate_object(HeapObject {
-            value: HeapObjectValue::NativeFunction(native_function),
+            value: HeapObjectValue::NativeFunction(Rc::new(native_function)),
         });
 
         self.globals
             .insert(identifier_handle.identifier(), Value::Function(handle));
 
         self
-    }
-
-    fn call_native_function(function: NativeFn) -> Result<Value, QangRuntimeError> {
-        Ok(Value::Nil)
     }
 
     fn get_current_frame(&self) -> &CallFrame {
@@ -113,13 +118,9 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, function: KangFunction) -> RuntimeResult<()> {
-        self.frames[0] = CallFrame {
-            function,
-            ip: 0,
-            value_slot: 0,
-        };
-        self.frame_count = 1;
+        self.call_function(Rc::new(function), 0)?;
         self.run()
+            .map_err(|e| e.with_stack_trace(self.get_stack_trace()))
     }
 
     fn run(&mut self) -> RuntimeResult<()> {
@@ -132,7 +133,7 @@ impl Vm {
             match opcode {
                 OpCode::Constant => {
                     let constant_index = self.read_byte()? as usize;
-                    let constant = self.read_constant(constant_index, self.get_current_chunk());
+                    let constant = self.read_constant(constant_index);
                     self.push(constant);
                 }
                 OpCode::Negate => {
@@ -172,6 +173,7 @@ impl Vm {
                             let str1: Box<str> = a
                                 .into_string(heap)
                                 .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
+
                             let str2: Box<str> = b
                                 .into_string(heap)
                                 .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
@@ -282,19 +284,19 @@ impl Vm {
                 })?,
                 OpCode::DefineGlobal => {
                     let loc = self.get_previous_loc();
-                    let identifier_handle: ObjectHandle = self
-                        .pop()?
-                        .try_into()
-                        .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
+                    let identifier_handle: ObjectHandle =
+                        self.pop()?.try_into().map_err(|e: ValueConversionError| {
+                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                        })?;
                     let value = self.pop()?;
                     self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
                     let loc = self.get_previous_loc();
-                    let identifier_handle: ObjectHandle = self
-                        .pop()?
-                        .try_into()
-                        .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
+                    let identifier_handle: ObjectHandle =
+                        self.pop()?.try_into().map_err(|e: ValueConversionError| {
+                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                        })?;
                     let value = *self
                         .globals
                         .get(&identifier_handle.identifier())
@@ -316,10 +318,10 @@ impl Vm {
                 }
                 OpCode::SetGlobal => {
                     let loc = self.get_previous_loc();
-                    let identifier_handle: ObjectHandle = self
-                        .pop()?
-                        .try_into()
-                        .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
+                    let identifier_handle: ObjectHandle =
+                        self.pop()?.try_into().map_err(|e: ValueConversionError| {
+                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                        })?;
 
                     if !self.globals.contains_key(&identifier_handle.identifier()) {
                         let identifier_name = self
@@ -362,6 +364,11 @@ impl Vm {
                     let offset = self.read_short()?;
                     self.get_current_frame_mut().ip -= offset;
                 }
+                OpCode::Call => {
+                    let arg_count = self.read_byte()? as usize;
+                    self.call_value(self.peek(arg_count), arg_count)?;
+                    self.frame_count = self.frame_count - 1;
+                }
                 OpCode::Print => {
                     let value = self.pop()?;
                     value.print(&self.heap);
@@ -371,7 +378,7 @@ impl Vm {
                     return Ok(());
                 }
                 _ => (),
-            }
+            };
         }
     }
 
@@ -388,8 +395,14 @@ impl Vm {
         Ok(byte)
     }
 
-    fn read_constant(&self, index: usize, chunk: &Chunk) -> Value {
-        *chunk.constants().get(index).unwrap_or(&Value::Nil)
+    fn read_constant(&self, index: usize) -> Value {
+        *self
+            .get_current_frame()
+            .function
+            .chunk
+            .constants()
+            .get(index)
+            .unwrap_or(&Value::Nil)
     }
 
     fn read_short(&mut self) -> RuntimeResult<usize> {
@@ -459,6 +472,77 @@ impl Vm {
         Ok(())
     }
 
+    fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
+        let obj = match value {
+            Value::Function(handle) => self.heap.get(handle).ok_or(QangRuntimeError::new(
+                "Function is nil.".to_string(),
+                self.get_previous_loc(),
+            )),
+            _ => Err(QangRuntimeError::new(
+                "Identifier not callable.".to_string(),
+                self.get_previous_loc(),
+            )),
+        }?;
+
+        match &obj.value {
+            HeapObjectValue::Function(function) => self.call_function(function.clone(), arg_count),
+            HeapObjectValue::NativeFunction(function) => {
+                let _value = self.call_native_function(function.clone(), arg_count)?;
+                Ok(())
+            }
+            _ => Err(QangRuntimeError::new(
+                "Value is not callable.".to_string(),
+                self.get_previous_loc(),
+            )),
+        }
+    }
+
+    fn call_function(&mut self, function: Rc<KangFunction>, arg_count: usize) -> RuntimeResult<()> {
+        if arg_count < function.arity {
+            for _ in arg_count..function.arity {
+                self.stack.push(Value::Nil);
+            }
+        }
+        if self.frame_count > FRAME_MAX {
+            return Err(QangRuntimeError::new(
+                "Stack overflow.".to_string(),
+                self.get_previous_loc(),
+            ));
+        }
+        self.frame_count += 1;
+        let ip = 0;
+        self.frames[self.frame_count - 1] = CallFrame {
+            function,
+            ip,
+            value_slot: self.frame_count - arg_count - 1,
+        };
+        Ok(())
+    }
+
+    fn call_native_function(
+        &mut self,
+        function: Rc<NativeFunction>,
+        arg_count: usize,
+    ) -> RuntimeResult<Value> {
+        let loc = self.get_previous_loc();
+        let mut args = Vec::<Value>::new();
+
+        for _ in 0..arg_count {
+            args.push(self.pop()?);
+        }
+
+        for _ in arg_count..(function.arity) {
+            args.push(Value::Nil);
+        }
+
+        (function.function)(args.as_slice(), self).map_err(|e: NativeFunctionError| {
+            e.into_qang_error(loc)
+                .with_stack_trace(self.get_stack_trace())
+        })?;
+
+        Ok(Value::Nil)
+    }
+
     fn is_truthy(&self, value: Value) -> bool {
         match value {
             Value::Boolean(boolean) => boolean,
@@ -478,6 +562,10 @@ impl Vm {
 
     pub fn heap(&self) -> &ObjectHeap {
         &self.heap
+    }
+
+    fn get_stack_trace(&self) -> Vec<Trace> {
+        todo!()
     }
 
     fn debug(&self) {

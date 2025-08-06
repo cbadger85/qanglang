@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     ErrorReporter, HeapObject, HeapObjectValue, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
@@ -110,10 +112,6 @@ impl<'a> Compiler<'a> {
     }
 
     fn reset(&mut self) {
-        let handle = self
-            .heap
-            .intern_string("<script>".to_string().into_boxed_str());
-
         self.source_map = SourceMap::default();
         self.locals = Vec::with_capacity(STACK_MAX);
         self.local_count = 0;
@@ -754,26 +752,30 @@ impl<'a> AstVisitor for Compiler<'a> {
         );
         self.begin_scope();
 
+        let parameter_span = SourceSpan::combine(
+            func_decl
+                .function
+                .parameters
+                .first()
+                .map(|p| p.span)
+                .unwrap_or(func_decl.span),
+            func_decl
+                .function
+                .parameters
+                .last()
+                .map(|p| p.span)
+                .unwrap_or(func_decl.span),
+        );
+
         if func_decl.function.parameters.len() > 255 {
             return Err(QangSyntaxError::new_formatted(
                 "Cannot have more than 255 parameters.",
-                SourceSpan::combine(
-                    func_decl
-                        .function
-                        .parameters
-                        .first()
-                        .map(|p| p.span)
-                        .unwrap_or(func_decl.span),
-                    func_decl
-                        .function
-                        .parameters
-                        .last()
-                        .map(|p| p.span)
-                        .unwrap_or(func_decl.span),
-                ),
+                parameter_span,
                 &self.source_map,
             ));
         }
+
+        self.emit_byte(func_decl.function.parameters.len() as u8, parameter_span);
 
         for parameter in &func_decl.function.parameters {
             self.add_local(&parameter.name, parameter.span)?;
@@ -783,7 +785,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         std::mem::swap(&mut self.enclosing, &mut artifact);
 
         let function_handle = self.heap.allocate_object(HeapObject {
-            value: HeapObjectValue::Function(artifact.function),
+            value: HeapObjectValue::Function(Rc::new(artifact.function)),
         });
 
         self.emit_constant(
@@ -829,9 +831,28 @@ impl<'a> AstVisitor for Compiler<'a> {
                         )),
                     }
                 } else {
-                    // Add actual implementation here
+                    match call.operation.as_ref() {
+                        ast::CallOperation::Call(args) => {
+                            if args.len() > u8::MAX as usize {
+                                return Err(QangSyntaxError::new_formatted(
+                                    "Functions may only take up to 256 arguments.",
+                                    call.span,
+                                    &self.source_map,
+                                ));
+                            }
 
-                    Ok(())
+                            for arg in args {
+                                self.visit_expression(arg, errors)?;
+                                self.emit_opcode(OpCode::Print, call.span);
+                            }
+
+                            Ok(())
+                        }
+                        _ => Err(QangSyntaxError::new(
+                            "Expected function call.".to_string(),
+                            call.span,
+                        )),
+                    }
                 }
             }
             _ => Ok(()),

@@ -15,11 +15,6 @@ impl ObjectHandle {
 }
 
 #[derive(Debug, Clone)]
-pub struct HeapObject {
-    pub value: HeapObjectValue,
-}
-
-#[derive(Debug, Clone)]
 pub struct NativeFunction {
     pub function: NativeFn,
     pub arity: usize,
@@ -44,65 +39,31 @@ impl KangFunction {
 }
 
 #[derive(Debug, Clone)]
-pub enum HeapObjectValue {
+pub enum HeapObject {
     String(Box<str>),
     NativeFunction(Rc<NativeFunction>),
     Function(Rc<KangFunction>),
 }
 
-pub const fn get_object_value_type(value: &HeapObjectValue) -> &'static str {
+pub const fn get_object_value_type(value: &HeapObject) -> &'static str {
     match value {
-        HeapObjectValue::String(_) => "string",
-        HeapObjectValue::NativeFunction(_) | HeapObjectValue::Function(_) => "function",
+        HeapObject::String(_) => "string",
+        HeapObject::NativeFunction(_) | HeapObject::Function(_) => "function",
     }
 }
 
-impl TryFrom<HeapObjectValue> for Box<str> {
+impl TryFrom<HeapObject> for Box<str> {
     type Error = ValueConversionError;
 
-    fn try_from(value: HeapObjectValue) -> Result<Self, Self::Error> {
+    fn try_from(value: HeapObject) -> Result<Self, Self::Error> {
         match value {
-            HeapObjectValue::String(string) => Ok(string),
+            HeapObject::String(string) => Ok(string),
             _ => Err(ValueConversionError::new(
                 format!("Expected string, found {}.", get_object_value_type(&value)).as_str(),
             )),
         }
     }
 }
-
-impl TryFrom<HeapObjectValue> for NativeFn {
-    type Error = ValueConversionError;
-
-    fn try_from(value: HeapObjectValue) -> Result<Self, Self::Error> {
-        match value {
-            HeapObjectValue::NativeFunction(native_function) => Ok(native_function.function),
-            _ => Err(ValueConversionError::new(
-                format!(
-                    "Expected function, found {}.",
-                    get_object_value_type(&value)
-                )
-                .as_str(),
-            )),
-        }
-    }
-}
-
-// impl TryFrom<&HeapObjectValue> for Rc<KangFunction> {
-//     type Error = ValueConversionError;
-
-//     fn try_from(value: &HeapObjectValue) -> Result<Self, Self::Error> {
-//         match value {
-//             HeapObjectValue::Function(function) => Ok(function.clone()),
-//             _ => Err(ValueConversionError::new(
-//                 format!(
-//                     "Expected function, found {}.",
-//                     get_object_value_type(&value)
-//                 )
-//                 .as_str(),
-//             )),
-//         }
-//     }
-// }
 
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
@@ -125,9 +86,7 @@ impl ObjectHeap {
             Entry::Occupied(entry) => ObjectHandle(*entry.get()),
             Entry::Vacant(entry) => {
                 let s = entry.into_key();
-                let handle = self.allocate_object(HeapObject {
-                    value: HeapObjectValue::String(s.clone()),
-                });
+                let handle = self.allocate_object(HeapObject::String(s.clone()));
                 self.string_interner.insert(s, handle.identifier());
                 handle
             }
@@ -155,8 +114,8 @@ impl ObjectHeap {
 
     pub fn free(&mut self, handle: ObjectHandle) {
         if let Some(obj) = self.objects[handle.0].take() {
-            match obj.value {
-                HeapObjectValue::String(_) | HeapObjectValue::NativeFunction(_) => {}
+            match obj {
+                HeapObject::String(_) | HeapObject::NativeFunction(_) => {}
                 _ => self.free_list.push(handle.0),
             }
         }

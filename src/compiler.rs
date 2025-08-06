@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use crate::{
-    ErrorReporter, HeapObject, HeapObjectValue, QangSyntaxError, SourceMap, Value,
+    ErrorReporter, HeapObject, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    heap::{KangFunction, ObjectHandle, ObjectHeap},
+    heap::{KangFunction, ObjectHeap},
     parser::Parser,
 };
 
@@ -65,24 +65,9 @@ pub const FRAME_MAX: usize = 64;
 pub const STACK_MAX: usize = FRAME_MAX * 256;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum CompilerArtifactKind {
+enum CompilerKind {
     Script,
     Function,
-}
-
-#[derive(Debug, Clone)]
-struct CompilerArtifact {
-    pub function: KangFunction,
-    pub kind: CompilerArtifactKind,
-}
-
-impl CompilerArtifact {
-    pub fn new(name: ObjectHandle, kind: CompilerArtifactKind, arity: usize) -> Self {
-        Self {
-            function: KangFunction::new(name, arity),
-            kind,
-        }
-    }
 }
 
 pub struct Compiler<'a> {
@@ -92,7 +77,8 @@ pub struct Compiler<'a> {
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
-    enclosing: CompilerArtifact,
+    enclosing: KangFunction,
+    compile_kind: CompilerKind,
 }
 
 impl<'a> Compiler<'a> {
@@ -107,7 +93,8 @@ impl<'a> Compiler<'a> {
             locals,
             local_count: 0,
             scope_depth: 0,
-            enclosing: CompilerArtifact::new(handle, CompilerArtifactKind::Script, 0),
+            compile_kind: CompilerKind::Script,
+            enclosing: KangFunction::new(handle, 0),
         }
     }
 
@@ -119,7 +106,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn get_current_chunk(&mut self) -> &mut Chunk {
-        &mut self.enclosing.function.chunk
+        &mut self.enclosing.chunk
     }
 
     pub fn compile(
@@ -143,12 +130,12 @@ impl<'a> Compiler<'a> {
             let handle = self
                 .heap
                 .intern_string("<script>".to_string().into_boxed_str());
-            let mut artifact = CompilerArtifact::new(handle, CompilerArtifactKind::Script, 0);
-            std::mem::swap(&mut self.enclosing, &mut artifact);
+            let mut function = KangFunction::new(handle, 0);
+            std::mem::swap(&mut self.enclosing, &mut function);
 
             self.reset();
 
-            Ok(artifact.function)
+            Ok(function)
         }
     }
 
@@ -742,14 +729,12 @@ impl<'a> AstVisitor for Compiler<'a> {
             .intern_string(func_decl.function.name.name.to_owned());
         self.mark_initialized();
 
-        let mut artifact = std::mem::replace(
+        let mut function = std::mem::replace(
             &mut self.enclosing,
-            CompilerArtifact::new(
-                handle,
-                CompilerArtifactKind::Function,
-                func_decl.function.parameters.len(),
-            ),
+            KangFunction::new(handle, func_decl.function.parameters.len()),
         );
+        let previous_compile_kind = self.compile_kind;
+        self.compile_kind = CompilerKind::Function;
         self.begin_scope();
 
         let parameter_span = SourceSpan::combine(
@@ -782,11 +767,12 @@ impl<'a> AstVisitor for Compiler<'a> {
         }
 
         self.visit_block_statement(&func_decl.function.body, errors)?;
-        std::mem::swap(&mut self.enclosing, &mut artifact);
+        std::mem::swap(&mut self.enclosing, &mut function);
+        self.compile_kind = previous_compile_kind;
 
-        let function_handle = self.heap.allocate_object(HeapObject {
-            value: HeapObjectValue::Function(Rc::new(artifact.function)),
-        });
+        let function_handle = self
+            .heap
+            .allocate_object(HeapObject::Function(Rc::new(function)));
 
         self.emit_constant(
             Value::Function(function_handle),

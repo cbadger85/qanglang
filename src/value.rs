@@ -1,4 +1,4 @@
-use crate::{HeapObjectValue, ObjectHeap, error::ValueConversionError, heap::ObjectHandle};
+use crate::{HeapObject, ObjectHeap, error::ValueConversionError, heap::ObjectHandle};
 
 pub const fn get_value_type(value: &Value) -> &'static str {
     match value {
@@ -30,7 +30,7 @@ impl Value {
             Value::Number(number) => number.to_string(),
             Value::String(handle) => {
                 if let Some(object) = heap.get(*handle) {
-                    if let HeapObjectValue::String(str) = &object.value {
+                    if let HeapObject::String(str) = &object {
                         return format!("\"{}\"", str);
                     }
                 }
@@ -39,7 +39,7 @@ impl Value {
             Value::Boolean(boolean) => boolean.to_string(),
             Value::Function(handle) => {
                 if let Some(object) = heap.get(*handle) {
-                    if let HeapObjectValue::NativeFunction(_) = &object.value {
+                    if let HeapObject::NativeFunction(_) = &object {
                         return "\"<native_fn>\"".to_string();
                     }
                 }
@@ -52,7 +52,7 @@ impl Value {
         match self {
             Value::String(handle) => heap
                 .get(handle)
-                .map(|h| h.value.clone())
+                .map(|h| h.clone())
                 .ok_or(ValueConversionError::new("Expected string, found nil."))
                 .and_then(|v| v.try_into()),
             _ => Err(ValueConversionError::new(

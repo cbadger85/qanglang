@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    HeapObject, HeapObjectValue, ObjectHeap, QangRuntimeError, Value,
+    HeapObject, ObjectHeap, QangRuntimeError, Value,
     chunk::{Chunk, OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
@@ -73,9 +73,9 @@ impl Vm {
             function,
         };
 
-        let handle = self.heap.allocate_object(HeapObject {
-            value: HeapObjectValue::NativeFunction(Rc::new(native_function)),
-        });
+        let handle = self
+            .heap
+            .allocate_object(HeapObject::NativeFunction(Rc::new(native_function)));
 
         self.globals
             .insert(identifier_handle.identifier(), Value::Function(handle));
@@ -304,8 +304,8 @@ impl Vm {
                             let identifier_name = self
                                 .heap
                                 .get(identifier_handle)
-                                .map(|obj| match &obj.value {
-                                    HeapObjectValue::String(string) => string.clone(),
+                                .map(|obj| match &obj {
+                                    HeapObject::String(string) => string.clone(),
                                     _ => "unknown".to_string().into_boxed_str(),
                                 })
                                 .unwrap_or("unknown".to_string().into_boxed_str());
@@ -484,9 +484,9 @@ impl Vm {
             )),
         }?;
 
-        match &obj.value {
-            HeapObjectValue::Function(function) => self.call_function(function.clone(), arg_count),
-            HeapObjectValue::NativeFunction(function) => {
+        match &obj {
+            HeapObject::Function(function) => self.call_function(function.clone(), arg_count),
+            HeapObject::NativeFunction(function) => {
                 let _value = self.call_native_function(function.clone(), arg_count)?;
                 Ok(())
             }
@@ -554,8 +554,8 @@ impl Vm {
     fn get_identifier_name(&self, handle: ObjectHandle) -> Option<Box<str>> {
         self.heap
             .get(handle)
-            .and_then(|obj: &HeapObject| match &obj.value {
-                HeapObjectValue::String(identifier) => Some(identifier.clone()),
+            .and_then(|obj: &HeapObject| match &obj {
+                HeapObject::String(identifier) => Some(identifier.clone()),
                 _ => None,
             })
     }

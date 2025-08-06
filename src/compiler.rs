@@ -1,5 +1,5 @@
 use crate::{
-    ErrorReporter, QangSyntaxError, SourceMap, Value,
+    ErrorReporter, HeapObject, HeapObjectValue, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
     heap::{KangFunction, ObjectHandle, ObjectHeap},
@@ -90,13 +90,13 @@ pub struct Compiler<'a> {
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
-    artifacts: Vec<CompilerArtifact>,
+    enclosing: CompilerArtifact,
 }
 
 impl<'a> Compiler<'a> {
     pub fn new(heap: &'a mut ObjectHeap, is_silent: bool) -> Self {
         let handle = heap.intern_string("<script>".to_string().into_boxed_str());
-        let locals = Vec::with_capacity(STACK_MAX);
+        let locals = Vec::with_capacity(u8::MAX as usize);
 
         Self {
             source_map: SourceMap::default(),
@@ -105,11 +105,7 @@ impl<'a> Compiler<'a> {
             locals,
             local_count: 0,
             scope_depth: 0,
-            artifacts: vec![CompilerArtifact::new(
-                handle,
-                CompilerArtifactKind::Script,
-                0,
-            )],
+            enclosing: CompilerArtifact::new(handle, CompilerArtifactKind::Script, 0),
         }
     }
 
@@ -122,22 +118,10 @@ impl<'a> Compiler<'a> {
         self.locals = Vec::with_capacity(STACK_MAX);
         self.local_count = 0;
         self.scope_depth = 0;
-        self.artifacts = vec![CompilerArtifact::new(
-            handle,
-            CompilerArtifactKind::Script,
-            0,
-        )];
     }
 
     fn get_current_chunk(&mut self) -> &mut Chunk {
-        let last_index = self.artifacts.len() - 1;
-        &mut self.artifacts[last_index].function.chunk
-    }
-
-    fn pop_artifact(&mut self) -> CompilerArtifact {
-        self.artifacts
-            .pop()
-            .expect("Expected compiler artifact and found none.")
+        &mut self.enclosing.function.chunk
     }
 
     pub fn compile(
@@ -158,7 +142,11 @@ impl<'a> Compiler<'a> {
 
             self.emit_opcode(OpCode::Return, SourceSpan::new(span, span));
 
-            let artifact = self.pop_artifact();
+            let handle = self
+                .heap
+                .intern_string("<script>".to_string().into_boxed_str());
+            let mut artifact = CompilerArtifact::new(handle, CompilerArtifactKind::Script, 0);
+            std::mem::swap(&mut self.enclosing, &mut artifact);
 
             self.reset();
 
@@ -293,11 +281,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn declare_local_variable(
-        &mut self,
-        handle: &str,
-        span: SourceSpan,
-    ) -> Result<(), QangSyntaxError> {
+    fn declare_variable(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
+        if self.scope_depth == 0 {
+            return Ok(());
+        }
         for i in (0..self.local_count).rev() {
             if let Some(local) = self.locals.get(i) {
                 if local
@@ -345,7 +332,10 @@ impl<'a> Compiler<'a> {
         Ok(None)
     }
 
-    fn mark_local_initialized(&mut self) {
+    fn mark_initialized(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
         if self.local_count > 0 {
             if let Some(local) = self.locals.get_mut(self.local_count - 1) {
                 local.depth = Some(self.scope_depth)
@@ -500,7 +490,7 @@ impl<'a> AstVisitor for Compiler<'a> {
     ) -> Result<(), Self::Error> {
         let is_local = self.scope_depth > 0;
         if is_local {
-            self.declare_local_variable(&var_decl.name.name, var_decl.name.span)?;
+            self.declare_variable(&var_decl.name.name, var_decl.name.span)?;
         }
 
         if let Some(expr) = &var_decl.initializer {
@@ -510,7 +500,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         }
 
         if is_local {
-            self.mark_local_initialized();
+            self.mark_initialized();
             self.emit_opcode_and_byte(OpCode::SetLocal, self.local_count as u8 - 1, var_decl.span);
         } else {
             let handle = self.heap.intern_string(var_decl.name.name.to_owned());
@@ -745,17 +735,75 @@ impl<'a> AstVisitor for Compiler<'a> {
 
     fn visit_function_declaration(
         &mut self,
-        _func_decl: &ast::FunctionDecl,
-        _errors: &mut ErrorReporter,
+        func_decl: &ast::FunctionDecl,
+        errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        Ok(())
-    }
+        let is_local = self.scope_depth > 0;
+        let handle = self
+            .heap
+            .intern_string(func_decl.function.name.name.to_owned());
+        self.mark_initialized();
 
-    fn visit_class_declaration(
-        &mut self,
-        _class_decl: &ast::ClassDecl,
-        _errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
+        let mut artifact = std::mem::replace(
+            &mut self.enclosing,
+            CompilerArtifact::new(
+                handle,
+                CompilerArtifactKind::Function,
+                func_decl.function.parameters.len(),
+            ),
+        );
+        self.begin_scope();
+
+        if func_decl.function.parameters.len() > 255 {
+            return Err(QangSyntaxError::new_formatted(
+                "Cannot have more than 255 parameters.",
+                SourceSpan::combine(
+                    func_decl
+                        .function
+                        .parameters
+                        .first()
+                        .map(|p| p.span)
+                        .unwrap_or(func_decl.span),
+                    func_decl
+                        .function
+                        .parameters
+                        .last()
+                        .map(|p| p.span)
+                        .unwrap_or(func_decl.span),
+                ),
+                &self.source_map,
+            ));
+        }
+
+        for parameter in &func_decl.function.parameters {
+            self.add_local(&parameter.name, parameter.span)?;
+        }
+
+        self.visit_block_statement(&func_decl.function.body, errors)?;
+        std::mem::swap(&mut self.enclosing, &mut artifact);
+
+        let function_handle = self.heap.allocate_object(HeapObject {
+            value: HeapObjectValue::Function(artifact.function),
+        });
+
+        self.emit_constant(
+            Value::Function(function_handle),
+            func_decl.function.body.span,
+            errors,
+        );
+
+        if is_local {
+            self.emit_opcode_and_byte(
+                OpCode::SetLocal,
+                self.local_count as u8 - 1,
+                func_decl.function.name.span,
+            );
+        } else {
+            self.emit_constant(Value::String(handle), func_decl.function.name.span, errors);
+
+            self.emit_opcode(OpCode::DefineGlobal, func_decl.function.name.span);
+        }
+
         Ok(())
     }
 
@@ -781,10 +829,20 @@ impl<'a> AstVisitor for Compiler<'a> {
                         )),
                     }
                 } else {
+                    // Add actual implementation here
+
                     Ok(())
                 }
             }
             _ => Ok(()),
         }
+    }
+
+    fn visit_class_declaration(
+        &mut self,
+        _class_decl: &ast::ClassDecl,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 }

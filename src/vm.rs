@@ -405,26 +405,15 @@ impl Vm {
                     println!();
                 }
                 OpCode::Return => {
-                    /*
-
-                           Value result = pop();
-                           vm.frameCount--;
-                           if (vm.frameCount == 0) {
-                           pop();
-                           return INTERPRET_OK;
-                           }
-
-                           vm.stackTop = frame->slots;
-                           push(result);
-                           frame = &vm.frames[vm.frameCount - 1];
-                           break;
-                    */
-
                     let result = self.pop()?;
                     self.frame_count -= 1;
 
                     if self.frame_count == 0 {
-                        self.pop()?;
+                        // For the main function, just pop the final result and exit
+                        // Don't call pop() again as there's no active frame for error handling
+                        if self.stack_top > 0 {
+                            self.stack_top -= 1;
+                        }
                         return Ok(());
                     }
 

@@ -25,7 +25,8 @@ fn test_run() {
     let source = r#"
         var hello_world = "hello" + " " + "world!";
         println(hello_world);
-        assert_eq(hello_world, "hello world");
+        assert_eq(hello_world, "hello world!", "Expect \"hello world\" to equal \"hello world!\"");
+        assert_eq("hello world", "hello world", "Expect \"hello world\" to equal \"hello world\"");
         var two = nil;
         assert_eq(two, nil);
         two = 2;
@@ -615,6 +616,38 @@ fn test_native_functions() {
                 }
                 Err(error) => {
                     assert!(error.message.contains("This should error."));
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_escape_sequences_in_print() {
+    let source = r#"
+        print("And then she said, \"Go to hell!\"");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let function: &KangFunction = heap
+                .get(program.into())
+                .expect("expected function, found none.")
+                .try_into()
+                .expect("expected function, found none.");
+            disassemble_chunk(&function.chunk, &heap, "script.ql");
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
                 }
             }
         }

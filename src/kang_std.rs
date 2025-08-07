@@ -28,7 +28,7 @@ pub fn kang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
 
     if a != b {
         let message = args
-            .get(1)
+            .get(2)
             .and_then(|v| v.into_string(vm.heap()).ok())
             .unwrap_or("Assertion failed.".into());
 

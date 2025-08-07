@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{
     HeapObject, KangProgram, ObjectHeap, QangRuntimeError, Value,
@@ -535,7 +535,7 @@ impl Vm {
                 Ok(())
             }
             HeapObject::Function(FunctionObject::NativeFunction(function)) => {
-                self.call_native_function(function.clone(), arg_count)?;
+                self.call_native_function(*function, arg_count)?;
                 Ok(())
             }
             _ => Err(QangRuntimeError::new(

@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    rc::Rc,
-};
+use std::collections::{HashMap, hash_map::Entry};
 
 use crate::{chunk::Chunk, error::ValueConversionError, vm::NativeFn};
 
@@ -26,7 +23,7 @@ impl From<ObjectHandle> for usize {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct NativeFunction {
     pub function: NativeFn,
     pub arity: usize,

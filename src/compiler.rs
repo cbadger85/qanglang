@@ -791,7 +791,8 @@ impl<'a> AstVisitor for Compiler<'a> {
 
         self.visit_block_statement(&func_decl.function.body, errors)?;
 
-        // Add implicit return nil for functions that don't end with an explicit return
+        // Always add implicit return nil at end (like Crafting Interpreters)
+        // This will only execute if no explicit return was hit
         self.emit_opcode(OpCode::Nil, func_decl.function.body.span);
         self.emit_opcode(OpCode::Return, func_decl.function.body.span);
 
@@ -827,7 +828,6 @@ impl<'a> AstVisitor for Compiler<'a> {
         return_stmt: &ast::ReturnStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        println!("RETURN!");
         if self.compile_kind == CompilerKind::Script {
             return Err(QangSyntaxError::new_formatted(
                 "Cannot return from top-level code.",

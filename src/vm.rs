@@ -566,13 +566,10 @@ impl Vm {
                 let value_slot = if self.frame_count == 1 {
                     0  // Initial script call starts with empty stack
                 } else {
-                    // Function is at stack_top - 1, arguments are at stack_top - 1 - arg_count to stack_top - 2
-                    // Return value should replace the function, so value_slot = stack_top - 1 - arg_count
-                    if self.stack_top > arg_count {
-                        self.stack_top - 1 - arg_count
-                    } else {
-                        0
-                    }
+                    // The function was called with: [function][arg1]...[argN]
+                    // The function is at position: stack_top - 1 - arg_count
+                    // We want to replace the function with the return value
+                    self.stack_top - 1 - arg_count
                 };
                 
                 self.frames[self.frame_count - 1] = CallFrame {

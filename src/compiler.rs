@@ -756,6 +756,14 @@ impl<'a> AstVisitor for Compiler<'a> {
             KangFunction::new(handle, func_decl.function.parameters.len()),
         );
         let previous_compile_kind = self.compile_kind;
+        let previous_locals = std::mem::take(&mut self.locals);
+        let previous_local_count = self.local_count;
+        let previous_scope_depth = self.scope_depth;
+        
+        // Reset state for function compilation
+        self.locals = Vec::with_capacity(STACK_MAX);
+        self.local_count = 0;
+        self.scope_depth = 0;
         self.compile_kind = CompilerKind::Function;
         self.begin_scope();
 
@@ -786,6 +794,7 @@ impl<'a> AstVisitor for Compiler<'a> {
 
         for parameter in &func_decl.function.parameters {
             self.add_local(&parameter.name, parameter.span)?;
+            self.mark_initialized();
         }
 
         self.visit_block_statement(&func_decl.function.body, errors)?;
@@ -796,7 +805,12 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.emit_opcode(OpCode::Return, func_decl.function.body.span);
 
         std::mem::swap(&mut self.enclosing, &mut function);
+        
+        // Restore previous compiler state
         self.compile_kind = previous_compile_kind;
+        self.locals = previous_locals;
+        self.local_count = previous_local_count;
+        self.scope_depth = previous_scope_depth;
 
         let function_handle = self.heap.allocate_object(function.into());
 

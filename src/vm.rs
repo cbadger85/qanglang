@@ -369,17 +369,21 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.read_byte()?;
-                    let value = self.stack.get(slot as usize).copied().unwrap_or(Value::Nil);
+                    // Local variables are relative to the current frame's value_slot
+                    let absolute_slot = self.get_current_frame().value_slot + slot as usize;
+                    let value = self.stack.get(absolute_slot).copied().unwrap_or(Value::Nil);
                     self.push(value);
                 }
                 OpCode::SetLocal => {
                     let slot = self.read_byte()?;
                     let value = self.peek(0);
+                    // Local variables are relative to the current frame's value_slot
+                    let absolute_slot = self.get_current_frame().value_slot + slot as usize;
                     // Ensure the stack is large enough for this slot
-                    while self.stack.len() <= slot as usize {
+                    while self.stack.len() <= absolute_slot {
                         self.stack.push(Value::default());
                     }
-                    self.stack[slot as usize] = value;
+                    self.stack[absolute_slot] = value;
                 }
                 OpCode::JumpIfFalse => {
                     let offset = self.read_short()?;
@@ -558,19 +562,34 @@ impl Vm {
                     return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
                 }
 
-                // Create new call frame
+                // Create new call frame using sliding window approach  
                 self.frame_count += 1;
-                // Calculate where to place the return value
-                // For regular function calls, replace the function with the return value
-                // For the initial script call (frame_count == 1), start from stack_top = 0  
+                
+                // In the sliding window approach:
+                // Before: [other values][function][arg0][arg1]...[argN]
+                // After:  [other values][arg0][arg1]...[argN][local vars...]
+                // We need to slide arguments to overwrite the function slot
+                
                 let value_slot = if self.frame_count == 1 {
                     0  // Initial script call starts with empty stack
                 } else {
-                    // The function was called with: [function][arg1]...[argN]
                     // The function is at position: stack_top - 1 - arg_count
-                    // We want to replace the function with the return value
+                    // Arguments will be moved to start from this position  
                     self.stack_top - 1 - arg_count
                 };
+                
+                // Slide arguments to overwrite the function slot
+                if arg_count > 0 && self.frame_count > 1 {
+                    // Move arguments from [value_slot+1, value_slot+2, ..., value_slot+arg_count]
+                    // to [value_slot, value_slot+1, ..., value_slot+arg_count-1]
+                    for i in 0..arg_count {
+                        if let Some(arg_value) = self.stack.get(value_slot + 1 + i).copied() {
+                            self.stack[value_slot + i] = arg_value;
+                        }
+                    }
+                    // Adjust stack_top to account for the removed function slot
+                    self.stack_top -= 1;
+                }
                 
                 // Check if this is a script function or user-defined function
                 // Script functions start at ip=0, user-defined functions start at ip=1 (to skip parameter count byte)

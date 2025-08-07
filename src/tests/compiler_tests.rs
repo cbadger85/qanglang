@@ -791,3 +791,38 @@ fn test_function_calls_with_args() {
         }
     }
 }
+
+#[test]
+fn test_nested_function_calls_with_args() {
+    let source = r#"
+        fn this_is_a_test(arg1, arg2) {
+            fn inner(arg1, arg2) {
+                return arg1 + arg2;
+            }
+
+            return inner(arg1, arg2);
+        }
+
+        assert_eq(this_is_a_test("hello ", "world"), "hello world");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

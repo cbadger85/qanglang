@@ -38,13 +38,11 @@ pub struct Vm {
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<usize, Value>,
     heap: ObjectHeap,
-    current_function: KangFunction,
 }
 
 impl Vm {
     pub fn new(heap: ObjectHeap) -> Self {
         Self {
-            current_function: KangFunction::default(),
             is_debug: false,
             frame_count: 0,
             stack_top: 0,
@@ -77,35 +75,41 @@ impl Vm {
     }
 
     fn get_current_frame(&self) -> &CallFrame {
+        if self.frame_count == 0 {
+            panic!("No active call frame");
+        }
         &self.frames[self.frame_count - 1]
     }
 
     fn get_current_frame_mut(&mut self) -> &mut CallFrame {
+        if self.frame_count == 0 {
+            panic!("No active call frame");
+        }
         &mut self.frames[self.frame_count - 1]
     }
 
-    // fn get_current_fuction(&self) -> &KangFunction {
-    //     let function_handle = self.get_current_frame().function_handle;
+    fn get_current_function(&self) -> &KangFunction {
+        let function_handle = self.get_current_frame().function_handle;
 
-    //     self.heap()
-    //         .get(function_handle)
-    //         .ok_or(QangRuntimeError::new(
-    //             "Missing function".to_string(),
-    //             self.get_current_loc(),
-    //         ))
-    //         .and_then(|obj| {
-    //             obj.try_into()
-    //                 .map_err(|e: ValueConversionError| e.into_qang_error(self.get_current_loc()))
-    //         })
-    //         .expect("Unexpected missing function.")
-    // }
+        self.heap
+            .get(function_handle)
+            .ok_or(QangRuntimeError::new(
+                "Missing function".to_string(),
+                SourceLocation::default(),
+            ))
+            .and_then(|obj| {
+                obj.try_into()
+                    .map_err(|e: ValueConversionError| e.into_qang_error(SourceLocation::default()))
+            })
+            .expect("Unexpected missing function.")
+    }
 
     fn get_current_loc(&self) -> SourceLocation {
         self.get_loc_at(self.get_current_frame().ip)
     }
 
     fn get_current_chunk(&self) -> &Chunk {
-        &self.current_function.chunk
+        &self.get_current_function().chunk
     }
 
     fn get_previous_loc(&self) -> SourceLocation {
@@ -117,7 +121,7 @@ impl Vm {
     }
 
     fn get_loc_at(&self, index: usize) -> SourceLocation {
-        self.current_function
+        self.get_current_function()
             .chunk
             .locs()
             .get(index)
@@ -126,7 +130,10 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: KangProgram) -> RuntimeResult<()> {
-        self.call_function(program.into(), 0)?;
+        let function_handle = program.into();
+        // Use call_function to initialize the first call frame consistently
+        self.call_function(function_handle, 0)?;
+
         self.run()
             .map_err(|e| e.with_stack_trace(self.get_stack_trace()))
     }
@@ -375,7 +382,6 @@ impl Vm {
                 OpCode::Call => {
                     let arg_count = self.read_byte()? as usize;
                     self.call_value(self.peek(arg_count), arg_count)?;
-                    self.frame_count = self.frame_count - 1;
                 }
                 OpCode::Print => {
                     let value = self.pop()?;
@@ -383,7 +389,11 @@ impl Vm {
                     println!();
                 }
                 OpCode::Return => {
-                    return Ok(());
+                    if self.frame_count <= 1 {
+                        return Ok(()); // Top-level return, exit
+                    }
+                    // Pop the current frame
+                    self.frame_count -= 1;
                 }
                 _ => (),
             };
@@ -405,7 +415,7 @@ impl Vm {
 
     fn read_constant(&self, index: usize) -> Value {
         *self
-            .current_function
+            .get_current_function()
             .chunk
             .constants()
             .get(index)
@@ -490,28 +500,19 @@ impl Vm {
     }
 
     fn call_function(&mut self, handle: ObjectHandle, arg_count: usize) -> RuntimeResult<()> {
-        let loc = self.get_previous_loc();
-        let existing_function = self
-            .heap
-            .get_mut(self.get_current_frame().function_handle)
-            .ok_or(QangRuntimeError::new(
-                "Unexpected missing function.".to_string(),
-                loc,
-            ))
-            .and_then(|obj| match obj {
-                HeapObject::Function(FunctionObject::KangFunction(function)) => Ok(function),
-                _ => Err(QangRuntimeError::new(
-                    "Unexpected missing function.".to_string(),
-                    loc,
-                )),
-            })?;
-        std::mem::swap(existing_function, &mut self.current_function);
-        let obj = self.heap.get_mut(handle).ok_or(QangRuntimeError::new(
+        // For the initial call from interpret(), there's no previous location
+        let loc = if self.frame_count > 0 {
+            self.get_previous_loc()
+        } else {
+            SourceLocation::default()
+        };
+
+        let obj = self.heap.get(handle).ok_or(QangRuntimeError::new(
             "Hanging identifier reference.".to_string(),
             loc,
         ))?;
 
-        let native_function = match obj {
+        match obj {
             HeapObject::Function(FunctionObject::KangFunction(function)) => {
                 if arg_count < function.arity {
                     for _ in arg_count..function.arity {
@@ -519,39 +520,34 @@ impl Vm {
                     }
                 }
 
-                if self.frame_count > FRAME_MAX {
+                if self.frame_count >= FRAME_MAX {
                     return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
                 }
-                std::mem::swap(&mut self.current_function, function);
+
+                // Create new call frame
                 self.frame_count += 1;
-                let ip = 0;
                 self.frames[self.frame_count - 1] = CallFrame {
                     function_handle: handle,
-                    ip,
-                    value_slot: self.frame_count - arg_count - 1,
+                    ip: 0,
+                    value_slot: self.stack_top - arg_count,
                 };
 
-                Ok(None)
+                Ok(())
             }
             HeapObject::Function(FunctionObject::NativeFunction(function)) => {
-                Ok(Some(function.clone()))
+                self.call_native_function(function.clone(), arg_count)?;
+                Ok(())
             }
             _ => Err(QangRuntimeError::new(
                 "Value not callable.".to_string(),
                 loc,
             )),
-        }?;
-
-        if let Some(function) = native_function {
-            let _value = self.call_native_function(function, arg_count)?;
         }
-
-        Ok(())
     }
 
     fn call_native_function(
         &mut self,
-        function: Rc<NativeFunction>,
+        function: NativeFunction,
         arg_count: usize,
     ) -> RuntimeResult<Value> {
         let loc = self.get_previous_loc();

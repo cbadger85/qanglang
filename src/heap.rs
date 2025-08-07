@@ -43,7 +43,7 @@ pub struct KangFunction {
 #[derive(Debug, Clone)]
 pub enum FunctionObject {
     KangFunction(KangFunction),
-    NativeFunction(Rc<NativeFunction>),
+    NativeFunction(NativeFunction),
 }
 
 impl KangFunction {
@@ -90,7 +90,7 @@ impl From<KangFunction> for HeapObject {
 
 impl From<NativeFunction> for HeapObject {
     fn from(value: NativeFunction) -> Self {
-        HeapObject::Function(FunctionObject::NativeFunction(Rc::new(value)))
+        HeapObject::Function(FunctionObject::NativeFunction(value))
     }
 }
 

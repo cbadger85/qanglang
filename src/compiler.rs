@@ -851,6 +851,9 @@ impl<'a> AstVisitor for Compiler<'a> {
                                 self.emit_opcode(OpCode::Pop, call.span);
                             }
 
+                            self.visit_identifier(&identifier, errors)?;
+                            self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
+
                             Ok(())
                         }
                         _ => Err(QangSyntaxError::new(

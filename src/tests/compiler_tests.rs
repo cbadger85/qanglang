@@ -604,8 +604,14 @@ fn test_native_functions() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
+            let function: &KangFunction = heap
+                .get(program.into())
+                .expect("expected function, found none.")
+                .try_into()
+                .expect("expected function, found none.");
+            disassemble_chunk(&function.chunk, &heap, "script.ql");
             match Vm::new(heap)
-                // .set_debug(false)
+                .set_debug(false)
                 .add_native_function("assert", 2, |args, vm| {
                     let assertion = args
                         .get(0)

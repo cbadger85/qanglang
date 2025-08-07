@@ -519,10 +519,16 @@ impl Vm {
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
             Value::Function(handle) => self.call_function(handle, arg_count),
-            _ => Err(QangRuntimeError::new(
-                "Identifier not callable.".to_string(),
-                self.get_previous_loc(),
-            )),
+            _ => {
+                let identifier = value
+                    .into_string(&self.heap)
+                    .ok()
+                    .unwrap_or("<unknown>".into());
+                Err(QangRuntimeError::new(
+                    format!("Identifier '{}' not callable.", identifier).to_string(),
+                    self.get_previous_loc(),
+                ))
+            }
         }
     }
 

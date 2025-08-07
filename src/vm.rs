@@ -11,9 +11,13 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct NativeFunctionError(String);
+pub struct NativeFunctionError(pub String);
 
 impl NativeFunctionError {
+    pub fn new(message: &str) -> Self {
+        Self(message.to_string())
+    }
+
     fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
         QangRuntimeError::new(self.0, loc)
     }
@@ -389,9 +393,32 @@ impl Vm {
                     println!();
                 }
                 OpCode::Return => {
-                    if self.frame_count <= 1 {
-                        return Ok(()); // Top-level return, exit
+                    /*
+
+                           Value result = pop();
+                           vm.frameCount--;
+                           if (vm.frameCount == 0) {
+                           pop();
+                           return INTERPRET_OK;
+                           }
+
+                           vm.stackTop = frame->slots;
+                           push(result);
+                           frame = &vm.frames[vm.frameCount - 1];
+                           break;
+                    */
+
+                    let result = self.pop()?;
+                    self.frame_count -= 1;
+
+                    if self.frame_count == 0 {
+                        self.pop()?;
+                        return Ok(());
                     }
+
+                    self.stack_top = self.get_current_frame().value_slot;
+                    self.push(result);
+
                     // Pop the current frame
                     self.frame_count -= 1;
                 }
@@ -508,7 +535,7 @@ impl Vm {
         };
 
         let obj = self.heap.get(handle).ok_or(QangRuntimeError::new(
-            "Hanging identifier reference.".to_string(),
+            "Orphaned identifier".to_string(),
             loc,
         ))?;
 
@@ -573,7 +600,7 @@ impl Vm {
         Ok(())
     }
 
-    fn is_truthy(&self, value: Value) -> bool {
+    pub fn is_truthy(&self, value: Value) -> bool {
         match value {
             Value::Boolean(boolean) => boolean,
             Value::Nil => false,

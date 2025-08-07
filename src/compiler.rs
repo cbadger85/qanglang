@@ -848,7 +848,7 @@ impl<'a> AstVisitor for Compiler<'a> {
 
                             for arg in args {
                                 self.visit_expression(arg, errors)?;
-                                self.emit_opcode(OpCode::Print, call.span);
+                                self.emit_opcode(OpCode::Pop, call.span);
                             }
 
                             Ok(())

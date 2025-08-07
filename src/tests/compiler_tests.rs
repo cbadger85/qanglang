@@ -1,4 +1,7 @@
-use crate::{CompilerPipeline, KangFunction, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk};
+use crate::{
+    CompilerPipeline, KangFunction, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk,
+    vm::NativeFunctionError,
+};
 
 #[test]
 fn test_display() {
@@ -586,6 +589,59 @@ fn test_initializing_local_variable_with_same_name() {
             assert_eq!(errors.all().len(), 1);
             let error_message = &errors.all()[0].message;
             assert!(error_message.contains("Already a variable with this name in this scope."));
+        }
+    }
+}
+
+#[test]
+fn test_native_functions() {
+    let source = r#"
+        assert(true, "This should not error.");
+        assert(false, "This should error.");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            match Vm::new(heap)
+                // .set_debug(false)
+                .add_native_function("assert", 2, |args, vm| {
+                    let assertion = args
+                        .get(0)
+                        .ok_or(NativeFunctionError::new("No arguments provided."))?;
+                    let is_true = vm.is_truthy(*assertion);
+
+                    if is_true {
+                        return Ok(None);
+                    }
+
+                    let message = args
+                        .get(1)
+                        .and_then(|v| v.into_string(vm.heap()).ok())
+                        .unwrap_or("Assertion failed.".into());
+
+                    Err(NativeFunctionError(message.into_string()))
+                })
+                // .add_native_function("print", 1, |args, vm| {
+                //     let value = args.get(0).copied().unwrap_or(Value::Nil);
+                //     let value = value.into_string(&vm.heap()).ok().unwrap_or("nil".into());
+                //     println!("{}", value);
+                //     Ok(None)
+                // })
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error.message)
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
         }
     }
 }

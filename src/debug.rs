@@ -77,6 +77,24 @@ fn constant_instruction(name: &str, chunk: &Chunk, heap: &ObjectHeap, offset: us
     offset + 2
 }
 
+fn disassemble_function(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
+    println!("== {} ==", name);
+
+    let is_script = name == "<script>";
+    let mut offset = 0;
+    
+    if !is_script && chunk.count() > 0 {
+        // For user-defined functions, show the parameter count byte
+        let param_count = chunk.code()[0];
+        println!("{:04} ---- PARAM_COUNT        {}", offset, param_count);
+        offset = 1; // Start disassembly after parameter count
+    }
+
+    while offset < chunk.count() {
+        offset = disassemble_instruction(chunk, heap, offset);
+    }
+}
+
 fn simple_instruction(name: &str, offset: usize) -> usize {
     println!("{}", name);
     offset + 1
@@ -109,7 +127,7 @@ pub fn disassemble_program(heap: &ObjectHeap) {
             
             println!("Function #{} (Object #{}) - {}:", function_count, index, function_name);
             println!("  Arity: {}", function.arity);
-            disassemble_chunk(&function.chunk, heap, function_name);
+            disassemble_function(&function.chunk, heap, function_name);
             println!();
         }
     }

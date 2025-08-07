@@ -225,7 +225,6 @@ impl<'a> Compiler<'a> {
 
     fn emit_constant(&mut self, value: Value, span: SourceSpan, errors: &mut ErrorReporter) {
         let constant = self.make_constant(value, span, errors);
-
         self.emit_opcode_and_byte(OpCode::Constant, constant, span);
     }
 

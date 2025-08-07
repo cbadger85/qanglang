@@ -572,9 +572,17 @@ impl Vm {
                     self.stack_top - 1 - arg_count
                 };
                 
+                // Check if this is a script function or user-defined function
+                // Script functions start at ip=0, user-defined functions start at ip=1 (to skip parameter count byte)
+                let is_script = if let Some(HeapObject::String(name)) = self.heap.get(function.name) {
+                    name.as_ref() == "<script>"
+                } else {
+                    false
+                };
+                
                 self.frames[self.frame_count - 1] = CallFrame {
                     function_handle: handle,
-                    ip: 0,
+                    ip: if is_script { 0 } else { 1 }, // Skip parameter count byte for user functions only
                     value_slot,
                 };
 

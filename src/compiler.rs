@@ -824,6 +824,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         return_stmt: &ast::ReturnStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
+        println!("RETURN!");
         if self.compile_kind == CompilerKind::Script {
             return Err(QangSyntaxError::new_formatted(
                 "Cannot return from top-level code.",
@@ -866,6 +867,11 @@ impl<'a> AstVisitor for Compiler<'a> {
                         }
 
                         self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
+
+                        if self.compile_kind == CompilerKind::Script {
+                            self.emit_opcode(OpCode::Nil, SourceSpan::default());
+                            self.emit_opcode(OpCode::Return, SourceSpan::default());
+                        }
 
                         Ok(())
                     }

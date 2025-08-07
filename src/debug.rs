@@ -52,7 +52,11 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
         OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
         OpCode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
         OpCode::Loop => jump_instruction("OP_LOOP", 1, chunk, offset),
-        OpCode::Call => simple_instruction("OP_CALL", offset),
+        OpCode::Call => {
+            let arg_count = chunk.code()[offset + 1];
+            print!("{:<16} {:4}\n", "OP_CALL", arg_count);
+            offset + 2
+        }
         OpCode::Print => simple_instruction("OP_PRINT", offset),
     }
 }

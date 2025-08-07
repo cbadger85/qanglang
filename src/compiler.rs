@@ -788,6 +788,11 @@ impl<'a> AstVisitor for Compiler<'a> {
         }
 
         self.visit_block_statement(&func_decl.function.body, errors)?;
+        
+        // Add implicit return nil for functions that don't end with an explicit return
+        self.emit_opcode(OpCode::Nil, func_decl.function.body.span);
+        self.emit_opcode(OpCode::Return, func_decl.function.body.span);
+        
         std::mem::swap(&mut self.enclosing, &mut function);
         self.compile_kind = previous_compile_kind;
 

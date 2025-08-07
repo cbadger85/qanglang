@@ -691,3 +691,79 @@ fn test_comments_in_strings() {
         }
     }
 }
+
+#[test]
+fn test_function_calls() {
+    let source = r#"
+        fn this_is_a_test() {
+            return nil;
+        }
+
+        println(this_is_a_test());
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let function: &KangFunction = heap
+                .get(program.into())
+                .expect("expected function, found none.")
+                .try_into()
+                .expect("expected function, found none.");
+            disassemble_chunk(&function.chunk, &heap, "script.ql");
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_nested_function_calls() {
+    let source = r#"
+        fn this_is_a_test() {
+            fn inner() {
+                return nil;
+            }
+
+            return inner();
+        }
+
+        println(this_is_a_test());
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let function: &KangFunction = heap
+                .get(program.into())
+                .expect("expected function, found none.")
+                .try_into()
+                .expect("expected function, found none.");
+            disassemble_chunk(&function.chunk, &heap, "script.ql");
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

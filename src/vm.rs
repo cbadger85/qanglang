@@ -406,6 +406,9 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = self.pop()?;
+                    
+                    // Get the value_slot from the current frame before decrementing frame_count
+                    let value_slot = self.get_current_frame().value_slot;
                     self.frame_count -= 1;
 
                     if self.frame_count == 0 {
@@ -417,7 +420,7 @@ impl Vm {
                         return Ok(());
                     }
 
-                    self.stack_top = self.get_current_frame().value_slot;
+                    self.stack_top = value_slot;
                     self.push(result);
                 }
                 _ => (),
@@ -557,10 +560,25 @@ impl Vm {
 
                 // Create new call frame
                 self.frame_count += 1;
+                // Calculate where to place the return value
+                // For regular function calls, replace the function with the return value
+                // For the initial script call (frame_count == 1), start from stack_top = 0  
+                let value_slot = if self.frame_count == 1 {
+                    0  // Initial script call starts with empty stack
+                } else {
+                    // Function is at stack_top - 1, arguments are at stack_top - 1 - arg_count to stack_top - 2
+                    // Return value should replace the function, so value_slot = stack_top - 1 - arg_count
+                    if self.stack_top > arg_count {
+                        self.stack_top - 1 - arg_count
+                    } else {
+                        0
+                    }
+                };
+                
                 self.frames[self.frame_count - 1] = CallFrame {
                     function_handle: handle,
                     ip: 0,
-                    value_slot: self.stack_top - arg_count,
+                    value_slot,
                 };
 
                 Ok(())

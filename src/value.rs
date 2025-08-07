@@ -48,7 +48,7 @@ impl Value {
                             let name_handle = function.name;
 
                             if let Some(HeapObject::String(string)) = heap.get(name_handle) {
-                                string.clone().into_string()
+                                format!("<function> {}", string)
                             } else {
                                 "nil".to_string()
                             }
@@ -57,7 +57,7 @@ impl Value {
                             let name_handle = function.name;
 
                             if let Some(HeapObject::String(string)) = heap.get(name_handle) {
-                                string.clone().into_string()
+                                format!("<native fn> {}", string)
                             } else {
                                 "nil".to_string()
                             }

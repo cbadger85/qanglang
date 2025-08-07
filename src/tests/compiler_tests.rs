@@ -696,7 +696,7 @@ fn test_comments_in_strings() {
 fn test_function_calls() {
     let source = r#"
         fn this_is_a_test() {
-            return nil;
+            return "hello?";
         }
 
         println(this_is_a_test());

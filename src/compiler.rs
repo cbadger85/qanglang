@@ -144,10 +144,6 @@ impl<'a> Compiler<'a> {
         if errors.has_errors() {
             Err(CompilerError(errors.take_errors()))
         } else {
-            let span = self.source_map.get_source().len();
-
-            self.emit_opcode(OpCode::Return, SourceSpan::new(span, span));
-
             let handle = self
                 .heap
                 .intern_string("<script>".to_string().into_boxed_str());
@@ -748,7 +744,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         let handle = self
             .heap
             .intern_string(func_decl.function.name.name.to_owned());
-        
+
         if is_local {
             self.declare_variable(&func_decl.function.name.name, func_decl.function.name.span)?;
         }
@@ -791,11 +787,11 @@ impl<'a> AstVisitor for Compiler<'a> {
         }
 
         self.visit_block_statement(&func_decl.function.body, errors)?;
-        
+
         // Add implicit return nil for functions that don't end with an explicit return
         self.emit_opcode(OpCode::Nil, func_decl.function.body.span);
         self.emit_opcode(OpCode::Return, func_decl.function.body.span);
-        
+
         std::mem::swap(&mut self.enclosing, &mut function);
         self.compile_kind = previous_compile_kind;
 
@@ -820,6 +816,29 @@ impl<'a> AstVisitor for Compiler<'a> {
             self.emit_opcode(OpCode::DefineGlobal, func_decl.function.name.span);
         }
 
+        Ok(())
+    }
+
+    fn visit_return_statement(
+        &mut self,
+        return_stmt: &ast::ReturnStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        if self.compile_kind == CompilerKind::Script {
+            return Err(QangSyntaxError::new_formatted(
+                "Cannot return from top-level code.",
+                return_stmt.span,
+                &self.source_map,
+            ));
+        }
+
+        if let Some(value) = &return_stmt.value {
+            self.visit_expression(value, errors)?;
+        } else {
+            self.emit_opcode(OpCode::Nil, return_stmt.span);
+        }
+
+        self.emit_opcode(OpCode::Return, return_stmt.span);
         Ok(())
     }
 

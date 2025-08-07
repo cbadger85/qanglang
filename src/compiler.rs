@@ -748,7 +748,10 @@ impl<'a> AstVisitor for Compiler<'a> {
         let handle = self
             .heap
             .intern_string(func_decl.function.name.name.to_owned());
-        self.mark_initialized();
+        
+        if is_local {
+            self.declare_variable(&func_decl.function.name.name, func_decl.function.name.span)?;
+        }
 
         let mut function = std::mem::replace(
             &mut self.enclosing,
@@ -805,6 +808,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         );
 
         if is_local {
+            self.mark_initialized();
             self.emit_opcode_and_byte(
                 OpCode::SetLocal,
                 self.local_count as u8 - 1,

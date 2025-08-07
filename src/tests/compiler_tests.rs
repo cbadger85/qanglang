@@ -733,7 +733,7 @@ fn test_nested_function_calls() {
     let source = r#"
         fn this_is_a_test() {
             fn inner() {
-                return nil;
+                return "hello?";
             }
 
             return inner();

@@ -659,3 +659,35 @@ fn test_escape_sequences_in_print() {
         }
     }
 }
+
+#[test]
+fn test_comments_in_strings() {
+    let source = r#"
+        print("\\\\This should\n not care.");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let function: &KangFunction = heap
+                .get(program.into())
+                .expect("expected function, found none.")
+                .try_into()
+                .expect("expected function, found none.");
+            disassemble_chunk(&function.chunk, &heap, "script.ql");
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

@@ -35,7 +35,7 @@ impl Value {
             Value::String(handle) => {
                 if let Some(object) = heap.get(*handle) {
                     if let HeapObject::String(str) = &object {
-                        return format!("\"{}\"", str);
+                        return format!("{}", str);
                     }
                 }
                 "nil".to_string()

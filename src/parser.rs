@@ -912,6 +912,38 @@ mod expression_parser {
         }
     }
 
+    fn process_escape_sequences(raw_string: &str) -> String {
+        let mut result = String::new();
+        let mut chars = raw_string.chars();
+        
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(escaped) = chars.next() {
+                    match escaped {
+                        'n' => result.push('\n'),
+                        't' => result.push('\t'),
+                        'r' => result.push('\r'),
+                        '\\' => result.push('\\'),
+                        '"' => result.push('"'),
+                        '\'' => result.push('\''),
+                        '0' => result.push('\0'),
+                        _ => {
+                            // This should not happen as tokenizer validates escapes
+                            result.push('\\');
+                            result.push(escaped);
+                        }
+                    }
+                } else {
+                    result.push('\\');
+                }
+            } else {
+                result.push(c);
+            }
+        }
+        
+        result
+    }
+
     fn string(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let token = get_previous_token(parser);
 
@@ -919,12 +951,15 @@ mod expression_parser {
 
         let span = ast::SourceSpan::from_token(token);
 
+        let raw_content = value[1..value.len() - 1]
+            .iter()
+            .collect::<String>();
+        
+        let processed_content = process_escape_sequences(&raw_content);
+
         Ok(ast::Expr::Primary(ast::PrimaryExpr::String(
             ast::StringLiteral {
-                value: value[1..value.len() - 1]
-                    .iter()
-                    .collect::<String>()
-                    .into_boxed_str(),
+                value: processed_content.into_boxed_str(),
                 span,
             },
         )))

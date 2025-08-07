@@ -25,13 +25,15 @@ fn test_run() {
     let source = r#"
         var hello_world = "hello" + " " + "world!";
         println(hello_world);
+        assert_eq(hello_world, "hello world");
         var two = nil;
-        println(two);
+        assert_eq(two, nil);
         two = 2;
-        println(two);
+        assert_eq(two, 2);
 
         {
             var two = "2";
+            assert_eq(two, "2");
             println(two);
         }   
   "#;

@@ -40,14 +40,14 @@ pub fn kang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
 
 pub fn kang_print(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.get(0).copied().unwrap_or(Value::Nil);
-    let value = value.into_string(&vm.heap()).ok().unwrap_or("nil".into());
+    let value = value.to_display_string(&vm.heap());
     print!("{}", value);
     Ok(None)
 }
 
 pub fn kang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.get(0).copied().unwrap_or(Value::Nil);
-    let value = value.into_string(&vm.heap()).ok().unwrap_or("nil".into());
+    let value = value.to_display_string(&vm.heap());
     println!("{}", value);
     Ok(None)
 }

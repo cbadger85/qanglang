@@ -4,6 +4,7 @@ mod compiler;
 mod debug;
 mod error;
 mod heap;
+mod kang_std;
 mod parser;
 mod source;
 mod tokenizer;
@@ -18,7 +19,7 @@ pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};
 pub use value::Value;
-pub use vm::Vm;
+pub use vm::{NativeFn, NativeFunctionError, Vm};
 
 #[cfg(test)]
 pub mod tests;

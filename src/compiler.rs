@@ -821,46 +821,30 @@ impl<'a> AstVisitor for Compiler<'a> {
     ) -> Result<(), Self::Error> {
         match call.callee.as_ref() {
             ast::Expr::Primary(ast::PrimaryExpr::Identifier(identifier)) => {
-                if identifier.name.as_ref() == "print" {
-                    match call.operation.as_ref() {
-                        ast::CallOperation::Call(args) => {
-                            for arg in args {
-                                self.visit_expression(arg, errors)?;
-                                self.emit_opcode(OpCode::Print, call.span);
-                            }
-                            Ok(())
+                match call.operation.as_ref() {
+                    ast::CallOperation::Call(args) => {
+                        if args.len() > u8::MAX as usize {
+                            return Err(QangSyntaxError::new_formatted(
+                                "Functions may only take up to 256 arguments.",
+                                call.span,
+                                &self.source_map,
+                            ));
                         }
-                        _ => Err(QangSyntaxError::new(
-                            "Expected function call.".to_string(),
-                            call.span,
-                        )),
-                    }
-                } else {
-                    match call.operation.as_ref() {
-                        ast::CallOperation::Call(args) => {
-                            if args.len() > u8::MAX as usize {
-                                return Err(QangSyntaxError::new_formatted(
-                                    "Functions may only take up to 256 arguments.",
-                                    call.span,
-                                    &self.source_map,
-                                ));
-                            }
 
-                            for arg in args {
-                                self.visit_expression(arg, errors)?;
-                                self.emit_opcode(OpCode::Pop, call.span);
-                            }
+                        self.visit_identifier(&identifier, errors)?;
 
-                            self.visit_identifier(&identifier, errors)?;
-                            self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
-
-                            Ok(())
+                        for arg in args {
+                            self.visit_expression(arg, errors)?;
                         }
-                        _ => Err(QangSyntaxError::new(
-                            "Expected function call.".to_string(),
-                            call.span,
-                        )),
+
+                        self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
+
+                        Ok(())
                     }
+                    _ => Err(QangSyntaxError::new(
+                        "Expected function call.".to_string(),
+                        call.span,
+                    )),
                 }
             }
             _ => Ok(()),

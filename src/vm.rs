@@ -7,6 +7,7 @@ use crate::{
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
     heap::{FunctionObject, KangFunction, NativeFunction, ObjectHandle},
+    kang_std::{kang_assert, kang_assert_eq, kang_print, kang_println},
     value::get_value_type,
 };
 
@@ -20,6 +21,12 @@ impl NativeFunctionError {
 
     fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
         QangRuntimeError::new(self.0, loc)
+    }
+}
+
+impl From<&'static str> for NativeFunctionError {
+    fn from(value: &'static str) -> Self {
+        NativeFunctionError::new(value)
     }
 }
 
@@ -46,7 +53,7 @@ pub struct Vm {
 
 impl Vm {
     pub fn new(heap: ObjectHeap) -> Self {
-        Self {
+        let vm = Self {
             is_debug: false,
             frame_count: 0,
             stack_top: 0,
@@ -54,7 +61,12 @@ impl Vm {
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals: HashMap::new(),
             heap,
-        }
+        };
+
+        vm.add_native_function("assert", 1, kang_assert)
+            .add_native_function("assert_eq", 1, kang_assert_eq)
+            .add_native_function("print", 1, kang_print)
+            .add_native_function("println", 1, kang_println)
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -418,9 +430,6 @@ impl Vm {
 
                     self.stack_top = self.get_current_frame().value_slot;
                     self.push(result);
-
-                    // Pop the current frame
-                    self.frame_count -= 1;
                 }
                 _ => (),
             };
@@ -593,6 +602,8 @@ impl Vm {
         for _ in arg_count..(function.arity) {
             args.push(Value::Nil);
         }
+
+        args.reverse();
 
         let value = (function.function)(args.as_slice(), self)
             .map_err(|e: NativeFunctionError| {

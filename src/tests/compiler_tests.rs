@@ -1,7 +1,4 @@
-use crate::{
-    CompilerPipeline, KangFunction, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk,
-    vm::NativeFunctionError,
-};
+use crate::{CompilerPipeline, KangFunction, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk};
 
 #[test]
 fn test_display() {
@@ -27,15 +24,15 @@ fn test_display() {
 fn test_run() {
     let source = r#"
         var hello_world = "hello" + " " + "world!";
-        print(hello_world);
+        println(hello_world);
         var two = nil;
-        print(two);
+        println(two);
         two = 2;
-        print(two);
+        println(two);
 
         {
             var two = "2";
-            print(two);
+            println(two);
         }   
   "#;
     let source_map = SourceMap::new(source.to_string());
@@ -65,7 +62,7 @@ fn test_while() {
         var a = 10;
 
         while (a > 0) {
-            print(a);
+            println(a);
             a = a - 1;
         } 
   "#;
@@ -101,7 +98,7 @@ fn test_subtraction() {
     let source = r#"
         var a = 3;
         a = 1 - a;
-        print(a - -3);
+        println(a - -3);
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
@@ -133,14 +130,14 @@ fn test_subtraction() {
 fn test_locals() {
     let source = r#"
         var two = "two";
-        print(two);
+        println(two);
         two = 2;
         {
             var two = "2";
-            print(two);
-            print("TEST");
+            println(two);
+            println("TEST");
         }
-        print(two);
+        println(two);
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
@@ -169,7 +166,7 @@ fn test_locals() {
 fn test_conditionals() {
     let source = r#"
         if (true) {
-            print("It's true!");
+            println("It's true!");
         } else {
             "This should not print" + true;
             }
@@ -177,7 +174,7 @@ fn test_conditionals() {
         if (false) {
             "This should not print" + true;
         } else {
-            print("It's false!"); 
+            println("It's false!"); 
         }
   "#;
     let source_map = SourceMap::new(source.to_string());
@@ -207,22 +204,22 @@ fn test_conditionals() {
 fn test_ternary_expressions() {
     let source = r#"
         var result1 = true ? "correct" : "wrong";
-        print(result1);
+        println(result1);
         
         var result2 = false ? "wrong" : "correct";
-        print(result2);
+        println(result2);
         
         var result3 = nil ? "wrong" : "correct";
-        print(result3);
+        println(result3);
 
         var result4 = true ? "should do this" : false ? "don't do this" : "nope";
-        print(result4);
+        println(result4);
 
         var result5 = false ? "should not do this" : true ? "do this" : "nope";
-        print(result5);
+        println(result5);
 
         var result6 = false ? "should not do this" : false ? "don't do this" : "yup";
-        print(result6);
+        println(result6);
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
@@ -251,28 +248,28 @@ fn test_ternary_expressions() {
 fn test_logical_expressions() {
     let source = r#"
         var result1 = true or false;
-        print(result1);
+        println(result1);
         
         var result2 = false or true;
-        print(result2);
+        println(result2);
         
         var result3 = false or false;
-        print(result3);
+        println(result3);
         
         var result4 = true and false;
-        print(result4);
+        println(result4);
         
         var result5 = true and true;
-        print(result5);
+        println(result5);
         
         var result6 = false and true;
-        print(result6);
+        println(result6);
         
         var result7 = "hello" or nil;
-        print(result7);
+        println(result7);
         
         var result8 = nil and "world";
-        print(result8);
+        println(result8);
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
@@ -353,18 +350,18 @@ fn equality_operations_test() {
 #[test]
 fn comparison_operations_test() {
     let source = r#"
-        print(10 >= 9);     // true
-        print(10 >= 10);    // true
-        print(10 >= 11);    // false
-        print(10 > 9);      // true
-        print(9 > 9);       // false
-        print(10 > 11);     // false
-        print(9 <= 10);     // true
-        print(10 <= 10);    // true
-        print(11 <= 10);    // false
-        print(9 < 10);      // true
-        print(9 < 9);       // false
-        print(11 < 10);     // false
+        println(10 >= 9);     // true
+        println(10 >= 10);    // true
+        println(10 >= 11);    // false
+        println(10 > 9);      // true
+        println(9 > 9);       // false
+        println(10 > 11);     // false
+        println(9 <= 10);     // true
+        println(10 <= 10);    // true
+        println(11 <= 10);    // false
+        println(9 < 10);      // true
+        println(9 < 9);       // false
+        println(11 < 10);     // false
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
@@ -540,10 +537,10 @@ fn test_for_loop() {
     let source = r#"
         var sum = 0;
         for (var i = 1; i <= 3; i = i + 1) {
-            print(i);
+            println(i);
             sum = sum + i;
         }
-        print(sum);
+        println(sum);
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
@@ -610,36 +607,12 @@ fn test_native_functions() {
                 .try_into()
                 .expect("expected function, found none.");
             disassemble_chunk(&function.chunk, &heap, "script.ql");
-            match Vm::new(heap)
-                .set_debug(false)
-                .add_native_function("assert", 2, |args, vm| {
-                    let assertion = args
-                        .get(0)
-                        .ok_or(NativeFunctionError::new("No arguments provided."))?;
-                    let is_true = vm.is_truthy(*assertion);
-
-                    if is_true {
-                        return Ok(None);
-                    }
-
-                    let message = args
-                        .get(1)
-                        .and_then(|v| v.into_string(vm.heap()).ok())
-                        .unwrap_or("Assertion failed.".into());
-
-                    Err(NativeFunctionError(message.into_string()))
-                })
-                // .add_native_function("print", 1, |args, vm| {
-                //     let value = args.get(0).copied().unwrap_or(Value::Nil);
-                //     let value = value.into_string(&vm.heap()).ok().unwrap_or("nil".into());
-                //     println!("{}", value);
-                //     Ok(None)
-                // })
-                .interpret(program)
-            {
-                Ok(_) => (),
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => {
+                    panic!("Expected error but received none.")
+                }
                 Err(error) => {
-                    panic!("{}", error.message)
+                    assert!(error.message.contains("This should error."));
                 }
             }
         }

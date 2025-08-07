@@ -565,7 +565,7 @@ impl Vm {
     }
 
     fn get_stack_trace(&self) -> Vec<Trace> {
-        todo!()
+        Vec::new()
     }
 
     fn debug(&self) {

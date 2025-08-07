@@ -35,6 +35,18 @@ pub struct Trace {
     loc: SourceLocation,
 }
 
+impl Trace {
+    pub fn new(callee: Box<str>, loc: SourceLocation) -> Self {
+        Self { callee, loc }
+    }
+}
+
+impl std::fmt::Display for Trace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "  at {} (line {}, column {})", self.callee, self.loc.line, self.loc.col)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangRuntimeError {
     pub message: String,
@@ -72,7 +84,15 @@ impl QangRuntimeError {
 
 impl std::fmt::Display for QangRuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
+        write!(f, "{}", self.message)?;
+        if !self.stack_trace.is_empty() {
+            writeln!(f)?;
+            writeln!(f, "Stack trace:")?;
+            for trace in &self.stack_trace {
+                writeln!(f, "{}", trace)?;
+            }
+        }
+        Ok(())
     }
 }
 

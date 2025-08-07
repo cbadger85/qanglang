@@ -549,7 +549,7 @@ impl Vm {
         &mut self,
         function: NativeFunction,
         arg_count: usize,
-    ) -> RuntimeResult<Value> {
+    ) -> RuntimeResult<()> {
         let loc = self.get_previous_loc();
         let mut args = Vec::<Value>::new();
 
@@ -561,12 +561,16 @@ impl Vm {
             args.push(Value::Nil);
         }
 
-        (function.function)(args.as_slice(), self).map_err(|e: NativeFunctionError| {
-            e.into_qang_error(loc)
-                .with_stack_trace(self.get_stack_trace())
-        })?;
+        let value = (function.function)(args.as_slice(), self)
+            .map_err(|e: NativeFunctionError| {
+                e.into_qang_error(loc)
+                    .with_stack_trace(self.get_stack_trace())
+            })?
+            .unwrap_or_default();
 
-        Ok(Value::Nil)
+        self.push(value);
+
+        Ok(())
     }
 
     fn is_truthy(&self, value: Value) -> bool {
@@ -591,7 +595,54 @@ impl Vm {
     }
 
     fn get_stack_trace(&self) -> Vec<Trace> {
-        Vec::new()
+        let mut traces = Vec::new();
+
+        for frame_idx in 0..self.frame_count {
+            let frame = &self.frames[frame_idx];
+            let function_handle = frame.function_handle;
+
+            // Get the function from the heap
+            if let Some(heap_obj) = self.heap.get(function_handle) {
+                match heap_obj {
+                    HeapObject::Function(FunctionObject::KangFunction(kang_fn)) => {
+                        let name = self
+                            .get_identifier_name(kang_fn.name)
+                            .unwrap_or("<unknown>".to_string().into_boxed_str());
+
+                        let loc = if frame.ip > 0 {
+                            kang_fn
+                                .chunk
+                                .locs()
+                                .get(frame.ip - 1)
+                                .copied()
+                                .unwrap_or_default()
+                        } else {
+                            SourceLocation::default()
+                        };
+
+                        traces.push(Trace::new(name, loc));
+                    }
+                    HeapObject::Function(FunctionObject::NativeFunction(native_fn)) => {
+                        let name = self
+                            .get_identifier_name(native_fn.name)
+                            .unwrap_or("<native>".to_string().into_boxed_str());
+
+                        // Native functions don't have source locations
+                        let loc = SourceLocation::default();
+                        traces.push(Trace::new(name, loc));
+                    }
+                    _ => {
+                        // Handle unexpected types
+                        traces.push(Trace::new(
+                            "<invalid>".to_string().into_boxed_str(),
+                            SourceLocation::default(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        traces
     }
 
     fn debug(&self) {

@@ -1,10 +1,8 @@
-use std::rc::Rc;
-
 use crate::{
-    ErrorReporter, HeapObject, QangSyntaxError, SourceMap, Value,
+    ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    heap::{KangFunction, ObjectHeap},
+    heap::{KangFunction, ObjectHandle, ObjectHeap},
     parser::Parser,
 };
 
@@ -13,6 +11,27 @@ pub struct CompilerError(Vec<QangSyntaxError>);
 impl CompilerError {
     pub fn all(&self) -> &[QangSyntaxError] {
         &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KangProgram(ObjectHandle);
+
+impl KangProgram {
+    pub fn new(handle: ObjectHandle) -> Self {
+        Self(handle)
+    }
+}
+
+impl From<KangProgram> for ObjectHandle {
+    fn from(value: KangProgram) -> Self {
+        value.0
+    }
+}
+
+impl From<ObjectHandle> for KangProgram {
+    fn from(value: ObjectHandle) -> Self {
+        KangProgram(value)
     }
 }
 
@@ -37,7 +56,7 @@ impl<'a> CompilerPipeline<'a> {
         self
     }
 
-    pub fn run(self) -> Result<KangFunction, CompilerError> {
+    pub fn run(self) -> Result<KangProgram, CompilerError> {
         let mut parser = Parser::new(&self.source_map);
         let program = parser.parse();
         let errors = parser.into_reporter();
@@ -45,7 +64,9 @@ impl<'a> CompilerPipeline<'a> {
         let function =
             Compiler::new(self.heap, self.is_silent).compile(program, self.source_map, errors)?;
 
-        Ok(function)
+        let program: KangProgram = self.heap.allocate_object(function.into()).into();
+
+        Ok(program)
     }
 }
 
@@ -770,9 +791,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         std::mem::swap(&mut self.enclosing, &mut function);
         self.compile_kind = previous_compile_kind;
 
-        let function_handle = self
-            .heap
-            .allocate_object(HeapObject::Function(Rc::new(function)));
+        let function_handle = self.heap.allocate_object(function.into());
 
         self.emit_constant(
             Value::Function(function_handle),

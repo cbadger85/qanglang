@@ -1,12 +1,12 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    HeapObject, ObjectHeap, QangRuntimeError, Value,
+    HeapObject, KangProgram, ObjectHeap, QangRuntimeError, Value,
     chunk::{Chunk, OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    heap::{KangFunction, NativeFunction, ObjectHandle},
+    heap::{FunctionObject, KangFunction, NativeFunction, ObjectHandle},
     value::get_value_type,
 };
 
@@ -23,9 +23,9 @@ pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
 
 pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct CallFrame {
-    function: Rc<KangFunction>,
+    function_handle: ObjectHandle,
     ip: usize,
     value_slot: usize,
 }
@@ -38,23 +38,18 @@ pub struct Vm {
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<usize, Value>,
     heap: ObjectHeap,
+    current_function: KangFunction,
 }
 
 impl Vm {
-    pub fn new(mut heap: ObjectHeap) -> Self {
-        let default_handle = heap.intern_string("".to_string().into_boxed_str());
-        let default_frame = CallFrame {
-            function: Rc::new(KangFunction::new(default_handle, 0)),
-            ip: 0,
-            value_slot: 0,
-        };
-
+    pub fn new(heap: ObjectHeap) -> Self {
         Self {
+            current_function: KangFunction::default(),
             is_debug: false,
             frame_count: 0,
             stack_top: 0,
             stack: Vec::with_capacity(STACK_MAX),
-            frames: std::array::from_fn(|_| default_frame.clone()),
+            frames: std::array::from_fn(|_| CallFrame::default()),
             globals: HashMap::new(),
             heap,
         }
@@ -73,9 +68,7 @@ impl Vm {
             function,
         };
 
-        let handle = self
-            .heap
-            .allocate_object(HeapObject::NativeFunction(Rc::new(native_function)));
+        let handle = self.heap.allocate_object(native_function.into());
 
         self.globals
             .insert(identifier_handle.identifier(), Value::Function(handle));
@@ -91,12 +84,28 @@ impl Vm {
         &mut self.frames[self.frame_count - 1]
     }
 
+    // fn get_current_fuction(&self) -> &KangFunction {
+    //     let function_handle = self.get_current_frame().function_handle;
+
+    //     self.heap()
+    //         .get(function_handle)
+    //         .ok_or(QangRuntimeError::new(
+    //             "Missing function".to_string(),
+    //             self.get_current_loc(),
+    //         ))
+    //         .and_then(|obj| {
+    //             obj.try_into()
+    //                 .map_err(|e: ValueConversionError| e.into_qang_error(self.get_current_loc()))
+    //         })
+    //         .expect("Unexpected missing function.")
+    // }
+
     fn get_current_loc(&self) -> SourceLocation {
         self.get_loc_at(self.get_current_frame().ip)
     }
 
     fn get_current_chunk(&self) -> &Chunk {
-        &self.get_current_frame().function.chunk
+        &self.current_function.chunk
     }
 
     fn get_previous_loc(&self) -> SourceLocation {
@@ -108,8 +117,7 @@ impl Vm {
     }
 
     fn get_loc_at(&self, index: usize) -> SourceLocation {
-        self.get_current_frame()
-            .function
+        self.current_function
             .chunk
             .locs()
             .get(index)
@@ -117,8 +125,8 @@ impl Vm {
             .unwrap_or_default()
     }
 
-    pub fn interpret(&mut self, function: KangFunction) -> RuntimeResult<()> {
-        self.call_function(Rc::new(function), 0)?;
+    pub fn interpret(&mut self, program: KangProgram) -> RuntimeResult<()> {
+        self.call_function(program.into(), 0)?;
         self.run()
             .map_err(|e| e.with_stack_trace(self.get_stack_trace()))
     }
@@ -397,8 +405,7 @@ impl Vm {
 
     fn read_constant(&self, index: usize) -> Value {
         *self
-            .get_current_frame()
-            .function
+            .current_function
             .chunk
             .constants()
             .get(index)
@@ -473,49 +480,72 @@ impl Vm {
     }
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
-        let obj = match value {
-            Value::Function(handle) => self.heap.get(handle).ok_or(QangRuntimeError::new(
-                "Function is nil.".to_string(),
-                self.get_previous_loc(),
-            )),
+        match value {
+            Value::Function(handle) => self.call_function(handle, arg_count),
             _ => Err(QangRuntimeError::new(
                 "Identifier not callable.".to_string(),
-                self.get_previous_loc(),
-            )),
-        }?;
-
-        match &obj {
-            HeapObject::Function(function) => self.call_function(function.clone(), arg_count),
-            HeapObject::NativeFunction(function) => {
-                let _value = self.call_native_function(function.clone(), arg_count)?;
-                Ok(())
-            }
-            _ => Err(QangRuntimeError::new(
-                "Value is not callable.".to_string(),
                 self.get_previous_loc(),
             )),
         }
     }
 
-    fn call_function(&mut self, function: Rc<KangFunction>, arg_count: usize) -> RuntimeResult<()> {
-        if arg_count < function.arity {
-            for _ in arg_count..function.arity {
-                self.stack.push(Value::Nil);
+    fn call_function(&mut self, handle: ObjectHandle, arg_count: usize) -> RuntimeResult<()> {
+        let loc = self.get_previous_loc();
+        let existing_function = self
+            .heap
+            .get_mut(self.get_current_frame().function_handle)
+            .ok_or(QangRuntimeError::new(
+                "Unexpected missing function.".to_string(),
+                loc,
+            ))
+            .and_then(|obj| match obj {
+                HeapObject::Function(FunctionObject::KangFunction(function)) => Ok(function),
+                _ => Err(QangRuntimeError::new(
+                    "Unexpected missing function.".to_string(),
+                    loc,
+                )),
+            })?;
+        std::mem::swap(existing_function, &mut self.current_function);
+        let obj = self.heap.get_mut(handle).ok_or(QangRuntimeError::new(
+            "Hanging identifier reference.".to_string(),
+            loc,
+        ))?;
+
+        let native_function = match obj {
+            HeapObject::Function(FunctionObject::KangFunction(function)) => {
+                if arg_count < function.arity {
+                    for _ in arg_count..function.arity {
+                        self.stack.push(Value::Nil);
+                    }
+                }
+
+                if self.frame_count > FRAME_MAX {
+                    return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
+                }
+                std::mem::swap(&mut self.current_function, function);
+                self.frame_count += 1;
+                let ip = 0;
+                self.frames[self.frame_count - 1] = CallFrame {
+                    function_handle: handle,
+                    ip,
+                    value_slot: self.frame_count - arg_count - 1,
+                };
+
+                Ok(None)
             }
+            HeapObject::Function(FunctionObject::NativeFunction(function)) => {
+                Ok(Some(function.clone()))
+            }
+            _ => Err(QangRuntimeError::new(
+                "Value not callable.".to_string(),
+                loc,
+            )),
+        }?;
+
+        if let Some(function) = native_function {
+            let _value = self.call_native_function(function, arg_count)?;
         }
-        if self.frame_count > FRAME_MAX {
-            return Err(QangRuntimeError::new(
-                "Stack overflow.".to_string(),
-                self.get_previous_loc(),
-            ));
-        }
-        self.frame_count += 1;
-        let ip = 0;
-        self.frames[self.frame_count - 1] = CallFrame {
-            function,
-            ip,
-            value_slot: self.frame_count - arg_count - 1,
-        };
+
         Ok(())
     }
 

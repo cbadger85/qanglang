@@ -5,12 +5,24 @@ use std::{
 
 use crate::{chunk::Chunk, error::ValueConversionError, vm::NativeFn};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ObjectHandle(usize);
 
 impl ObjectHandle {
     pub fn identifier(&self) -> usize {
         self.0
+    }
+}
+
+impl From<usize> for ObjectHandle {
+    fn from(value: usize) -> Self {
+        ObjectHandle(value)
+    }
+}
+
+impl From<ObjectHandle> for usize {
+    fn from(value: ObjectHandle) -> Self {
+        value.0
     }
 }
 
@@ -21,11 +33,17 @@ pub struct NativeFunction {
     pub name: ObjectHandle,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct KangFunction {
     pub arity: usize,
     pub name: ObjectHandle,
     pub chunk: Chunk,
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionObject {
+    KangFunction(KangFunction),
+    NativeFunction(Rc<NativeFunction>),
 }
 
 impl KangFunction {
@@ -41,14 +59,13 @@ impl KangFunction {
 #[derive(Debug, Clone)]
 pub enum HeapObject {
     String(Box<str>),
-    NativeFunction(Rc<NativeFunction>),
-    Function(Rc<KangFunction>),
+    Function(FunctionObject),
 }
 
 pub const fn get_object_value_type(value: &HeapObject) -> &'static str {
     match value {
         HeapObject::String(_) => "string",
-        HeapObject::NativeFunction(_) | HeapObject::Function(_) => "function",
+        HeapObject::Function(_) => "function",
     }
 }
 
@@ -61,6 +78,28 @@ impl TryFrom<HeapObject> for Box<str> {
             _ => Err(ValueConversionError::new(
                 format!("Expected string, found {}.", get_object_value_type(&value)).as_str(),
             )),
+        }
+    }
+}
+
+impl From<KangFunction> for HeapObject {
+    fn from(value: KangFunction) -> Self {
+        HeapObject::Function(FunctionObject::KangFunction(value))
+    }
+}
+
+impl From<NativeFunction> for HeapObject {
+    fn from(value: NativeFunction) -> Self {
+        HeapObject::Function(FunctionObject::NativeFunction(Rc::new(value)))
+    }
+}
+
+impl<'a> TryFrom<&'a HeapObject> for &'a KangFunction {
+    type Error = ValueConversionError;
+    fn try_from(value: &'a HeapObject) -> Result<Self, Self::Error> {
+        match value {
+            HeapObject::Function(FunctionObject::KangFunction(function)) => Ok(&function),
+            _ => Err(ValueConversionError::new("Value is not a function")),
         }
     }
 }
@@ -115,7 +154,8 @@ impl ObjectHeap {
     pub fn free(&mut self, handle: ObjectHandle) {
         if let Some(obj) = self.objects[handle.0].take() {
             match obj {
-                HeapObject::String(_) | HeapObject::NativeFunction(_) => {}
+                HeapObject::String(_) | HeapObject::Function(FunctionObject::NativeFunction(_)) => {
+                }
                 _ => self.free_list.push(handle.0),
             }
         }

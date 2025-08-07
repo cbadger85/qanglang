@@ -1,4 +1,8 @@
-use crate::{HeapObject, ObjectHeap, error::ValueConversionError, heap::ObjectHandle};
+use crate::{
+    HeapObject, ObjectHeap,
+    error::ValueConversionError,
+    heap::{FunctionObject, ObjectHandle},
+};
 
 pub const fn get_value_type(value: &Value) -> &'static str {
     match value {
@@ -39,11 +43,30 @@ impl Value {
             Value::Boolean(boolean) => boolean.to_string(),
             Value::Function(handle) => {
                 if let Some(object) = heap.get(*handle) {
-                    if let HeapObject::NativeFunction(_) = &object {
-                        return "\"<native_fn>\"".to_string();
+                    match object {
+                        HeapObject::Function(FunctionObject::KangFunction(function)) => {
+                            let name_handle = function.name;
+
+                            if let Some(HeapObject::String(string)) = heap.get(name_handle) {
+                                string.clone().into_string()
+                            } else {
+                                "nil".to_string()
+                            }
+                        }
+                        HeapObject::Function(FunctionObject::NativeFunction(function)) => {
+                            let name_handle = function.name;
+
+                            if let Some(HeapObject::String(string)) = heap.get(name_handle) {
+                                string.clone().into_string()
+                            } else {
+                                "nil".to_string()
+                            }
+                        }
+                        _ => "nil".to_string(),
                     }
+                } else {
+                    "nil".to_string()
                 }
-                "nil".to_string()
             }
         }
     }

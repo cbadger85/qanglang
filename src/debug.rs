@@ -1,6 +1,7 @@
 use crate::{
     ObjectHeap,
     chunk::{Chunk, OpCode},
+    heap::{HeapObject, FunctionObject},
 };
 
 #[allow(dead_code)]
@@ -86,4 +87,36 @@ fn jump_instruction(name: &str, sign: i32, chunk: &Chunk, offset: usize) -> usiz
     let target = offset as i32 + 3 + sign * (jump as i32);
     println!("{:<16} {:4} -> {}", name, offset, target);
     offset + 3
+}
+
+#[allow(dead_code)]
+pub fn disassemble_program(heap: &ObjectHeap) {
+    println!("=== PROGRAM DISASSEMBLY ===");
+    println!();
+    
+    let mut function_count = 0;
+    
+    // Iterate through all objects in the heap to find functions
+    for (index, obj) in heap.iter_objects() {
+        if let HeapObject::Function(FunctionObject::KangFunction(function)) = obj {
+            function_count += 1;
+            
+            // Get function name as string
+            let function_name = match heap.get(function.name) {
+                Some(HeapObject::String(name_str)) => name_str.as_ref(),
+                _ => "<anonymous>",
+            };
+            
+            println!("Function #{} (Object #{}) - {}:", function_count, index, function_name);
+            println!("  Arity: {}", function.arity);
+            disassemble_chunk(&function.chunk, heap, function_name);
+            println!();
+        }
+    }
+    
+    if function_count == 0 {
+        println!("No functions found in the program.");
+    } else {
+        println!("=== END PROGRAM DISASSEMBLY ({} functions) ===", function_count);
+    }
 }

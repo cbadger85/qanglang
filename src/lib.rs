@@ -13,6 +13,7 @@ mod vm;
 
 pub use chunk::SourceLocation;
 pub use compiler::{CompilerError, CompilerPipeline, KangProgram};
+pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace};
 pub use heap::{HeapObject, KangFunction, ObjectHeap};
 pub use parser::Parser;

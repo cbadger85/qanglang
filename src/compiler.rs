@@ -141,6 +141,9 @@ impl<'a> Compiler<'a> {
         self.visit_program(&program, &mut errors)
             .map_err(|err| CompilerError(vec![err]))?;
 
+        self.emit_opcode(OpCode::Nil, SourceSpan::default());
+        self.emit_opcode(OpCode::Return, SourceSpan::default());
+
         if errors.has_errors() {
             Err(CompilerError(errors.take_errors()))
         } else {
@@ -867,11 +870,6 @@ impl<'a> AstVisitor for Compiler<'a> {
                         }
 
                         self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
-
-                        if self.compile_kind == CompilerKind::Script {
-                            self.emit_opcode(OpCode::Nil, SourceSpan::default());
-                            self.emit_opcode(OpCode::Return, SourceSpan::default());
-                        }
 
                         Ok(())
                     }

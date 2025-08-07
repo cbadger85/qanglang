@@ -171,4 +171,10 @@ impl ObjectHeap {
             }
         }
     }
+
+    pub fn iter_objects(&self) -> impl Iterator<Item = (usize, &HeapObject)> {
+        self.objects.iter().enumerate().filter_map(|(index, obj_opt)| {
+            obj_opt.as_ref().map(|obj| (index, obj))
+        })
+    }
 }

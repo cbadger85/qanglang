@@ -1,4 +1,7 @@
-use crate::{CompilerPipeline, KangFunction, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk};
+use crate::{
+    CompilerPipeline, KangFunction, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk,
+    disassemble_program,
+};
 
 #[test]
 fn test_display() {
@@ -699,19 +702,14 @@ fn test_function_calls() {
             return "hello?";
         }
 
-        println(this_is_a_test());
+        assert_eq(this_is_a_test(), "hello?");
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let function: &KangFunction = heap
-                .get(program.into())
-                .expect("expected function, found none.")
-                .try_into()
-                .expect("expected function, found none.");
-            disassemble_chunk(&function.chunk, &heap, "script.ql");
+            disassemble_program(&heap);
             match Vm::new(heap).set_debug(false).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
@@ -739,19 +737,14 @@ fn test_nested_function_calls() {
             return inner();
         }
 
-        println(this_is_a_test());
+        assert_eq(this_is_a_test(), "hello?");
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let function: &KangFunction = heap
-                .get(program.into())
-                .expect("expected function, found none.")
-                .try_into()
-                .expect("expected function, found none.");
-            disassemble_chunk(&function.chunk, &heap, "script.ql");
+            disassemble_program(&heap);
             match Vm::new(heap).set_debug(false).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {

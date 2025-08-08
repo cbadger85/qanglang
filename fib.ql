@@ -6,7 +6,7 @@ fn fib(n) {
 }
 
 var start = system_time();
-fib(38);
+fib(32);
 print("Completed in ");
 print(system_time() - start);
 print(" ms");

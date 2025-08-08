@@ -471,7 +471,9 @@ impl Vm {
                         return Ok(());
                     }
 
-                    self.stack_top = value_slot;
+                    // With optimized approach, we need to account for the function value
+                    // still being on the stack. Set stack_top to just before the function.
+                    self.stack_top = if value_slot > 0 { value_slot - 1 } else { 0 };
                     push_value!(self, result);
                 }
                 _ => (),
@@ -570,42 +572,17 @@ impl Vm {
                     return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
                 }
 
-                // Create new call frame using sliding window approach
                 self.frame_count += 1;
 
-                // In the sliding window approach:
-                // Before: [other values][function][arg0][arg1]...[argN]
-                // After:  [other values][arg0][arg1]...[argN][local vars...]
-                // We need to slide arguments to overwrite the function slot
-
                 let value_slot = if self.frame_count == 1 {
-                    0 // Initial script call starts with empty stack
+                    0
                 } else {
-                    // The function is at position: stack_top - 1 - arg_count
-                    // Arguments will be moved to start from this position
-                    self.stack_top - 1 - arg_count
+                    self.stack_top - arg_count
                 };
-
-                // Slide arguments to overwrite the function slot
-                if arg_count > 0 && self.frame_count > 1 {
-                    // Move arguments from [value_slot+1, value_slot+2, ..., value_slot+arg_count]
-                    // to [value_slot, value_slot+1, ..., value_slot+arg_count-1]
-                    for i in 0..arg_count {
-                        if let Some(arg_value) = self.stack.get(value_slot + 1 + i).copied() {
-                            self.stack[value_slot + i] = arg_value;
-                        }
-                    }
-                    // Adjust stack_top to account for the removed function slot
-                    self.stack_top -= 1;
-                }
-
-                // Check if this is a script function or user-defined function
-                // Script functions start at ip=0, user-defined functions start at ip=1 (to skip parameter count byte)
-                let is_script = handle == self.program_handle;
 
                 let call_frame = &mut self.frames[self.frame_count - 1];
                 call_frame.current_function = function.clone();
-                call_frame.ip = if is_script { 0 } else { 1 };
+                call_frame.ip = if handle == self.program_handle { 0 } else { 1 };
                 call_frame.value_slot = value_slot;
 
                 Ok(())

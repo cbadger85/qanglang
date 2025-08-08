@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     HeapObject, KangProgram, ObjectHeap, QangRuntimeError, Value,
@@ -36,7 +36,7 @@ pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nat
 
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
-    function_handle: ObjectHandle,
+    current_function: Rc<KangFunction>,
     ip: usize,
     value_slot: usize,
 }
@@ -102,19 +102,7 @@ impl Vm {
     }
 
     fn get_current_function(&self) -> &KangFunction {
-        let function_handle = self.get_current_frame().function_handle;
-
-        self.heap
-            .get(function_handle)
-            .ok_or(QangRuntimeError::new(
-                "Missing function".to_string(),
-                SourceLocation::default(),
-            ))
-            .and_then(|obj| {
-                obj.try_into()
-                    .map_err(|e: ValueConversionError| e.into_qang_error(SourceLocation::default()))
-            })
-            .expect("Unexpected missing function.")
+        &self.get_current_frame().current_function
     }
 
     fn get_current_loc(&self) -> SourceLocation {
@@ -588,7 +576,7 @@ impl Vm {
                 let is_script = handle == self.program_handle;
 
                 let call_frame = &mut self.frames[self.frame_count - 1];
-                call_frame.function_handle = handle;
+                call_frame.current_function = function.clone();
                 call_frame.ip = if is_script { 0 } else { 1 };
                 call_frame.value_slot = value_slot;
 
@@ -670,47 +658,23 @@ impl Vm {
 
         for frame_idx in 0..self.frame_count {
             let frame = &self.frames[frame_idx];
-            let function_handle = frame.function_handle;
+            let name = self
+                .get_identifier_name(frame.current_function.name)
+                .unwrap_or("<unknown>".to_string().into_boxed_str());
 
-            // Get the function from the heap
-            if let Some(heap_obj) = self.heap.get(function_handle) {
-                match heap_obj {
-                    HeapObject::Function(FunctionObject::KangFunction(kang_fn)) => {
-                        let name = self
-                            .get_identifier_name(kang_fn.name)
-                            .unwrap_or("<unknown>".to_string().into_boxed_str());
+            let loc = if frame.ip > 0 {
+                frame
+                    .current_function
+                    .chunk
+                    .locs()
+                    .get(frame.ip - 1)
+                    .copied()
+                    .unwrap_or_default()
+            } else {
+                SourceLocation::default()
+            };
 
-                        let loc = if frame.ip > 0 {
-                            kang_fn
-                                .chunk
-                                .locs()
-                                .get(frame.ip - 1)
-                                .copied()
-                                .unwrap_or_default()
-                        } else {
-                            SourceLocation::default()
-                        };
-
-                        traces.push(Trace::new(name, loc));
-                    }
-                    HeapObject::Function(FunctionObject::NativeFunction(native_fn)) => {
-                        let name = self
-                            .get_identifier_name(native_fn.name)
-                            .unwrap_or("<native>".to_string().into_boxed_str());
-
-                        // Native functions don't have source locations
-                        let loc = SourceLocation::default();
-                        traces.push(Trace::new(name, loc));
-                    }
-                    _ => {
-                        // Handle unexpected types
-                        traces.push(Trace::new(
-                            "<invalid>".to_string().into_boxed_str(),
-                            SourceLocation::default(),
-                        ));
-                    }
-                }
-            }
+            traces.push(Trace::new(name, loc));
         }
 
         traces

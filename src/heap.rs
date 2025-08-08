@@ -1,4 +1,7 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    rc::Rc,
+};
 
 use crate::{chunk::Chunk, error::ValueConversionError, vm::NativeFn};
 
@@ -39,7 +42,7 @@ pub struct KangFunction {
 
 #[derive(Debug, Clone)]
 pub enum FunctionObject {
-    KangFunction(KangFunction),
+    KangFunction(Rc<KangFunction>),
     NativeFunction(NativeFunction),
 }
 
@@ -81,7 +84,7 @@ impl TryFrom<HeapObject> for Box<str> {
 
 impl From<KangFunction> for HeapObject {
     fn from(value: KangFunction) -> Self {
-        HeapObject::Function(FunctionObject::KangFunction(value))
+        HeapObject::Function(FunctionObject::KangFunction(Rc::new(value)))
     }
 }
 

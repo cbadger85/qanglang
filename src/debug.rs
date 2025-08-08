@@ -8,10 +8,28 @@ use crate::{
 pub fn disassemble_chunk(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
     println!("== {} ==", name);
 
+    let is_script = name == "<script>";
     let mut offset = 0;
+
     while offset < chunk.count() {
-        offset = disassemble_instruction(chunk, heap, offset);
+        offset = disassemble_instruction_with_context(chunk, heap, offset, is_script);
     }
+}
+
+pub fn disassemble_instruction_with_context(
+    chunk: &Chunk,
+    heap: &ObjectHeap,
+    offset: usize,
+    is_script: bool,
+) -> usize {
+    // Handle parameter count byte for user functions
+    if !is_script && offset == 0 {
+        let param_count = chunk.code()[offset];
+        println!("{:04} ---- PARAM_COUNT        {}", offset, param_count);
+        return offset + 1;
+    }
+
+    disassemble_instruction(chunk, heap, offset)
 }
 
 pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) -> usize {
@@ -48,14 +66,14 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
         OpCode::DefineGlobal => simple_instruction("OP_DEFINE_GLOBAL", offset),
         OpCode::GetGlobal => simple_instruction("OP_GET_GLOBAL", offset),
         OpCode::SetGlobal => simple_instruction("OP_SET_GLOBAL", offset),
-        OpCode::GetLocal => simple_instruction("OP_GET_LOCAL", offset),
-        OpCode::SetLocal => simple_instruction("OP_SET_LOCAL", offset),
+        OpCode::GetLocal => byte_instruction("OP_GET_LOCAL", chunk, offset),
+        OpCode::SetLocal => byte_instruction("OP_SET_LOCAL", chunk, offset),
         OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
         OpCode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
         OpCode::Loop => jump_instruction("OP_LOOP", 1, chunk, offset),
         OpCode::Call => {
             let arg_count = chunk.code()[offset + 1];
-            print!("{:<16} {:4}\n", "OP_CALL", arg_count);
+            println!("{:<16} {:4}", "OP_CALL", arg_count);
             offset + 2
         }
         OpCode::Print => simple_instruction("OP_PRINT", offset),
@@ -77,27 +95,15 @@ fn constant_instruction(name: &str, chunk: &Chunk, heap: &ObjectHeap, offset: us
     offset + 2
 }
 
-fn disassemble_function(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
-    println!("== {} ==", name);
-
-    let is_script = name == "<script>";
-    let mut offset = 0;
-
-    if !is_script && chunk.count() > 0 {
-        // For user-defined functions, show the parameter count byte
-        let param_count = chunk.code()[0];
-        println!("{:04} ---- PARAM_COUNT        {}", offset, param_count);
-        offset = 1; // Start disassembly after parameter count
-    }
-
-    while offset < chunk.count() {
-        offset = disassemble_instruction(chunk, heap, offset);
-    }
-}
-
 fn simple_instruction(name: &str, offset: usize) -> usize {
     println!("{}", name);
     offset + 1
+}
+
+fn byte_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
+    let slot = chunk.code()[offset + 1];
+    println!("{:<16} {:4}", name, slot);
+    offset + 2
 }
 
 fn jump_instruction(name: &str, sign: i32, chunk: &Chunk, offset: usize) -> usize {
@@ -130,7 +136,7 @@ pub fn disassemble_program(heap: &ObjectHeap) {
                 function_count, index, function_name
             );
             println!("  Arity: {}", function.arity);
-            disassemble_function(&function.chunk, heap, function_name);
+            disassemble_chunk(&function.chunk, heap, function_name);
             println!();
         }
     }

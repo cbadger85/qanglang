@@ -2,7 +2,7 @@ use crate::{NativeFunctionError, Value, Vm};
 
 pub fn kang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args
-        .get(0)
+        .first()
         .ok_or(NativeFunctionError::new("No arguments provided."))?;
     let is_true = vm.is_truthy(*assertion);
 
@@ -39,15 +39,15 @@ pub fn kang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
 }
 
 pub fn kang_print(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.get(0).copied().unwrap_or(Value::Nil);
-    let value = value.to_display_string(&vm.heap());
+    let value = args.first().copied().unwrap_or(Value::Nil);
+    let value = value.to_display_string(vm.heap());
     print!("{}", value);
     Ok(None)
 }
 
 pub fn kang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.get(0).copied().unwrap_or(Value::Nil);
-    let value = value.to_display_string(&vm.heap());
+    let value = args.first().copied().unwrap_or(Value::Nil);
+    let value = value.to_display_string(vm.heap());
     println!("{}", value);
     Ok(None)
 }

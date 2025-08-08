@@ -95,7 +95,7 @@ impl<'a> TryFrom<&'a HeapObject> for &'a KangFunction {
     type Error = ValueConversionError;
     fn try_from(value: &'a HeapObject) -> Result<Self, Self::Error> {
         match value {
-            HeapObject::Function(FunctionObject::KangFunction(function)) => Ok(&function),
+            HeapObject::Function(FunctionObject::KangFunction(function)) => Ok(function),
             _ => Err(ValueConversionError::new("Value is not a function")),
         }
     }
@@ -173,8 +173,9 @@ impl ObjectHeap {
     }
 
     pub fn iter_objects(&self) -> impl Iterator<Item = (usize, &HeapObject)> {
-        self.objects.iter().enumerate().filter_map(|(index, obj_opt)| {
-            obj_opt.as_ref().map(|obj| (index, obj))
-        })
+        self.objects
+            .iter()
+            .enumerate()
+            .filter_map(|(index, obj_opt)| obj_opt.as_ref().map(|obj| (index, obj)))
     }
 }

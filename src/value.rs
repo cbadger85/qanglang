@@ -33,10 +33,8 @@ impl Value {
             Value::Nil => "nil".to_string(),
             Value::Number(number) => number.to_string(),
             Value::String(handle) => {
-                if let Some(object) = heap.get(*handle) {
-                    if let HeapObject::String(str) = &object {
-                        return format!("{}", str);
-                    }
+                if let Some(HeapObject::String(str)) = heap.get(*handle) {
+                    return format!("{}", str);
                 }
                 "nil".to_string()
             }
@@ -75,7 +73,7 @@ impl Value {
         match self {
             Value::String(handle) => heap
                 .get(handle)
-                .map(|h| h.clone())
+                .cloned()
                 .ok_or(ValueConversionError::new("Expected string, found nil."))
                 .and_then(|v| v.try_into()),
             _ => Err(ValueConversionError::new(

@@ -49,6 +49,7 @@ pub struct Vm {
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<usize, Value>,
     heap: ObjectHeap,
+    program_handle: ObjectHandle,
 }
 
 impl Vm {
@@ -61,6 +62,7 @@ impl Vm {
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals: HashMap::new(),
             heap,
+            program_handle: ObjectHandle::default(),
         };
 
         vm.add_native_function("assert", 1, kang_assert)
@@ -92,16 +94,10 @@ impl Vm {
     }
 
     fn get_current_frame(&self) -> &CallFrame {
-        if self.frame_count == 0 {
-            panic!("No active call frame");
-        }
         &self.frames[self.frame_count - 1]
     }
 
     fn get_current_frame_mut(&mut self) -> &mut CallFrame {
-        if self.frame_count == 0 {
-            panic!("No active call frame");
-        }
         &mut self.frames[self.frame_count - 1]
     }
 
@@ -148,6 +144,7 @@ impl Vm {
 
     pub fn interpret(&mut self, program: KangProgram) -> RuntimeResult<()> {
         let function_handle = program.into();
+        self.program_handle = function_handle;
         // Use call_function to initialize the first call frame consistently
         self.call_function(function_handle, 0)?;
 
@@ -482,14 +479,7 @@ impl Vm {
     fn pop(&mut self) -> RuntimeResult<Value> {
         if self.stack_top > 0 {
             self.stack_top -= 1;
-            if let Some(value) = self.stack.get_mut(self.stack_top) {
-                Ok(std::mem::take(value))
-            } else {
-                Err(QangRuntimeError::new(
-                    "Stack corruption: stack_top points to invalid location".to_string(),
-                    self.get_current_loc(),
-                ))
-            }
+            Ok(self.stack[self.stack_top])
         } else {
             Err(QangRuntimeError::new(
                 "No value found, unexpected empty stack.".to_string(),
@@ -595,18 +585,12 @@ impl Vm {
 
                 // Check if this is a script function or user-defined function
                 // Script functions start at ip=0, user-defined functions start at ip=1 (to skip parameter count byte)
-                let is_script = if let Some(HeapObject::String(name)) = self.heap.get(function.name)
-                {
-                    name.as_ref() == "<script>"
-                } else {
-                    false
-                };
+                let is_script = handle == self.program_handle;
 
-                self.frames[self.frame_count - 1] = CallFrame {
-                    function_handle: handle,
-                    ip: if is_script { 0 } else { 1 }, // Skip parameter count byte for user functions only
-                    value_slot,
-                };
+                let call_frame = &mut self.frames[self.frame_count - 1];
+                call_frame.function_handle = handle;
+                call_frame.ip = if is_script { 0 } else { 1 };
+                call_frame.value_slot = value_slot;
 
                 Ok(())
             }

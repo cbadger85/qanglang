@@ -11,6 +11,12 @@ path = "src/main.rs"
 name = "qanglang"
 path = "src/lib.rs"
 
+[profile.release]
+debug = "line-tables-only"
+
+[features]
+profiler = []
 
 [dependencies]
 phf = { version = "0.11.3", features = ["macros"]}
+coz = "0.1"

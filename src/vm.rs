@@ -1,5 +1,8 @@
 use std::{collections::HashMap, rc::Rc};
 
+#[cfg(feature = "profiler")]
+use coz;
+
 use crate::{
     HeapObject, KangProgram, ObjectHeap, QangRuntimeError, Value,
     chunk::{Chunk, OpCode, SourceLocation},
@@ -136,15 +139,22 @@ impl Vm {
         // Use call_function to initialize the first call frame consistently
         self.call_function(function_handle, 0)?;
 
+        if self.is_debug {
+            self.debug();
+        }
+
+        #[cfg(feature = "profiler")]
+        coz::scope!("vm_interpret");
+
         self.run()
             .map_err(|e| e.with_stack_trace(self.get_stack_trace()))
     }
 
     fn run(&mut self) -> RuntimeResult<()> {
         loop {
-            if self.is_debug {
-                self.debug();
-            }
+            #[cfg(feature = "profiler")]
+            coz::progress!("vm_instructions");
+
             let opcode: OpCode = self.read_byte()?.into();
 
             match opcode {
@@ -187,6 +197,9 @@ impl Vm {
                             Ok(Value::Number(num1 + num2))
                         }
                         (Value::String(_), Value::String(_)) => {
+                            #[cfg(feature = "profiler")]
+                            coz::scope!("string_concatenation");
+
                             let str1: Box<str> = a
                                 .into_string(heap)
                                 .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
@@ -398,6 +411,9 @@ impl Vm {
                 OpCode::Return => {
                     let result = self.pop()?;
 
+                    #[cfg(feature = "profiler")]
+                    coz::progress!("function_returns");
+
                     // Get the value_slot from the current frame before decrementing frame_count
                     let value_slot = self.get_current_frame().value_slot;
                     self.frame_count -= 1;
@@ -486,6 +502,9 @@ impl Vm {
     where
         F: FnOnce(Value, Value, &mut ObjectHeap, SourceLocation) -> RuntimeResult<Value>,
     {
+        #[cfg(feature = "profiler")]
+        coz::scope!("binary_operation");
+
         let op_loc = self.get_previous_loc();
         let b = self.pop()?;
         let a = self.pop()?;
@@ -513,6 +532,9 @@ impl Vm {
     }
 
     fn call_function(&mut self, handle: ObjectHandle, arg_count: usize) -> RuntimeResult<()> {
+        #[cfg(feature = "profiler")]
+        coz::scope!("call_function");
+
         // For the initial call from interpret(), there's no previous location
         let loc = if self.frame_count > 0 {
             self.get_previous_loc()

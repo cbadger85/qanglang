@@ -7,7 +7,7 @@ use crate::{
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
     heap::{FunctionObject, KangFunction, NativeFunction, ObjectHandle},
-    kang_std::{kang_assert, kang_assert_eq, kang_print, kang_println},
+    kang_std::{kang_assert, kang_assert_eq, kang_print, kang_println, system_time},
     value::get_value_type,
 };
 
@@ -67,6 +67,7 @@ impl Vm {
             .add_native_function("assert_eq", 1, kang_assert_eq)
             .add_native_function("print", 1, kang_print)
             .add_native_function("println", 1, kang_println)
+            .add_native_function("system_time", 0, system_time)
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -401,7 +402,8 @@ impl Vm {
                 }
                 OpCode::Call => {
                     let arg_count = self.read_byte()? as usize;
-                    self.call_value(self.peek(arg_count), arg_count)?;
+                    let function_value = self.peek(arg_count);
+                    self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Print => {
                     let value = self.pop()?;
@@ -410,7 +412,7 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = self.pop()?;
-                    
+
                     // Get the value_slot from the current frame before decrementing frame_count
                     let value_slot = self.get_current_frame().value_slot;
                     self.frame_count -= 1;
@@ -562,22 +564,22 @@ impl Vm {
                     return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
                 }
 
-                // Create new call frame using sliding window approach  
+                // Create new call frame using sliding window approach
                 self.frame_count += 1;
-                
+
                 // In the sliding window approach:
                 // Before: [other values][function][arg0][arg1]...[argN]
                 // After:  [other values][arg0][arg1]...[argN][local vars...]
                 // We need to slide arguments to overwrite the function slot
-                
+
                 let value_slot = if self.frame_count == 1 {
-                    0  // Initial script call starts with empty stack
+                    0 // Initial script call starts with empty stack
                 } else {
                     // The function is at position: stack_top - 1 - arg_count
-                    // Arguments will be moved to start from this position  
+                    // Arguments will be moved to start from this position
                     self.stack_top - 1 - arg_count
                 };
-                
+
                 // Slide arguments to overwrite the function slot
                 if arg_count > 0 && self.frame_count > 1 {
                     // Move arguments from [value_slot+1, value_slot+2, ..., value_slot+arg_count]
@@ -590,15 +592,16 @@ impl Vm {
                     // Adjust stack_top to account for the removed function slot
                     self.stack_top -= 1;
                 }
-                
+
                 // Check if this is a script function or user-defined function
                 // Script functions start at ip=0, user-defined functions start at ip=1 (to skip parameter count byte)
-                let is_script = if let Some(HeapObject::String(name)) = self.heap.get(function.name) {
+                let is_script = if let Some(HeapObject::String(name)) = self.heap.get(function.name)
+                {
                     name.as_ref() == "<script>"
                 } else {
                     false
                 };
-                
+
                 self.frames[self.frame_count - 1] = CallFrame {
                     function_handle: handle,
                     ip: if is_script { 0 } else { 1 }, // Skip parameter count byte for user functions only
@@ -626,10 +629,15 @@ impl Vm {
         let loc = self.get_previous_loc();
         let mut args = Vec::<Value>::new();
 
+        // Pop arguments from stack
         for _ in 0..arg_count {
             args.push(self.pop()?);
         }
 
+        // Pop the function value from the stack
+        self.pop()?;
+
+        // Fill remaining arguments with nil if needed
         for _ in arg_count..(function.arity) {
             args.push(Value::Nil);
         }

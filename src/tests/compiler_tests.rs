@@ -826,3 +826,34 @@ fn test_nested_function_calls_with_args() {
         }
     }
 }
+
+#[test]
+fn test_system_time() {
+    let source = r#"
+        // Not saved as a local
+        print("System time is ");
+        print(system_time());
+        println("");
+        assert(system_time() != nil);
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

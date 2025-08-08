@@ -51,3 +51,18 @@ pub fn kang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Native
     println!("{}", value);
     Ok(None)
 }
+
+pub fn system_time(_args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| NativeFunctionError::new("Unable to get system time."))?;
+
+    let time: f64 = since_the_epoch.as_millis() as f64;
+
+    // println!("naive time is: {}", time);
+
+    Ok(Some(time.into()))
+}

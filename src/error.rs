@@ -43,7 +43,11 @@ impl Trace {
 
 impl std::fmt::Display for Trace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "  at {} (line {}, column {})", self.callee, self.loc.line, self.loc.col)
+        write!(
+            f,
+            "  at {} (line {}, column {})",
+            self.callee, self.loc.line, self.loc.col
+        )
     }
 }
 
@@ -104,6 +108,10 @@ pub struct ValueConversionError(String);
 impl ValueConversionError {
     pub fn new(message: &str) -> Self {
         Self(message.to_string())
+    }
+
+    pub fn message(&self) -> &str {
+        &self.0
     }
 
     pub fn into_qang_error_with_trace(

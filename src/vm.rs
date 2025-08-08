@@ -58,7 +58,7 @@ impl Vm {
             is_debug: false,
             frame_count: 0,
             stack_top: 0,
-            stack: Vec::with_capacity(STACK_MAX),
+            stack: vec![Value::Nil; STACK_MAX],
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals: HashMap::new(),
             heap,
@@ -453,11 +453,6 @@ impl Vm {
                 "Stack overflow: maximum stack size of {} exceeded",
                 STACK_MAX
             );
-        }
-
-        // Ensure the vec is large enough
-        while self.stack.len() <= self.stack_top {
-            self.stack.push(Value::default());
         }
 
         self.stack[self.stack_top] = value;

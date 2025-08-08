@@ -669,6 +669,10 @@ impl Vm {
         &self.heap
     }
 
+    pub fn heap_mut(&mut self) -> &mut ObjectHeap {
+        &mut self.heap
+    }
+
     fn get_stack_trace(&self) -> Vec<Trace> {
         let mut traces = Vec::new();
 

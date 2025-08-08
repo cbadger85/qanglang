@@ -37,6 +37,33 @@ pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
 
 pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
+macro_rules! push_value {
+    ($vm:expr, $value:expr) => {
+        if $vm.stack_top >= STACK_MAX {
+            panic!(
+                "Stack overflow: maximum stack size of {} exceeded",
+                STACK_MAX
+            );
+        }
+        $vm.stack[$vm.stack_top] = $value;
+        $vm.stack_top += 1;
+    };
+}
+
+macro_rules! pop_value {
+    ($vm:expr) => {
+        if $vm.stack_top > 0 {
+            $vm.stack_top -= 1;
+            Ok($vm.stack[$vm.stack_top])
+        } else {
+            Err(QangRuntimeError::new(
+                "No value found, unexpected empty stack.".to_string(),
+                $vm.get_current_loc(),
+            ))
+        }
+    };
+}
+
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
     current_function: Rc<KangFunction>,
@@ -97,10 +124,15 @@ impl Vm {
     }
 
     fn get_current_frame(&self) -> &CallFrame {
+        #[cfg(feature = "profiler")]
+        coz::scope!("get_current_frame");
         &self.frames[self.frame_count - 1]
+        // unsafe { self.frames.get_unchecked(self.frame_count - 1) }
     }
 
     fn get_current_frame_mut(&mut self) -> &mut CallFrame {
+        #[cfg(feature = "profiler")]
+        coz::scope!("get_current_frame_mut");
         &mut self.frames[self.frame_count - 1]
     }
 
@@ -146,8 +178,14 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
 
-        self.run()
-            .map_err(|e| e.with_stack_trace(self.get_stack_trace()))
+        let result = self
+            .run()
+            .map_err(|e| e.with_stack_trace(self.get_stack_trace()));
+
+        #[cfg(feature = "profiler")]
+        coz::progress!("execution_complete");
+
+        result
     }
 
     fn run(&mut self) -> RuntimeResult<()> {
@@ -161,7 +199,7 @@ impl Vm {
                 OpCode::Constant => {
                     let constant_index = self.read_byte()? as usize;
                     let constant = self.read_constant(constant_index);
-                    self.push(constant);
+                    push_value!(self, constant);
                 }
                 OpCode::Negate => {
                     if let Value::Number(number) = self.peek(0) {
@@ -183,13 +221,13 @@ impl Vm {
                     }
                 }
                 OpCode::True => {
-                    self.push(Value::Boolean(true));
+                    push_value!(self, Value::Boolean(true));
                 }
                 OpCode::False => {
-                    self.push(Value::Boolean(false));
+                    push_value!(self, Value::Boolean(false));
                 }
                 OpCode::Nil => {
-                    self.push(Value::Nil);
+                    push_value!(self, Value::Nil);
                 }
                 OpCode::Add => {
                     self.binary_operation(|a, b, heap, loc| match (&a, &b) {
@@ -315,18 +353,22 @@ impl Vm {
                 OpCode::DefineGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        self.pop()?.try_into().map_err(|e: ValueConversionError| {
-                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                        })?;
-                    let value = self.pop()?;
+                        pop_value!(self)?
+                            .try_into()
+                            .map_err(|e: ValueConversionError| {
+                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                            })?;
+                    let value = pop_value!(self)?;
                     self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        self.pop()?.try_into().map_err(|e: ValueConversionError| {
-                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                        })?;
+                        pop_value!(self)?
+                            .try_into()
+                            .map_err(|e: ValueConversionError| {
+                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                            })?;
                     let value = *self
                         .globals
                         .get(&identifier_handle.identifier())
@@ -344,14 +386,16 @@ impl Vm {
                                 loc,
                             )
                         })?;
-                    self.push(value);
+                    push_value!(self, value);
                 }
                 OpCode::SetGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        self.pop()?.try_into().map_err(|e: ValueConversionError| {
-                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                        })?;
+                        pop_value!(self)?
+                            .try_into()
+                            .map_err(|e: ValueConversionError| {
+                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                            })?;
 
                     if !self.globals.contains_key(&identifier_handle.identifier()) {
                         let identifier_name = self
@@ -371,7 +415,7 @@ impl Vm {
                     // Local variables are relative to the current frame's value_slot
                     let absolute_slot = self.get_current_frame().value_slot + slot as usize;
                     let value = self.stack.get(absolute_slot).copied().unwrap_or(Value::Nil);
-                    self.push(value);
+                    push_value!(self, value);
                 }
                 OpCode::SetLocal => {
                     let slot = self.read_byte()?;
@@ -380,7 +424,7 @@ impl Vm {
                     let absolute_slot = self.get_current_frame().value_slot + slot as usize;
                     // Ensure the stack is large enough for this slot
                     while self.stack.len() <= absolute_slot {
-                        self.stack.push(Value::default());
+                        push_value!(self, Value::Nil);
                     }
                     self.stack[absolute_slot] = value;
                 }
@@ -404,12 +448,12 @@ impl Vm {
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Print => {
-                    let value = self.pop()?;
+                    let value = pop_value!(self)?;
                     value.print(&self.heap);
                     println!();
                 }
                 OpCode::Return => {
-                    let result = self.pop()?;
+                    let result = pop_value!(self)?;
 
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
@@ -428,7 +472,7 @@ impl Vm {
                     }
 
                     self.stack_top = value_slot;
-                    self.push(result);
+                    push_value!(self, result);
                 }
                 _ => (),
             };
@@ -436,55 +480,19 @@ impl Vm {
     }
 
     fn read_byte(&mut self) -> RuntimeResult<u8> {
-        if self.get_current_frame().ip >= self.get_current_chunk().count() {
-            return Err(QangRuntimeError::new(
-                "Instruction pointer out of bounds.".to_string(),
-                SourceLocation::default(),
-            ));
-        }
-
         let byte = self.get_current_chunk().code()[self.get_current_frame().ip];
         self.get_current_frame_mut().ip += 1;
         Ok(byte)
     }
 
     fn read_constant(&self, index: usize) -> Value {
-        *self
-            .get_current_function()
-            .chunk
-            .constants()
-            .get(index)
-            .unwrap_or(&Value::Nil)
+        self.get_current_function().chunk.constants()[index]
     }
 
     fn read_short(&mut self) -> RuntimeResult<usize> {
         let high_byte = self.read_byte()? as usize;
         let low_byte = self.read_byte()? as usize;
         Ok((high_byte << 8) | low_byte)
-    }
-
-    fn push(&mut self, value: Value) {
-        if self.stack_top >= STACK_MAX {
-            panic!(
-                "Stack overflow: maximum stack size of {} exceeded",
-                STACK_MAX
-            );
-        }
-
-        self.stack[self.stack_top] = value;
-        self.stack_top += 1;
-    }
-
-    fn pop(&mut self) -> RuntimeResult<Value> {
-        if self.stack_top > 0 {
-            self.stack_top -= 1;
-            Ok(self.stack[self.stack_top])
-        } else {
-            Err(QangRuntimeError::new(
-                "No value found, unexpected empty stack.".to_string(),
-                self.get_current_loc(),
-            ))
-        }
     }
 
     fn peek(&self, distance: usize) -> Value {
@@ -506,12 +514,12 @@ impl Vm {
         coz::scope!("binary_operation");
 
         let op_loc = self.get_previous_loc();
-        let b = self.pop()?;
-        let a = self.pop()?;
+        let b = pop_value!(self)?;
+        let a = pop_value!(self)?;
 
         let value = op(a, b, &mut self.heap, op_loc)?;
 
-        self.push(value);
+        push_value!(self, value);
         Ok(())
     }
 
@@ -535,6 +543,9 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
 
+        #[cfg(feature = "profiler")]
+        coz::progress!("before_call");
+
         // For the initial call from interpret(), there's no previous location
         let loc = if self.frame_count > 0 {
             self.get_previous_loc()
@@ -551,7 +562,7 @@ impl Vm {
             HeapObject::Function(FunctionObject::KangFunction(function)) => {
                 if arg_count < function.arity {
                     for _ in arg_count..function.arity {
-                        self.stack.push(Value::Nil);
+                        push_value!(self, Value::Nil);
                     }
                 }
 
@@ -607,7 +618,12 @@ impl Vm {
                 "Value not callable.".to_string(),
                 loc,
             )),
-        }
+        }?;
+
+        #[cfg(feature = "profiler")]
+        coz::progress!("after_call");
+
+        Ok(())
     }
 
     fn call_native_function(
@@ -620,11 +636,11 @@ impl Vm {
 
         // Pop arguments from stack
         for _ in 0..arg_count {
-            args.push(self.pop()?);
+            args.push(pop_value!(self)?);
         }
 
         // Pop the function value from the stack
-        self.pop()?;
+        pop_value!(self)?;
 
         // Fill remaining arguments with nil if needed
         for _ in arg_count..(function.arity) {
@@ -640,7 +656,7 @@ impl Vm {
             })?
             .unwrap_or_default();
 
-        self.push(value);
+        push_value!(self, value);
 
         Ok(())
     }

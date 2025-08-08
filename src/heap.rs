@@ -133,6 +133,8 @@ impl ObjectHeap {
     }
 
     pub fn allocate_object(&mut self, obj: HeapObject) -> ObjectHandle {
+        #[cfg(feature = "profiler")]
+        coz::progress!("heap_allocation");
         let index = if let Some(free_index) = self.free_list.pop() {
             self.objects[free_index] = Some(obj);
             free_index

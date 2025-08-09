@@ -174,8 +174,8 @@ impl Vm {
 
         #[cfg(feature = "profiler")]
         coz::scope!("get_current_frame");
+
         &self.frames[self.frame_count - 1]
-        // unsafe { self.frames.get_unchecked(self.frame_count - 1) }
     }
 
     fn get_current_frame_mut(&mut self) -> &mut CallFrame {
@@ -216,7 +216,7 @@ impl Vm {
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
         let function_handle = program.into();
         self.program_handle = function_handle;
-        // Use call_function to initialize the first call frame consistently
+
         self.call_function(function_handle, 0)?;
 
         #[cfg(feature = "profiler")]
@@ -508,24 +508,22 @@ impl Vm {
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    // Get the value_slot from the current frame before decrementing frame_count
                     let value_slot = self.get_current_frame().value_slot;
                     self.frame_count -= 1;
 
                     if self.frame_count == 0 {
-                        // Main function should leave exactly one return value
                         debug_assert!(
                             self.stack_top <= 1,
                             "Stack corruption: {} values left",
                             self.stack_top
                         );
 
-                        self.stack_top = 0; // Clear any remaining values
+                        self.stack_top = 0;
                         return Ok(());
                     }
 
-                    // Reset stack to before the function call, then push the return value
-                    // This effectively replaces the function and its arguments with the return value
+                    // Reset stack to before the function call, then push the return value.
+                    // This replaces the function and its arguments with the return value.
                     self.stack_top = if value_slot > 0 { value_slot - 1 } else { 0 };
                     push_value!(self, result);
                 }
@@ -680,10 +678,7 @@ impl Vm {
         pop_value!(self)?; // pop function off the stack now that it has been called.
 
         let value = (function.function)(args.as_slice(), self)
-            .map_err(|e: NativeFunctionError| {
-                e.into_qang_error(loc)
-                    .with_stack_trace(self.get_stack_trace())
-            })?
+            .map_err(|e: NativeFunctionError| e.into_qang_error(loc))?
             .unwrap_or_default();
 
         push_value!(self, value);

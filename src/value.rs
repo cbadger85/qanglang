@@ -13,21 +13,17 @@ impl PartialEq for NativeFunction {
     }
 }
 
-pub const fn get_value_type(value: &Value) -> &'static str {
-    match value {
-        Value::Nil => "nil",
-        Value::Boolean(_) => "boolean",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Function(_) => "function",
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionValueKind {
     QangFunction(ObjectHandle),
     NativeFunction(NativeFunction),
 }
+
+pub const NIL_TYPE_STRING: &str = "nil";
+pub const BOOLEAN_TYPE_STRING: &str = "boolean";
+pub const NUMBER_TYPE_STRING: &str = "number";
+pub const STRING_TYPE_STRING: &str = "string";
+pub const FUNCTION_TYPE_STRING: &str = "function";
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Value {
@@ -75,6 +71,16 @@ impl Value {
         }
     }
 
+    pub const fn to_type_string(&self) -> &'static str {
+        match self {
+            Value::Nil => NIL_TYPE_STRING,
+            Value::Boolean(_) => BOOLEAN_TYPE_STRING,
+            Value::Number(_) => NUMBER_TYPE_STRING,
+            Value::String(_) => STRING_TYPE_STRING,
+            Value::Function(_) => FUNCTION_TYPE_STRING,
+        }
+    }
+
     pub fn into_string(self, heap: &ObjectHeap) -> Result<Box<str>, ValueConversionError> {
         match self {
             Value::String(handle) => heap
@@ -83,8 +89,16 @@ impl Value {
                 .ok_or(ValueConversionError::new("Expected string, found nil."))
                 .and_then(|v| v.try_into()),
             _ => Err(ValueConversionError::new(
-                format!("Expected string, found {}.", get_value_type(&self)).as_str(),
+                format!("Expected string, found {}.", self.to_type_string()).as_str(),
             )),
+        }
+    }
+
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Value::Boolean(boolean) => *boolean,
+            Value::Nil => false,
+            _ => true,
         }
     }
 }
@@ -102,7 +116,7 @@ impl TryFrom<Value> for f64 {
         match value {
             Value::Number(number) => Ok(number),
             _ => Err(ValueConversionError::new(
-                format!("Expected number, found {}.", get_value_type(&value)).as_str(),
+                format!("Expected number, found {}.", value.to_type_string()).as_str(),
             )),
         }
     }
@@ -117,7 +131,7 @@ impl TryFrom<Value> for ObjectHandle {
             _ => Err(ValueConversionError::new(
                 format!(
                     "Expected referenced value, found {}.",
-                    get_value_type(&value)
+                    value.to_type_string()
                 )
                 .as_str(),
             )),
@@ -132,7 +146,7 @@ impl TryFrom<Value> for bool {
         match value {
             Value::Boolean(boolean) => Ok(boolean),
             _ => Err(ValueConversionError::new(
-                format!("Expected boolean, found {}.", get_value_type(&value)).as_str(),
+                format!("Expected boolean, found {}.", value.to_type_string()).as_str(),
             )),
         }
     }

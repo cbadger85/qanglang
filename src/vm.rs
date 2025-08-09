@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, ops::Range, rc::Rc};
 
 #[cfg(feature = "profiler")]
 use coz;
@@ -10,8 +10,11 @@ use crate::{
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
     heap::{FunctionObject, ObjectHandle},
-    qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, system_time},
-    value::{FunctionValueKind, NativeFunction, get_value_type},
+    qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, qang_typeof, system_time},
+    value::{
+        BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, FunctionValueKind, NIL_TYPE_STRING,
+        NUMBER_TYPE_STRING, NativeFunction, STRING_TYPE_STRING,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -83,23 +86,61 @@ pub struct Vm {
 }
 
 impl Vm {
-    pub fn new(heap: ObjectHeap) -> Self {
+    pub fn new(mut heap: ObjectHeap) -> Self {
+        let mut globals = HashMap::new();
+
+        let nil_type_handle = heap.intern_string("NIL".into());
+        let nil_type_value_handle = heap.intern_string(NIL_TYPE_STRING.into());
+        globals.insert(
+            nil_type_handle.identifier(),
+            Value::String(nil_type_value_handle),
+        );
+
+        let boolean_type_handle = heap.intern_string("BOOLEAN".into());
+        let boolean_type_value_handle = heap.intern_string(BOOLEAN_TYPE_STRING.into());
+        globals.insert(
+            boolean_type_handle.identifier(),
+            Value::String(boolean_type_value_handle),
+        );
+
+        let number_type_handle = heap.intern_string("NUMBER".into());
+        let number_type_value_handle = heap.intern_string(NUMBER_TYPE_STRING.into());
+        globals.insert(
+            number_type_handle.identifier(),
+            Value::String(number_type_value_handle),
+        );
+
+        let string_type_handle = heap.intern_string("STRING".into());
+        let string_type_value_handle = heap.intern_string(STRING_TYPE_STRING.into());
+        globals.insert(
+            string_type_handle.identifier(),
+            Value::String(string_type_value_handle),
+        );
+
+        let function_type_handle = heap.intern_string("FUNCTION".into());
+        let function_type_value_handle = heap.intern_string(FUNCTION_TYPE_STRING.into());
+        globals.insert(
+            function_type_handle.identifier(),
+            Value::String(function_type_value_handle),
+        );
+
         let vm = Self {
             is_debug: false,
             frame_count: 0,
             stack_top: 0,
             stack: vec![Value::Nil; STACK_MAX],
             frames: std::array::from_fn(|_| CallFrame::default()),
-            globals: HashMap::new(),
+            globals,
             heap,
             program_handle: ObjectHandle::default(),
         };
 
         vm.add_native_function("assert", 2, qang_assert)
-            .add_native_function("assert_eq", 2, qang_assert_eq)
+            .add_native_function("assert_eq", 3, qang_assert_eq)
             .add_native_function("print", 1, qang_print)
             .add_native_function("println", 1, qang_println)
             .add_native_function("system_time", 0, system_time)
+            .add_native_function("typeof", 1, qang_typeof)
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -124,6 +165,13 @@ impl Vm {
     }
 
     fn get_current_frame(&self) -> &CallFrame {
+        debug_assert!(self.frame_count > 0, "No active frame");
+        debug_assert!(
+            self.frame_count <= FRAME_MAX,
+            "Frame count {} exceeds max",
+            self.frame_count
+        );
+
         #[cfg(feature = "profiler")]
         coz::scope!("get_current_frame");
         &self.frames[self.frame_count - 1]
@@ -215,9 +263,8 @@ impl Vm {
                 }
                 OpCode::Not => {
                     let value = self.peek(0);
-                    let is_truthy = self.is_truthy(value);
                     if let Some(stack_value) = self.stack.get_mut(self.stack_top - 1) {
-                        *stack_value = Value::Boolean(!is_truthy);
+                        *stack_value = Value::Boolean(!value.is_truthy());
                     }
                 }
                 OpCode::True => {
@@ -254,19 +301,19 @@ impl Vm {
                             Ok(Value::String(result))
                         }
                         (Value::Number(_), _) => Err(QangRuntimeError::new(
-                            format!("Cannot add number to {}.", get_value_type(&b)),
+                            format!("Cannot add number to {}.", b.to_type_string()),
                             loc,
                         )),
                         (Value::String(_), _) => Err(QangRuntimeError::new(
-                            format!("Cannot add string to {}.", get_value_type(&b)),
+                            format!("Cannot add string to {}.", b.to_type_string()),
                             loc,
                         )),
                         (_, Value::Number(_)) => Err(QangRuntimeError::new(
-                            format!("Cannot add {} to number.", get_value_type(&a)),
+                            format!("Cannot add {} to number.", a.to_type_string()),
                             loc,
                         )),
                         (_, Value::String(_)) => Err(QangRuntimeError::new(
-                            format!("Cannot add {} to string.", get_value_type(&a)),
+                            format!("Cannot add {} to string.", a.to_type_string()),
                             loc,
                         )),
                         _ => Err(QangRuntimeError::new(
@@ -420,7 +467,13 @@ impl Vm {
                 OpCode::GetLocal => {
                     let slot = self.read_byte()?;
                     let absolute_slot = self.get_current_frame().value_slot + slot as usize;
-                    let value = self.stack.get(absolute_slot).copied().unwrap_or(Value::Nil);
+                    debug_assert!(
+                        absolute_slot < STACK_MAX,
+                        "Local slot {} out of bounds",
+                        absolute_slot
+                    );
+
+                    let value = self.stack[absolute_slot];
                     push_value!(self, value);
                 }
                 OpCode::SetLocal => {
@@ -432,7 +485,7 @@ impl Vm {
                 }
                 OpCode::JumpIfFalse => {
                     let offset = self.read_short()?;
-                    if !self.is_truthy(self.peek(0)) {
+                    if !self.peek(0).is_truthy() {
                         self.get_current_frame_mut().ip += offset;
                     }
                 }
@@ -460,16 +513,19 @@ impl Vm {
                     self.frame_count -= 1;
 
                     if self.frame_count == 0 {
-                        // For the main function, just pop the final result and exit
-                        // Don't call pop() again as there's no active frame for error handling
-                        if self.stack_top > 0 {
-                            self.stack_top -= 1;
-                        }
+                        // Main function should leave exactly one return value
+                        debug_assert!(
+                            self.stack_top <= 1,
+                            "Stack corruption: {} values left",
+                            self.stack_top
+                        );
+
+                        self.stack_top = 0; // Clear any remaining values
                         return Ok(());
                     }
 
-                    // With optimized approach, we need to account for the function value
-                    // still being on the stack. Set stack_top to just before the function.
+                    // Reset stack to before the function call, then push the return value
+                    // This effectively replaces the function and its arguments with the return value
                     self.stack_top = if value_slot > 0 { value_slot - 1 } else { 0 };
                     push_value!(self, result);
                 }
@@ -484,7 +540,13 @@ impl Vm {
     }
 
     fn read_constant(&self, index: usize) -> Value {
-        self.get_current_function().chunk.constants()[index]
+        let constants = self.get_current_function().chunk.constants();
+        debug_assert!(
+            index < constants.len(),
+            "Constant index {} out of bounds",
+            index
+        );
+        constants[index]
     }
 
     fn read_short(&mut self) -> RuntimeResult<usize> {
@@ -629,14 +691,6 @@ impl Vm {
         Ok(())
     }
 
-    pub fn is_truthy(&self, value: Value) -> bool {
-        match value {
-            Value::Boolean(boolean) => boolean,
-            Value::Nil => false,
-            _ => true,
-        }
-    }
-
     fn get_identifier_name(&self, handle: ObjectHandle) -> Option<Box<str>> {
         self.heap
             .get(handle)
@@ -655,9 +709,13 @@ impl Vm {
     }
 
     fn get_stack_trace(&self) -> Vec<Trace> {
+        self.get_stack_trace_from_frames(0..self.frame_count)
+    }
+
+    fn get_stack_trace_from_frames(&self, frame_id_range: Range<usize>) -> Vec<Trace> {
         let mut traces = Vec::new();
 
-        for frame_idx in 0..self.frame_count {
+        for frame_idx in frame_id_range {
             let frame = &self.frames[frame_idx];
             let name = self
                 .get_identifier_name(frame.current_function.name)

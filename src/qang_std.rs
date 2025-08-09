@@ -4,9 +4,8 @@ pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
     let assertion = args
         .first()
         .ok_or(NativeFunctionError::new("No arguments provided."))?;
-    let is_true = vm.is_truthy(*assertion);
 
-    if is_true {
+    if assertion.is_truthy() {
         return Ok(None);
     }
 
@@ -52,6 +51,14 @@ pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Native
     Ok(None)
 }
 
+pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let value = args.first().copied().unwrap_or(Value::Nil);
+
+    let handle = vm.heap_mut().intern_string(value.to_type_string().into());
+
+    Ok(Some(Value::String(handle)))
+}
+
 pub fn system_time(_args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -65,4 +72,9 @@ pub fn system_time(_args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, Nativ
     // println!("naive time is: {}", time);
 
     Ok(Some(time.into()))
+}
+
+mod tests {
+    #[test]
+    fn test_qang_assert() {}
 }

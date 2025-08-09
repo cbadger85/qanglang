@@ -166,11 +166,11 @@ fn test_conditionals() {
         if (true) {
             println("It's true!");
         } else {
-            "This should not print" + true;
+            assert(false, "Expected true to be true");
             }
             
         if (false) {
-            "This should not print" + true;
+            assert(false, "Expected false to be false");
         } else {
             println("It's false!"); 
         }
@@ -179,15 +179,7 @@ fn test_conditionals() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        let mut vm = Vm::new(heap);
-        match vm.interpret(program) {
+        match Vm::new(heap).set_debug(true).interpret(program) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error.message)
@@ -230,8 +222,7 @@ fn test_ternary_expressions() {
             .expect("expected function, found none.");
         disassemble_chunk(&function.chunk, &heap, "script.ql");
         disassemble_chunk(&function.chunk, &heap, "script.ql");
-        let mut vm = Vm::new(heap);
-        match vm.interpret(program) {
+        match Vm::new(heap).interpret(program) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error.message)
@@ -834,6 +825,37 @@ fn test_system_time() {
                 }
             }
         }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_typeof_function() {
+    let source = r#"
+        assert_eq(typeof("this is a string"), STRING, "Expected 'this is a string' to equal a string.");
+        assert_eq(typeof(0), NUMBER, "Expected 0 to be a number.");
+        assert_eq(typeof(true), BOOLEAN, "Expected true to be a boolean.");
+        assert_eq(typeof(nil), NIL, "Expected nil to be nil");
+
+        fn identity(x) { return x; }
+
+        assert_eq(typeof(identity), FUNCTION, "Expected identity() to be a function.");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
+            }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

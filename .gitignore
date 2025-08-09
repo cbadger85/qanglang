@@ -1,6 +1,6 @@
 /target
 .DS_Store
-.vscode
 .claude
 profile.coz
 flamegraph.svg
+node_modules

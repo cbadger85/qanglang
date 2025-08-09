@@ -9,3 +9,4 @@ path = "src/main.rs"
 
 [dependencies]
 qanglang-core = { path = "../qanglang-core" }
+qanglang-ls = { path = "../qanglang-ls" }

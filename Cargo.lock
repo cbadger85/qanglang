@@ -80,6 +80,7 @@ name = "qanglang-cli"
 version = "0.1.0"
 dependencies = [
  "qanglang-core",
+ "qanglang-ls",
 ]
 
 [[package]]
@@ -88,6 +89,13 @@ version = "0.1.0"
 dependencies = [
  "coz",
  "phf",
+]
+
+[[package]]
+name = "qanglang-ls"
+version = "0.1.0"
+dependencies = [
+ "qanglang-core",
 ]
 
 [[package]]

@@ -354,6 +354,9 @@ impl Vm {
                     })?;
                     Ok(Value::Boolean(a <= b))
                 })?,
+                OpCode::Pop => {
+                    pop_value!(self)?;
+                }
                 OpCode::DefineGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
@@ -446,11 +449,6 @@ impl Vm {
                     let function_value = self.peek(arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
-                OpCode::Print => {
-                    let value = pop_value!(self)?;
-                    value.print(&self.heap);
-                    println!();
-                }
                 OpCode::Return => {
                     let result = pop_value!(self)?;
 
@@ -475,7 +473,6 @@ impl Vm {
                     self.stack_top = if value_slot > 0 { value_slot - 1 } else { 0 };
                     push_value!(self, result);
                 }
-                _ => (),
             };
         }
     }
@@ -617,6 +614,7 @@ impl Vm {
                 pop_value!(self)?; // discard values that are passed in but not needed by the function.
             }
         }
+        pop_value!(self)?; // pop function off the stack now that it has been called.
 
         let value = (function.function)(args.as_slice(), self)
             .map_err(|e: NativeFunctionError| {

@@ -365,14 +365,7 @@ fn comparison_operations_test() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &KangFunction = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        match Vm::new(heap).set_debug(false).interpret(program) {
+        match Vm::new(heap).set_debug(true).interpret(program) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error.message)
@@ -737,7 +730,7 @@ fn test_nested_function_calls() {
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
             disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
+            match Vm::new(heap).set_debug(true).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);

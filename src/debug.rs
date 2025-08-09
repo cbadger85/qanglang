@@ -76,7 +76,6 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
             println!("{:<16} {:4}", "OP_CALL", arg_count);
             offset + 2
         }
-        OpCode::Print => simple_instruction("OP_PRINT", offset),
     }
 }
 

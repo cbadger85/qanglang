@@ -409,7 +409,6 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.emit_opcode(equality.operator.into(), equality.span);
 
         if let ast::EqualityOperator::NotEqual = equality.operator {
-            self.emit_opcode(OpCode::Pop, equality.span);
             self.emit_opcode(OpCode::Not, equality.span);
         }
         Ok(())

@@ -1,5 +1,5 @@
 use crate::{
-    CompilerPipeline, QangFunction, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk,
+    CompilerPipeline, FunctionObject, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk,
     disassemble_program,
 };
 
@@ -12,7 +12,7 @@ fn test_display() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -45,7 +45,7 @@ fn test_run() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -77,7 +77,7 @@ fn test_while() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let function: &QangFunction = heap
+            let function: &FunctionObject = heap
                 .get(program.into())
                 .expect("expected function, found none.")
                 .try_into()
@@ -141,7 +141,7 @@ fn test_locals() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -179,7 +179,7 @@ fn test_conditionals() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -223,7 +223,7 @@ fn test_ternary_expressions() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -273,7 +273,7 @@ fn test_logical_expressions() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -301,7 +301,7 @@ fn math_operations_test() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -327,7 +327,7 @@ fn equality_operations_test() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -385,7 +385,7 @@ fn test_runtime_error_with_source_span() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -415,7 +415,7 @@ fn test_booleans() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -441,7 +441,7 @@ fn test_targeted_type_error_spans() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -474,7 +474,7 @@ fn test_left_operand_error_span() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &QangFunction = heap
+        let function: &FunctionObject = heap
             .get(program.into())
             .expect("expected function, found none.")
             .try_into()
@@ -538,7 +538,7 @@ fn test_for_loop() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let function: &QangFunction = heap
+            let function: &FunctionObject = heap
                 .get(program.into())
                 .expect("expected function, found none.")
                 .try_into()
@@ -592,7 +592,7 @@ fn test_native_functions() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let function: &QangFunction = heap
+            let function: &FunctionObject = heap
                 .get(program.into())
                 .expect("expected function, found none.")
                 .try_into()
@@ -626,7 +626,7 @@ fn test_escape_sequences_in_print() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let function: &QangFunction = heap
+            let function: &FunctionObject = heap
                 .get(program.into())
                 .expect("expected function, found none.")
                 .try_into()
@@ -658,7 +658,7 @@ fn test_comments_in_strings() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let function: &QangFunction = heap
+            let function: &FunctionObject = heap
                 .get(program.into())
                 .expect("expected function, found none.")
                 .try_into()

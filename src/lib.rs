@@ -15,11 +15,11 @@ pub use chunk::SourceLocation;
 pub use compiler::{CompilerError, CompilerPipeline, QangProgram};
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
-pub use heap::{HeapObject, ObjectHeap, QangFunction};
+pub use heap::{FunctionObject, HeapObject, ObjectHeap};
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};
-pub use value::Value;
+pub use value::{FunctionValueKind, Value};
 pub use vm::{NativeFn, NativeFunctionError, Vm};
 
 #[cfg(test)]

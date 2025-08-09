@@ -1,8 +1,11 @@
-use crate::{
-    HeapObject, ObjectHeap,
-    error::ValueConversionError,
-    heap::{FunctionObject, ObjectHandle},
-};
+use crate::{HeapObject, NativeFn, ObjectHeap, error::ValueConversionError, heap::ObjectHandle};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NativeFunction {
+    pub function: NativeFn,
+    pub arity: usize,
+    pub name: ObjectHandle,
+}
 
 pub const fn get_value_type(value: &Value) -> &'static str {
     match value {
@@ -14,13 +17,19 @@ pub const fn get_value_type(value: &Value) -> &'static str {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FunctionValueKind {
+    QangFunction(ObjectHandle),
+    NativeFunction(NativeFunction),
+}
+
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
     String(ObjectHandle),
-    Function(ObjectHandle),
+    Function(FunctionValueKind),
 }
 
 impl Value {
@@ -39,33 +48,24 @@ impl Value {
                 "nil".to_string()
             }
             Value::Boolean(boolean) => boolean.to_string(),
-            Value::Function(handle) => {
-                if let Some(object) = heap.get(*handle) {
-                    match object {
-                        HeapObject::Function(FunctionObject::QangFunction(function)) => {
-                            let name_handle = function.name;
-
-                            if let Some(HeapObject::String(string)) = heap.get(name_handle) {
-                                format!("<function> {}", string)
-                            } else {
-                                "nil".to_string()
-                            }
-                        }
-                        HeapObject::Function(FunctionObject::NativeFunction(function)) => {
-                            let name_handle = function.name;
-
-                            if let Some(HeapObject::String(string)) = heap.get(name_handle) {
-                                format!("<native fn> {}", string)
-                            } else {
-                                "nil".to_string()
-                            }
-                        }
-                        _ => "nil".to_string(),
-                    }
-                } else {
-                    "nil".to_string()
+            Value::Function(function) => match function {
+                FunctionValueKind::NativeFunction(function) => {
+                    heap.get(function.name).and_then(|obj| match obj {
+                        HeapObject::String(str) => Some(str.to_string()),
+                        _ => None,
+                    })
                 }
+                FunctionValueKind::QangFunction(handle) => match heap.get(*handle) {
+                    Some(HeapObject::Function(function)) => {
+                        heap.get(function.name).and_then(|obj| match obj {
+                            HeapObject::String(str) => Some(str.to_string()),
+                            _ => None,
+                        })
+                    }
+                    _ => None,
+                },
             }
+            .unwrap_or("nil".to_string()),
         }
     }
 

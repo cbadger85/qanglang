@@ -2,8 +2,9 @@ use crate::{
     ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    heap::{ObjectHandle, ObjectHeap, QangFunction},
+    heap::{FunctionObject, ObjectHandle, ObjectHeap},
     parser::Parser,
+    value::FunctionValueKind,
 };
 
 pub struct CompilerError(Vec<QangSyntaxError>);
@@ -98,7 +99,7 @@ pub struct Compiler<'a> {
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
-    enclosing: QangFunction,
+    enclosing: FunctionObject,
     compile_kind: CompilerKind,
 }
 
@@ -115,7 +116,7 @@ impl<'a> Compiler<'a> {
             local_count: 0,
             scope_depth: 0,
             compile_kind: CompilerKind::Script,
-            enclosing: QangFunction::new(handle, 0),
+            enclosing: FunctionObject::new(handle, 0),
         }
     }
 
@@ -135,7 +136,7 @@ impl<'a> Compiler<'a> {
         program: ast::Program,
         source_map: SourceMap,
         mut errors: ErrorReporter,
-    ) -> Result<QangFunction, CompilerError> {
+    ) -> Result<FunctionObject, CompilerError> {
         self.source_map = source_map;
 
         self.visit_program(&program, &mut errors)
@@ -150,7 +151,7 @@ impl<'a> Compiler<'a> {
             let handle = self
                 .heap
                 .intern_string("<script>".to_string().into_boxed_str());
-            let mut function = QangFunction::new(handle, 0);
+            let mut function = FunctionObject::new(handle, 0);
             std::mem::swap(&mut self.enclosing, &mut function);
 
             self.reset();
@@ -752,7 +753,7 @@ impl<'a> AstVisitor for Compiler<'a> {
 
         let mut function = std::mem::replace(
             &mut self.enclosing,
-            QangFunction::new(handle, func_decl.function.parameters.len()),
+            FunctionObject::new(handle, func_decl.function.parameters.len()),
         );
         let previous_compile_kind = self.compile_kind;
         let previous_locals = std::mem::take(&mut self.locals);
@@ -814,7 +815,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         let function_handle = self.heap.allocate_object(function.into());
 
         self.emit_constant(
-            Value::Function(function_handle),
+            Value::Function(FunctionValueKind::QangFunction(function_handle)),
             func_decl.function.body.span,
             errors,
         );

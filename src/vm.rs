@@ -9,9 +9,9 @@ use crate::{
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    heap::{FunctionObject, NativeFunction, ObjectHandle, QangFunction},
+    heap::{FunctionObject, ObjectHandle},
     qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, system_time},
-    value::get_value_type,
+    value::{FunctionValueKind, NativeFunction, get_value_type},
 };
 
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ macro_rules! pop_value {
 
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
-    current_function: Rc<QangFunction>,
+    current_function: Rc<FunctionObject>,
     ip: usize,
     value_slot: usize,
 }
@@ -115,10 +115,10 @@ impl Vm {
             function,
         };
 
-        let handle = self.heap.allocate_object(native_function.into());
-
-        self.globals
-            .insert(identifier_handle.identifier(), Value::Function(handle));
+        self.globals.insert(
+            identifier_handle.identifier(),
+            Value::Function(FunctionValueKind::NativeFunction(native_function)),
+        );
 
         self
     }
@@ -136,7 +136,7 @@ impl Vm {
         &mut self.frames[self.frame_count - 1]
     }
 
-    fn get_current_function(&self) -> &QangFunction {
+    fn get_current_function(&self) -> &FunctionObject {
         &self.get_current_frame().current_function
     }
 
@@ -523,7 +523,12 @@ impl Vm {
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
-            Value::Function(handle) => self.call_function(handle, arg_count),
+            Value::Function(FunctionValueKind::QangFunction(handle)) => {
+                self.call_function(handle, arg_count)
+            }
+            Value::Function(FunctionValueKind::NativeFunction(function)) => {
+                self.call_native_function(function, arg_count)
+            }
             _ => {
                 let identifier = value
                     .into_string(&self.heap)
@@ -557,7 +562,7 @@ impl Vm {
         ))?;
 
         match obj {
-            HeapObject::Function(FunctionObject::QangFunction(function)) => {
+            HeapObject::Function(function) => {
                 if arg_count < function.arity {
                     for _ in arg_count..function.arity {
                         push_value!(self, Value::Nil);
@@ -581,10 +586,6 @@ impl Vm {
                 call_frame.ip = if handle == self.program_handle { 0 } else { 1 };
                 call_frame.value_slot = value_slot;
 
-                Ok(())
-            }
-            HeapObject::Function(FunctionObject::NativeFunction(function)) => {
-                self.call_native_function(*function, arg_count)?;
                 Ok(())
             }
             _ => Err(QangRuntimeError::new(

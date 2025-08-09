@@ -1,0 +1,13 @@
+[package]
+name = "qanglang-core"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+profiler = ["coz"]
+
+[dependencies]
+phf = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+coz = { workspace = true, optional = true }

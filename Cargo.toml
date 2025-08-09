@@ -1,24 +1,13 @@
-[package]
-name = "qanglang"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
+members = [
+    "crates/qanglang-core",
+    "crates/qanglang-cli"
+]
 
-[[bin]]
-name = "main"
-path = "src/main.rs"
-
-[lib]
-name = "qanglang"
-path = "src/lib.rs"
+[workspace.dependencies]
+phf = { version = "0.11.3", features = ["macros"]}
+coz = "0.1"
 
 [profile.release]
 debug = 1
-
-[features]
-profiler = ["coz"]
-
-[dependencies]
-phf = { version = "0.11.3", features = ["macros"]}
-
-[target.'cfg(unix)'.dependencies]
-coz = { version = "0.1", optional = true }

@@ -76,7 +76,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "qanglang"
+name = "qanglang-cli"
+version = "0.1.0"
+dependencies = [
+ "qanglang-core",
+]
+
+[[package]]
+name = "qanglang-core"
 version = "0.1.0"
 dependencies = [
  "coz",

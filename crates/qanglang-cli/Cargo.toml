@@ -1,0 +1,11 @@
+[package]
+name = "qanglang-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "qang"
+path = "src/main.rs"
+
+[dependencies]
+qanglang-core = { path = "../qanglang-core" }

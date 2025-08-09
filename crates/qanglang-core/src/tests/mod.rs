@@ -2,6 +2,7 @@ pub mod parse_declarations;
 pub mod parse_expressions;
 pub mod parse_statements;
 pub mod parser_errors;
+pub mod source_analysis_test;
 pub mod tokenizing;
 pub mod vm_tests;
 

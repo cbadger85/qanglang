@@ -1,7 +1,4 @@
-use crate::{
-    CompilerPipeline, FunctionObject, ObjectHeap, SourceMap, Vm, debug::disassemble_chunk,
-    disassemble_program,
-};
+use crate::{CompilerPipeline, ObjectHeap, SourceMap, Vm};
 
 #[test]
 fn test_display() {
@@ -11,13 +8,7 @@ fn test_display() {
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
 
-    if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
+    if let Ok(_) = CompilerPipeline::new(source_map, &mut heap).run() {
     } else {
         panic!("Compiler errors.")
     }
@@ -45,12 +36,6 @@ fn test_run() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => (),
             Err(error) => {
@@ -76,20 +61,12 @@ fn test_while() {
     let mut heap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            let function: &FunctionObject = heap
-                .get(program.into())
-                .expect("expected function, found none.")
-                .try_into()
-                .expect("expected function, found none.");
-            disassemble_chunk(&function.chunk, &heap, "script.ql");
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error.message)
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error.message)
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -141,13 +118,6 @@ fn test_locals() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         let mut vm = Vm::new(heap);
         match vm.interpret(program) {
             Ok(_) => (),
@@ -215,13 +185,6 @@ fn test_ternary_expressions() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => (),
             Err(error) => {
@@ -264,13 +227,6 @@ fn test_logical_expressions() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         let mut vm = Vm::new(heap);
         match vm.interpret(program) {
             Ok(_) => (),
@@ -292,12 +248,6 @@ fn math_operations_test() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => (),
             Err(error) => {
@@ -318,13 +268,6 @@ fn equality_operations_test() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => (),
             Err(error) => {
@@ -376,12 +319,6 @@ fn test_runtime_error_with_source_span() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
@@ -406,12 +343,6 @@ fn test_booleans() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => (),
             Err(error) => {
@@ -432,12 +363,6 @@ fn test_targeted_type_error_spans() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for adding number and string")
@@ -465,12 +390,6 @@ fn test_left_operand_error_span() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let function: &FunctionObject = heap
-            .get(program.into())
-            .expect("expected function, found none.")
-            .try_into()
-            .expect("expected function, found none.");
-        disassemble_chunk(&function.chunk, &heap, "script.ql");
         match Vm::new(heap).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for adding boolean and number")
@@ -490,31 +409,6 @@ fn test_left_operand_error_span() {
 }
 
 #[test]
-fn test_initializing_local_variable_with_itself() {
-    let source = r#"
-        {
-            var a = "outer";
-            {
-                var a = a;
-            }
-        }
-  "#;
-    let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
-
-    match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(_) => panic!("Expected failure but found none."),
-        Err(errors) => {
-            assert_eq!(errors.all().len(), 1);
-            let error_message = &errors.all()[0].message;
-            assert!(
-                error_message.contains("Cannot read local variable during its initialization.")
-            );
-        }
-    }
-}
-
-#[test]
 fn test_for_loop() {
     let source = r#"
         var sum = 0;
@@ -528,46 +422,17 @@ fn test_for_loop() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            let function: &FunctionObject = heap
-                .get(program.into())
-                .expect("expected function, found none.")
-                .try_into()
-                .expect("expected function, found none.");
-            disassemble_chunk(&function.chunk, &heap, "for_loop_test.ql");
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error.message)
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error.message)
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
             }
             panic!("Failed with compiler errors.")
-        }
-    }
-}
-
-#[test]
-fn test_initializing_local_variable_with_same_name() {
-    let source = r#"
-        {
-            var a = "a";
-            var a = "b";
-        }
-  "#;
-    let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
-
-    match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(_) => panic!("Expected failure but found none."),
-        Err(errors) => {
-            assert_eq!(errors.all().len(), 1);
-            let error_message = &errors.all()[0].message;
-            assert!(error_message.contains("Already a variable with this name in this scope."));
         }
     }
 }
@@ -582,22 +447,14 @@ fn test_native_functions() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            let function: &FunctionObject = heap
-                .get(program.into())
-                .expect("expected function, found none.")
-                .try_into()
-                .expect("expected function, found none.");
-            disassemble_chunk(&function.chunk, &heap, "script.ql");
-            match Vm::new(heap).set_debug(true).interpret(program) {
-                Ok(_) => {
-                    panic!("Expected error but received none.")
-                }
-                Err(error) => {
-                    assert!(error.message.contains("This should error."));
-                }
+        Ok(program) => match Vm::new(heap).set_debug(true).interpret(program) {
+            Ok(_) => {
+                panic!("Expected error but received none.")
             }
-        }
+            Err(error) => {
+                assert!(error.message.contains("This should error."));
+            }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -616,20 +473,12 @@ fn test_escape_sequences_in_print() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            let function: &FunctionObject = heap
-                .get(program.into())
-                .expect("expected function, found none.")
-                .try_into()
-                .expect("expected function, found none.");
-            disassemble_chunk(&function.chunk, &heap, "script.ql");
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -648,20 +497,12 @@ fn test_comments_in_strings() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            let function: &FunctionObject = heap
-                .get(program.into())
-                .expect("expected function, found none.")
-                .try_into()
-                .expect("expected function, found none.");
-            disassemble_chunk(&function.chunk, &heap, "script.ql");
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -684,15 +525,12 @@ fn test_function_calls() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -719,15 +557,12 @@ fn test_nested_function_calls() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap).set_debug(true).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(true).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -750,15 +585,12 @@ fn test_function_calls_with_args() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -785,15 +617,12 @@ fn test_nested_function_calls_with_args() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -816,15 +645,12 @@ fn test_system_time() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

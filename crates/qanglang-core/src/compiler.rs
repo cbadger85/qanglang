@@ -38,23 +38,12 @@ impl From<ObjectHandle> for QangProgram {
 
 pub struct CompilerPipeline<'a> {
     source_map: SourceMap,
-    is_silent: bool,
     heap: &'a mut ObjectHeap,
 }
 
 impl<'a> CompilerPipeline<'a> {
     pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
-        Self {
-            source_map,
-            is_silent: false,
-            heap,
-        }
-    }
-
-    pub fn set_silent(mut self, is_silent: bool) -> Self {
-        self.is_silent = is_silent;
-
-        self
+        Self { source_map, heap }
     }
 
     pub fn run(self) -> Result<QangProgram, CompilerError> {
@@ -62,12 +51,21 @@ impl<'a> CompilerPipeline<'a> {
         let program = parser.parse();
         let errors = parser.into_reporter();
 
-        let function =
-            Compiler::new(self.heap, self.is_silent).compile(program, self.source_map, errors)?;
+        let function = Compiler::new(self.heap, false).compile(program, self.source_map, errors)?;
 
         let program: QangProgram = self.heap.allocate_object(function.into()).into();
 
         Ok(program)
+    }
+
+    pub fn analyze(self) -> Result<(), CompilerError> {
+        let mut parser = Parser::new(&self.source_map);
+        let program = parser.parse();
+        let errors = parser.into_reporter();
+
+        let _ = Compiler::new(self.heap, true).compile(program, self.source_map, errors)?;
+
+        Ok(())
     }
 }
 
@@ -812,13 +810,15 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.local_count = previous_local_count;
         self.scope_depth = previous_scope_depth;
 
-        let function_handle = self.heap.allocate_object(function.into());
+        if !self.is_silent {
+            let function_handle = self.heap.allocate_object(function.into());
 
-        self.emit_constant(
-            Value::Function(FunctionValueKind::QangFunction(function_handle)),
-            func_decl.function.body.span,
-            errors,
-        );
+            self.emit_constant(
+                Value::Function(FunctionValueKind::QangFunction(function_handle)),
+                func_decl.function.body.span,
+                errors,
+            );
+        }
 
         if is_local {
             self.mark_initialized();

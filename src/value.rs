@@ -42,7 +42,7 @@ impl Value {
             Value::Function(handle) => {
                 if let Some(object) = heap.get(*handle) {
                     match object {
-                        HeapObject::Function(FunctionObject::KangFunction(function)) => {
+                        HeapObject::Function(FunctionObject::QangFunction(function)) => {
                             let name_handle = function.name;
 
                             if let Some(HeapObject::String(string)) = heap.get(name_handle) {

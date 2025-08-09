@@ -121,7 +121,7 @@ pub fn disassemble_program(heap: &ObjectHeap) {
 
     // Iterate through all objects in the heap to find functions
     for (index, obj) in heap.iter_objects() {
-        if let HeapObject::Function(FunctionObject::KangFunction(function)) = obj {
+        if let HeapObject::Function(FunctionObject::QangFunction(function)) = obj {
             function_count += 1;
 
             // Get function name as string

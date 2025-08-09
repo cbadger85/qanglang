@@ -1,6 +1,6 @@
 use crate::{NativeFunctionError, Value, Vm};
 
-pub fn kang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args
         .first()
         .ok_or(NativeFunctionError::new("No arguments provided."))?;
@@ -18,7 +18,7 @@ pub fn kang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
     Err(NativeFunctionError(message.into_string()))
 }
 
-pub fn kang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     if args.len() < 2 {
         return Err("Must provide two arguments.".into());
     }
@@ -38,14 +38,14 @@ pub fn kang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     }
 }
 
-pub fn kang_print(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_print(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
     let value = value.to_display_string(vm.heap());
     print!("{}", value);
     Ok(None)
 }
 
-pub fn kang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
     let value = value.to_display_string(vm.heap());
     println!("{}", value);

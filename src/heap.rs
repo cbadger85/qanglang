@@ -34,7 +34,7 @@ pub struct NativeFunction {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct KangFunction {
+pub struct QangFunction {
     pub arity: usize,
     pub name: ObjectHandle,
     pub chunk: Chunk,
@@ -42,11 +42,11 @@ pub struct KangFunction {
 
 #[derive(Debug, Clone)]
 pub enum FunctionObject {
-    KangFunction(Rc<KangFunction>),
+    QangFunction(Rc<QangFunction>),
     NativeFunction(NativeFunction),
 }
 
-impl KangFunction {
+impl QangFunction {
     pub fn new(name: ObjectHandle, arity: usize) -> Self {
         Self {
             name,
@@ -82,9 +82,9 @@ impl TryFrom<HeapObject> for Box<str> {
     }
 }
 
-impl From<KangFunction> for HeapObject {
-    fn from(value: KangFunction) -> Self {
-        HeapObject::Function(FunctionObject::KangFunction(Rc::new(value)))
+impl From<QangFunction> for HeapObject {
+    fn from(value: QangFunction) -> Self {
+        HeapObject::Function(FunctionObject::QangFunction(Rc::new(value)))
     }
 }
 
@@ -94,11 +94,11 @@ impl From<NativeFunction> for HeapObject {
     }
 }
 
-impl<'a> TryFrom<&'a HeapObject> for &'a KangFunction {
+impl<'a> TryFrom<&'a HeapObject> for &'a QangFunction {
     type Error = ValueConversionError;
     fn try_from(value: &'a HeapObject) -> Result<Self, Self::Error> {
         match value {
-            HeapObject::Function(FunctionObject::KangFunction(function)) => Ok(function),
+            HeapObject::Function(FunctionObject::QangFunction(function)) => Ok(function),
             _ => Err(ValueConversionError::new("Value is not a function")),
         }
     }

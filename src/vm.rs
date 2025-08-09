@@ -4,13 +4,13 @@ use std::{collections::HashMap, rc::Rc};
 use coz;
 
 use crate::{
-    HeapObject, KangProgram, ObjectHeap, QangRuntimeError, Value,
+    HeapObject, ObjectHeap, QangProgram, QangRuntimeError, Value,
     chunk::{Chunk, OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    heap::{FunctionObject, KangFunction, NativeFunction, ObjectHandle},
-    kang_std::{kang_assert, kang_assert_eq, kang_print, kang_println, system_time},
+    heap::{FunctionObject, NativeFunction, ObjectHandle, QangFunction},
+    qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, system_time},
     value::get_value_type,
 };
 
@@ -66,7 +66,7 @@ macro_rules! pop_value {
 
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
-    current_function: Rc<KangFunction>,
+    current_function: Rc<QangFunction>,
     ip: usize,
     value_slot: usize,
 }
@@ -95,10 +95,10 @@ impl Vm {
             program_handle: ObjectHandle::default(),
         };
 
-        vm.add_native_function("assert", 2, kang_assert)
-            .add_native_function("assert_eq", 2, kang_assert_eq)
-            .add_native_function("print", 1, kang_print)
-            .add_native_function("println", 1, kang_println)
+        vm.add_native_function("assert", 2, qang_assert)
+            .add_native_function("assert_eq", 2, qang_assert_eq)
+            .add_native_function("print", 1, qang_print)
+            .add_native_function("println", 1, qang_println)
             .add_native_function("system_time", 0, system_time)
     }
 
@@ -136,7 +136,7 @@ impl Vm {
         &mut self.frames[self.frame_count - 1]
     }
 
-    fn get_current_function(&self) -> &KangFunction {
+    fn get_current_function(&self) -> &QangFunction {
         &self.get_current_frame().current_function
     }
 
@@ -165,7 +165,7 @@ impl Vm {
             .unwrap_or_default()
     }
 
-    pub fn interpret(&mut self, program: KangProgram) -> RuntimeResult<()> {
+    pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
         let function_handle = program.into();
         self.program_handle = function_handle;
         // Use call_function to initialize the first call frame consistently
@@ -557,7 +557,7 @@ impl Vm {
         ))?;
 
         match obj {
-            HeapObject::Function(FunctionObject::KangFunction(function)) => {
+            HeapObject::Function(FunctionObject::QangFunction(function)) => {
                 if arg_count < function.arity {
                     for _ in arg_count..function.arity {
                         push_value!(self, Value::Nil);

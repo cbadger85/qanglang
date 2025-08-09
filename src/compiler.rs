@@ -2,7 +2,7 @@ use crate::{
     ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    heap::{KangFunction, ObjectHandle, ObjectHeap},
+    heap::{ObjectHandle, ObjectHeap, QangFunction},
     parser::Parser,
 };
 
@@ -15,23 +15,23 @@ impl CompilerError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KangProgram(ObjectHandle);
+pub struct QangProgram(ObjectHandle);
 
-impl KangProgram {
+impl QangProgram {
     pub fn new(handle: ObjectHandle) -> Self {
         Self(handle)
     }
 }
 
-impl From<KangProgram> for ObjectHandle {
-    fn from(value: KangProgram) -> Self {
+impl From<QangProgram> for ObjectHandle {
+    fn from(value: QangProgram) -> Self {
         value.0
     }
 }
 
-impl From<ObjectHandle> for KangProgram {
+impl From<ObjectHandle> for QangProgram {
     fn from(value: ObjectHandle) -> Self {
-        KangProgram(value)
+        QangProgram(value)
     }
 }
 
@@ -56,7 +56,7 @@ impl<'a> CompilerPipeline<'a> {
         self
     }
 
-    pub fn run(self) -> Result<KangProgram, CompilerError> {
+    pub fn run(self) -> Result<QangProgram, CompilerError> {
         let mut parser = Parser::new(&self.source_map);
         let program = parser.parse();
         let errors = parser.into_reporter();
@@ -64,7 +64,7 @@ impl<'a> CompilerPipeline<'a> {
         let function =
             Compiler::new(self.heap, self.is_silent).compile(program, self.source_map, errors)?;
 
-        let program: KangProgram = self.heap.allocate_object(function.into()).into();
+        let program: QangProgram = self.heap.allocate_object(function.into()).into();
 
         Ok(program)
     }
@@ -98,7 +98,7 @@ pub struct Compiler<'a> {
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
-    enclosing: KangFunction,
+    enclosing: QangFunction,
     compile_kind: CompilerKind,
 }
 
@@ -115,7 +115,7 @@ impl<'a> Compiler<'a> {
             local_count: 0,
             scope_depth: 0,
             compile_kind: CompilerKind::Script,
-            enclosing: KangFunction::new(handle, 0),
+            enclosing: QangFunction::new(handle, 0),
         }
     }
 
@@ -135,7 +135,7 @@ impl<'a> Compiler<'a> {
         program: ast::Program,
         source_map: SourceMap,
         mut errors: ErrorReporter,
-    ) -> Result<KangFunction, CompilerError> {
+    ) -> Result<QangFunction, CompilerError> {
         self.source_map = source_map;
 
         self.visit_program(&program, &mut errors)
@@ -150,7 +150,7 @@ impl<'a> Compiler<'a> {
             let handle = self
                 .heap
                 .intern_string("<script>".to_string().into_boxed_str());
-            let mut function = KangFunction::new(handle, 0);
+            let mut function = QangFunction::new(handle, 0);
             std::mem::swap(&mut self.enclosing, &mut function);
 
             self.reset();
@@ -752,7 +752,7 @@ impl<'a> AstVisitor for Compiler<'a> {
 
         let mut function = std::mem::replace(
             &mut self.enclosing,
-            KangFunction::new(handle, func_decl.function.parameters.len()),
+            QangFunction::new(handle, func_decl.function.parameters.len()),
         );
         let previous_compile_kind = self.compile_kind;
         let previous_locals = std::mem::take(&mut self.locals);

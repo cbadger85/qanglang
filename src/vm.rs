@@ -246,14 +246,11 @@ impl Vm {
                                 .into_string(heap)
                                 .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
 
-                            let result =
-                                heap.intern_string(format!("{}{}", str1, str2).into_boxed_str());
+                            let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
+                            str1_str2.push_str(&str1);
+                            str1_str2.push_str(&str2);
 
-                            // let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
-                            // str1_str2.push_str(&str1);
-                            // str1_str2.push_str(&str2);
-
-                            // let result = heap.intern_string(str1_str2.into_boxed_str());
+                            let result = heap.intern_string(str1_str2.into_boxed_str());
                             Ok(Value::String(result))
                         }
                         (Value::Number(_), _) => Err(QangRuntimeError::new(

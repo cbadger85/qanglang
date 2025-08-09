@@ -95,8 +95,8 @@ impl Vm {
             program_handle: ObjectHandle::default(),
         };
 
-        vm.add_native_function("assert", 1, kang_assert)
-            .add_native_function("assert_eq", 1, kang_assert_eq)
+        vm.add_native_function("assert", 2, kang_assert)
+            .add_native_function("assert_eq", 2, kang_assert_eq)
             .add_native_function("print", 1, kang_print)
             .add_native_function("println", 1, kang_println)
             .add_native_function("system_time", 0, system_time)
@@ -171,10 +171,6 @@ impl Vm {
         // Use call_function to initialize the first call frame consistently
         self.call_function(function_handle, 0)?;
 
-        if self.is_debug {
-            self.debug();
-        }
-
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
 
@@ -192,6 +188,10 @@ impl Vm {
         loop {
             #[cfg(feature = "profiler")]
             coz::progress!("vm_instructions");
+
+            if self.is_debug {
+                self.debug();
+            }
 
             let opcode: OpCode = self.read_byte()?.into();
 
@@ -416,7 +416,6 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.read_byte()?;
-                    // Local variables are relative to the current frame's value_slot
                     let absolute_slot = self.get_current_frame().value_slot + slot as usize;
                     let value = self.stack.get(absolute_slot).copied().unwrap_or(Value::Nil);
                     push_value!(self, value);
@@ -424,12 +423,8 @@ impl Vm {
                 OpCode::SetLocal => {
                     let slot = self.read_byte()?;
                     let value = self.peek(0);
-                    // Local variables are relative to the current frame's value_slot
                     let absolute_slot = self.get_current_frame().value_slot + slot as usize;
-                    // Ensure the stack is large enough for this slot
-                    while self.stack.len() <= absolute_slot {
-                        push_value!(self, Value::Nil);
-                    }
+
                     self.stack[absolute_slot] = value;
                 }
                 OpCode::JumpIfFalse => {
@@ -613,22 +608,15 @@ impl Vm {
         arg_count: usize,
     ) -> RuntimeResult<()> {
         let loc = self.get_previous_loc();
-        let mut args = Vec::<Value>::new();
+        let mut args = vec![Value::Nil; function.arity];
 
-        // Pop arguments from stack
-        for _ in 0..arg_count {
-            args.push(pop_value!(self)?);
+        for i in (0..arg_count).rev() {
+            if i < function.arity {
+                args[i] = pop_value!(self)?;
+            } else {
+                pop_value!(self)?; // discard values that are passed in but not needed by the function.
+            }
         }
-
-        // Pop the function value from the stack
-        pop_value!(self)?;
-
-        // Fill remaining arguments with nil if needed
-        for _ in arg_count..(function.arity) {
-            args.push(Value::Nil);
-        }
-
-        args.reverse();
 
         let value = (function.function)(args.as_slice(), self)
             .map_err(|e: NativeFunctionError| {

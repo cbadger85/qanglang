@@ -605,7 +605,7 @@ fn test_native_functions() {
                 .try_into()
                 .expect("expected function, found none.");
             disassemble_chunk(&function.chunk, &heap, "script.ql");
-            match Vm::new(heap).set_debug(false).interpret(program) {
+            match Vm::new(heap).set_debug(true).interpret(program) {
                 Ok(_) => {
                     panic!("Expected error but received none.")
                 }

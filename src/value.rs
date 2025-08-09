@@ -1,10 +1,16 @@
 use crate::{HeapObject, NativeFn, ObjectHeap, error::ValueConversionError, heap::ObjectHandle};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct NativeFunction {
     pub function: NativeFn,
     pub arity: usize,
     pub name: ObjectHandle,
+}
+
+impl PartialEq for NativeFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 pub const fn get_value_type(value: &Value) -> &'static str {

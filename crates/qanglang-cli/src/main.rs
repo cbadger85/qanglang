@@ -1,24 +1,48 @@
-use qanglang_core::{CompilerPipeline, ObjectHeap, SourceMap, Vm};
-use std::env;
+mod repl;
+
+use qanglang_core::{CompilerPipeline, ObjectHeap, SourceMap, Vm, disassemble_program};
+use repl::run_repl;
 use std::fs;
-use std::io::{self, Write};
+
+use clap::{ArgAction, Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "Qang")]
+#[command(version = "0.0.1")]
+#[command(version, about = "CLI tooling for QangLang", long_about = None)]
+struct QangCli {
+    #[command(subcommand)]
+    command: Option<QangCommand>,
+    #[arg(short, long, action = ArgAction::SetTrue)]
+    debug: bool,
+}
+
+#[derive(Subcommand)]
+enum QangCommand {
+    Run {
+        path: String,
+        #[arg(short, long, action = ArgAction::SetTrue)]
+        debug: bool,
+
+        #[arg(short = 'm', long, action = ArgAction::SetTrue)]
+        heap: bool,
+    },
+    Check {
+        path: String,
+    },
+}
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let cli = QangCli::parse();
 
-    match args.len() {
-        1 => run_repl(),
-        3 if args[1] == "run" => run_script(&args[2]),
-        _ => {
-            eprintln!("Usage:");
-            eprintln!("  qanglang                 # Start REPL");
-            eprintln!("  qanglang run <script>    # Run script file");
-            std::process::exit(1);
-        }
+    match cli.command {
+        Some(QangCommand::Run { path, debug, heap }) => run_script(&path, debug, heap),
+        Some(QangCommand::Check { path }) => check_script(&path),
+        _ => run_repl(cli.debug),
     }
 }
 
-fn run_script(filename: &str) {
+fn run_script(filename: &str, debug_mode: bool, heap_dump: bool) {
     let source = match fs::read_to_string(filename) {
         Ok(content) => content,
         Err(err) => {
@@ -27,65 +51,16 @@ fn run_script(filename: &str) {
         }
     };
 
-    execute_code(&source, filename);
-}
-
-fn run_repl() {
-    println!("QangLang REPL - Type 'exit' to quit");
-
-    let heap = ObjectHeap::new();
-    let mut vm = Vm::new(heap);
-
-    loop {
-        print!("> ");
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(_) => {
-                let input = input.trim();
-                if input == "exit" {
-                    break;
-                }
-                if !input.is_empty() {
-                    execute_repl_line(input, &mut vm);
-                }
-            }
-            Err(err) => {
-                eprintln!("Error reading input: {}", err);
-                break;
-            }
-        }
-    }
-}
-
-fn execute_repl_line(source: &str, vm: &mut Vm) {
-    let source_map = SourceMap::new(source.to_string());
-
-    let program = match CompilerPipeline::new(source_map, vm.heap_mut()).run() {
-        Ok(program) => program,
-        Err(errors) => {
-            for error in errors.all() {
-                eprintln!("Compile error: {}", error.message);
-            }
-            return;
-        }
-    };
-
-    match vm.interpret(program) {
-        Ok(_) => (),
-        Err(error) => {
-            eprintln!("Runtime error: {}", error.message);
-        }
-    }
-}
-
-fn execute_code(source: &str, _filename: &str) {
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
 
     let program = match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => program,
+        Ok(program) => {
+            if heap_dump {
+                disassemble_program(&heap);
+            }
+            program
+        }
         Err(errors) => {
             for error in errors.all() {
                 eprintln!("Compile error: {}", error.message);
@@ -94,10 +69,30 @@ fn execute_code(source: &str, _filename: &str) {
         }
     };
 
-    match Vm::new(heap).interpret(program) {
+    match Vm::new(heap).set_debug(debug_mode).interpret(program) {
         Ok(_) => (),
         Err(error) => {
             eprintln!("Runtime error: {}", error.message);
         }
+    }
+}
+
+fn check_script(filename: &str) {
+    let source = match fs::read_to_string(filename) {
+        Ok(content) => content,
+        Err(err) => {
+            eprintln!("Error reading file '{}': {}", filename, err);
+            std::process::exit(1);
+        }
+    };
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
+
+    if let Err(errors) = CompilerPipeline::new(source_map, &mut heap).analyze() {
+        for error in errors.all() {
+            eprintln!("Compile error: {}", error.message);
+        }
+        return;
     }
 }

@@ -23,6 +23,12 @@
       "include": "#classes"
     },
     {
+      "include": "#arrays"
+    },
+    {
+      "include": "#objects"
+    },
+    {
       "include": "#lambdas"
     },
     {
@@ -75,6 +81,10 @@
         {
           "name": "support.type",
           "match": "\\b(STRING|NUMBER|BOOLEAN|NIL|FUNCTION)\\b"
+        },
+        {
+          "name": "support.function.builtin",
+          "match": "\\b(print|println|assert|assert_eq|typeof|system_time)\\b"
         }
       ]
     },
@@ -106,6 +116,73 @@
         {
           "name": "constant.numeric.decimal.qanglang",
           "match": "\\.\\d+"
+        }
+      ]
+    },
+    "arrays": {
+      "patterns": [
+        {
+          "name": "meta.array.literal.qanglang",
+          "begin": "\\[",
+          "end": "\\]",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.array.begin.qanglang"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.array.end.qanglang"
+            }
+          },
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        }
+      ]
+    },
+    "objects": {
+      "patterns": [
+        {
+          "name": "meta.object.literal.qanglang",
+          "begin": ":\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.object.begin.qanglang"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.object.end.qanglang"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#object-fields"
+            }
+          ]
+        }
+      ]
+    },
+    "object-fields": {
+      "patterns": [
+        {
+          "name": "meta.object.field.qanglang",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)",
+          "captures": {
+            "1": {
+              "name": "variable.other.property.qanglang"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.qanglang"
+            }
+          }
+        },
+        {
+          "include": "$self"
         }
       ]
     },
@@ -184,18 +261,15 @@
       "patterns": [
         {
           "name": "meta.lambda.qanglang",
-          "begin": "\\(",
-          "end": "\\)\\s*(->)",
-          "endCaptures": {
+          "match": "\\(\\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\\s*,\\s*[a-zA-Z_][a-zA-Z0-9_]*)*)?\\s*\\)\\s*(->)",
+          "captures": {
             "1": {
+              "name": "variable.parameter.qanglang"
+            },
+            "2": {
               "name": "keyword.operator.arrow.qanglang"
             }
-          },
-          "patterns": [
-            {
-              "include": "#function-parameters"
-            }
-          ]
+          }
         }
       ]
     },
@@ -256,10 +330,6 @@
         {
           "name": "punctuation.section.brackets.end.qanglang",
           "match": "[\\])}]"
-        },
-        {
-          "name": "punctuation.section.object.begin.qanglang",
-          "match": ":\\{"
         }
       ]
     },

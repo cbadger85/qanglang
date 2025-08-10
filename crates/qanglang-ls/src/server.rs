@@ -127,6 +127,18 @@ impl LanguageServer for Backend {
         .await
     }
 
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        if let Some(text) = params.text {
+            self.on_change(TextDocumentItem {
+                uri: params.text_document.uri,
+                text,
+                version: 0, // Save doesn't provide version
+                language_id: "".to_string(), // not used
+            })
+            .await
+        }
+    }
+
     async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
         match self.client.apply_edit(WorkspaceEdit::default()).await {
             Ok(res) if res.applied => self.client.log_message(MessageType::INFO, "applied").await,

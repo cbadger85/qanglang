@@ -1,6 +1,7 @@
 mod repl;
 
 use qanglang_core::{CompilerPipeline, ObjectHeap, SourceMap, Vm, disassemble_program};
+use qanglang_ls::run_language_server;
 use repl::run_repl;
 use std::fs;
 
@@ -39,7 +40,7 @@ fn main() {
     match cli.command {
         Some(QangCommand::Run { path, debug, heap }) => run_script(&path, debug, heap),
         Some(QangCommand::Check { path }) => check_script(&path),
-        Some(QangCommand::Ls) => todo!("turn on language server here."),
+        Some(QangCommand::Ls) => run_language_server(),
         _ => run_repl(cli.debug),
     }
 }

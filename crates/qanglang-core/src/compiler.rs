@@ -4,6 +4,7 @@ use crate::{
     chunk::{Chunk, OpCode, SourceLocation},
     heap::{FunctionObject, ObjectHandle, ObjectHeap},
     parser::Parser,
+    source::DEFALT_SOURCE_MAP,
     value::FunctionValueKind,
 };
 
@@ -12,6 +13,10 @@ pub struct CompilerError(Vec<QangSyntaxError>);
 impl CompilerError {
     pub fn all(&self) -> &[QangSyntaxError] {
         &self.0
+    }
+
+    pub fn into_errors(self) -> Vec<QangSyntaxError> {
+        self.0
     }
 }
 
@@ -51,21 +56,11 @@ impl<'a> CompilerPipeline<'a> {
         let program = parser.parse();
         let errors = parser.into_reporter();
 
-        let function = Compiler::new(self.heap, false).compile(program, self.source_map, errors)?;
+        let function = Compiler::new(self.heap).compile(program, &self.source_map, errors)?;
 
         let program: QangProgram = self.heap.allocate_object(function.into()).into();
 
         Ok(program)
-    }
-
-    pub fn analyze(self) -> Result<(), CompilerError> {
-        let mut parser = Parser::new(&self.source_map);
-        let program = parser.parse();
-        let errors = parser.into_reporter();
-
-        let _ = Compiler::new(self.heap, true).compile(program, self.source_map, errors)?;
-
-        Ok(())
     }
 }
 
@@ -91,9 +86,8 @@ enum CompilerKind {
 }
 
 pub struct Compiler<'a> {
-    source_map: SourceMap,
+    source_map: &'a SourceMap,
     heap: &'a mut ObjectHeap,
-    is_silent: bool,
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
@@ -102,13 +96,12 @@ pub struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(heap: &'a mut ObjectHeap, is_silent: bool) -> Self {
+    pub fn new(heap: &'a mut ObjectHeap) -> Self {
         let handle = heap.intern_string("<script>".to_string().into_boxed_str());
         let locals = Vec::with_capacity(u8::MAX as usize);
 
         Self {
-            source_map: SourceMap::default(),
-            is_silent,
+            source_map: &DEFALT_SOURCE_MAP,
             heap,
             locals,
             local_count: 0,
@@ -119,7 +112,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn reset(&mut self) {
-        self.source_map = SourceMap::default();
+        self.source_map = &DEFALT_SOURCE_MAP;
         self.locals = Vec::with_capacity(STACK_MAX);
         self.local_count = 0;
         self.scope_depth = 0;
@@ -132,7 +125,7 @@ impl<'a> Compiler<'a> {
     pub fn compile(
         &mut self,
         program: ast::Program,
-        source_map: SourceMap,
+        source_map: &'a SourceMap,
         mut errors: ErrorReporter,
     ) -> Result<FunctionObject, CompilerError> {
         self.source_map = source_map;
@@ -161,19 +154,15 @@ impl<'a> Compiler<'a> {
     fn emit_opcode(&mut self, opcode: OpCode, span: SourceSpan) {
         let line = self.source_map.get_line_number(span.start);
         let col = self.source_map.get_column_number(span.start);
-        if !self.is_silent {
-            self.get_current_chunk()
-                .write_opcode(opcode, SourceLocation::new(line, col));
-        }
+        self.get_current_chunk()
+            .write_opcode(opcode, SourceLocation::new(line, col));
     }
 
     fn emit_byte(&mut self, byte: u8, span: SourceSpan) {
         let line = self.source_map.get_line_number(span.start);
         let col = self.source_map.get_column_number(span.start);
-        if !self.is_silent {
-            self.get_current_chunk()
-                .write(byte, SourceLocation::new(line, col));
-        }
+        self.get_current_chunk()
+            .write(byte, SourceLocation::new(line, col));
     }
 
     fn emit_jump(&mut self, opcode: OpCode, span: SourceSpan) -> usize {
@@ -231,7 +220,6 @@ impl<'a> Compiler<'a> {
         let index = self.get_current_chunk().add_constant(value);
 
         if index > u8::MAX as usize {
-            self.is_silent = true;
             errors.report_error(QangSyntaxError::new_formatted(
                 "Constant index out of range",
                 span,
@@ -810,15 +798,13 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.local_count = previous_local_count;
         self.scope_depth = previous_scope_depth;
 
-        if !self.is_silent {
-            let function_handle = self.heap.allocate_object(function.into());
+        let function_handle = self.heap.allocate_object(function.into());
 
-            self.emit_constant(
-                Value::Function(FunctionValueKind::QangFunction(function_handle)),
-                func_decl.function.body.span,
-                errors,
-            );
-        }
+        self.emit_constant(
+            Value::Function(FunctionValueKind::QangFunction(function_handle)),
+            func_decl.function.body.span,
+            errors,
+        );
 
         if is_local {
             self.mark_initialized();

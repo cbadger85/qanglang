@@ -11,7 +11,7 @@ fn test_initializing_local_variable_with_same_name() {
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).analyze() {
+    match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);
@@ -34,7 +34,7 @@ fn test_initializing_local_variable_with_itself() {
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).analyze() {
+    match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);

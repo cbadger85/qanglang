@@ -30,6 +30,7 @@ enum QangCommand {
     Check {
         path: String,
     },
+    Ls,
 }
 
 fn main() {
@@ -38,6 +39,7 @@ fn main() {
     match cli.command {
         Some(QangCommand::Run { path, debug, heap }) => run_script(&path, debug, heap),
         Some(QangCommand::Check { path }) => check_script(&path),
+        Some(QangCommand::Ls) => todo!("turn on language server here."),
         _ => run_repl(cli.debug),
     }
 }
@@ -89,7 +91,7 @@ fn check_script(filename: &str) {
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
 
-    if let Err(errors) = CompilerPipeline::new(source_map, &mut heap).analyze() {
+    if let Err(errors) = CompilerPipeline::new(source_map, &mut heap).run() {
         for error in errors.all() {
             eprintln!("Compile error: {}", error.message);
         }

@@ -114,3 +114,8 @@ impl SourceMap {
         (position - line_start + 1) as u32
     }
 }
+
+pub static DEFALT_SOURCE_MAP: SourceMap = SourceMap {
+    line_indices: Vec::new(),
+    source: Vec::new(),
+};

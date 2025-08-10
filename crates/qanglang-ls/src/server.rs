@@ -28,10 +28,7 @@ pub struct Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        info!("Language server initializing...");
-        info!("Client info: {:?}", params.client_info);
-        info!("Root URI: {:?}", params.root_uri);
+    async fn initialize(&self, _params: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: None,
             offset_encoding: None,
@@ -105,12 +102,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        // Only process .ql files
-        if !params.text_document.uri.path().ends_with(".ql") {
-            info!("Ignoring non-.ql file: {}", params.text_document.uri);
-            return;
-        }
-
         self.on_change(TextDocumentItem {
             uri: params.text_document.uri,
             text: params.text_document.text,
@@ -121,12 +112,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
-        // Only process .ql files
-        if !params.text_document.uri.path().ends_with(".ql") {
-            info!("Ignoring non-.ql file change: {}", params.text_document.uri);
-            return;
-        }
-
         let text = params
             .content_changes
             .get_mut(0)
@@ -143,19 +128,7 @@ impl LanguageServer for Backend {
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        info!("=== did_save called for: {} ===", params.text_document.uri);
-        info!("Text included: {}", params.text.is_some());
-
-        // Only process .ql files
-        if !params.text_document.uri.path().ends_with(".ql") {
-            info!("Ignoring non-.ql file save: {}", params.text_document.uri);
-            return;
-        }
-
-        info!("Processing .ql file save");
-
         if let Some(text) = params.text {
-            info!("Save text length: {}", text.len());
             self.on_change(TextDocumentItem {
                 uri: params.text_document.uri,
                 text,
@@ -163,8 +136,6 @@ impl LanguageServer for Backend {
                 language_id: "".to_string(), // not used
             })
             .await
-        } else {
-            info!("No text provided in save event");
         }
     }
 
@@ -182,16 +153,7 @@ impl LanguageServer for Backend {
 impl Backend {
     async fn on_change(&self, document: TextDocumentItem) {
         info!("=== Starting analysis for: {} ===", document.uri);
-        info!("Source text length: {}", document.text.len());
 
-        // Add timeout protection
-        let analysis_start = std::time::Instant::now();
-        const MAX_ANALYSIS_TIME_MS: u128 = 5000; // 5 second timeout
-
-        info!(
-            "First 100 chars: {}",
-            &document.text.chars().take(100).collect::<String>()
-        );
         let source_map = SourceMap::new(document.text);
         let mut diagnostics = Vec::new();
 
@@ -207,27 +169,12 @@ impl Backend {
             }
         };
 
-        // Check if analysis took too long
-        let analysis_duration = analysis_start.elapsed().as_millis();
-        if analysis_duration > MAX_ANALYSIS_TIME_MS {
-            info!("⚠️ Analysis took too long: {}ms", analysis_duration);
-            // Could publish a warning diagnostic here
-        } else {
-            info!("Analysis completed in {}ms", analysis_duration);
-        }
-
         for error in errors {
-            info!("Error: {} (span: {:?})", &error.message, error.span);
-
             let start_line = source_map.get_line_number(error.span.start) - 1;
             let start_char = source_map.get_column_number(error.span.start) - 1;
             let end_line = source_map.get_line_number(error.span.end) - 1;
             let end_char = source_map.get_column_number(error.span.end) - 1;
 
-            info!(
-                "  Mapped to: {}:{} -> {}:{}",
-                start_line, start_char, end_line, end_char
-            );
             diagnostics.push(Diagnostic {
                 range: Range {
                     start: Position {
@@ -269,12 +216,7 @@ pub fn run_language_server() {
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
 
-        info!("Setting up LSP service...");
-        let (service, socket) = LspService::build(|client| {
-            info!("Creating backend with client");
-            Backend { client }
-        })
-        .finish();
+        let (service, socket) = LspService::build(|client| Backend { client }).finish();
 
         info!("Starting server...");
         Server::new(stdin, stdout, socket).serve(service).await;

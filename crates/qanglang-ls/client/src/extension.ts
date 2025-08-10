@@ -21,18 +21,16 @@ import {
 } from "vscode-languageclient/node";
 
 let client: LanguageClient;
-// type a = Parameters<>;
-
-// Get the server path from settings
-const config = workspace.getConfiguration("qls-language-server");
-const serverPath = config.get<string>("serverPath") || "qang ls";
-
-// Split the command and arguments properly
-const parts = serverPath.split(" ");
-const command = parts[0];
-const args = parts.slice(1);
 
 export async function activate(context: ExtensionContext) {
+  // Get the server path from settings INSIDE activate function
+  const config = workspace.getConfiguration("qls-language-server");
+  const serverPath = config.get<string>("serverPath") || "qang ls";
+
+  // Split the command and arguments properly
+  const parts = serverPath.split(" ");
+  const command = parts[0];
+  const args = parts.slice(1);
   const traceOutputChannel = window.createOutputChannel(
     "QangLang Language Server trace"
   );
@@ -58,8 +56,8 @@ export async function activate(context: ExtensionContext) {
     // Register the server for plain text documents
     documentSelector: [{ scheme: "file", language: "qanglang" }],
     synchronize: {
-      // Notify the server about file changes to .ql files contained in the workspace
-      fileEvents: workspace.createFileSystemWatcher("**/*.ql"),
+      // Don't watch files to avoid performance issues
+      // fileEvents: workspace.createFileSystemWatcher("**/*.ql"),
     },
     traceOutputChannel,
   };

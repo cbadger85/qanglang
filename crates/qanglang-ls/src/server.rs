@@ -28,7 +28,10 @@ pub struct Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        info!("Language server initializing...");
+        info!("Client info: {:?}", params.client_info);
+        info!("Root URI: {:?}", params.root_uri);
         Ok(InitializeResult {
             server_info: None,
             offset_encoding: None,
@@ -234,18 +237,25 @@ impl Backend {
 }
 
 pub fn run_language_server() {
+    // Initialize logging for the language server first
+    env_logger::init();
+    info!("Starting QangLang Language Server...");
+
     // Create a new tokio runtime for the language server
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     rt.block_on(async {
-        // Initialize logging for the language server
-        env_logger::init();
-
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
 
-        let (service, socket) = LspService::build(|client| Backend { client }).finish();
+        info!("Setting up LSP service...");
+        let (service, socket) = LspService::build(|client| {
+            info!("Creating backend with client");
+            Backend { client }
+        }).finish();
 
+        info!("Starting server...");
         Server::new(stdin, stdout, socket).serve(service).await;
+        info!("Server stopped");
     });
 }

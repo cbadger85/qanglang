@@ -24,7 +24,7 @@ let client: LanguageClient;
 
 export async function activate(context: ExtensionContext) {
   console.log("QangLang extension activating...");
-  
+
   // Get the server path from settings INSIDE activate function
   const config = workspace.getConfiguration("qls-language-server");
   const serverPath = config.get<string>("serverPath") || "qang ls";
@@ -35,9 +35,9 @@ export async function activate(context: ExtensionContext) {
   const parts = serverPath.split(" ");
   const command = parts[0];
   const args = parts.slice(1);
-  
+
   console.log("Command:", command, "Args:", args);
-  
+
   const traceOutputChannel = window.createOutputChannel(
     "QangLang Language Server trace"
   );
@@ -91,20 +91,22 @@ export async function activate(context: ExtensionContext) {
     serverOptions,
     clientOptions
   );
-  
+
   console.log("Starting language client...");
-  
+
   // Handle client errors
   client.onDidChangeState((event) => {
     console.log("Language client state changed:", event);
   });
-  
+
   try {
     await client.start();
     console.log("Language client started successfully");
   } catch (error) {
     console.error("Failed to start language client:", error);
-    window.showErrorMessage(`Failed to start QangLang Language Server: ${error}`);
+    window.showErrorMessage(
+      `Failed to start QangLang Language Server: ${error}`
+    );
   }
 }
 
@@ -114,13 +116,16 @@ export function deactivate(): Thenable<void> | undefined {
     console.log("No client to stop");
     return undefined;
   }
-  
+
   console.log("Stopping language client...");
-  return client.stop().then(() => {
-    console.log("Language client stopped successfully");
-  }).catch((error) => {
-    console.error("Error stopping language client:", error);
-  });
+  return client
+    .stop()
+    .then(() => {
+      console.log("Language client stopped successfully");
+    })
+    .catch((error) => {
+      console.error("Error stopping language client:", error);
+    });
 }
 
 // export function activateInlayHints(ctx: ExtensionContext) {

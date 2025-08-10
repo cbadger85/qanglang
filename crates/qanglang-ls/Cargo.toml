@@ -7,7 +7,7 @@ edition = "2024"
 qanglang-core = { path = "../qanglang-core" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.78"
-tokio = { version = "1.17.0", features = ["full"] }
+tokio = { version = "1.17.0", features = ["rt", "rt-multi-thread", "io-std", "macros"] }
 tower-lsp = { version = "0.20.0", features = ["proposed"]}
 env_logger = "0.10.0" 
 log = "0.4.27"

@@ -42,9 +42,9 @@ impl LanguageServer for Backend {
                     TextDocumentSyncOptions {
                         open_close: Some(true),
                         change: Some(TextDocumentSyncKind::FULL),
-                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
-                            include_text: Some(true),
-                        })),
+                        // save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+                        //     include_text: Some(true),
+                        // })),
                         ..Default::default()
                     },
                 )),
@@ -143,13 +143,19 @@ impl LanguageServer for Backend {
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        info!("=== did_save called for: {} ===", params.text_document.uri);
+        info!("Text included: {}", params.text.is_some());
+
         // Only process .ql files
         if !params.text_document.uri.path().ends_with(".ql") {
             info!("Ignoring non-.ql file save: {}", params.text_document.uri);
             return;
         }
 
+        info!("Processing .ql file save");
+
         if let Some(text) = params.text {
+            info!("Save text length: {}", text.len());
             self.on_change(TextDocumentItem {
                 uri: params.text_document.uri,
                 text,
@@ -157,6 +163,8 @@ impl LanguageServer for Backend {
                 language_id: "".to_string(), // not used
             })
             .await
+        } else {
+            info!("No text provided in save event");
         }
     }
 
@@ -176,6 +184,10 @@ impl Backend {
         info!("=== Starting analysis for: {} ===", document.uri);
         info!("Source text length: {}", document.text.len());
 
+        // Add timeout protection
+        let analysis_start = std::time::Instant::now();
+        const MAX_ANALYSIS_TIME_MS: u128 = 5000; // 5 second timeout
+
         info!(
             "First 100 chars: {}",
             &document.text.chars().take(100).collect::<String>()
@@ -194,6 +206,15 @@ impl Backend {
                 error.into_errors()
             }
         };
+
+        // Check if analysis took too long
+        let analysis_duration = analysis_start.elapsed().as_millis();
+        if analysis_duration > MAX_ANALYSIS_TIME_MS {
+            info!("⚠️ Analysis took too long: {}ms", analysis_duration);
+            // Could publish a warning diagnostic here
+        } else {
+            info!("Analysis completed in {}ms", analysis_duration);
+        }
 
         for error in errors {
             info!("Error: {} (span: {:?})", &error.message, error.span);
@@ -252,7 +273,8 @@ pub fn run_language_server() {
         let (service, socket) = LspService::build(|client| {
             info!("Creating backend with client");
             Backend { client }
-        }).finish();
+        })
+        .finish();
 
         info!("Starting server...");
         Server::new(stdin, stdout, socket).serve(service).await;

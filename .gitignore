@@ -5,3 +5,4 @@ profile.coz
 flamegraph.svg
 node_modules
 *.vsix
+dist

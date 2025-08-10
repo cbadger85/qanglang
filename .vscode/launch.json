@@ -5,6 +5,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/crates/qanglang-ls"
+      ]
+    },
+    {
       "type": "lldb",
       "request": "launch",
       "name": "Debug unit tests in library 'qanglang_core'",

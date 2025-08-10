@@ -102,6 +102,12 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        // Only process .ql files
+        if !params.text_document.uri.path().ends_with(".ql") {
+            info!("Ignoring non-.ql file: {}", params.text_document.uri);
+            return;
+        }
+
         self.on_change(TextDocumentItem {
             uri: params.text_document.uri,
             text: params.text_document.text,
@@ -112,6 +118,12 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
+        // Only process .ql files
+        if !params.text_document.uri.path().ends_with(".ql") {
+            info!("Ignoring non-.ql file change: {}", params.text_document.uri);
+            return;
+        }
+
         let text = params
             .content_changes
             .get_mut(0)
@@ -128,11 +140,17 @@ impl LanguageServer for Backend {
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        // Only process .ql files
+        if !params.text_document.uri.path().ends_with(".ql") {
+            info!("Ignoring non-.ql file save: {}", params.text_document.uri);
+            return;
+        }
+
         if let Some(text) = params.text {
             self.on_change(TextDocumentItem {
                 uri: params.text_document.uri,
                 text,
-                version: 0, // Save doesn't provide version
+                version: 0,                  // Save doesn't provide version
                 language_id: "".to_string(), // not used
             })
             .await
@@ -177,10 +195,10 @@ impl Backend {
         for error in errors {
             info!("Error: {} (span: {:?})", &error.message, error.span);
 
-            let start_line = source_map.get_line_number(error.span.start);
-            let start_char = source_map.get_column_number(error.span.start);
-            let end_line = source_map.get_line_number(error.span.end);
-            let end_char = source_map.get_column_number(error.span.end);
+            let start_line = source_map.get_line_number(error.span.start) - 1;
+            let start_char = source_map.get_column_number(error.span.start) - 1;
+            let end_line = source_map.get_line_number(error.span.end) - 1;
+            let end_char = source_map.get_column_number(error.span.end) - 1;
 
             info!(
                 "  Mapped to: {}:{} -> {}:{}",
@@ -208,12 +226,9 @@ impl Backend {
             });
         }
 
-        if !diagnostics.is_empty() {
-            info!("Publishing {} diagnostics", diagnostics.len());
-            self.client
-                .publish_diagnostics(document.uri, diagnostics, Some(document.version))
-                .await;
-        }
+        self.client
+            .publish_diagnostics(document.uri, diagnostics, Some(document.version))
+            .await;
         info!("=== Analysis complete ===");
     }
 }

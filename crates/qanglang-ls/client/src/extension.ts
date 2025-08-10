@@ -58,7 +58,7 @@ export async function activate(context: ExtensionContext) {
     // Register the server for plain text documents
     documentSelector: [{ scheme: "file", language: "qanglang" }],
     synchronize: {
-      // Notify the server about file changes to '.clientrc files contained in the workspace
+      // Notify the server about file changes to .ql files contained in the workspace
       fileEvents: workspace.createFileSystemWatcher("**/*.ql"),
     },
     traceOutputChannel,

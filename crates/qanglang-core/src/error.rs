@@ -11,13 +11,28 @@ impl QangSyntaxError {
         Self { message, span }
     }
 
-    pub fn new_formatted(
-        message: &str,
-        span: SourceSpan,
-        source_map: &SourceMap,
-    ) -> QangSyntaxError {
-        let message = pretty_print_syntax_error(source_map, message, span);
-        QangSyntaxError::new(message, span)
+    pub fn into_formatted(self, source_map: &SourceMap) -> Self {
+        let message = pretty_print_syntax_error(source_map, &self.message, self.span);
+
+        Self {
+            message,
+            span: self.span,
+        }
+    }
+
+    pub fn into_short_formatted(self, source_map: &SourceMap) -> Self {
+        let line_num = source_map.get_line_number(self.span.start);
+        let col_num = source_map.get_column_number(self.span.start);
+
+        let message = format!(
+            "{} at line {}, column {}: {}\n",
+            "Syntax Error", line_num, col_num, self.message
+        );
+
+        Self {
+            message,
+            span: self.span,
+        }
     }
 }
 
@@ -259,11 +274,13 @@ mod tests {
         let mut reporter = ErrorReporter::new();
 
         // Report an error
-        reporter.report_error(QangSyntaxError::new_formatted(
-            "Expected expression after '+'",
-            SourceSpan::new(11, 11),
-            &source_map,
-        ));
+        reporter.report_error(
+            QangSyntaxError::new(
+                "Expected expression after '+'".to_string(),
+                SourceSpan::new(11, 11),
+            )
+            .into_formatted(&source_map),
+        );
 
         assert!(reporter.has_errors());
         assert_eq!(reporter.errors().len(), 1);
@@ -276,17 +293,21 @@ mod tests {
         let mut reporter = ErrorReporter::new();
 
         // Report multiple errors
-        reporter.report_error(QangSyntaxError::new_formatted(
-            "Missing operand after '+'",
-            SourceSpan::new(11, 11),
-            &source_map,
-        ));
+        reporter.report_error(
+            QangSyntaxError::new(
+                "Missing operand after '+'".to_string(),
+                SourceSpan::new(11, 11),
+            )
+            .into_formatted(&source_map),
+        );
 
-        reporter.report_error(QangSyntaxError::new_formatted(
-            "Missing operand after '*'",
-            SourceSpan::new(23, 23),
-            &source_map,
-        ));
+        reporter.report_error(
+            QangSyntaxError::new(
+                "Missing operand after '*'".to_string(),
+                SourceSpan::new(23, 23),
+            )
+            .into_formatted(&source_map),
+        );
 
         assert_eq!(reporter.errors().len(), 2);
 
@@ -308,11 +329,10 @@ mod tests {
         let source_map = SourceMap::new(source.to_string());
         let mut reporter = ErrorReporter::new();
 
-        reporter.report_error(QangSyntaxError::new_formatted(
-            "Syntax error 1",
-            SourceSpan::new(0, 3),
-            &source_map,
-        ));
+        reporter.report_error(
+            QangSyntaxError::new("Syntax error 1".to_string(), SourceSpan::new(0, 3))
+                .into_formatted(&source_map),
+        );
 
         let summary = error_summary(reporter.errors());
         assert!(summary.contains("Found 1 error."));
@@ -324,16 +344,14 @@ mod tests {
         let source_map = SourceMap::new(source.to_string());
         let mut reporter = ErrorReporter::new();
 
-        reporter.report_error(QangSyntaxError::new_formatted(
-            "Syntax error 1",
-            SourceSpan::new(0, 3),
-            &source_map,
-        ));
-        reporter.report_error(QangSyntaxError::new_formatted(
-            "Syntax error 2",
-            SourceSpan::new(4, 5),
-            &source_map,
-        ));
+        reporter.report_error(
+            QangSyntaxError::new("Syntax error 1".to_string(), SourceSpan::new(0, 3))
+                .into_formatted(&source_map),
+        );
+        reporter.report_error(
+            QangSyntaxError::new("Syntax error 2".to_string(), SourceSpan::new(4, 5))
+                .into_formatted(&source_map),
+        );
 
         let summary = error_summary(reporter.errors());
         assert!(summary.contains("Found 2 errors."));

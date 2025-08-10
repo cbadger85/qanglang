@@ -8,6 +8,13 @@ use crate::{
     value::FunctionValueKind,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ErrorMessageFormat {
+    Verbose,
+    Compact,
+    Minimal,
+}
+
 pub struct CompilerError(Vec<QangSyntaxError>);
 
 impl CompilerError {
@@ -44,11 +51,22 @@ impl From<ObjectHandle> for QangProgram {
 pub struct CompilerPipeline<'a> {
     source_map: SourceMap,
     heap: &'a mut ObjectHeap,
+    error_message_format: ErrorMessageFormat,
 }
 
 impl<'a> CompilerPipeline<'a> {
     pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
-        Self { source_map, heap }
+        Self {
+            source_map,
+            heap,
+            error_message_format: ErrorMessageFormat::Minimal,
+        }
+    }
+
+    pub fn error_message_format(mut self, format: ErrorMessageFormat) -> Self {
+        self.error_message_format = format;
+
+        self
     }
 
     pub fn run(self) -> Result<QangProgram, CompilerError> {
@@ -56,11 +74,17 @@ impl<'a> CompilerPipeline<'a> {
         let program = parser.parse();
         let errors = parser.into_reporter();
 
-        let function = Compiler::new(self.heap).compile(program, &self.source_map, errors)?;
-
-        let program: QangProgram = self.heap.allocate_object(function.into()).into();
-
-        Ok(program)
+        match Compiler::new(self.heap).compile(program, &self.source_map, errors) {
+            Ok(program) => Ok(self.heap.allocate_object(program.into()).into()),
+            Err(error) => Err(CompilerError(
+                error
+                    .all()
+                    .iter()
+                    .cloned()
+                    .map(|e| e.into_formatted(&self.source_map))
+                    .collect(),
+            )),
+        }
     }
 }
 
@@ -176,10 +200,9 @@ impl<'a> Compiler<'a> {
         let jump = self.get_current_chunk().code().len() - offset - 2;
 
         if jump > u16::MAX as usize {
-            return Err(QangSyntaxError::new_formatted(
-                "Too much code to jump over.",
+            return Err(QangSyntaxError::new(
+                "Too much code to jump over.".to_string(),
                 span,
-                &self.source_map,
             ));
         }
 
@@ -193,10 +216,9 @@ impl<'a> Compiler<'a> {
         self.emit_opcode(OpCode::Loop, span);
         let offset = self.get_current_chunk().code().len() - loop_start + 2;
         if offset > u16::MAX as usize {
-            return Err(QangSyntaxError::new_formatted(
-                "Loop body too large.",
+            return Err(QangSyntaxError::new(
+                "Loop body too large.".to_string(),
                 span,
-                &self.source_map,
             ));
         }
 
@@ -220,10 +242,9 @@ impl<'a> Compiler<'a> {
         let index = self.get_current_chunk().add_constant(value);
 
         if index > u8::MAX as usize {
-            errors.report_error(QangSyntaxError::new_formatted(
-                "Constant index out of range",
+            errors.report_error(QangSyntaxError::new(
+                "Constant index out of range".to_string(),
                 span,
-                &self.source_map,
             ));
             0
         } else {
@@ -253,10 +274,9 @@ impl<'a> Compiler<'a> {
 
     fn add_local(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
         if self.local_count >= STACK_MAX {
-            Err(QangSyntaxError::new_formatted(
-                "Too many local variables in scope.",
+            Err(QangSyntaxError::new(
+                "Too many local variables in scope.".to_string(),
                 span,
-                &self.source_map,
             ))
         } else {
             let local = Local::new(handle.into());
@@ -287,10 +307,9 @@ impl<'a> Compiler<'a> {
                 }
 
                 if *local.name == *handle {
-                    return Err(QangSyntaxError::new_formatted(
-                        "Already a variable with this name in this scope.",
+                    return Err(QangSyntaxError::new(
+                        "Already a variable with this name in this scope.".to_string(),
                         span,
-                        &self.source_map,
                     ));
                 }
             }
@@ -309,10 +328,9 @@ impl<'a> Compiler<'a> {
             if let Some(local) = self.locals.get(i) {
                 if *local.name == *handle {
                     if local.depth.is_none() {
-                        return Err(QangSyntaxError::new_formatted(
-                            "Cannot read local variable during its initialization.",
+                        return Err(QangSyntaxError::new(
+                            "Cannot read local variable during its initialization.".to_string(),
                             span,
-                            &self.source_map,
                         ));
                     }
                     return Ok(Some(i));
@@ -769,10 +787,9 @@ impl<'a> AstVisitor for Compiler<'a> {
         );
 
         if func_decl.function.parameters.len() > 255 {
-            return Err(QangSyntaxError::new_formatted(
-                "Cannot have more than 255 parameters.",
+            return Err(QangSyntaxError::new(
+                "Cannot have more than 255 parameters.".to_string(),
                 parameter_span,
-                &self.source_map,
             ));
         }
 
@@ -828,10 +845,9 @@ impl<'a> AstVisitor for Compiler<'a> {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         if self.compile_kind == CompilerKind::Script {
-            return Err(QangSyntaxError::new_formatted(
-                "Cannot return from top-level code.",
+            return Err(QangSyntaxError::new(
+                "Cannot return from top-level code.".to_string(),
                 return_stmt.span,
-                &self.source_map,
             ));
         }
 
@@ -855,10 +871,9 @@ impl<'a> AstVisitor for Compiler<'a> {
                 match call.operation.as_ref() {
                     ast::CallOperation::Call(args) => {
                         if args.len() > u8::MAX as usize {
-                            return Err(QangSyntaxError::new_formatted(
-                                "Functions may only take up to 256 arguments.",
+                            return Err(QangSyntaxError::new(
+                                "Functions may only take up to 256 arguments.".to_string(),
                                 call.span,
-                                &self.source_map,
                             ));
                         }
 

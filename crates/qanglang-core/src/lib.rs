@@ -12,7 +12,7 @@ mod value;
 mod vm;
 
 pub use chunk::SourceLocation;
-pub use compiler::{Compiler, CompilerError, CompilerPipeline, QangProgram};
+pub use compiler::{Compiler, CompilerError, CompilerPipeline, ErrorMessageFormat, QangProgram};
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
 pub use heap::{FunctionObject, HeapObject, ObjectHeap};

@@ -90,12 +90,12 @@ impl<'a> Parser<'a> {
         let message = token
             .error_message
             .as_deref()
-            .unwrap_or("Tokenization error");
+            .unwrap_or("Tokenization error")
+            .to_string();
 
-        self.errors.report_error(QangSyntaxError::new_formatted(
+        self.errors.report_error(QangSyntaxError::new(
             message,
             ast::SourceSpan::from_token(token),
-            self.source_map,
         ));
     }
 
@@ -250,8 +250,7 @@ impl<'a> Parser<'a> {
         match result {
             Ok(decl) => Some(decl),
             Err(error) => {
-                let formatted_error =
-                    QangSyntaxError::new_formatted(&error.message, error.span, self.source_map);
+                let formatted_error = QangSyntaxError::new(error.message, error.span);
                 self.errors.report_error(formatted_error);
                 self.synchronize();
                 None
@@ -915,7 +914,7 @@ mod expression_parser {
     fn process_escape_sequences(raw_string: &str) -> String {
         let mut result = String::new();
         let mut chars = raw_string.chars();
-        
+
         while let Some(c) = chars.next() {
             if c == '\\' {
                 if let Some(escaped) = chars.next() {
@@ -940,7 +939,7 @@ mod expression_parser {
                 result.push(c);
             }
         }
-        
+
         result
     }
 
@@ -951,10 +950,8 @@ mod expression_parser {
 
         let span = ast::SourceSpan::from_token(token);
 
-        let raw_content = value[1..value.len() - 1]
-            .iter()
-            .collect::<String>();
-        
+        let raw_content = value[1..value.len() - 1].iter().collect::<String>();
+
         let processed_content = process_escape_sequences(&raw_content);
 
         Ok(ast::Expr::Primary(ast::PrimaryExpr::String(
@@ -1597,9 +1594,10 @@ mod expression_parser {
                     // We have an expression-like token that couldn't be parsed as part of the current expression
                     // This suggests a syntax error like missing operator
                     let span = ast::SourceSpan::from_token(current_token);
+                    let location = span.start - 1; // TODO - check if previous location is whitespace. if it is, go back another character.
                     return Err(crate::QangSyntaxError::new(
-                        "Unexpected token in expression. Missing operator?".to_string(),
-                        span,
+                        "Unexpected oprand. Missing operator or ';'.".to_string(),
+                        SourceSpan::new(location, location),
                     ));
                 }
                 _ => {}

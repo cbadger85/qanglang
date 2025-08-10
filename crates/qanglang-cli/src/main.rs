@@ -1,6 +1,8 @@
 mod repl;
 
-use qanglang_core::{CompilerPipeline, ObjectHeap, SourceMap, Vm, disassemble_program};
+use qanglang_core::{
+    CompilerPipeline, ErrorMessageFormat, ObjectHeap, SourceMap, Vm, disassemble_program,
+};
 use qanglang_ls::run_language_server;
 use repl::run_repl;
 use std::fs;
@@ -27,9 +29,13 @@ enum QangCommand {
 
         #[arg(short = 'm', long, action = ArgAction::SetTrue)]
         heap: bool,
+        // TODO - add --eformat flag to format the error output.
     },
     Check {
         path: String,
+        // TODO - Add --ignore flag to filter out files to skip.
+
+        // TODO - add --eformat flag to format the error output.
     },
     Ls,
 }
@@ -57,7 +63,10 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool) {
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
 
-    let program = match CompilerPipeline::new(source_map, &mut heap).run() {
+    let program = match CompilerPipeline::new(source_map, &mut heap)
+        .error_message_format(ErrorMessageFormat::Verbose)
+        .run()
+    {
         Ok(program) => {
             if heap_dump {
                 disassemble_program(&heap);
@@ -80,6 +89,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool) {
     }
 }
 
+// TODO - Check if input is file or directory, if directory, recursively grab all '.ql' files to check.
 fn check_script(filename: &str) {
     let source = match fs::read_to_string(filename) {
         Ok(content) => content,
@@ -92,10 +102,18 @@ fn check_script(filename: &str) {
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
 
-    if let Err(errors) = CompilerPipeline::new(source_map, &mut heap).run() {
-        for error in errors.all() {
-            eprintln!("Compile error: {}", error.message);
+    match CompilerPipeline::new(source_map, &mut heap)
+        .error_message_format(ErrorMessageFormat::Verbose)
+        .run()
+    {
+        Err(errors) => {
+            for error in errors.all() {
+                eprintln!("Compile error: {}", error.message);
+            }
         }
-        return;
+        Ok(_) => {
+            // TODO - Improve this message
+            println!("Complete.");
+        }
     }
 }

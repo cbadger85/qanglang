@@ -12,11 +12,11 @@ impl<'a> Analyzer<'a> {
     pub fn analyze(&self) -> Result<(), CompilerError> {
         let mut heap = ObjectHeap::new();
 
-        let mut parser = Parser::new(&self.source_map);
+        let mut parser = Parser::new(self.source_map);
         let program = parser.parse();
         let errors = parser.into_reporter();
 
-        let _ = Compiler::new(&mut heap).compile(program, &self.source_map, errors)?;
+        let _ = Compiler::new(&mut heap).compile(program, self.source_map, errors)?;
 
         Ok(())
     }

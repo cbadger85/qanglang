@@ -11,9 +11,7 @@
   },
   "enabledApiProposals": [],
   "main": "./dist/extension.js",
-  "activationEvents": [
-    "onLanguage:qanglang"
-  ],
+  "activationEvents": [],
   "contributes": {
     "commands": [
       {

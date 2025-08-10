@@ -25,7 +25,7 @@ fn test_missing_arrow_in_lambda() {
 
     let (_program, errors) = parse_source(&source_map);
 
-    assert_parse_error(&errors, "Unexpected token in expression. Missing operator?");
+    assert_parse_error(&errors, "Unexpected oprand. Missing operator or ';'.");
 }
 
 #[test]
@@ -176,10 +176,7 @@ fn test_unterminated_array() {
     let source_map = SourceMap::new(source.to_string());
     let (_program, errors) = parse_source(&source_map);
 
-    assert_parse_error(
-        &errors,
-        "Syntax Error at line 1, column 1: Expect ']' after array elements.",
-    );
+    assert_parse_error(&errors, "Expect ']' after array elements.");
 }
 
 #[test]
@@ -188,8 +185,5 @@ fn test_unterminated_with_trailing_comma() {
     let source_map = SourceMap::new(source.to_string());
     let (_program, errors) = parse_source(&source_map);
 
-    assert_parse_error(
-        &errors,
-        "Syntax Error at line 1, column 1: Expected expression.",
-    );
+    assert_parse_error(&errors, "Expected expression.");
 }

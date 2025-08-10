@@ -1592,12 +1592,18 @@ mod expression_parser {
                 | TokenType::Super
                 | TokenType::LeftParen => {
                     // We have an expression-like token that couldn't be parsed as part of the current expression
-                    // This suggests a syntax error like missing operator
-                    let span = ast::SourceSpan::from_token(current_token);
-                    let location = span.start - 1; // TODO - check if previous location is whitespace. if it is, go back another character.
+                    // This suggests a syntax error like missing operator or semicolon.
+                    let location = parser
+                        .previous_token
+                        .as_ref()
+                        .map(|t| SourceSpan::from_token(t).end)
+                        .unwrap_or(SourceSpan::from_token(current_token).start);
+
+                    let span = SourceSpan::new(location, location);
+
                     return Err(crate::QangSyntaxError::new(
                         "Unexpected oprand. Missing operator or ';'.".to_string(),
-                        SourceSpan::new(location, location),
+                        span,
                     ));
                 }
                 _ => {}

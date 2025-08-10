@@ -1,24 +1,25 @@
 use qanglang_core::SourceMap;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
-use tower_lsp::lsp_types::SemanticTokenType;
+// use tower_lsp::lsp_types::SemanticTokenType;
+use log::info;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::analyzer::Analyzer;
 
-pub const LEGEND_TYPE: &[SemanticTokenType] = &[
-    SemanticTokenType::FUNCTION,
-    SemanticTokenType::CLASS,
-    SemanticTokenType::STRUCT,
-    SemanticTokenType::METHOD,
-    SemanticTokenType::VARIABLE,
-    SemanticTokenType::STRING,
-    SemanticTokenType::NUMBER,
-    SemanticTokenType::KEYWORD,
-    SemanticTokenType::OPERATOR,
-    SemanticTokenType::PARAMETER,
-];
+// pub const LEGEND_TYPE: &[SemanticTokenType] = &[
+//     SemanticTokenType::FUNCTION,
+//     SemanticTokenType::CLASS,
+//     SemanticTokenType::STRUCT,
+//     SemanticTokenType::METHOD,
+//     SemanticTokenType::VARIABLE,
+//     SemanticTokenType::STRING,
+//     SemanticTokenType::NUMBER,
+//     SemanticTokenType::KEYWORD,
+//     SemanticTokenType::OPERATOR,
+//     SemanticTokenType::PARAMETER,
+// ];
 
 #[derive(Debug)]
 pub struct Backend {
@@ -32,7 +33,8 @@ impl LanguageServer for Backend {
             server_info: None,
             offset_encoding: None,
             capabilities: ServerCapabilities {
-                inlay_hint_provider: Some(OneOf::Left(true)),
+                // inlay_hint_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: None,
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         open_close: Some(true),
@@ -43,18 +45,17 @@ impl LanguageServer for Backend {
                         ..Default::default()
                     },
                 )),
-                completion_provider: Some(CompletionOptions {
-                    resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string()]),
-                    work_done_progress_options: Default::default(),
-                    all_commit_characters: None,
-                    completion_item: None,
-                }),
+                // completion_provider: Some(CompletionOptions {
+                //     resolve_provider: Some(false),
+                //     trigger_characters: Some(vec![".".to_string()]),
+                //     work_done_progress_options: Default::default(),
+                //     all_commit_characters: None,
+                //     completion_item: None,
+                // }),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec!["dummy.do_something".to_string()],
                     work_done_progress_options: Default::default(),
                 }),
-
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
@@ -62,35 +63,35 @@ impl LanguageServer for Backend {
                     }),
                     file_operations: None,
                 }),
-                semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
-                        SemanticTokensRegistrationOptions {
-                            text_document_registration_options: {
-                                TextDocumentRegistrationOptions {
-                                    document_selector: Some(vec![DocumentFilter {
-                                        language: Some("nrs".to_string()),
-                                        scheme: Some("file".to_string()),
-                                        pattern: None,
-                                    }]),
-                                }
-                            },
-                            semantic_tokens_options: SemanticTokensOptions {
-                                work_done_progress_options: WorkDoneProgressOptions::default(),
-                                legend: SemanticTokensLegend {
-                                    token_types: LEGEND_TYPE.into(),
-                                    token_modifiers: vec![],
-                                },
-                                range: Some(true),
-                                full: Some(SemanticTokensFullOptions::Bool(true)),
-                            },
-                            static_registration_options: StaticRegistrationOptions::default(),
-                        },
-                    ),
-                ),
+                // semantic_tokens_provider: Some(
+                //     SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
+                //         SemanticTokensRegistrationOptions {
+                //             text_document_registration_options: {
+                //                 TextDocumentRegistrationOptions {
+                //                     document_selector: Some(vec![DocumentFilter {
+                //                         language: Some("qanglang".to_string()),
+                //                         scheme: Some("file".to_string()),
+                //                         pattern: None,
+                //                     }]),
+                //                 }
+                //             },
+                //             semantic_tokens_options: SemanticTokensOptions {
+                //                 work_done_progress_options: WorkDoneProgressOptions::default(),
+                //                 legend: SemanticTokensLegend {
+                //                     token_types: LEGEND_TYPE.into(),
+                //                     token_modifiers: vec![],
+                //                 },
+                //                 range: Some(true),
+                //                 full: Some(SemanticTokensFullOptions::Bool(true)),
+                //             },
+                //             static_registration_options: StaticRegistrationOptions::default(),
+                //         },
+                //     ),
+                // ),
                 // definition: Some(GotoCapability::default()),
-                definition_provider: Some(OneOf::Left(true)),
-                references_provider: Some(OneOf::Left(true)),
-                rename_provider: Some(OneOf::Left(true)),
+                // definition_provider: Some(OneOf::Left(true)),
+                // references_provider: Some(OneOf::Left(true)),
+                // rename_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
         })
@@ -139,23 +140,49 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn on_change(&self, document: TextDocumentItem) {
-        let source_map = SourceMap::new(document.text);
+        info!("=== Starting analysis for: {} ===", document.uri);
+        info!("Source text length: {}", document.text.len());
 
+        info!(
+            "First 100 chars: {}",
+            &document.text.chars().take(100).collect::<String>()
+        );
+        let source_map = SourceMap::new(document.text);
         let mut diagnostics = Vec::new();
 
-        for error in match Analyzer::new(&source_map).analyze() {
-            Ok(_) => Vec::new(),
-            Err(error) => error.into_errors(),
-        } {
+        let errors = match Analyzer::new(&source_map).analyze() {
+            Ok(_) => {
+                info!("✅ Analysis succeeded - no errors found");
+                Vec::new()
+            }
+            Err(error) => {
+                info!("❌ Analysis failed");
+                info!("Error count: {}", error.all().len());
+                error.into_errors()
+            }
+        };
+
+        for error in errors {
+            info!("Error: {} (span: {:?})", &error.message, error.span);
+
+            let start_line = source_map.get_line_number(error.span.start);
+            let start_char = source_map.get_column_number(error.span.start);
+            let end_line = source_map.get_line_number(error.span.end);
+            let end_char = source_map.get_column_number(error.span.end);
+
+            info!(
+                "  Mapped to: {}:{} -> {}:{}",
+                start_line, start_char, end_line, end_char
+            );
             diagnostics.push(Diagnostic {
                 range: Range {
                     start: Position {
-                        line: source_map.get_line_number(error.span.start),
-                        character: source_map.get_column_number(error.span.start),
+                        line: start_line,
+                        character: start_char,
                     },
                     end: Position {
-                        line: source_map.get_line_number(error.span.end),
-                        character: source_map.get_column_number(error.span.end),
+                        line: end_line,
+                        character: end_char,
                     },
                 },
                 severity: Some(DiagnosticSeverity::ERROR),
@@ -169,8 +196,29 @@ impl Backend {
             });
         }
 
-        self.client
-            .publish_diagnostics(document.uri, diagnostics, Some(document.version))
-            .await;
+        if !diagnostics.is_empty() {
+            info!("Publishing {} diagnostics", diagnostics.len());
+            self.client
+                .publish_diagnostics(document.uri, diagnostics, Some(document.version))
+                .await;
+        }
+        info!("=== Analysis complete ===");
     }
+}
+
+pub fn run_language_server() {
+    // Create a new tokio runtime for the language server
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    rt.block_on(async {
+        // Initialize logging for the language server
+        env_logger::init();
+
+        let stdin = tokio::io::stdin();
+        let stdout = tokio::io::stdout();
+
+        let (service, socket) = LspService::build(|client| Backend { client }).finish();
+
+        Server::new(stdin, stdout, socket).serve(service).await;
+    });
 }

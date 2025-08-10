@@ -1,30 +1,56 @@
 {
   "name": "qls-language-server",
   "description": "QangLang language server",
+  "repository": {
+    "url": "https://github.com/cbadger85/qanglang/tree/lsp/crates/qanglang-ls"
+  },
   "license": "MIT",
-  "version": "1.5.0",
-  "categories": [],
+  "version": "0.0.1",
+  "categories": [
+    "Programming Languages"
+  ],
   "engines": {
     "vscode": "^1.66.0"
   },
   "enabledApiProposals": [],
-  "activationEvents": [
-    "onLanguage:qanglang"
-  ],
   "main": "./dist/extension.js",
+  "activationEvents": [],
   "contributes": {
+    "commands": [
+      {
+        "command": "qanglang.restartServer",
+        "title": "Restart QangLang Language Server"
+      }
+    ],
     "languages": [
       {
         "id": "qanglang",
+        "aliases": [
+          "QangLang",
+          "qanglang"
+        ],
         "extensions": [
           ".ql"
-        ]
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "qanglang",
+        "scopeName": "source.qanglang",
+        "path": "./syntaxes/qanglang.tmGrammar.json"
       }
     ],
     "configuration": {
       "type": "object",
       "title": "qls-language-server",
       "properties": {
+        "qls-language-server.serverPath": {
+          "type": "string",
+          "default": "qang ls",
+          "description": "Path to the QangLang language server command"
+        },
         "qls-language-server.trace.server": {
           "type": "string",
           "scope": "window",
@@ -42,7 +68,56 @@
           "description": "Traces the communication between VS Code and the language server."
         }
       }
-    }
+    },
+    "semanticTokenTypes": [
+      {
+        "id": "variable",
+        "superType": "variable",
+        "description": "Variables"
+      },
+      {
+        "id": "parameter",
+        "superType": "parameter",
+        "description": "Function parameters"
+      },
+      {
+        "id": "property",
+        "superType": "property",
+        "description": "Object properties"
+      }
+    ],
+    "semanticTokenModifiers": [
+      {
+        "id": "declaration",
+        "description": "Symbol declarations"
+      },
+      {
+        "id": "modification",
+        "description": "Symbol modifications"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "qanglang",
+        "scopes": {
+          "variable": [
+            "variable.other.qanglang"
+          ],
+          "parameter": [
+            "variable.parameter.qanglang"
+          ],
+          "function": [
+            "entity.name.function.qanglang"
+          ],
+          "property": [
+            "variable.other.property.qanglang"
+          ],
+          "class": [
+            "entity.name.type.class.qanglang"
+          ]
+        }
+      }
+    ]
   },
   "scripts": {
     "postinstall": "cd client && npm i",

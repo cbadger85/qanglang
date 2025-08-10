@@ -1,0 +1,38 @@
+# Source files
+client/src/**
+client/node_modules/**
+client/package*.json
+client/tsconfig.json
+
+# Build artifacts
+node_modules/**
+src/**
+target/**
+*.ts
+!dist/**
+
+# Development files
+.git/**
+.gitignore
+.vscode/**
+tsconfig.json
+esbuild.js
+**/*.map
+
+# Rust source (since we're only packaging the compiled extension)
+crates/**
+Cargo.toml
+Cargo.lock
+
+# Documentation and tests
+**/*.md
+!README.md
+**/test/**
+**/*.test.*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

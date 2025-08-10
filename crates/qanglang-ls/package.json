@@ -9,13 +9,13 @@
   },
   "enabledApiProposals": [],
   "activationEvents": [
-    "onLanguage:nrs"
+    "onLanguage:qanglang"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
-        "id": "ql",
+        "id": "qanglang",
         "extensions": [
           ".ql"
         ]

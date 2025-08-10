@@ -16,7 +16,7 @@ use clap::{ArgAction, Parser, Subcommand};
 struct QangCli {
     #[command(subcommand)]
     command: Option<QangCommand>,
-    #[arg(short, long, action = ArgAction::SetTrue)] // TODO Add help text.
+    #[arg(short, long, action = ArgAction::SetTrue, help = "Enable debug mode for REPL")]
     debug: bool,
 }
 
@@ -24,23 +24,22 @@ struct QangCli {
 enum QangCommand {
     Run {
         path: String,
-        #[arg(short, long, action = ArgAction::SetTrue)] // TODO Add help text.
+        #[arg(short, long, action = ArgAction::SetTrue, help = "Enable debug output during script execution")]
         debug: bool,
 
-        #[arg(short = 'm', long, action = ArgAction::SetTrue)] // TODO Add help text.
+        #[arg(short = 'm', long, action = ArgAction::SetTrue, help = "Dump compiled bytecode and heap contents before execution")]
         heap: bool,
 
-        // TODO list options in --help. Add help text.
-        #[arg(short = 'e', long, default_value = "verbose")]
+        #[arg(short = 'e', long, default_value = "verbose", help = "Error message format [possible values: minimal, compact, verbose]")]
         eformat: String,
     },
     Check {
         path: String,
 
-        #[arg(short, long)] // TODO Add help text.
+        #[arg(short, long, help = "Patterns to ignore when recursively checking directories")]
         ignore: Vec<String>,
 
-        #[arg(short = 'e', long, default_value = "verbose")] // TODO Add help text.
+        #[arg(short = 'e', long, default_value = "verbose", help = "Error message format [possible values: minimal, compact, verbose]")]
         eformat: String,
     },
     Ls,

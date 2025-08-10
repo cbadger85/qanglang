@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 qanglang-core = { path = "../qanglang-core" }
-ropey = "1.5.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.78"
 tokio = { version = "1.17.0", features = ["full"] }

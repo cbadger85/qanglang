@@ -29,7 +29,11 @@
         "extensions": [
           ".ql"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/qanglang-light.svg",
+          "dark": "./icons/qanglang-dark.svg"
+        }
       }
     ],
     "grammars": [

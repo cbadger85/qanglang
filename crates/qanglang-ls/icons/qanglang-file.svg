@@ -1,0 +1,10 @@
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+  <!-- File background -->
+  <rect x="2" y="1" width="10" height="14" rx="1" fill="#3B82F6" stroke="#1E40AF" stroke-width="0.5"/>
+  
+  <!-- Folded corner -->
+  <path d="M10 1 L12 3 L10 3 Z" fill="#1E40AF"/>
+  
+  <!-- Q letter -->
+  <text x="6.5" y="10" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="6" font-weight="bold">Q</text>
+</svg>

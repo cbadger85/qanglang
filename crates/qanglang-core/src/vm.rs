@@ -616,10 +616,10 @@ impl Vm {
             SourceLocation::default()
         };
 
-        let obj = self.heap.get(handle).ok_or(QangRuntimeError::new(
-            "Orphaned identifier".to_string(),
-            loc,
-        ))?;
+        let obj = self
+            .heap
+            .get(handle)
+            .ok_or_else(|| QangRuntimeError::new("Orphaned identifier".to_string(), loc))?;
 
         match obj {
             HeapObject::Function(function) => {

@@ -4,11 +4,11 @@ use qanglang_core::{
     CompilerPipeline, FunctionValueKind, HeapObject, ObjectHandle, ObjectHeap, SourceMap, Value, Vm,
 };
 
-pub fn run_tests(files: Vec<std::path::PathBuf>) {
+pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
     let mut results = Vec::new();
 
     for file in files {
-        results.push(run_test(file));
+        results.push(run_test(&file.to_string_lossy(), vm_loader));
     }
 
     let fatal_count = results.iter().filter(|result| result.is_fatal()).count();
@@ -31,7 +31,6 @@ pub fn run_tests(files: Vec<std::path::PathBuf>) {
         })
         .sum();
 
-    // Display individual test results
     for result in &results {
         match result {
             TestSuiteResult::Success(test_results) => {
@@ -53,7 +52,6 @@ pub fn run_tests(files: Vec<std::path::PathBuf>) {
         }
     }
 
-    // Display summary
     println!();
     if fatal_count > 0 {
         println!("Fatal errors: {}", fatal_count);
@@ -70,12 +68,12 @@ pub fn run_tests(files: Vec<std::path::PathBuf>) {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-struct TestDetails {
+pub struct TestDetails {
     name: Option<String>,
     test_handles: Vec<(String, ObjectHandle)>,
 }
 
-enum TestSuiteResult {
+pub enum TestSuiteResult {
     Success(Vec<TestResult>),
     Failure { name: String, reason: String },
 }
@@ -86,7 +84,7 @@ impl TestSuiteResult {
     }
 }
 
-struct TestResult {
+pub struct TestResult {
     name: String,
     failure_reason: Option<String>,
 }
@@ -115,12 +113,12 @@ impl TestResult {
     }
 }
 
-fn run_test(file: std::path::PathBuf) -> TestSuiteResult {
-    let filename = file.to_string_lossy();
-    let source = match fs::read_to_string(file.clone()) {
+pub fn run_test(filename: &str, vm_loader: fn(&mut Vm) -> ()) -> TestSuiteResult {
+    // let filename = file.to_string_lossy();
+    let source = match fs::read_to_string(filename) {
         Ok(content) => content,
         Err(err) => {
-            let filename = filename.into_owned();
+            let filename = filename.to_string();
             let reason = format!("Error reading file '{}': {}", &filename, err);
             return TestSuiteResult::Failure {
                 name: filename,
@@ -138,7 +136,7 @@ fn run_test(file: std::path::PathBuf) -> TestSuiteResult {
                 Ok(_) => vm,
                 Err(error) => {
                     return TestSuiteResult::Failure {
-                        name: filename.into_owned(),
+                        name: filename.to_string(),
                         reason: error.message,
                     };
                 }
@@ -157,18 +155,20 @@ fn run_test(file: std::path::PathBuf) -> TestSuiteResult {
                 .join("\n");
 
             return TestSuiteResult::Failure {
-                name: filename.into_owned(),
+                name: filename.to_string(),
                 reason,
             };
         }
     };
+
+    vm_loader(&mut vm);
 
     let test_details = extract_test_details(vm.globals(), vm.heap());
 
     print!("{}", filename);
     match test_details.name {
         Some(name) => println!(" - {}", name),
-        None => println!(" "),
+        None => println!(),
     }
 
     let mut test_results = Vec::new();

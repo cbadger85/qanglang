@@ -1,5 +1,4 @@
 mod repl;
-mod test_runner;
 
 use qanglang_core::{
     CompilerPipeline, ErrorMessageFormat, ObjectHeap, SourceMap, Vm, disassemble_program,
@@ -103,10 +102,10 @@ fn main() {
 
             if path_obj.is_dir() {
                 let files = collect_ql_files(&path, &[]);
-                test_runner::run_tests(files);
+                qanglang_test::run_tests(files, |_| ());
             } else {
                 let path = path_obj.into();
-                test_runner::run_tests(vec![path]);
+                qanglang_test::run_tests(vec![path], |_| ());
             }
         }
         _ => run_repl(cli.debug),

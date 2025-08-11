@@ -2,7 +2,9 @@
 resolver = "2"
 members = [
     "crates/qanglang-core",
-    "crates/qanglang-cli"
+    "crates/qanglang-cli",
+    "crates/qanglang-ls",
+    "crates/qanglang-test"
 ]
 
 [workspace.dependencies]

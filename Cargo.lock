@@ -705,6 +705,7 @@ dependencies = [
  "clap",
  "qanglang-core",
  "qanglang-ls",
+ "qanglang-test",
 ]
 
 [[package]]
@@ -726,6 +727,13 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower-lsp",
+]
+
+[[package]]
+name = "qanglang-test"
+version = "0.1.0"
+dependencies = [
+ "qanglang-core",
 ]
 
 [[package]]

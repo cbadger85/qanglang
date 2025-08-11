@@ -346,9 +346,24 @@ impl Vm {
                     let a: f64 = a.try_into().map_err(|_| {
                         QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
                     })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
-                    })?;
+                    let b: f64 = b
+                        .try_into()
+                        .map_err(|_| {
+                            QangRuntimeError::new(
+                                "Both operands must be a number.".to_string(),
+                                loc,
+                            )
+                        })
+                        .and_then(|num| {
+                            if num == 0.0 {
+                                Err(QangRuntimeError::new(
+                                    "Cannot divide by zero.".to_string(),
+                                    loc,
+                                ))
+                            } else {
+                                Ok(num)
+                            }
+                        })?;
 
                     Ok((a / b).into())
                 })?,

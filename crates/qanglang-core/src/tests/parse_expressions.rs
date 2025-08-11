@@ -3011,3 +3011,15 @@ fn test_deeply_nested_expressions() {
         }
     }
 }
+
+#[test]
+fn test_lambda_as_expression() {
+    let source_code = r#"
+            assert_throws(() -> 1 / 0);
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}

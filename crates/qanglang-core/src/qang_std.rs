@@ -1,4 +1,4 @@
-use crate::{NativeFunctionError, Value, Vm};
+use crate::{FunctionValueKind, NativeFunctionError, Value, Vm};
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args
@@ -34,6 +34,35 @@ pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
         Err(NativeFunctionError(message.into_string()))
     } else {
         Ok(None)
+    }
+}
+
+#[allow(dead_code)] // TODO add this to the VM after closures are added.
+pub fn qang_assert_throws(
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let assertion = args
+        .first()
+        .ok_or(NativeFunctionError::new("No arguments provided."))?;
+
+    let function_handle = match assertion {
+        Value::Function(FunctionValueKind::QangFunction(function_handle)) => *function_handle,
+        _ => return Err("First argument must be a function.".into()),
+    };
+
+    let result = vm.call_function_with_args(function_handle, Vec::new());
+
+    match result {
+        Ok(_) => {
+            let message = args
+                .get(1)
+                .and_then(|v| v.into_string(vm.heap()).ok())
+                .unwrap_or("Expected function to throw, but did not.".into());
+
+            Err(NativeFunctionError::new(&message))
+        }
+        Err(_) => Ok(None),
     }
 }
 

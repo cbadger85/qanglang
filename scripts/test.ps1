@@ -1,5 +1,6 @@
 # PowerShell script to run qang language tests
-$command = "..\target\release\qang.exe test ..\tests"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$command = "$scriptDir\..\target\release\qang.exe test $scriptDir\..\tests"
 
 Write-Host "Running qang language tests..."
 

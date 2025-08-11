@@ -2,7 +2,8 @@
 
 # Bash script to benchmark cargo run command 30 times
 times=()
-command="../target/release/qang run ../examples/fib.ql"
+script_dir="$(dirname "${BASH_SOURCE[0]}")"
+command="$script_dir/../target/release/qang run $script_dir/../examples/fib.ql"
 
 echo "Running benchmark 30 times..."
 

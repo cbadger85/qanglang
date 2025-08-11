@@ -1,6 +1,7 @@
 # PowerShell script to benchmark cargo run command 30 times
 $times = @()
-$command = "..\target\release\qang.exe run ..\examples\fib.ql"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$command = "$scriptDir\..\target\release\qang.exe run $scriptDir\..\examples\fib.ql"
 
 Write-Host "Running benchmark 30 times..."
 

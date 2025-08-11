@@ -1,10 +1,12 @@
 var test_description = "Testing assertions in QangLang";
 
 fn test_assert_true() {
-  assert_eq(true, true, "Expected 'true' to equal 'true'.");
+  assert_eq(true, !true, "Expected 'true' to equal 'true'.");
   assert(true, "Expected 'true' to be truthy");
   assert_eq(true, !false, "Expected 'true' not to be falsy.");
 }
+
+// test_assert_true();
 
 fn test_assert_false() {
   assert_eq(false, false, "Expected 'false' to equal 'false'.");
@@ -17,11 +19,3 @@ fn test_assert_nil() {
   assert(!nil, "Expected 'nil' to be falsy");
   assert_eq(!nil, true, "Expected 'nil' not to be truthy.");
 }
-
-// Replace with test runner.
-
-println(test_description);
-test_assert_true();
-test_assert_false();
-test_assert_nil();
-println("All tests passed.");

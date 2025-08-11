@@ -58,6 +58,22 @@ enum QangCommand {
         eformat: String,
     },
     Ls,
+    Test {
+        path: String,
+        #[arg(short, long, action = ArgAction::SetTrue, help = "Enable debug output during script execution")]
+        debug: bool,
+
+        #[arg(short = 'm', long, action = ArgAction::SetTrue, help = "Dump compiled bytecode and heap contents before execution")]
+        heap: bool,
+
+        #[arg(
+            short = 'e',
+            long,
+            default_value = "verbose",
+            help = "Error message format [possible values: minimal, compact, verbose]"
+        )]
+        eformat: String,
+    },
 }
 
 fn main() {
@@ -76,6 +92,23 @@ fn main() {
             eformat,
         }) => check_script(&path, &ignore, &eformat),
         Some(QangCommand::Ls) => run_language_server(),
+        Some(QangCommand::Test {
+            path,
+            debug: _,
+            heap: _,
+            eformat: _,
+        }) => {
+            use std::path::Path;
+            let path_obj = Path::new(&path);
+
+            if path_obj.is_dir() {
+                let files = collect_ql_files(&path, &[]);
+                test_runner::run_tests(files);
+            } else {
+                let path = path_obj.into();
+                test_runner::run_tests(vec![path]);
+            }
+        }
         _ => run_repl(cli.debug),
     }
 }

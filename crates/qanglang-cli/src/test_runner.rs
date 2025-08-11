@@ -15,23 +15,58 @@ pub fn run_tests(files: Vec<std::path::PathBuf>) {
     let total_errors: usize = results
         .iter()
         .map(|result| match result {
-            TestSuiteResult::Success {
-                name: _,
-                test_results,
-            } => test_results.iter().filter(|r| r.is_failure()).count(),
+            TestSuiteResult::Success(test_results) => {
+                test_results.iter().filter(|r| r.is_failure()).count()
+            }
             _ => 0,
         })
         .sum();
     let total_passed: usize = results
         .iter()
         .map(|result| match result {
-            TestSuiteResult::Success {
-                name: _,
-                test_results,
-            } => test_results.iter().filter(|r| r.is_success()).count(),
+            TestSuiteResult::Success(test_results) => {
+                test_results.iter().filter(|r| r.is_success()).count()
+            }
             _ => 0,
         })
         .sum();
+
+    // Display individual test results
+    for result in &results {
+        match result {
+            TestSuiteResult::Success(test_results) => {
+                for test_result in test_results {
+                    if test_result.is_success() {
+                        println!("  ✓ {}", test_result.name);
+                    } else {
+                        println!("  ✗ {}", test_result.name);
+                        if let Some(reason) = &test_result.failure_reason {
+                            println!("    {}", reason);
+                        }
+                    }
+                }
+            }
+            TestSuiteResult::Failure { name, reason } => {
+                println!("  ✗ Suite failed: {}", name);
+                println!("    {}", reason);
+            }
+        }
+    }
+
+    // Display summary
+    println!();
+    if fatal_count > 0 {
+        println!("Fatal errors: {}", fatal_count);
+    }
+    if total_errors > 0 {
+        println!("Failed tests: {}", total_errors);
+    }
+    println!("Passed tests: {}", total_passed);
+
+    let total_tests = total_passed + total_errors;
+    if total_tests > 0 {
+        println!("Total: {} tests", total_tests);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -41,14 +76,8 @@ struct TestDetails {
 }
 
 enum TestSuiteResult {
-    Success {
-        name: String,
-        test_results: Vec<TestResult>,
-    },
-    Failure {
-        name: String,
-        reason: String,
-    },
+    Success(Vec<TestResult>),
+    Failure { name: String, reason: String },
 }
 
 impl TestSuiteResult {
@@ -158,10 +187,7 @@ fn run_test(file: std::path::PathBuf) -> TestSuiteResult {
         }
     }
 
-    return TestSuiteResult::Success {
-        name: filename.into_owned(),
-        test_results,
-    };
+    return TestSuiteResult::Success(test_results);
 }
 
 fn extract_test_details(globals: &HashMap<usize, Value>, heap: &ObjectHeap) -> TestDetails {

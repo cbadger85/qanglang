@@ -665,6 +665,11 @@ impl Vm {
         handle: ObjectHandle,
         args: Vec<Value>,
     ) -> RuntimeResult<Value> {
+        push_value!(
+            self,
+            Value::Function(FunctionValueKind::QangFunction(handle))
+        );
+
         for value in &args {
             push_value!(self, *value);
         }

@@ -87,11 +87,17 @@ pub fn run_tests(files: Vec<PathBuf>) -> Vec<TestSuiteResult> {
                 current_dir.join(&file)
             };
             
-            let file_path = absolute_file.to_string_lossy().to_string();
-            let relative_path = file.strip_prefix(&current_dir)
-                .unwrap_or(&file)
-                .to_string_lossy()
-                .to_string();
+            // Canonicalize the absolute path to resolve .. and . components for file reading
+            let canonical_file = absolute_file.canonicalize().unwrap_or(absolute_file.clone());
+            let file_path = canonical_file.to_string_lossy().to_string();
+            
+            // For display, create a clean relative path from the canonical file to current dir
+            let relative_path = canonical_file.strip_prefix(&current_dir.canonicalize().unwrap_or(current_dir.clone()))
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| {
+                    // Fallback: try to use the original file path if it's cleaner
+                    file.to_string_lossy().to_string()
+                });
             
             run_test(&file_path, &relative_path)
         })

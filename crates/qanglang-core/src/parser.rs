@@ -642,7 +642,7 @@ impl<'a> Parser<'a> {
     fn expression_statement(&mut self) -> ParseResult<ast::ExprStmt> {
         let expr = self.expression()?;
 
-        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?; // TODO move this error to the previous line.
 
         let semicolon_span = self.get_previous_span();
 
@@ -1599,7 +1599,7 @@ mod expression_parser {
                         .map(|t| SourceSpan::from_token(t).end)
                         .unwrap_or(SourceSpan::from_token(current_token).start);
 
-                    let span = SourceSpan::new(location, location);
+                    let span = SourceSpan::new(location, location); // TODO move the logic to get this span into a helper in the Parser.
 
                     return Err(crate::QangSyntaxError::new(
                         "Unexpected oprand. Missing operator or ';'.".to_string(),

@@ -100,13 +100,15 @@ fn main() {
             use std::path::Path;
             let path_obj = Path::new(&path);
 
-            if path_obj.is_dir() {
-                let files = collect_ql_files(&path, &[]);
-                qanglang_test::run_tests(files, |_| ());
+            let files = if path_obj.is_dir() {
+                collect_ql_files(&path, &[])
             } else {
-                let path = path_obj.into();
-                qanglang_test::run_tests(vec![path], |_| ());
-            }
+                vec![path_obj.into()]
+            };
+
+            let results = qanglang_test::run_tests(files);
+            let output = qanglang_test::format_results(&results);
+            print!("{}", output);
         }
         _ => run_repl(cli.debug),
     }

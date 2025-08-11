@@ -665,6 +665,9 @@ impl Vm {
         handle: ObjectHandle,
         args: Vec<Value>,
     ) -> RuntimeResult<Value> {
+        let saved_stack_top = self.stack_top;
+        let saved_frame_count = self.frame_count;
+
         push_value!(
             self,
             Value::Function(FunctionValueKind::QangFunction(handle))
@@ -676,9 +679,15 @@ impl Vm {
 
         self.call_function(handle, args.len())?;
 
-        let return_value = self.run()?;
-
-        Ok(return_value)
+        match self.run() {
+            Ok(return_value) => Ok(return_value),
+            Err(error) => {
+                // Reset the VM state to before the function call
+                self.stack_top = saved_stack_top;
+                self.frame_count = saved_frame_count;
+                Err(error)
+            }
+        }
     }
 
     fn call_native_function(

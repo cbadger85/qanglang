@@ -22,7 +22,7 @@ fn test_multiplication() {
 fn test_division() {
   assert_eq(2 / 4, 0.5, "Expect 2 / 4 to equal 0.5.");
   assert_eq(2 / -4, -0.5, "Expect 2 / -4 to equal 0.5.");
-  assert_eq(-4 / 2, -0.5, "Expect -2 / 4 to equal 0.5");
-  assert_eq(-4 / -2, 0.5, "Expect -2 / -4 to equal 0.5.");
+  assert_eq(-2 / 4, -0.5, "Expect -2 / 4 to equal 0.5");
+  assert_eq(-2 / -4, 0.5, "Expect -2 / -4 to equal 0.5.");
 }
 

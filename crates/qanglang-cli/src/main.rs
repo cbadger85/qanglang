@@ -1,4 +1,5 @@
 mod repl;
+mod test_runner;
 
 use qanglang_core::{
     CompilerPipeline, ErrorMessageFormat, ObjectHeap, SourceMap, Vm, disassemble_program,
@@ -30,16 +31,30 @@ enum QangCommand {
         #[arg(short = 'm', long, action = ArgAction::SetTrue, help = "Dump compiled bytecode and heap contents before execution")]
         heap: bool,
 
-        #[arg(short = 'e', long, default_value = "verbose", help = "Error message format [possible values: minimal, compact, verbose]")]
+        #[arg(
+            short = 'e',
+            long,
+            default_value = "verbose",
+            help = "Error message format [possible values: minimal, compact, verbose]"
+        )]
         eformat: String,
     },
     Check {
         path: String,
 
-        #[arg(short, long, help = "Patterns to ignore when recursively checking directories")]
+        #[arg(
+            short,
+            long,
+            help = "Patterns to ignore when recursively checking directories"
+        )]
         ignore: Vec<String>,
 
-        #[arg(short = 'e', long, default_value = "verbose", help = "Error message format [possible values: minimal, compact, verbose]")]
+        #[arg(
+            short = 'e',
+            long,
+            default_value = "verbose",
+            help = "Error message format [possible values: minimal, compact, verbose]"
+        )]
         eformat: String,
     },
     Ls,

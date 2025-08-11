@@ -9,6 +9,10 @@ use crate::{chunk::Chunk, error::ValueConversionError};
 pub struct ObjectHandle(usize);
 
 impl ObjectHandle {
+    pub fn new(handle_id: usize) -> Self {
+        Self(handle_id)
+    }
+
     pub fn identifier(&self) -> usize {
         self.0
     }

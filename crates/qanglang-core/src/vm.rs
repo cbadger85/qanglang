@@ -660,6 +660,20 @@ impl Vm {
         Ok(())
     }
 
+    pub fn call_function_with_args(
+        &mut self,
+        handle: ObjectHandle,
+        args: Vec<Value>,
+    ) -> RuntimeResult<Value> {
+        for value in &args {
+            push_value!(self, *value);
+        }
+
+        self.call_function(handle, args.len())?;
+
+        pop_value!(self)
+    }
+
     fn call_native_function(
         &mut self,
         function: NativeFunction,
@@ -701,6 +715,10 @@ impl Vm {
 
     pub fn heap_mut(&mut self) -> &mut ObjectHeap {
         &mut self.heap
+    }
+
+    pub fn globals(&self) -> &HashMap<usize, Value> {
+        &self.globals
     }
 
     fn get_stack_trace(&self) -> Vec<Trace> {

@@ -15,7 +15,7 @@ pub use chunk::SourceLocation;
 pub use compiler::{Compiler, CompilerError, CompilerPipeline, ErrorMessageFormat, QangProgram};
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
-pub use heap::{FunctionObject, HeapObject, ObjectHeap};
+pub use heap::{FunctionObject, HeapObject, ObjectHandle, ObjectHeap};
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};

@@ -15,26 +15,39 @@ pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
     let total_errors: usize = results
         .iter()
         .map(|result| match result {
-            TestSuiteResult::Success(test_results) => {
-                test_results.iter().filter(|r| r.is_failure()).count()
-            }
+            TestSuiteResult::Success {
+                name,
+                results,
+                description,
+            } => results.iter().filter(|r| r.is_failure()).count(),
             _ => 0,
         })
         .sum();
     let total_passed: usize = results
         .iter()
         .map(|result| match result {
-            TestSuiteResult::Success(test_results) => {
-                test_results.iter().filter(|r| r.is_success()).count()
-            }
+            TestSuiteResult::Success {
+                name,
+                results,
+                description,
+            } => results.iter().filter(|r| r.is_success()).count(),
             _ => 0,
         })
         .sum();
 
     for result in &results {
         match result {
-            TestSuiteResult::Success(test_results) => {
-                for test_result in test_results {
+            TestSuiteResult::Success {
+                name,
+                results,
+                description,
+            } => {
+                if let Some(desc) = description {
+                    println!("{} - {}", name, desc);
+                } else {
+                    println!("{}", name);
+                }
+                for test_result in results {
                     if test_result.is_success() {
                         println!("  ✓ {}", test_result.name);
                     } else {
@@ -46,6 +59,7 @@ pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
                 }
             }
             TestSuiteResult::Failure { name, reason } => {
+                println!("{}", name);
                 println!("  ✗ Suite failed: {}", name);
                 println!("    {}", reason);
             }
@@ -69,13 +83,20 @@ pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TestDetails {
-    name: Option<String>,
+    description: Option<String>,
     test_handles: Vec<(String, ObjectHandle)>,
 }
 
 pub enum TestSuiteResult {
-    Success(Vec<TestResult>),
-    Failure { name: String, reason: String },
+    Success {
+        name: String,
+        results: Vec<TestResult>,
+        description: Option<String>,
+    },
+    Failure {
+        name: String,
+        reason: String,
+    },
 }
 
 impl TestSuiteResult {
@@ -165,12 +186,6 @@ pub fn run_test(filename: &str, vm_loader: fn(&mut Vm) -> ()) -> TestSuiteResult
 
     let test_details = extract_test_details(vm.globals(), vm.heap());
 
-    print!("{}", filename);
-    match test_details.name {
-        Some(name) => println!(" - {}", name),
-        None => println!(),
-    }
-
     let mut test_results = Vec::new();
 
     for (function_name, function_handle) in test_details.test_handles {
@@ -184,7 +199,11 @@ pub fn run_test(filename: &str, vm_loader: fn(&mut Vm) -> ()) -> TestSuiteResult
         }
     }
 
-    TestSuiteResult::Success(test_results)
+    TestSuiteResult::Success {
+        name: filename.to_string(),
+        results: test_results,
+        description: test_details.description,
+    }
 }
 
 fn extract_test_details(globals: &HashMap<usize, Value>, heap: &ObjectHeap) -> TestDetails {
@@ -225,5 +244,8 @@ fn extract_test_details(globals: &HashMap<usize, Value>, heap: &ObjectHeap) -> T
         })
         .collect();
 
-    TestDetails { name, test_handles }
+    TestDetails {
+        description: name,
+        test_handles,
+    }
 }

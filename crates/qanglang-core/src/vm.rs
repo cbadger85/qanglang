@@ -222,17 +222,17 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
 
-        let result = self
+        let _ = self
             .run()
-            .map_err(|e| e.with_stack_trace(self.get_stack_trace()));
+            .map_err(|e| e.with_stack_trace(self.get_stack_trace()))?;
 
         #[cfg(feature = "profiler")]
         coz::progress!("execution_complete");
 
-        result
+        Ok(())
     }
 
-    fn run(&mut self) -> RuntimeResult<()> {
+    fn run(&mut self) -> RuntimeResult<Value> {
         loop {
             #[cfg(feature = "profiler")]
             coz::progress!("vm_instructions");
@@ -519,7 +519,7 @@ impl Vm {
                         );
 
                         self.stack_top = 0;
-                        return Ok(());
+                        return Ok(result);
                     }
 
                     // Reset stack to before the function call, then push the return value.
@@ -676,7 +676,9 @@ impl Vm {
 
         self.call_function(handle, args.len())?;
 
-        pop_value!(self)
+        let return_value = self.run()?;
+
+        Ok(return_value)
     }
 
     fn call_native_function(

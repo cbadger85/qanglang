@@ -82,10 +82,7 @@ enum TestSuiteResult {
 
 impl TestSuiteResult {
     fn is_fatal(&self) -> bool {
-        match self {
-            Self::Failure { name: _, reason: _ } => true,
-            _ => false,
-        }
+        matches!(self, Self::Failure { name: _, reason: _ })
     }
 }
 
@@ -171,7 +168,7 @@ fn run_test(file: std::path::PathBuf) -> TestSuiteResult {
     print!("{}", filename);
     match test_details.name {
         Some(name) => println!(" - {}", name),
-        None => println!(""),
+        None => println!(" "),
     }
 
     let mut test_results = Vec::new();
@@ -187,7 +184,7 @@ fn run_test(file: std::path::PathBuf) -> TestSuiteResult {
         }
     }
 
-    return TestSuiteResult::Success(test_results);
+    TestSuiteResult::Success(test_results)
 }
 
 fn extract_test_details(globals: &HashMap<usize, Value>, heap: &ObjectHeap) -> TestDetails {

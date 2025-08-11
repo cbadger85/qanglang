@@ -16,9 +16,9 @@ pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
         .iter()
         .map(|result| match result {
             TestSuiteResult::Success {
-                name,
+                name: _,
                 results,
-                description,
+                description: _,
             } => results.iter().filter(|r| r.is_failure()).count(),
             _ => 0,
         })
@@ -27,9 +27,9 @@ pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
         .iter()
         .map(|result| match result {
             TestSuiteResult::Success {
-                name,
+                name: _,
                 results,
-                description,
+                description: _,
             } => results.iter().filter(|r| r.is_success()).count(),
             _ => 0,
         })

@@ -182,8 +182,8 @@ fn test_edge_cases() {
   assert_eq(1000 * 0, 0, "Expected 1000 * 0 to equal 0.");
   assert_eq(0 - 5, -5, "Expected 0 - 5 to equal -5.");
   assert_eq(5 - 0, 5, "Expected 5 - 0 to equal 5.");
-  // assert_throws(() -> (5 / 0), "Unexpected division by zero."); // TODO test division by zero.
-  
+  // assert_throws(() -> nil, "Unexpected division by zero."); // TODO test division by zero.
+   
   // Operations that result in zero
   assert_eq(5 - 5, 0, "Expected 5 - 5 to equal 0.");
   assert_eq(7 * 8 - 56, 0, "Expected 7 * 8 - 56 to equal 0.");

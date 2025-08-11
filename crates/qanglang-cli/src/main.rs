@@ -97,16 +97,24 @@ fn main() {
             heap: _,
             eformat: _,
         }) => {
-            use std::path::Path;
-            let path_obj = Path::new(&path);
-
-            let files = if path_obj.is_dir() {
-                collect_ql_files(&path, &[])
-            } else {
-                vec![path_obj.into()]
+            // Use the new clean test file resolution system
+            let resolver = match qanglang_test::TestFileResolver::new() {
+                Ok(resolver) => resolver,
+                Err(err) => {
+                    eprintln!("Error: Unable to determine working directory: {}", err);
+                    std::process::exit(1);
+                }
             };
 
-            let results = qanglang_test::run_tests(files);
+            let test_files = match resolver.resolve(&path) {
+                Ok(files) => files,
+                Err(err) => {
+                    eprintln!("Error: {}", err);
+                    std::process::exit(1);
+                }
+            };
+
+            let results = qanglang_test::run_tests_from_files(test_files);
             let output = qanglang_test::format_results(&results);
             print!("{}", output);
         }

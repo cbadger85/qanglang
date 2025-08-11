@@ -1,8 +1,10 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs};
 
 use qanglang_core::{
     CompilerPipeline, FunctionValueKind, HeapObject, ObjectHandle, ObjectHeap, SourceMap, Value, Vm,
 };
+
+use crate::test_file::TestFile;
 
 /// Represents the result of running a single test function
 #[derive(Debug, Clone)]
@@ -33,28 +35,25 @@ impl TestResult {
 /// Represents the result of running a test suite (single .ql file)
 #[derive(Debug, Clone)]
 pub struct TestSuiteResult {
-    pub file_path: String,
-    pub relative_path: String,
+    pub display_path: String,
     pub description: Option<String>,
     pub tests: Vec<TestResult>,
     pub suite_error: Option<String>,
 }
 
 impl TestSuiteResult {
-    pub fn success(file_path: String, relative_path: String, description: Option<String>, tests: Vec<TestResult>) -> Self {
+    pub fn success(display_path: String, description: Option<String>, tests: Vec<TestResult>) -> Self {
         Self {
-            file_path,
-            relative_path,
+            display_path,
             description,
             tests,
             suite_error: None,
         }
     }
 
-    pub fn failure(file_path: String, relative_path: String, error: String) -> Self {
+    pub fn failure(display_path: String, error: String) -> Self {
         Self {
-            file_path,
-            relative_path,
+            display_path,
             description: None,
             tests: Vec::new(),
             suite_error: Some(error),
@@ -74,48 +73,22 @@ impl TestSuiteResult {
     }
 }
 
-/// Runs tests from a collection of test files and returns results
-pub fn run_tests(files: Vec<PathBuf>) -> Vec<TestSuiteResult> {
-    let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::new());
-    
-    files.into_iter()
-        .map(|file| {
-            // Convert to absolute path to ensure we can read the file
-            let absolute_file = if file.is_absolute() {
-                file.clone()
-            } else {
-                current_dir.join(&file)
-            };
-            
-            // Canonicalize the absolute path to resolve .. and . components for file reading
-            let canonical_file = absolute_file.canonicalize().unwrap_or(absolute_file.clone());
-            let file_path = canonical_file.to_string_lossy().to_string();
-            
-            // For display, create a clean relative path from the canonical file to current dir
-            let relative_path = canonical_file.strip_prefix(&current_dir.canonicalize().unwrap_or(current_dir.clone()))
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| {
-                    // Fallback: try to use the original file path if it's cleaner
-                    file.to_string_lossy().to_string()
-                });
-            
-            run_test(&file_path, &relative_path)
-        })
+/// Runs tests from a collection of TestFile objects and returns results
+pub fn run_tests_from_files(test_files: Vec<TestFile>) -> Vec<TestSuiteResult> {
+    test_files
+        .into_iter()
+        .map(|test_file| run_test_file(test_file))
         .collect()
 }
 
 /// Runs a single test file and returns the results
-pub fn run_test(file_path: &str, relative_path: &str) -> TestSuiteResult {
+pub fn run_test_file(test_file: TestFile) -> TestSuiteResult {
     // Read the test file
-    let source = match fs::read_to_string(file_path) {
+    let source = match fs::read_to_string(&test_file.file_path) {
         Ok(content) => content,
         Err(err) => {
-            let error = format!("Error reading file '{}': {}", file_path, err);
-            return TestSuiteResult::failure(
-                file_path.to_string(),
-                relative_path.to_string(),
-                error,
-            );
+            let error = format!("Error reading file '{}': {}", test_file.file_path.display(), err);
+            return TestSuiteResult::failure(test_file.display_path, error);
         }
     };
 
@@ -133,11 +106,7 @@ pub fn run_test(file_path: &str, relative_path: &str) -> TestSuiteResult {
                 .collect();
             
             let error = format!("Compilation failed: {}", error_messages.join("; "));
-            return TestSuiteResult::failure(
-                file_path.to_string(),
-                relative_path.to_string(),
-                error,
-            );
+            return TestSuiteResult::failure(test_file.display_path, error);
         }
     };
 
@@ -145,11 +114,7 @@ pub fn run_test(file_path: &str, relative_path: &str) -> TestSuiteResult {
     let mut vm = Vm::new(heap);
     if let Err(error) = vm.interpret(program) {
         let error = format!("Runtime error during initialization: {}", error.message);
-        return TestSuiteResult::failure(
-            file_path.to_string(),
-            relative_path.to_string(),
-            error,
-        );
+        return TestSuiteResult::failure(test_file.display_path, error);
     }
 
     // Extract test information
@@ -168,12 +133,13 @@ pub fn run_test(file_path: &str, relative_path: &str) -> TestSuiteResult {
         }
     }
 
-    TestSuiteResult::success(
-        file_path.to_string(),
-        relative_path.to_string(),
-        description,
-        test_results,
-    )
+    TestSuiteResult::success(test_file.display_path, description, test_results)
+}
+
+/// Legacy function for compatibility
+pub fn run_test(file_path: &str, relative_path: &str) -> TestSuiteResult {
+    let test_file = TestFile::new(file_path.into(), relative_path.to_string());
+    run_test_file(test_file)
 }
 
 /// Extracts test description and test functions from the VM globals
@@ -226,9 +192,9 @@ pub fn format_results(results: &[TestSuiteResult]) -> String {
     // Print each test suite
     for result in results {
         if let Some(description) = &result.description {
-            output.push_str(&format!("{} - {}\n", result.relative_path, description));
+            output.push_str(&format!("{} - {}\n", result.display_path, description));
         } else {
-            output.push_str(&format!("{}\n", result.relative_path));
+            output.push_str(&format!("{}\n", result.display_path));
         }
 
         if let Some(error) = &result.suite_error {

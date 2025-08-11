@@ -7,6 +7,13 @@ use qanglang_core::{
 pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
     let mut results = Vec::new();
 
+    // Find common path prefix
+    let common_prefix = if files.len() > 1 {
+        find_common_path_prefix(&files)
+    } else {
+        std::path::PathBuf::new()
+    };
+
     for file in files {
         results.push(run_test(&file.to_string_lossy(), vm_loader));
     }
@@ -42,10 +49,11 @@ pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
                 results,
                 description,
             } => {
+                let display_name = strip_common_prefix(name, &common_prefix);
                 if let Some(desc) = description {
-                    println!("{} - {}", name, desc);
+                    println!("{} - {}", display_name, desc);
                 } else {
-                    println!("{}", name);
+                    println!("{}", display_name);
                 }
                 for test_result in results {
                     if test_result.is_success() {
@@ -59,8 +67,9 @@ pub fn run_tests(files: Vec<std::path::PathBuf>, vm_loader: fn(&mut Vm) -> ()) {
                 }
             }
             TestSuiteResult::Failure { name, reason } => {
-                println!("{}", name);
-                println!("  ✗ Suite failed: {}", name);
+                let display_name = strip_common_prefix(name, &common_prefix);
+                println!("{}", display_name);
+                println!("  ✗ Suite failed: {}", display_name);
                 println!("    {}", reason);
             }
         }
@@ -247,5 +256,40 @@ fn extract_test_details(globals: &HashMap<usize, Value>, heap: &ObjectHeap) -> T
     TestDetails {
         description: name,
         test_handles,
+    }
+}
+
+fn find_common_path_prefix(paths: &[std::path::PathBuf]) -> std::path::PathBuf {
+    if paths.is_empty() {
+        return std::path::PathBuf::new();
+    }
+
+    let mut common = paths[0].clone();
+
+    for path in &paths[1..] {
+        let mut new_common = std::path::PathBuf::new();
+        let common_components: Vec<_> = common.components().collect();
+        let path_components: Vec<_> = path.components().collect();
+
+        for (c1, c2) in common_components.iter().zip(path_components.iter()) {
+            if c1 == c2 {
+                new_common.push(c1.as_os_str());
+            } else {
+                break;
+            }
+        }
+        common = new_common;
+    }
+
+    common
+}
+
+fn strip_common_prefix(path: &str, prefix: &std::path::Path) -> String {
+    let path_buf = std::path::PathBuf::from(path);
+
+    if let Ok(relative) = path_buf.strip_prefix(prefix) {
+        relative.to_string_lossy().to_string()
+    } else {
+        path.to_string()
     }
 }

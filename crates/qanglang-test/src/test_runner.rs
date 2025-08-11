@@ -4,7 +4,7 @@ use qanglang_core::{
     CompilerPipeline, FunctionValueKind, HeapObject, ObjectHandle, ObjectHeap, SourceMap, Value, Vm,
 };
 
-use crate::test_file::TestFile;
+use crate::test_file::SourceFile;
 
 /// Represents the result of running a single test function
 #[derive(Debug, Clone)]
@@ -42,7 +42,11 @@ pub struct TestSuiteResult {
 }
 
 impl TestSuiteResult {
-    pub fn success(display_path: String, description: Option<String>, tests: Vec<TestResult>) -> Self {
+    pub fn success(
+        display_path: String,
+        description: Option<String>,
+        tests: Vec<TestResult>,
+    ) -> Self {
         Self {
             display_path,
             description,
@@ -73,22 +77,29 @@ impl TestSuiteResult {
     }
 }
 
-/// Runs tests from a collection of TestFile objects and returns results
-pub fn run_tests_from_files(test_files: Vec<TestFile>) -> Vec<TestSuiteResult> {
-    test_files
+/// Runs tests from a collection of SourceFile objects and optional lambda to modify the runtime, then returns results,
+pub fn run_tests_from_files(
+    source_files: Vec<SourceFile>,
+    vm_builder: Option<fn(&mut Vm)>,
+) -> Vec<TestSuiteResult> {
+    source_files
         .into_iter()
-        .map(|test_file| run_test_file(test_file))
+        .map(|source_file| run_test_file(source_file, vm_builder))
         .collect()
 }
 
-/// Runs a single test file and returns the results
-pub fn run_test_file(test_file: TestFile) -> TestSuiteResult {
+/// Runs a single test file and returns the results. Allows an optional lambda to be used to modify the runtime,
+pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -> TestSuiteResult {
     // Read the test file
-    let source = match fs::read_to_string(&test_file.file_path) {
+    let source = match fs::read_to_string(&source_file.file_path) {
         Ok(content) => content,
         Err(err) => {
-            let error = format!("Error reading file '{}': {}", test_file.file_path.display(), err);
-            return TestSuiteResult::failure(test_file.display_path, error);
+            let error = format!(
+                "Error reading file '{}': {}",
+                source_file.file_path.display(),
+                err
+            );
+            return TestSuiteResult::failure(source_file.display_path, error);
         }
     };
 
@@ -104,17 +115,22 @@ pub fn run_test_file(test_file: TestFile) -> TestSuiteResult {
                 .into_iter()
                 .map(|e| e.message)
                 .collect();
-            
+
             let error = format!("Compilation failed: {}", error_messages.join("; "));
-            return TestSuiteResult::failure(test_file.display_path, error);
+            return TestSuiteResult::failure(source_file.display_path, error);
         }
     };
 
     // Create VM and run the initial script
     let mut vm = Vm::new(heap);
+
+    if let Some(builder) = vm_builder {
+        builder(&mut vm);
+    }
+
     if let Err(error) = vm.interpret(program) {
         let error = format!("Runtime error during initialization: {}", error.message);
-        return TestSuiteResult::failure(test_file.display_path, error);
+        return TestSuiteResult::failure(source_file.display_path, error);
     }
 
     // Extract test information
@@ -133,17 +149,14 @@ pub fn run_test_file(test_file: TestFile) -> TestSuiteResult {
         }
     }
 
-    TestSuiteResult::success(test_file.display_path, description, test_results)
-}
-
-/// Legacy function for compatibility
-pub fn run_test(file_path: &str, relative_path: &str) -> TestSuiteResult {
-    let test_file = TestFile::new(file_path.into(), relative_path.to_string());
-    run_test_file(test_file)
+    TestSuiteResult::success(source_file.display_path, description, test_results)
 }
 
 /// Extracts test description and test functions from the VM globals
-fn extract_test_info(globals: &HashMap<usize, Value>, heap: &ObjectHeap) -> (Option<String>, Vec<(String, ObjectHandle)>) {
+fn extract_test_info(
+    globals: &HashMap<usize, Value>,
+    heap: &ObjectHeap,
+) -> (Option<String>, Vec<(String, ObjectHandle)>) {
     let mut description = None;
     let mut test_functions = Vec::new();
 
@@ -151,12 +164,10 @@ fn extract_test_info(globals: &HashMap<usize, Value>, heap: &ObjectHeap) -> (Opt
         let handle = ObjectHandle::new(*handle_id);
 
         // Get the identifier name for this global
-        let identifier = heap
-            .get(handle)
-            .and_then(|obj| match obj {
-                HeapObject::String(name) => Some(name.as_ref()),
-                _ => None,
-            });
+        let identifier = heap.get(handle).and_then(|obj| match obj {
+            HeapObject::String(name) => Some(name.as_ref()),
+            _ => None,
+        });
 
         if let Some(identifier) = identifier {
             match value {

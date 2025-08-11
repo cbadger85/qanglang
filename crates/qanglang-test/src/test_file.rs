@@ -1,15 +1,15 @@
 use std::path::{Path, PathBuf};
 
-/// Represents a test file with both its actual file location and how it should be displayed
+/// Represents a source file with both its actual file location and how it should be displayed
 #[derive(Debug, Clone)]
-pub struct TestFile {
+pub struct SourceFile {
     /// The actual file path that can be used to read the file
     pub file_path: PathBuf,
     /// The path to display to the user (relative to their context)
     pub display_path: String,
 }
 
-impl TestFile {
+impl SourceFile {
     pub fn new(file_path: PathBuf, display_path: String) -> Self {
         Self {
             file_path,
@@ -18,19 +18,27 @@ impl TestFile {
     }
 }
 
-/// Resolves test files from user input while preserving display context
-pub struct TestFileResolver {
+// Type alias for backward compatibility
+pub type TestFile = SourceFile;
+
+/// Resolves source files from user input while preserving display context
+pub struct SourceFileResolver {
     user_working_dir: PathBuf,
 }
 
-impl TestFileResolver {
+// Type alias for backward compatibility
+pub type TestFileResolver = SourceFileResolver;
+
+// TODO add support for ignore patterns when resolving a dir of files.
+
+impl SourceFileResolver {
     pub fn new() -> std::io::Result<Self> {
         let user_working_dir = std::env::current_dir()?;
         Ok(Self { user_working_dir })
     }
 
-    /// Resolve a single file or directory path into test files
-    pub fn resolve(&self, user_input: &str) -> std::io::Result<Vec<TestFile>> {
+    /// Resolve a single file or directory path into source files
+    pub fn resolve(&self, user_input: &str) -> std::io::Result<Vec<SourceFile>> {
         let input_path = Path::new(user_input);
 
         // Convert to absolute path for file operations
@@ -59,27 +67,27 @@ impl TestFileResolver {
         }
     }
 
-    fn resolve_single_file(&self, absolute_path: &Path) -> std::io::Result<Vec<TestFile>> {
+    fn resolve_single_file(&self, absolute_path: &Path) -> std::io::Result<Vec<SourceFile>> {
         // For single files, use a clean display path
         let display_path = self.create_display_path(absolute_path);
 
-        Ok(vec![TestFile::new(
+        Ok(vec![SourceFile::new(
             absolute_path.to_path_buf(),
             display_path,
         )])
     }
 
-    fn resolve_directory(&self, absolute_path: &Path) -> std::io::Result<Vec<TestFile>> {
-        let mut test_files = Vec::new();
-        self.collect_ql_files(absolute_path, &mut test_files)?;
+    fn resolve_directory(&self, absolute_path: &Path) -> std::io::Result<Vec<SourceFile>> {
+        let mut source_files = Vec::new();
+        self.collect_ql_files(absolute_path, &mut source_files)?;
 
         // Sort for consistent output
-        test_files.sort_by(|a, b| a.display_path.cmp(&b.display_path));
+        source_files.sort_by(|a, b| a.display_path.cmp(&b.display_path));
 
-        Ok(test_files)
+        Ok(source_files)
     }
 
-    fn collect_ql_files(&self, dir: &Path, files: &mut Vec<TestFile>) -> std::io::Result<()> {
+    fn collect_ql_files(&self, dir: &Path, files: &mut Vec<SourceFile>) -> std::io::Result<()> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
@@ -88,7 +96,7 @@ impl TestFileResolver {
                 self.collect_ql_files(&path, files)?;
             } else if path.extension().and_then(|s| s.to_str()) == Some("ql") {
                 let display_path = self.create_display_path(&path);
-                files.push(TestFile::new(path, display_path));
+                files.push(SourceFile::new(path, display_path));
             }
         }
         Ok(())

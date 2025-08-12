@@ -1,4 +1,4 @@
-var test_description = "Testing assertions in QangLang";
+var test_description = "Testing the native assertion functions.";
 
 fn test_assert_true() {
   assert_eq(true, true, "Expected 'true' to equal 'true'.");

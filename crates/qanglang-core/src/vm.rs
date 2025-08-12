@@ -43,13 +43,18 @@ pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nat
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {
         if $vm.stack_top >= STACK_MAX {
-            panic!(
-                "Stack overflow: maximum stack size of {} exceeded",
-                STACK_MAX
-            );
+            Err(QangRuntimeError::new(
+                format!(
+                    "Stack overflow: maximum stack size of {} exceeded",
+                    STACK_MAX
+                ),
+                $vm.get_current_loc(),
+            ))
+        } else {
+            $vm.stack[$vm.stack_top] = $value;
+            $vm.stack_top += 1;
+            Ok(())
         }
-        $vm.stack[$vm.stack_top] = $value;
-        $vm.stack_top += 1;
     };
 }
 
@@ -57,12 +62,9 @@ macro_rules! pop_value {
     ($vm:expr) => {
         if $vm.stack_top > 0 {
             $vm.stack_top -= 1;
-            Ok($vm.stack[$vm.stack_top])
+            $vm.stack[$vm.stack_top]
         } else {
-            Err(QangRuntimeError::new(
-                "No value found, unexpected empty stack.".to_string(),
-                $vm.get_current_loc(),
-            ))
+            panic!("Stack underflow: unexpected empty stack.")
         }
     };
 }
@@ -247,7 +249,7 @@ impl Vm {
                 OpCode::Constant => {
                     let constant_index = self.read_byte()? as usize;
                     let constant = self.read_constant(constant_index);
-                    push_value!(self, constant);
+                    push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
                     if let Value::Number(number) = self.peek(0) {
@@ -268,13 +270,13 @@ impl Vm {
                     }
                 }
                 OpCode::True => {
-                    push_value!(self, Value::Boolean(true));
+                    push_value!(self, Value::Boolean(true))?;
                 }
                 OpCode::False => {
-                    push_value!(self, Value::Boolean(false));
+                    push_value!(self, Value::Boolean(false))?;
                 }
                 OpCode::Nil => {
-                    push_value!(self, Value::Nil);
+                    push_value!(self, Value::Nil)?;
                 }
                 OpCode::Add => {
                     self.binary_operation(|a, b, heap, loc| match (&a, &b) {
@@ -417,23 +419,23 @@ impl Vm {
                     Ok(Value::Boolean(a <= b))
                 })?,
                 OpCode::Pop => {
-                    pop_value!(self)?;
+                    pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        pop_value!(self)?
+                        pop_value!(self)
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
                             })?;
-                    let value = pop_value!(self)?;
+                    let value = pop_value!(self);
                     self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        pop_value!(self)?
+                        pop_value!(self)
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
@@ -455,12 +457,12 @@ impl Vm {
                                 loc,
                             )
                         })?;
-                    push_value!(self, value);
+                    push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        pop_value!(self)?
+                        pop_value!(self)
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
@@ -489,7 +491,7 @@ impl Vm {
                     );
 
                     let value = self.stack[absolute_slot];
-                    push_value!(self, value);
+                    push_value!(self, value)?;
                 }
                 OpCode::SetLocal => {
                     let slot = self.read_byte()?;
@@ -518,7 +520,7 @@ impl Vm {
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Return => {
-                    let result = pop_value!(self)?;
+                    let result = pop_value!(self);
 
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
@@ -540,7 +542,7 @@ impl Vm {
                     // Reset stack to before the function call, then push the return value.
                     // This replaces the function and its arguments with the return value.
                     self.stack_top = if value_slot > 0 { value_slot - 1 } else { 0 };
-                    push_value!(self, result);
+                    push_value!(self, result)?;
                 }
             };
         }
@@ -587,12 +589,12 @@ impl Vm {
         coz::scope!("binary_operation");
 
         let op_loc = self.get_previous_loc();
-        let b = pop_value!(self)?;
-        let a = pop_value!(self)?;
+        let b = pop_value!(self);
+        let a = pop_value!(self);
 
         let value = op(a, b, &mut self.heap, op_loc)?;
 
-        push_value!(self, value);
+        push_value!(self, value)?;
         Ok(())
     }
 
@@ -640,7 +642,7 @@ impl Vm {
             HeapObject::Function(function) => {
                 if arg_count < function.arity {
                     for _ in arg_count..function.arity {
-                        push_value!(self, Value::Nil);
+                        push_value!(self, Value::Nil)?;
                     }
                 }
 
@@ -686,10 +688,10 @@ impl Vm {
         push_value!(
             self,
             Value::Function(FunctionValueKind::QangFunction(handle))
-        );
+        )?;
 
         for value in &args {
-            push_value!(self, *value);
+            push_value!(self, *value)?;
         }
 
         self.call_function(handle, args.len())?;
@@ -715,18 +717,18 @@ impl Vm {
 
         for i in (0..arg_count).rev() {
             if i < function.arity {
-                args[i] = pop_value!(self)?;
+                args[i] = pop_value!(self);
             } else {
-                pop_value!(self)?; // discard values that are passed in but not needed by the function.
+                pop_value!(self); // discard values that are passed in but not needed by the function.
             }
         }
-        pop_value!(self)?; // pop function off the stack now that it has been called.
+        pop_value!(self); // pop function off the stack now that it has been called.
 
         let value = (function.function)(args.as_slice(), self)
             .map_err(|e: NativeFunctionError| e.into_qang_error(loc))?
             .unwrap_or_default();
 
-        push_value!(self, value);
+        push_value!(self, value)?;
 
         Ok(())
     }

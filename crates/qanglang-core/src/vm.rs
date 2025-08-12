@@ -76,6 +76,7 @@ struct CallFrame {
     value_slot: usize,
 }
 
+#[derive(Clone)]
 pub struct Vm {
     is_debug: bool,
     stack_top: usize,

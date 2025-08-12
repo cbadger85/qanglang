@@ -53,7 +53,6 @@ macro_rules! push_value {
     };
 }
 
-/*
 macro_rules! pop_value {
     ($vm:expr) => {
         if $vm.stack_top > 0 {
@@ -64,18 +63,6 @@ macro_rules! pop_value {
                 "No value found, unexpected empty stack.".to_string(),
                 $vm.get_current_loc(),
             ))
-        }
-    };
-}
-*/
-
-macro_rules! pop_value {
-    ($vm:expr) => {
-        if $vm.stack_top > 0 {
-            $vm.stack_top -= 1;
-            unsafe { *$vm.stack.get_unchecked($vm.stack_top) }
-        } else {
-            panic!("No value found, unexpected empty stack.")
         }
     };
 }
@@ -201,9 +188,9 @@ impl Vm {
         &self.get_current_frame().current_function
     }
 
-    // fn get_current_loc(&self) -> SourceLocation {
-    //     self.get_loc_at(self.get_current_frame().ip)
-    // }
+    fn get_current_loc(&self) -> SourceLocation {
+        self.get_loc_at(self.get_current_frame().ip)
+    }
 
     fn get_current_chunk(&self) -> &Chunk {
         &self.get_current_function().chunk
@@ -430,23 +417,23 @@ impl Vm {
                     Ok(Value::Boolean(a <= b))
                 })?,
                 OpCode::Pop => {
-                    pop_value!(self);
+                    pop_value!(self)?;
                 }
                 OpCode::DefineGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        pop_value!(self)
+                        pop_value!(self)?
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
                             })?;
-                    let value = pop_value!(self);
+                    let value = pop_value!(self)?;
                     self.globals.insert(identifier_handle.identifier(), value);
                 }
                 OpCode::GetGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        pop_value!(self)
+                        pop_value!(self)?
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
@@ -473,7 +460,7 @@ impl Vm {
                 OpCode::SetGlobal => {
                     let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
-                        pop_value!(self)
+                        pop_value!(self)?
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
@@ -531,7 +518,7 @@ impl Vm {
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Return => {
-                    let result = pop_value!(self);
+                    let result = pop_value!(self)?;
 
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
@@ -600,8 +587,8 @@ impl Vm {
         coz::scope!("binary_operation");
 
         let op_loc = self.get_previous_loc();
-        let b = pop_value!(self);
-        let a = pop_value!(self);
+        let b = pop_value!(self)?;
+        let a = pop_value!(self)?;
 
         let value = op(a, b, &mut self.heap, op_loc)?;
 
@@ -728,12 +715,12 @@ impl Vm {
 
         for i in (0..arg_count).rev() {
             if i < function.arity {
-                args[i] = pop_value!(self);
+                args[i] = pop_value!(self)?;
             } else {
-                pop_value!(self); // discard values that are passed in but not needed by the function.
+                pop_value!(self)?; // discard values that are passed in but not needed by the function.
             }
         }
-        pop_value!(self); // pop function off the stack now that it has been called.
+        pop_value!(self)?; // pop function off the stack now that it has been called.
 
         let value = (function.function)(args.as_slice(), self)
             .map_err(|e: NativeFunctionError| e.into_qang_error(loc))?

@@ -148,6 +148,46 @@ fn test_if_statement_without_else() {
 }
 
 #[test]
+fn test_if_else_statement() {
+    let source_code = r#"
+            if (condition) {
+                do_something();
+            } else if (other_condition) {
+                do_something_else(); 
+            }
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_if_expression_statement() {
+    let source_code = r#"
+            if (condition) do_something();
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_else_expression_statement() {
+    let source_code = r#"
+            if (condition) do_something(); else do_something_else();
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
 fn test_while_statement() {
     let source_code = r#"
             while (i < 10) {

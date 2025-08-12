@@ -98,8 +98,12 @@ pub struct ObjectHeap {
 
 impl ObjectHeap {
     pub fn new() -> Self {
+        Self::with_capacity(64) // Default initial capacity
+    }
+
+    pub fn with_capacity(initial_capacity: usize) -> Self {
         Self {
-            objects: Vec::new(),
+            objects: Vec::with_capacity(initial_capacity),
             free_list: Vec::new(),
             string_interner: HashMap::new(),
         }
@@ -124,6 +128,14 @@ impl ObjectHeap {
             self.objects[free_index] = Some(obj);
             free_index
         } else {
+            if self.objects.len() == self.objects.capacity() {
+                let new_capacity = if self.objects.capacity() == 0 {
+                    64
+                } else {
+                    self.objects.capacity() * 2
+                };
+                self.objects.reserve(new_capacity - self.objects.capacity());
+            }
             self.objects.push(Some(obj));
             self.objects.len() - 1
         };

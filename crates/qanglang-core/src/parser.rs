@@ -213,7 +213,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-
     pub fn parse(&mut self) -> ast::Program {
         let start_span = self.get_current_span();
         let mut decls = Vec::new();
@@ -245,7 +244,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.class_declaration()
             }
-            _ => self.statement(),
+            _ => self.declaration_statement(),
         };
 
         match result {
@@ -377,7 +376,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn statement(&mut self) -> ParseResult<ast::Decl> {
+    fn declaration_statement(&mut self) -> ParseResult<ast::Decl> {
         let current_token_type = self
             .current_token
             .as_ref()
@@ -402,9 +401,7 @@ impl<'a> Parser<'a> {
             TokenType::Return => Ok(ast::Decl::Stmt(ast::Stmt::Return(self.return_statement()?))),
             TokenType::Throw => Ok(ast::Decl::Stmt(ast::Stmt::Throw(self.throw_statement()?))),
             TokenType::Try => Ok(ast::Decl::Stmt(ast::Stmt::Try(self.try_statement()?))),
-            _ => Ok(ast::Decl::Stmt(ast::Stmt::Expr(
-                self.expression_statement()?,
-            ))),
+            _ => Ok(ast::Decl::Stmt(self.statement()?)),
         }
     }
 
@@ -434,12 +431,14 @@ impl<'a> Parser<'a> {
         let condition = self.expression()?;
         self.consume(TokenType::RightParen, "Expected ')'.")?;
 
-        let then_branch = Box::new(ast::Stmt::Block(self.block_statement()?));
+        // Parse then branch as any statement (block or expression)
+        let then_branch = Box::new(self.statement()?);
 
         let (else_branch, span) = if self.match_token(TokenType::Else) {
-            let block_stmt = ast::Stmt::Block(self.block_statement()?);
-            let span = ast::SourceSpan::combine(start_span, block_stmt.span());
-            (Some(Box::new(block_stmt)), span)
+            // Parse else branch as any statement (block, expression, or another if)
+            let else_stmt = self.statement()?;
+            let span = ast::SourceSpan::combine(start_span, else_stmt.span());
+            (Some(Box::new(else_stmt)), span)
         } else {
             (
                 None,
@@ -453,6 +452,33 @@ impl<'a> Parser<'a> {
             else_branch,
             span,
         })
+    }
+
+    fn statement(&mut self) -> ParseResult<ast::Stmt> {
+        let current_token_type = self
+            .current_token
+            .as_ref()
+            .ok_or(QangSyntaxError::new(
+                "Expected statement.".to_string(),
+                self.previous_token
+                    .as_ref()
+                    .map(SourceSpan::from_token)
+                    .unwrap_or_default(),
+            ))?
+            .token_type;
+
+        match current_token_type {
+            TokenType::While => Ok(ast::Stmt::While(self.while_statement()?)),
+            TokenType::If => Ok(ast::Stmt::If(self.if_statement()?)),
+            TokenType::LeftBrace => Ok(ast::Stmt::Block(self.block_statement()?)),
+            TokenType::For => Ok(ast::Stmt::For(self.for_statement()?)),
+            TokenType::Break => Ok(ast::Stmt::Break(self.break_statement()?)),
+            TokenType::Continue => Ok(ast::Stmt::Continue(self.continue_statement()?)),
+            TokenType::Return => Ok(ast::Stmt::Return(self.return_statement()?)),
+            TokenType::Throw => Ok(ast::Stmt::Throw(self.throw_statement()?)),
+            TokenType::Try => Ok(ast::Stmt::Try(self.try_statement()?)),
+            _ => Ok(ast::Stmt::Expr(self.expression_statement()?)),
+        }
     }
 
     fn while_statement(&mut self) -> ParseResult<ast::WhileStmt> {
@@ -841,21 +867,24 @@ mod expression_parser {
         let is_lambda = if let Some(current) = &parser.current_token {
             if current.token_type == TokenType::RightParen {
                 // Empty parameter list: () ->
-                parser.tokens
+                parser
+                    .tokens
                     .peek()
                     .map(|t| t.token_type == TokenType::Arrow)
                     .unwrap_or(false)
             } else {
                 // Non-empty parameter list: look for ) ->
                 let mut offset = 0;
-                while parser.tokens
+                while parser
+                    .tokens
                     .peek_ahead(offset)
                     .map(|t| t.token_type != TokenType::RightParen)
                     .unwrap_or(false)
                 {
                     offset += 1;
                 }
-                parser.tokens
+                parser
+                    .tokens
                     .peek_ahead(offset + 1)
                     .map(|t| t.token_type == TokenType::Arrow)
                     .unwrap_or(false)
@@ -867,17 +896,17 @@ mod expression_parser {
         if is_lambda {
             // Parse lambda, but we need to adjust since '(' was already consumed
             let start_span = parser.get_previous_span(); // Use previous span for '('
-            
+
             // Parse parameters manually since '(' is already consumed
             let mut parameters = Vec::new();
-            
+
             if parser.match_token(TokenType::RightParen) {
                 // Empty parameters
             } else {
                 // Parse parameter list
                 parser.consume(TokenType::Identifier, "Expect parameter name.")?;
                 parameters.push(parser.get_identifier()?);
-                
+
                 while parser.match_token(TokenType::Comma) {
                     if parser.check(TokenType::RightParen) {
                         break;
@@ -885,10 +914,10 @@ mod expression_parser {
                     parser.consume(TokenType::Identifier, "Expect parameter name.")?;
                     parameters.push(parser.get_identifier()?);
                 }
-                
+
                 parser.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
             }
-            
+
             parser.consume(TokenType::Arrow, "Expect '->' after lambda parameters.")?;
 
             let body = if parser.check(TokenType::LeftBrace) {
@@ -905,7 +934,7 @@ mod expression_parser {
                     parameters,
                     body,
                     span,
-                }
+                },
             ))))
         } else {
             grouping(parser)

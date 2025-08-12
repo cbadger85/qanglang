@@ -5,7 +5,7 @@ use std::{
 
 use crate::{chunk::Chunk, error::ValueConversionError};
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Eq, Hash, PartialOrd)]
 pub struct ObjectHandle(usize);
 
 impl ObjectHandle {

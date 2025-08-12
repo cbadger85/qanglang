@@ -83,7 +83,7 @@ pub struct Vm {
     frame_count: usize,
     stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
-    globals: HashMap<usize, Value>,
+    globals: HashMap<ObjectHandle, Value>,
     heap: ObjectHeap,
     program_handle: ObjectHandle,
 }
@@ -94,36 +94,27 @@ impl Vm {
 
         let nil_type_handle = heap.intern_string("NIL".into());
         let nil_type_value_handle = heap.intern_string(NIL_TYPE_STRING.into());
-        globals.insert(
-            nil_type_handle.identifier(),
-            Value::String(nil_type_value_handle),
-        );
+        globals.insert(nil_type_handle, Value::String(nil_type_value_handle));
 
         let boolean_type_handle = heap.intern_string("BOOLEAN".into());
         let boolean_type_value_handle = heap.intern_string(BOOLEAN_TYPE_STRING.into());
         globals.insert(
-            boolean_type_handle.identifier(),
+            boolean_type_handle,
             Value::String(boolean_type_value_handle),
         );
 
         let number_type_handle = heap.intern_string("NUMBER".into());
         let number_type_value_handle = heap.intern_string(NUMBER_TYPE_STRING.into());
-        globals.insert(
-            number_type_handle.identifier(),
-            Value::String(number_type_value_handle),
-        );
+        globals.insert(number_type_handle, Value::String(number_type_value_handle));
 
         let string_type_handle = heap.intern_string("STRING".into());
         let string_type_value_handle = heap.intern_string(STRING_TYPE_STRING.into());
-        globals.insert(
-            string_type_handle.identifier(),
-            Value::String(string_type_value_handle),
-        );
+        globals.insert(string_type_handle, Value::String(string_type_value_handle));
 
         let function_type_handle = heap.intern_string("FUNCTION".into());
         let function_type_value_handle = heap.intern_string(FUNCTION_TYPE_STRING.into());
         globals.insert(
-            function_type_handle.identifier(),
+            function_type_handle,
             Value::String(function_type_value_handle),
         );
 
@@ -160,7 +151,7 @@ impl Vm {
         };
 
         self.globals.insert(
-            identifier_handle.identifier(),
+            identifier_handle,
             Value::Function(FunctionValueKind::NativeFunction(native_function)),
         );
 
@@ -431,7 +422,7 @@ impl Vm {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
                             })?;
                     let value = pop_value!(self);
-                    self.globals.insert(identifier_handle.identifier(), value);
+                    self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
                     let loc = self.get_previous_loc();
@@ -441,23 +432,20 @@ impl Vm {
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
                             })?;
-                    let value = *self
-                        .globals
-                        .get(&identifier_handle.identifier())
-                        .ok_or_else(|| {
-                            let identifier_name = self
-                                .heap
-                                .get(identifier_handle)
-                                .map(|obj| match &obj {
-                                    HeapObject::String(string) => string.clone(),
-                                    _ => "unknown".to_string().into_boxed_str(),
-                                })
-                                .unwrap_or("unknown".to_string().into_boxed_str());
-                            QangRuntimeError::new(
-                                format!("Undefined variable: {}.", identifier_name),
-                                loc,
-                            )
-                        })?;
+                    let value = *self.globals.get(&identifier_handle).ok_or_else(|| {
+                        let identifier_name = self
+                            .heap
+                            .get(identifier_handle)
+                            .map(|obj| match &obj {
+                                HeapObject::String(string) => string.clone(),
+                                _ => "unknown".to_string().into_boxed_str(),
+                            })
+                            .unwrap_or("unknown".to_string().into_boxed_str());
+                        QangRuntimeError::new(
+                            format!("Undefined variable: {}.", identifier_name),
+                            loc,
+                        )
+                    })?;
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
@@ -469,7 +457,7 @@ impl Vm {
                                 e.into_qang_error_with_trace(loc, self.get_stack_trace())
                             })?;
 
-                    if !self.globals.contains_key(&identifier_handle.identifier()) {
+                    if !self.globals.contains_key(&identifier_handle) {
                         let identifier_name = self
                             .get_identifier_name(identifier_handle)
                             .unwrap_or("<unknown>".to_string().into_boxed_str());
@@ -480,7 +468,7 @@ impl Vm {
                         ));
                     }
                     let value = self.peek(0);
-                    self.globals.insert(identifier_handle.identifier(), value);
+                    self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetLocal => {
                     let slot = self.read_byte()?;
@@ -751,7 +739,7 @@ impl Vm {
         &mut self.heap
     }
 
-    pub fn globals(&self) -> &HashMap<usize, Value> {
+    pub fn globals(&self) -> &HashMap<ObjectHandle, Value> {
         &self.globals
     }
 

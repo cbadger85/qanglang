@@ -154,17 +154,15 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
 
 /// Extracts test description and test functions from the VM globals
 fn extract_test_info(
-    globals: &HashMap<usize, Value>,
+    globals: &HashMap<ObjectHandle, Value>,
     heap: &ObjectHeap,
 ) -> (Option<String>, Vec<(String, ObjectHandle)>) {
     let mut description = None;
     let mut test_functions = Vec::new();
 
-    for (handle_id, value) in globals.iter() {
-        let handle = ObjectHandle::new(*handle_id);
-
+    for (handle, value) in globals.iter() {
         // Get the identifier name for this global
-        let identifier = heap.get(handle).and_then(|obj| match obj {
+        let identifier = heap.get(*handle).and_then(|obj| match obj {
             HeapObject::String(name) => Some(name.as_ref()),
             _ => None,
         });

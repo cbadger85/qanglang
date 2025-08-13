@@ -30,7 +30,7 @@ impl From<ObjectHandle> for usize {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct FunctionObject {
     pub arity: usize,
     pub name: ObjectHandle,
@@ -73,19 +73,9 @@ impl TryFrom<HeapObject> for Box<str> {
     }
 }
 
-impl From<FunctionObject> for HeapObject {
-    fn from(value: FunctionObject) -> Self {
-        HeapObject::Function(Rc::new(value))
-    }
-}
-
-impl<'a> TryFrom<&'a HeapObject> for &'a FunctionObject {
-    type Error = ValueConversionError;
-    fn try_from(value: &'a HeapObject) -> Result<Self, Self::Error> {
-        match value {
-            HeapObject::Function(function) => Ok(function),
-            _ => Err(ValueConversionError::new("Value is not a function")),
-        }
+impl From<Rc<FunctionObject>> for HeapObject {
+    fn from(value: Rc<FunctionObject>) -> Self {
+        HeapObject::Function(value)
     }
 }
 

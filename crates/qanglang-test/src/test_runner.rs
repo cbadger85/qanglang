@@ -139,7 +139,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     // Run each test function
     let mut test_results = Vec::new();
     for (test_name, function_handle) in test_functions {
-        match vm.call_function_with_args(function_handle, Vec::new()) {
+        match vm.call_function(function_handle, Vec::new()) {
             Ok(_) => {
                 test_results.push(TestResult::success(test_name));
             }

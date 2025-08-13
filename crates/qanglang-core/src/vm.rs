@@ -85,7 +85,6 @@ pub struct Vm {
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<ObjectHandle, Value>,
     heap: ObjectHeap,
-    program_handle: ObjectHandle,
 }
 
 impl Vm {
@@ -126,7 +125,6 @@ impl Vm {
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals,
             heap,
-            program_handle: ObjectHandle::default(),
         };
 
         vm.add_native_function("assert", 2, qang_assert)
@@ -208,27 +206,7 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
-        let function_handle = program.into();
-        self.program_handle = function_handle;
-
-        let obj = self.heap.get(function_handle).ok_or_else(|| {
-            QangRuntimeError::new(
-                "Program not found in heap.".to_string(),
-                SourceLocation::default(),
-            )
-        })?;
-
-        let function = match obj {
-            HeapObject::Function(function) => function,
-            _ => {
-                return Err(QangRuntimeError::new(
-                    "Value not callable.".to_string(),
-                    SourceLocation::default(),
-                ));
-            }
-        };
-
-        self.call(function.clone(), 0, true)?;
+        self.call(program.into_function(), 0)?;
 
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
@@ -489,7 +467,7 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.read_byte()?;
-                    let absolute_slot = self.get_current_frame().value_slot + slot as usize;
+                    let absolute_slot = self.get_current_frame().value_slot + 1 + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
                         "Local slot {} out of bounds",
@@ -502,7 +480,7 @@ impl Vm {
                 OpCode::SetLocal => {
                     let slot = self.read_byte()?;
                     let value = self.peek(0);
-                    let absolute_slot = self.get_current_frame().value_slot + slot as usize;
+                    let absolute_slot = self.get_current_frame().value_slot + 1 + slot as usize;
 
                     self.stack[absolute_slot] = value;
                 }
@@ -527,6 +505,7 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
+                    let value_slot = self.get_current_frame().value_slot;
                     self.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]
@@ -543,8 +522,8 @@ impl Vm {
                         return Ok(result);
                     }
 
-                    self.stack_top = self.get_current_frame().value_slot;
-                    push_value!(self, result)?;
+                    self.stack_top = value_slot + 1;
+                    self.stack[value_slot] = result;
                 }
             };
         }
@@ -624,7 +603,7 @@ impl Vm {
                     }
                 };
 
-                self.call(function.clone(), arg_count, false)
+                self.call(function.clone(), arg_count)
             }
             Value::Function(FunctionValueKind::NativeFunction(function)) => {
                 self.call_native_function(function, arg_count)
@@ -642,12 +621,7 @@ impl Vm {
         }
     }
 
-    fn call(
-        &mut self,
-        function: Rc<FunctionObject>,
-        arg_count: usize,
-        is_script: bool,
-    ) -> RuntimeResult<()> {
+    fn call(&mut self, function: Rc<FunctionObject>, arg_count: usize) -> RuntimeResult<()> {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
 
@@ -678,7 +652,7 @@ impl Vm {
 
         call_frame.value_slot = value_slot;
         call_frame.current_function = function;
-        call_frame.ip = if is_script { 0 } else { 1 };
+        call_frame.ip = 0;
 
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");
@@ -686,7 +660,7 @@ impl Vm {
         Ok(())
     }
 
-    pub fn call_function_with_args(
+    pub fn call_function(
         &mut self,
         handle: ObjectHandle,
         args: Vec<Value>,
@@ -717,7 +691,7 @@ impl Vm {
             }
         };
 
-        self.call(function.clone(), args.len(), handle == self.program_handle)?;
+        self.call(function.clone(), args.len())?;
 
         match self.run() {
             Ok(return_value) => Ok(return_value),

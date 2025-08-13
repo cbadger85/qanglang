@@ -28,24 +28,16 @@ impl CompilerError {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct QangProgram(ObjectHandle);
+#[derive(Debug, Clone, PartialEq)]
+pub struct QangProgram(Rc<FunctionObject>);
 
 impl QangProgram {
-    pub fn new(handle: ObjectHandle) -> Self {
-        Self(handle)
+    pub fn new(function: FunctionObject) -> Self {
+        Self(Rc::new(function))
     }
-}
 
-impl From<QangProgram> for ObjectHandle {
-    fn from(value: QangProgram) -> Self {
-        value.0
-    }
-}
-
-impl From<ObjectHandle> for QangProgram {
-    fn from(value: ObjectHandle) -> Self {
-        QangProgram(value)
+    pub fn into_function(self) -> Rc<FunctionObject> {
+        self.0
     }
 }
 
@@ -76,7 +68,11 @@ impl<'a> CompilerPipeline<'a> {
         let errors = parser.into_reporter();
 
         match Compiler::new(self.heap).compile(program, &self.source_map, errors) {
-            Ok(program) => Ok(self.heap.allocate_object(program.into()).into()),
+            Ok(program) => {
+                let program = Rc::new(program);
+                self.heap.allocate_object(program.clone().into());
+                Ok(QangProgram(program.clone()))
+            }
             Err(error) => Err(CompilerError(
                 error
                     .all()

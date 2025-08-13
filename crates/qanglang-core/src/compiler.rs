@@ -41,6 +41,84 @@ impl QangProgram {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+struct Artifact {
+    kind: CompilerKind,
+    function: FunctionObject,
+    previous: Option<Box<Artifact>>,
+}
+
+impl Artifact {
+    fn new_script(handle: ObjectHandle) -> Self {
+        Self {
+            kind: CompilerKind::Script,
+            function: FunctionObject::new(handle, 0),
+            previous: None,
+        }
+    }
+
+    fn new_function(handle: ObjectHandle, arity: usize) -> Self {
+        Self {
+            kind: CompilerKind::Function,
+            function: FunctionObject::new(handle, arity),
+            previous: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ArtifactStack {
+    artifacts: Vec<Artifact>,
+}
+
+impl ArtifactStack {
+    fn new(handle: ObjectHandle) -> Self {
+        Self {
+            artifacts: vec![Artifact::new_script(handle)],
+        }
+    }
+
+    fn push(&mut self, handle: ObjectHandle, arity: usize) {
+        self.artifacts.push(Artifact::new_function(handle, arity));
+    }
+
+    fn pop(&mut self) -> Option<FunctionObject> {
+        if self.artifacts.len() > 1 {
+            self.artifacts.pop().map(|a| a.function)
+        } else {
+            None
+        }
+    }
+
+    fn compiler_kind(&self) -> CompilerKind {
+        self.artifacts[self.artifacts.len() - 1].kind
+    }
+
+    #[allow(dead_code)]
+    fn function(&self) -> &FunctionObject {
+        &self.artifacts[self.artifacts.len() - 1].function
+    }
+
+    fn function_mut(&mut self) -> &mut FunctionObject {
+        let len = self.artifacts.len();
+        &mut self.artifacts[len - 1].function
+    }
+
+    #[allow(dead_code)]
+    fn iter(&self) -> impl Iterator<Item = &Artifact> {
+        self.artifacts.iter().rev()
+    }
+
+    #[allow(dead_code)]
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Artifact> {
+        self.artifacts.iter_mut().rev()
+    }
+
+    fn into_function(mut self) -> FunctionObject {
+        self.artifacts.pop().unwrap().function
+    }
+}
+
 pub struct CompilerPipeline<'a> {
     source_map: SourceMap,
     heap: &'a mut ObjectHeap,
@@ -106,14 +184,19 @@ enum CompilerKind {
     Function,
 }
 
+impl Default for CompilerKind {
+    fn default() -> Self {
+        Self::Script
+    }
+}
+
 pub struct Compiler<'a> {
     source_map: &'a SourceMap,
     heap: &'a mut ObjectHeap,
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
-    enclosing: FunctionObject,
-    compile_kind: CompilerKind,
+    artifacts: ArtifactStack,
 }
 
 impl<'a> Compiler<'a> {
@@ -127,8 +210,7 @@ impl<'a> Compiler<'a> {
             locals,
             local_count: 0,
             scope_depth: 0,
-            compile_kind: CompilerKind::Script,
-            enclosing: FunctionObject::new(handle, 0),
+            artifacts: ArtifactStack::new(handle),
         }
     }
 
@@ -140,7 +222,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn get_current_chunk(&mut self) -> &mut Chunk {
-        &mut self.enclosing.chunk
+        &mut self.artifacts.function_mut().chunk
     }
 
     pub fn compile(
@@ -160,15 +242,10 @@ impl<'a> Compiler<'a> {
         if errors.has_errors() {
             Err(CompilerError(errors.take_errors()))
         } else {
-            let handle = self
-                .heap
-                .intern_string("<script>".to_string().into_boxed_str());
-            let mut function = FunctionObject::new(handle, 0);
-            std::mem::swap(&mut self.enclosing, &mut function);
-
+            let artifacts = std::mem::take(&mut self.artifacts);
             self.reset();
 
-            Ok(function)
+            Ok(artifacts.into_function())
         }
     }
 
@@ -782,15 +859,14 @@ impl<'a> AstVisitor for Compiler<'a> {
         let function_identifier_handle =
             self.parse_variable(&func_decl.function.name.name, func_decl.function.span)?;
 
-        let mut function = std::mem::replace(
-            &mut self.enclosing,
-            FunctionObject::new(
-                self.heap
-                    .intern_string(func_decl.function.name.name.clone()),
-                func_decl.function.parameters.len(),
-            ),
+        let function_name_handle = function_identifier_handle.unwrap_or_else(|| {
+            self.heap.intern_string(func_decl.function.name.name.to_owned())
+        });
+
+        self.artifacts.push(
+            function_name_handle,
+            func_decl.function.parameters.len(),
         );
-        let previous_compile_kind = self.compile_kind;
         let previous_locals = std::mem::take(&mut self.locals);
         let previous_local_count = self.local_count;
         let previous_scope_depth = self.scope_depth;
@@ -799,7 +875,6 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.locals = Vec::with_capacity(STACK_MAX);
         self.local_count = 0;
         self.scope_depth = 0;
-        self.compile_kind = CompilerKind::Function;
         self.begin_scope();
 
         let parameter_span = SourceSpan::combine(
@@ -833,7 +908,10 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.visit_block_statement(&func_decl.function.body, errors)?;
         self.emit_return(func_decl.span);
 
-        std::mem::swap(&mut self.enclosing, &mut function);
+        let function = self
+            .artifacts
+            .pop()
+            .expect("Unexpected end of artifact stack.");
 
         let function_handle = self
             .heap
@@ -845,7 +923,6 @@ impl<'a> AstVisitor for Compiler<'a> {
         )?;
 
         // Restore previous compiler state
-        self.compile_kind = previous_compile_kind;
         self.locals = previous_locals;
         self.local_count = previous_local_count;
         self.scope_depth = previous_scope_depth;
@@ -859,7 +936,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         return_stmt: &ast::ReturnStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        if self.compile_kind == CompilerKind::Script {
+        if self.artifacts.compiler_kind() == CompilerKind::Script {
             return Err(QangSyntaxError::new(
                 "Cannot return from top-level code.".to_string(),
                 return_stmt.span,

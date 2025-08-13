@@ -914,8 +914,9 @@ impl<'a> AstVisitor for Compiler<'a> {
             .expect("Unexpected end of artifact stack.");
 
         let function_handle = self.heap.allocate_object(function.into());
-        self.emit_opcode(OpCode::Closure, func_decl.span);
-        self.emit_constant(Value::FunctionDecl(function_handle), func_decl.span)?;
+        let constant_index =
+            self.make_constant(Value::FunctionDecl(function_handle), func_decl.span)?;
+        self.emit_opcode_and_byte(OpCode::Closure, constant_index, func_decl.span);
 
         // Restore previous compiler state
         self.locals = previous_locals;

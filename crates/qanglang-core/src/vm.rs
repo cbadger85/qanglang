@@ -5,7 +5,7 @@ use coz;
 
 use crate::{
     HeapObject, ObjectHeap, QangProgram, QangRuntimeError, Value,
-    chunk::{Chunk, OpCode, SourceLocation},
+    chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
@@ -182,10 +182,6 @@ impl Vm {
 
     fn get_current_loc(&self) -> SourceLocation {
         self.get_loc_at(self.get_current_frame().ip)
-    }
-
-    fn get_current_chunk(&self) -> &Chunk {
-        &self.get_current_function().chunk
     }
 
     fn get_previous_loc(&self) -> SourceLocation {
@@ -523,7 +519,7 @@ impl Vm {
     }
 
     fn read_byte(&mut self) -> RuntimeResult<u8> {
-        let byte = self.get_current_chunk().code()[self.get_current_frame().ip];
+        let byte = self.get_current_function().chunk.code()[self.get_current_frame().ip];
         self.get_current_frame_mut().ip += 1;
         Ok(byte)
     }
@@ -621,7 +617,6 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::progress!("before_call");
 
-        // For the initial call from interpret(), there's no previous location
         let loc = if self.frame_count > 0 {
             self.get_previous_loc()
         } else {
@@ -794,7 +789,7 @@ impl Vm {
         println!();
 
         disassemble_instruction(
-            self.get_current_chunk(),
+            &self.get_current_function().chunk,
             &self.heap,
             self.get_current_frame().ip,
         );

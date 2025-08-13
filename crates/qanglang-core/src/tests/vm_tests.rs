@@ -751,7 +751,7 @@ fn test_calling_functions_from_native() {
             .unwrap();
 
         match value {
-            Value::Function(FunctionValueKind::QangFunction(handle)) => *handle,
+            Value::Function(FunctionValueKind::Closure(handle)) => *handle,
             _ => panic!("Identity function not found!"),
         }
     }
@@ -885,7 +885,7 @@ fn test_assert_nil() {
                     );
 
                     // Extract the test function handle
-                    if let Some(Value::Function(FunctionValueKind::QangFunction(func_handle))) =
+                    if let Some(Value::Function(FunctionValueKind::Closure(func_handle))) =
                         vm.globals().get(&test_func_handle)
                     {
                         // This should succeed (like call_function in test runner)
@@ -905,6 +905,36 @@ fn test_assert_nil() {
                 }
             }
         }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_recursive_function_calls() {
+    let source = r#"
+        fn fib(n) {
+            if (n < 2) {
+               return n;
+            }
+            return fib(n - 2) + fib(n - 1);
+        }
+        assert_eq(fib(3), 2);
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
+            }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

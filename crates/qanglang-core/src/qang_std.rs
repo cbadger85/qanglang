@@ -47,7 +47,7 @@ pub fn qang_assert_throws(
         .ok_or(NativeFunctionError::new("No arguments provided."))?;
 
     let function_handle = match assertion {
-        Value::Function(FunctionValueKind::QangFunction(function_handle)) => *function_handle,
+        Value::Function(FunctionValueKind::Closure(function_handle)) => *function_handle,
         _ => return Err("First argument must be a function.".into()),
     };
 

@@ -31,6 +31,23 @@ impl From<ObjectHandle> for usize {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+pub struct ClosureObject {
+    pub function: Rc<FunctionObject>,
+}
+
+impl ClosureObject {
+    pub fn new(function: Rc<FunctionObject>) -> Rc<Self> {
+        Rc::new(Self { function })
+    }
+}
+
+impl From<Rc<ClosureObject>> for HeapObject {
+    fn from(value: Rc<ClosureObject>) -> Self {
+        HeapObject::Closure(value)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct FunctionObject {
     pub arity: usize,
     pub name: ObjectHandle,
@@ -47,16 +64,23 @@ impl FunctionObject {
     }
 }
 
+impl From<FunctionObject> for HeapObject {
+    fn from(value: FunctionObject) -> Self {
+        HeapObject::Function(Rc::new(value))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum HeapObject {
     String(Box<str>),
     Function(Rc<FunctionObject>),
+    Closure(Rc<ClosureObject>),
 }
 
 pub const fn get_object_value_type(value: &HeapObject) -> &'static str {
     match value {
         HeapObject::String(_) => "string",
-        HeapObject::Function(_) => "function",
+        HeapObject::Closure(_) | HeapObject::Function(_) => "function",
     }
 }
 
@@ -70,12 +94,6 @@ impl TryFrom<HeapObject> for Box<str> {
                 format!("Expected string, found {}.", get_object_value_type(&value)).as_str(),
             )),
         }
-    }
-}
-
-impl From<Rc<FunctionObject>> for HeapObject {
-    fn from(value: Rc<FunctionObject>) -> Self {
-        HeapObject::Function(value)
     }
 }
 

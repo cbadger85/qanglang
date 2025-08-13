@@ -170,7 +170,7 @@ fn extract_test_info(
         if let Some(identifier) = identifier {
             match value {
                 // Check if this is a test function (starts with "test_")
-                Value::Function(FunctionValueKind::QangFunction(func_handle)) => {
+                Value::Function(FunctionValueKind::Closure(func_handle)) => {
                     if identifier.starts_with("test_") {
                         test_functions.push((identifier.to_string(), *func_handle));
                     }

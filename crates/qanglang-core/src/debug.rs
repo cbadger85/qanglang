@@ -54,10 +54,13 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
         OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
         OpCode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
         OpCode::Loop => jump_instruction("OP_LOOP", 1, chunk, offset),
-        OpCode::Call => {
-            let arg_count = chunk.code()[offset + 1];
-            println!("{:<16} {:4}", "OP_CALL", arg_count);
-            offset + 2
+        OpCode::Call => byte_instruction("OP_CALL", chunk, offset),
+        OpCode::Closure => {
+            let constant = chunk.code()[offset + 1];
+            print!("{:<16} {:4} '", "OP_CLOSURE", constant);
+            let value = chunk.constants()[constant as usize];
+            println!("{}", value.to_display_string(&heap));
+            return offset + 2;
         }
     }
 }

@@ -9,7 +9,7 @@ use crate::{
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    heap::{FunctionObject, ObjectHandle},
+    heap::{ClosureObject, FunctionObject, ObjectHandle},
     qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, qang_typeof, system_time},
     value::{
         BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, FunctionValueKind, NIL_TYPE_STRING,
@@ -202,7 +202,7 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
-        self.call(program.into_function(), 0)?;
+        self.call(ClosureObject::new(program.into_function()), 0)?;
 
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
@@ -230,8 +230,7 @@ impl Vm {
 
             match opcode {
                 OpCode::Constant => {
-                    let constant_index = self.read_byte()? as usize;
-                    let constant = self.read_constant(constant_index);
+                    let constant = self.read_constant()?;
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
@@ -499,6 +498,42 @@ impl Vm {
                     let function_value = self.peek(arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
+                OpCode::Closure => {
+                    /*
+                    ObjFunction* function = AS_FUNCTION(READ_CONSTANT());
+                    ObjClosure* closure = newClosure(function);
+                    push(OBJ_VAL(closure));
+                    break;
+                     */
+                    let closure = self
+                        .read_constant()
+                        .and_then(|v| match v {
+                            Value::FunctionDecl(function_handle) => {
+                                self.heap.get(function_handle).ok_or_else(|| {
+                                    QangRuntimeError::new(
+                                        "No function found.".to_string(),
+                                        self.get_previous_loc(),
+                                    )
+                                })
+                            }
+                            _ => Err(QangRuntimeError::new(
+                                "Expected function value.".to_string(),
+                                self.get_previous_loc(),
+                            )),
+                        })
+                        .and_then(|obj| match obj {
+                            HeapObject::Function(function) => {
+                                Ok(HeapObject::Closure(ClosureObject::new(function.clone())))
+                            }
+                            _ => Err(QangRuntimeError::new(
+                                "Expected function.".to_string(),
+                                self.get_previous_loc(),
+                            )),
+                        })?;
+
+                    let handle: ObjectHandle = self.heap.allocate_object(closure);
+                    push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
+                }
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.get_current_frame().value_slot;
@@ -524,14 +559,16 @@ impl Vm {
         Ok(byte)
     }
 
-    fn read_constant(&self, index: usize) -> Value {
+    fn read_constant(&mut self) -> RuntimeResult<Value> {
+        let index = self.read_byte()? as usize;
         let constants = self.get_current_function().chunk.constants();
         debug_assert!(
             index < constants.len(),
             "Constant index {} out of bounds",
             index
         );
-        constants[index]
+
+        Ok(constants[index])
     }
 
     fn read_short(&mut self) -> RuntimeResult<usize> {
@@ -570,7 +607,7 @@ impl Vm {
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
-            Value::Function(FunctionValueKind::QangFunction(handle)) => {
+            Value::Function(FunctionValueKind::Closure(handle)) => {
                 let loc = if self.frame_count > 0 {
                     self.get_previous_loc()
                 } else {
@@ -583,7 +620,7 @@ impl Vm {
                     .ok_or_else(|| QangRuntimeError::new("Orphaned identifier".to_string(), loc))?;
 
                 let function = match obj {
-                    HeapObject::Function(function) => function,
+                    HeapObject::Closure(function) => function,
                     _ => {
                         return Err(QangRuntimeError::new(
                             "Value not callable.".to_string(),
@@ -610,7 +647,7 @@ impl Vm {
         }
     }
 
-    fn call(&mut self, function: Rc<FunctionObject>, arg_count: usize) -> RuntimeResult<()> {
+    fn call(&mut self, closure: Rc<ClosureObject>, arg_count: usize) -> RuntimeResult<()> {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
 
@@ -623,11 +660,11 @@ impl Vm {
             SourceLocation::default()
         };
 
-        let final_arg_count = if arg_count < function.arity {
-            for _ in arg_count..function.arity {
+        let final_arg_count = if arg_count < closure.function.arity {
+            for _ in arg_count..closure.function.arity {
                 push_value!(self, Value::Nil)?;
             }
-            function.arity
+            closure.function.arity
         } else {
             arg_count
         };
@@ -642,7 +679,7 @@ impl Vm {
         let call_frame = self.get_current_frame_mut();
 
         call_frame.value_slot = value_slot;
-        call_frame.current_function = function;
+        call_frame.current_function.clone_from(&closure.function);
         call_frame.ip = 0;
 
         #[cfg(feature = "profiler")]
@@ -659,10 +696,7 @@ impl Vm {
         let saved_stack_top = self.stack_top;
         let saved_frame_count = self.frame_count;
 
-        push_value!(
-            self,
-            Value::Function(FunctionValueKind::QangFunction(handle))
-        )?;
+        push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
 
         for value in &args {
             push_value!(self, *value)?;
@@ -672,8 +706,8 @@ impl Vm {
             QangRuntimeError::new("Orphaned identifier".to_string(), SourceLocation::default())
         })?;
 
-        let function = match obj {
-            HeapObject::Function(function) => function,
+        let closure = match obj {
+            HeapObject::Closure(closure) => closure,
             _ => {
                 return Err(QangRuntimeError::new(
                     "Value not callable.".to_string(),
@@ -682,7 +716,7 @@ impl Vm {
             }
         };
 
-        self.call(function.clone(), args.len())?;
+        self.call(closure.clone(), args.len())?;
 
         match self.run() {
             Ok(return_value) => {

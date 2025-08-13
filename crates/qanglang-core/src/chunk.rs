@@ -31,6 +31,7 @@ pub enum OpCode {
     Jump,
     Loop,
     Call,
+    Closure,
 }
 
 impl From<u8> for OpCode {
@@ -63,6 +64,7 @@ impl From<u8> for OpCode {
             24 => OpCode::Jump,
             25 => OpCode::Loop,
             26 => OpCode::Call,
+            27 => OpCode::Closure,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

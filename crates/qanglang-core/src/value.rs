@@ -15,7 +15,7 @@ impl PartialEq for NativeFunction {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionValueKind {
-    QangFunction(ObjectHandle),
+    Closure(ObjectHandle),
     NativeFunction(NativeFunction),
 }
 
@@ -32,6 +32,7 @@ pub enum Value {
     Number(f64),
     String(ObjectHandle),
     Function(FunctionValueKind),
+    FunctionDecl(ObjectHandle),
 }
 
 impl Value {
@@ -50,6 +51,7 @@ impl Value {
                 "nil".to_string()
             }
             Value::Boolean(boolean) => boolean.to_string(),
+            Value::FunctionDecl(_) => "nil".to_string(),
             Value::Function(function) => match function {
                 FunctionValueKind::NativeFunction(function) => {
                     heap.get(function.name).and_then(|obj| match obj {
@@ -57,9 +59,9 @@ impl Value {
                         _ => None,
                     })
                 }
-                FunctionValueKind::QangFunction(handle) => match heap.get(*handle) {
-                    Some(HeapObject::Function(function)) => {
-                        heap.get(function.name).and_then(|obj| match obj {
+                FunctionValueKind::Closure(handle) => match heap.get(*handle) {
+                    Some(HeapObject::Closure(closure)) => {
+                        heap.get(closure.function.name).and_then(|obj| match obj {
                             HeapObject::String(str) => Some(str.to_string()),
                             _ => None,
                         })
@@ -78,6 +80,7 @@ impl Value {
             Value::Number(_) => NUMBER_TYPE_STRING,
             Value::String(_) => STRING_TYPE_STRING,
             Value::Function(_) => FUNCTION_TYPE_STRING,
+            Value::FunctionDecl(_) => FUNCTION_TYPE_STRING,
         }
     }
 

@@ -148,7 +148,8 @@ impl<'a> CompilerPipeline<'a> {
         match Compiler::new(self.heap).compile(program, &self.source_map, errors) {
             Ok(program) => {
                 let program = Rc::new(program);
-                self.heap.allocate_object(program.clone().into());
+                self.heap
+                    .allocate_object(crate::HeapObject::Function(program.clone()));
                 Ok(QangProgram(program.clone()))
             }
             Err(error) => Err(CompilerError(
@@ -860,13 +861,12 @@ impl<'a> AstVisitor for Compiler<'a> {
             self.parse_variable(&func_decl.function.name.name, func_decl.function.span)?;
 
         let function_name_handle = function_identifier_handle.unwrap_or_else(|| {
-            self.heap.intern_string(func_decl.function.name.name.to_owned())
+            self.heap
+                .intern_string(func_decl.function.name.name.to_owned())
         });
 
-        self.artifacts.push(
-            function_name_handle,
-            func_decl.function.parameters.len(),
-        );
+        self.artifacts
+            .push(function_name_handle, func_decl.function.parameters.len());
         let previous_locals = std::mem::take(&mut self.locals);
         let previous_local_count = self.local_count;
         let previous_scope_depth = self.scope_depth;
@@ -913,14 +913,9 @@ impl<'a> AstVisitor for Compiler<'a> {
             .pop()
             .expect("Unexpected end of artifact stack.");
 
-        let function_handle = self
-            .heap
-            .allocate_object(crate::HeapObject::Function(Rc::new(function)));
-
-        self.emit_constant(
-            Value::Function(crate::FunctionValueKind::QangFunction(function_handle)),
-            func_decl.span,
-        )?;
+        let function_handle = self.heap.allocate_object(function.into());
+        self.emit_opcode(OpCode::Closure, func_decl.span);
+        self.emit_constant(Value::FunctionDecl(function_handle), func_decl.span)?;
 
         // Restore previous compiler state
         self.locals = previous_locals;

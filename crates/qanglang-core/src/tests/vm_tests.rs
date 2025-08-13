@@ -1,4 +1,7 @@
-use crate::{CompilerPipeline, ObjectHeap, SourceMap, Vm, disassemble_program};
+use crate::{
+    CompilerPipeline, FunctionValueKind, HeapObject, ObjectHandle, ObjectHeap, SourceMap, Value,
+    Vm, disassemble_program,
+};
 
 #[test]
 fn test_display() {
@@ -544,6 +547,37 @@ fn test_function_calls() {
 }
 
 #[test]
+fn test_function_calls_called_with_extra_args() {
+    let source = r#"
+        fn this_is_a_test() {
+            return "hello?";
+        }
+
+        assert_eq(this_is_a_test("This too."), "hello?");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(true).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
 fn test_nested_function_calls() {
     let source = r#"
         fn this_is_a_test() {
@@ -626,7 +660,7 @@ fn test_nested_function_calls_with_args() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+        Ok(program) => match Vm::new(heap).set_debug(true).interpret(program) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error);
@@ -691,6 +725,186 @@ fn test_typeof_function() {
                 panic!("{}", error);
             }
         },
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_calling_functions_from_native() {
+    let source = r#"
+        fn identity(x) { return x; }
+    "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    fn find_function_handle(identifier: &str, vm: &mut Vm) -> ObjectHandle {
+        let function_identifier_handle = vm.heap_mut().intern_string(identifier.into());
+        let (_, value) = vm
+            .globals()
+            .iter()
+            .find(|(handle, _value)| **handle == function_identifier_handle)
+            .unwrap();
+
+        match value {
+            Value::Function(FunctionValueKind::QangFunction(handle)) => *handle,
+            _ => panic!("Identity function not found!"),
+        }
+    }
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let mut vm = Vm::new(heap).set_debug(false);
+            match vm.interpret(program) {
+                Ok(_) => {}
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+
+            let function_handle = find_function_handle("identity", &mut vm);
+
+            match vm.call_function(function_handle, vec![Value::Number(42.0)]) {
+                Ok(Value::Number(number)) => {
+                    assert_eq!(number, 42.0);
+                }
+                Err(error) => {
+                    println!("{}", error.message);
+                    panic!("Operation failed")
+                }
+                _ => panic!("Unexpected type conversion."),
+            }
+
+            let foo = vm.heap_mut().intern_string("foo".into());
+
+            match vm.call_function(function_handle, vec![Value::String(foo)]) {
+                Ok(Value::String(handle)) => {
+                    let string = match vm.heap().get(handle) {
+                        Some(HeapObject::String(string)) => string,
+                        _ => panic!("Not a string!"),
+                    };
+                    assert_eq!("foo".to_string(), string.clone().into_string());
+                }
+                Err(error) => {
+                    println!("{}", error.message);
+                    panic!("Operation failed")
+                }
+                _ => panic!("Unexpected type conversion."),
+            }
+
+            match vm.call_function(function_handle, vec![]) {
+                Ok(Value::Nil) => (),
+                Err(error) => {
+                    println!("{}", error.message);
+                    panic!("Operation failed")
+                }
+                _ => panic!("Unexpected type conversion."),
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_qanglang_test_runner_regression() {
+    // This test reproduces the issue where the QangLang test runner fails
+    // with "Value not callable" during the initial interpret() call
+
+    // Try reading the actual test file
+    let source = match std::fs::read_to_string(
+        "C:\\Users\\hassl\\projects\\qanglang\\tests\\test_assertions.ql",
+    ) {
+        Ok(content) => content,
+        Err(_) => {
+            // Fallback to inline content
+            r#"var test_description = "Testing the native assertion functions.";
+
+fn test_assert_true() {
+  assert_eq(true, true, "Expected 'true' to equal 'true'.");
+  assert(true, "Expected 'true' to be truthy");
+  assert_eq(true, !false, "Expected 'true' not to be falsy.");
+}
+
+fn test_assert_false() {
+  assert_eq(false, false, "Expected 'false' to equal 'false'.");
+  assert(!false, "Expected 'false' to be falsy");
+  assert_eq(false, !true, "Expected 'false' not to be truthy.");
+}
+
+fn test_assert_nil() {
+  assert(nil == nil, "Expected 'nil' to equal 'nil'.");
+  assert(!nil, "Expected 'nil' to be falsy");
+  assert_eq(!nil, true, "Expected 'nil' not to be truthy.");
+}"#
+            .to_string()
+        }
+    };
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    // Simulate what the test runner does
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let mut vm = Vm::new(heap);
+
+            // This should succeed (like interpret() in test runner)
+            match vm.interpret(program) {
+                Ok(_) => {
+                    // Test runner logic: extract test functions and call them
+                    let test_description_handle =
+                        vm.heap_mut().intern_string("test_description".into());
+                    let test_func_handle = vm.heap_mut().intern_string("test_assert_true".into());
+
+                    // Debug: Print what globals we actually have
+                    println!("Globals in VM:");
+                    for (handle, value) in vm.globals().iter() {
+                        if let Some(obj) = vm.heap().get(*handle) {
+                            if let HeapObject::String(name) = obj {
+                                println!("  {} -> {:?}", name, value);
+                            }
+                        }
+                    }
+
+                    // Check that globals were set correctly
+                    assert!(
+                        vm.globals().contains_key(&test_description_handle),
+                        "test_description not found"
+                    );
+                    assert!(
+                        vm.globals().contains_key(&test_func_handle),
+                        "test_assert_true not found"
+                    );
+
+                    // Extract the test function handle
+                    if let Some(Value::Function(FunctionValueKind::QangFunction(func_handle))) =
+                        vm.globals().get(&test_func_handle)
+                    {
+                        // This should succeed (like call_function in test runner)
+                        match vm.call_function(*func_handle, vec![]) {
+                            Ok(_) => (), // Test passed
+                            Err(error) => panic!("Test function call failed: {}", error.message),
+                        }
+                    } else {
+                        panic!("Test function not found in globals");
+                    }
+                }
+                Err(error) => {
+                    panic!(
+                        "Runtime error during interpretation (this is the bug): {}",
+                        error.message
+                    );
+                }
+            }
+        }
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

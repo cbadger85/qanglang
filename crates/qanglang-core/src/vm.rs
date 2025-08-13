@@ -512,13 +512,6 @@ impl Vm {
                     coz::progress!("function_returns");
 
                     if self.frame_count == 0 {
-                        debug_assert!(
-                            self.stack_top <= 1,
-                            "Stack corruption: {} values left",
-                            self.stack_top
-                        );
-
-                        self.stack_top = 0;
                         return Ok(result);
                     }
 
@@ -635,11 +628,14 @@ impl Vm {
             SourceLocation::default()
         };
 
-        if arg_count < function.arity {
+        let final_arg_count = if arg_count < function.arity {
             for _ in arg_count..function.arity {
                 push_value!(self, Value::Nil)?;
             }
-        }
+            function.arity
+        } else {
+            arg_count
+        };
 
         if self.frame_count >= FRAME_MAX {
             return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
@@ -647,7 +643,7 @@ impl Vm {
 
         self.frame_count += 1;
 
-        let value_slot = self.stack_top - arg_count - 1; // This should overwrite the function identifier with its return value.
+        let value_slot = self.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
         let call_frame = self.get_current_frame_mut();
 
         call_frame.value_slot = value_slot;
@@ -694,7 +690,12 @@ impl Vm {
         self.call(function.clone(), args.len())?;
 
         match self.run() {
-            Ok(return_value) => Ok(return_value),
+            Ok(return_value) => {
+                // Reset the VM state to before the function call
+                self.stack_top = saved_stack_top;
+                self.frame_count = saved_frame_count;
+                Ok(return_value)
+            }
             Err(error) => {
                 // Reset the VM state to before the function call
                 self.stack_top = saved_stack_top;

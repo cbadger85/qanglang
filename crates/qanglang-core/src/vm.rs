@@ -121,7 +121,7 @@ impl Vm {
         let vm = Self {
             is_debug: false,
             frame_count: 0,
-            stack_top: 0,
+            stack_top: 1,
             stack: vec![Value::Nil; STACK_MAX],
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals,
@@ -211,7 +211,24 @@ impl Vm {
         let function_handle = program.into();
         self.program_handle = function_handle;
 
-        self.call_function(function_handle, 0)?;
+        let obj = self.heap.get(function_handle).ok_or_else(|| {
+            QangRuntimeError::new(
+                "Program not found in heap.".to_string(),
+                SourceLocation::default(),
+            )
+        })?;
+
+        let function = match obj {
+            HeapObject::Function(function) => function,
+            _ => {
+                return Err(QangRuntimeError::new(
+                    "Value not callable.".to_string(),
+                    SourceLocation::default(),
+                ));
+            }
+        };
+
+        self.call(function.clone(), 0, true)?;
 
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
@@ -510,12 +527,10 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
+                    self.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
-
-                    let value_slot = self.get_current_frame().value_slot;
-                    self.frame_count -= 1;
 
                     if self.frame_count == 0 {
                         debug_assert!(
@@ -528,9 +543,7 @@ impl Vm {
                         return Ok(result);
                     }
 
-                    // Reset stack to before the function call, then push the return value.
-                    // This replaces the function and its arguments with the return value.
-                    self.stack_top = if value_slot > 0 { value_slot - 1 } else { 0 };
+                    self.stack_top = self.get_current_frame().value_slot;
                     push_value!(self, result)?;
                 }
             };
@@ -590,7 +603,28 @@ impl Vm {
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
             Value::Function(FunctionValueKind::QangFunction(handle)) => {
-                self.call_function(handle, arg_count)
+                let loc = if self.frame_count > 0 {
+                    self.get_previous_loc()
+                } else {
+                    SourceLocation::default()
+                };
+
+                let obj = self
+                    .heap
+                    .get(handle)
+                    .ok_or_else(|| QangRuntimeError::new("Orphaned identifier".to_string(), loc))?;
+
+                let function = match obj {
+                    HeapObject::Function(function) => function,
+                    _ => {
+                        return Err(QangRuntimeError::new(
+                            "Value not callable.".to_string(),
+                            loc,
+                        ));
+                    }
+                };
+
+                self.call(function.clone(), arg_count, false)
             }
             Value::Function(FunctionValueKind::NativeFunction(function)) => {
                 self.call_native_function(function, arg_count)
@@ -608,7 +642,12 @@ impl Vm {
         }
     }
 
-    fn call_function(&mut self, handle: ObjectHandle, arg_count: usize) -> RuntimeResult<()> {
+    fn call(
+        &mut self,
+        function: Rc<FunctionObject>,
+        arg_count: usize,
+        is_script: bool,
+    ) -> RuntimeResult<()> {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
 
@@ -622,43 +661,24 @@ impl Vm {
             SourceLocation::default()
         };
 
-        let obj = self
-            .heap
-            .get(handle)
-            .ok_or_else(|| QangRuntimeError::new("Orphaned identifier".to_string(), loc))?;
-
-        match obj {
-            HeapObject::Function(function) => {
-                if arg_count < function.arity {
-                    for _ in arg_count..function.arity {
-                        push_value!(self, Value::Nil)?;
-                    }
-                }
-
-                if self.frame_count >= FRAME_MAX {
-                    return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
-                }
-
-                self.frame_count += 1;
-
-                let value_slot = if self.frame_count == 1 {
-                    0
-                } else {
-                    self.stack_top - arg_count
-                };
-
-                let call_frame = &mut self.frames[self.frame_count - 1];
-                call_frame.current_function = function.clone();
-                call_frame.ip = if handle == self.program_handle { 0 } else { 1 };
-                call_frame.value_slot = value_slot;
-
-                Ok(())
+        if arg_count < function.arity {
+            for _ in arg_count..function.arity {
+                push_value!(self, Value::Nil)?;
             }
-            _ => Err(QangRuntimeError::new(
-                "Value not callable.".to_string(),
-                loc,
-            )),
-        }?;
+        }
+
+        if self.frame_count >= FRAME_MAX {
+            return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
+        }
+
+        self.frame_count += 1;
+
+        let value_slot = self.stack_top - arg_count - 1; // This should overwrite the function identifier with its return value.
+        let call_frame = self.get_current_frame_mut();
+
+        call_frame.value_slot = value_slot;
+        call_frame.current_function = function;
+        call_frame.ip = if is_script { 0 } else { 1 };
 
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");
@@ -683,7 +703,21 @@ impl Vm {
             push_value!(self, *value)?;
         }
 
-        self.call_function(handle, args.len())?;
+        let obj = self.heap.get(handle).ok_or_else(|| {
+            QangRuntimeError::new("Orphaned identifier".to_string(), SourceLocation::default())
+        })?;
+
+        let function = match obj {
+            HeapObject::Function(function) => function,
+            _ => {
+                return Err(QangRuntimeError::new(
+                    "Value not callable.".to_string(),
+                    SourceLocation::default(),
+                ));
+            }
+        };
+
+        self.call(function.clone(), args.len(), handle == self.program_handle)?;
 
         match self.run() {
             Ok(return_value) => Ok(return_value),

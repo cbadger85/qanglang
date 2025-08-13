@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
@@ -5,7 +7,6 @@ use crate::{
     heap::{FunctionObject, ObjectHandle, ObjectHeap},
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
-    value::FunctionValueKind,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -233,23 +234,29 @@ impl<'a> Compiler<'a> {
         self.emit_byte(byte, span);
     }
 
-    fn emit_constant(&mut self, value: Value, span: SourceSpan, errors: &mut ErrorReporter) {
-        let constant = self.make_constant(value, span, errors);
+    fn emit_constant(&mut self, value: Value, span: SourceSpan) -> Result<(), QangSyntaxError> {
+        let constant = self.make_constant(value, span)?;
         self.emit_opcode_and_byte(OpCode::Constant, constant, span);
+
+        Ok(())
     }
 
-    fn make_constant(&mut self, value: Value, span: SourceSpan, errors: &mut ErrorReporter) -> u8 {
+    fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangSyntaxError> {
         let index = self.get_current_chunk().add_constant(value);
 
         if index > u8::MAX as usize {
-            errors.report_error(QangSyntaxError::new(
+            Err(QangSyntaxError::new(
                 "Constant index out of range".to_string(),
                 span,
-            ));
-            0
+            ))
         } else {
-            index as u8
+            Ok(index as u8)
         }
+    }
+
+    fn emit_return(&mut self, span: SourceSpan) {
+        self.emit_opcode(OpCode::Nil, span);
+        self.emit_opcode(OpCode::Return, span);
     }
 
     fn begin_scope(&mut self) {
@@ -319,6 +326,24 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn define_variable(
+        &mut self,
+        handle: Option<ObjectHandle>,
+        span: SourceSpan,
+    ) -> Result<(), QangSyntaxError> {
+        if self.scope_depth > 0 {
+            self.mark_initialized();
+            return Ok(());
+        }
+
+        let handle = handle.expect("Expected an object handle when defining global variables.");
+
+        self.emit_constant(Value::String(handle), span)?;
+        self.emit_opcode(OpCode::DefineGlobal, span);
+
+        Ok(())
+    }
+
     fn resolve_local_variable(
         &mut self,
         handle: &str,
@@ -351,6 +376,20 @@ impl<'a> Compiler<'a> {
             }
         }
     }
+
+    fn parse_variable(
+        &mut self,
+        identifer: &str,
+        span: SourceSpan,
+    ) -> Result<Option<ObjectHandle>, QangSyntaxError> {
+        self.declare_variable(identifer, span)?;
+
+        if self.scope_depth > 0 {
+            Ok(None)
+        } else {
+            Ok(Some(self.heap.intern_string(identifer.into())))
+        }
+    }
 }
 
 impl<'a> AstVisitor for Compiler<'a> {
@@ -359,20 +398,18 @@ impl<'a> AstVisitor for Compiler<'a> {
     fn visit_number_literal(
         &mut self,
         number: &ast::NumberLiteral,
-        errors: &mut ErrorReporter,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.emit_constant(number.value.into(), number.span, errors);
-        Ok(())
+        self.emit_constant(number.value.into(), number.span)
     }
 
     fn visit_string_literal(
         &mut self,
         string: &ast::StringLiteral,
-        errors: &mut ErrorReporter,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         let handle = self.heap.intern_string(string.value.to_owned());
-        self.emit_constant(Value::String(handle), string.span, errors);
-        Ok(())
+        self.emit_constant(Value::String(handle), string.span)
     }
 
     fn visit_boolean_literal(
@@ -466,7 +503,7 @@ impl<'a> AstVisitor for Compiler<'a> {
                     self.emit_opcode_and_byte(OpCode::SetLocal, index as u8, identifier.span);
                 } else {
                     let handle = self.heap.intern_string(identifier.name.to_owned());
-                    self.emit_constant(Value::String(handle), identifier.span, errors);
+                    self.emit_constant(Value::String(handle), identifier.span)?;
                     self.emit_opcode(OpCode::SetGlobal, assignment.span);
                 };
             }
@@ -513,7 +550,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         } else {
             let handle = self.heap.intern_string(var_decl.name.name.to_owned());
 
-            self.emit_constant(Value::String(handle), var_decl.name.span, errors);
+            self.emit_constant(Value::String(handle), var_decl.name.span)?;
 
             self.emit_opcode(OpCode::DefineGlobal, var_decl.span);
         }
@@ -523,13 +560,13 @@ impl<'a> AstVisitor for Compiler<'a> {
     fn visit_identifier(
         &mut self,
         identifier: &ast::Identifier,
-        errors: &mut ErrorReporter,
+        _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         if let Some(index) = self.resolve_local_variable(&identifier.name, identifier.span)? {
             self.emit_opcode_and_byte(OpCode::GetLocal, index as u8, identifier.span);
         } else {
             let handle = self.heap.intern_string(identifier.name.to_owned());
-            self.emit_constant(Value::String(handle), identifier.span, errors);
+            self.emit_constant(Value::String(handle), identifier.span)?;
             self.emit_opcode(OpCode::GetGlobal, identifier.span);
         };
 
@@ -746,18 +783,16 @@ impl<'a> AstVisitor for Compiler<'a> {
         func_decl: &ast::FunctionDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let is_local = self.scope_depth > 0;
-        let handle = self
-            .heap
-            .intern_string(func_decl.function.name.name.to_owned());
-
-        if is_local {
-            self.declare_variable(&func_decl.function.name.name, func_decl.function.name.span)?;
-        }
+        let function_identifier_handle =
+            self.parse_variable(&func_decl.function.name.name, func_decl.function.span)?;
 
         let mut function = std::mem::replace(
             &mut self.enclosing,
-            FunctionObject::new(handle, func_decl.function.parameters.len()),
+            FunctionObject::new(
+                self.heap
+                    .intern_string(func_decl.function.name.name.clone()),
+                func_decl.function.parameters.len(),
+            ),
         );
         let previous_compile_kind = self.compile_kind;
         let previous_locals = std::mem::take(&mut self.locals);
@@ -793,21 +828,25 @@ impl<'a> AstVisitor for Compiler<'a> {
             ));
         }
 
-        self.emit_byte(func_decl.function.parameters.len() as u8, parameter_span);
-
         for parameter in &func_decl.function.parameters {
-            self.add_local(&parameter.name, parameter.span)?;
-            self.mark_initialized();
+            let handle = self.parse_variable(&parameter.name, parameter.span)?;
+
+            self.define_variable(handle, parameter.span)?;
         }
 
         self.visit_block_statement(&func_decl.function.body, errors)?;
-
-        // Always add implicit return nil at end (like Crafting Interpreters)
-        // This will only execute if no explicit return was hit
-        self.emit_opcode(OpCode::Nil, func_decl.function.body.span);
-        self.emit_opcode(OpCode::Return, func_decl.function.body.span);
+        self.emit_return(func_decl.span);
 
         std::mem::swap(&mut self.enclosing, &mut function);
+
+        let function_handle = self
+            .heap
+            .allocate_object(crate::HeapObject::Function(Rc::new(function)));
+
+        self.emit_constant(
+            Value::Function(crate::FunctionValueKind::QangFunction(function_handle)),
+            func_decl.span,
+        )?;
 
         // Restore previous compiler state
         self.compile_kind = previous_compile_kind;
@@ -815,27 +854,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         self.local_count = previous_local_count;
         self.scope_depth = previous_scope_depth;
 
-        let function_handle = self.heap.allocate_object(function.into());
-
-        self.emit_constant(
-            Value::Function(FunctionValueKind::QangFunction(function_handle)),
-            func_decl.function.body.span,
-            errors,
-        );
-
-        if is_local {
-            self.mark_initialized();
-            self.emit_opcode_and_byte(
-                OpCode::SetLocal,
-                self.local_count as u8 - 1,
-                func_decl.function.name.span,
-            );
-        } else {
-            self.emit_constant(Value::String(handle), func_decl.function.name.span, errors);
-
-            self.emit_opcode(OpCode::DefineGlobal, func_decl.function.name.span);
-        }
-
+        self.define_variable(function_identifier_handle, func_decl.span)?;
         Ok(())
     }
 

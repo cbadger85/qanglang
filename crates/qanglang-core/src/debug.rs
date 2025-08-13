@@ -8,28 +8,11 @@ use crate::{
 pub fn disassemble_chunk(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
     println!("== {} ==", name);
 
-    let is_script = name == "<script>";
     let mut offset = 0;
 
     while offset < chunk.count() {
-        offset = disassemble_instruction_with_context(chunk, heap, offset, is_script);
+        offset = disassemble_instruction(chunk, heap, offset);
     }
-}
-
-pub fn disassemble_instruction_with_context(
-    chunk: &Chunk,
-    heap: &ObjectHeap,
-    offset: usize,
-    is_script: bool,
-) -> usize {
-    // Handle parameter count byte for user functions
-    if !is_script && offset == 0 {
-        let param_count = chunk.code()[offset];
-        println!("{:04} ---- PARAM_COUNT        {}", offset, param_count);
-        return offset + 1;
-    }
-
-    disassemble_instruction(chunk, heap, offset)
 }
 
 pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) -> usize {

@@ -1,4 +1,4 @@
-use crate::{CompilerPipeline, ObjectHeap, SourceMap, Vm};
+use crate::{CompilerPipeline, ObjectHeap, SourceMap, Vm, disassemble_program};
 
 #[test]
 fn test_display() {
@@ -299,7 +299,7 @@ fn comparison_operations_test() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        match Vm::new(heap).set_debug(true).interpret(program) {
+        match Vm::new(heap).set_debug(false).interpret(program) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error.message)
@@ -525,12 +525,15 @@ fn test_function_calls() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
-            Ok(_) => (),
-            Err(error) => {
-                panic!("{}", error);
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(true).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
             }
-        },
+        }
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -557,12 +560,15 @@ fn test_nested_function_calls() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(true).interpret(program) {
-            Ok(_) => (),
-            Err(error) => {
-                panic!("{}", error);
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(true).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
             }
-        },
+        }
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -585,12 +591,15 @@ fn test_function_calls_with_args() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
-            Ok(_) => (),
-            Err(error) => {
-                panic!("{}", error);
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(true).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
             }
-        },
+        }
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

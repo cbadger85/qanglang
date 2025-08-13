@@ -71,7 +71,7 @@ macro_rules! pop_value {
 
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
-    current_function: Rc<FunctionObject>,
+    closure: Rc<ClosureObject>,
     ip: usize,
     value_slot: usize,
 }
@@ -177,7 +177,7 @@ impl Vm {
     }
 
     fn get_current_function(&self) -> &FunctionObject {
-        &self.get_current_frame().current_function
+        &self.get_current_frame().closure.function
     }
 
     fn get_current_loc(&self) -> SourceLocation {
@@ -679,7 +679,7 @@ impl Vm {
         let call_frame = self.get_current_frame_mut();
 
         call_frame.value_slot = value_slot;
-        call_frame.current_function.clone_from(&closure.function);
+        call_frame.closure.clone_from(&closure);
         call_frame.ip = 0;
 
         #[cfg(feature = "profiler")]
@@ -791,12 +791,13 @@ impl Vm {
         for frame_idx in frame_id_range {
             let frame = &self.frames[frame_idx];
             let name = self
-                .get_identifier_name(frame.current_function.name)
+                .get_identifier_name(frame.closure.function.name)
                 .unwrap_or("<unknown>".to_string().into_boxed_str());
 
             let loc = if frame.ip > 0 {
                 frame
-                    .current_function
+                    .closure
+                    .function
                     .chunk
                     .locs()
                     .get(frame.ip - 1)

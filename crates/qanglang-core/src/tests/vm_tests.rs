@@ -38,15 +38,19 @@ fn test_run() {
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
 
-    if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        match Vm::new(heap).interpret(program) {
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => match Vm::new(heap).interpret(program) {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error.message)
             }
+        },
+        Err(error) => {
+            for error in error.all() {
+                eprintln!("{}", error);
+            }
+            panic!("Compiler errors.")
         }
-    } else {
-        panic!("Compiler errors.")
     }
 }
 
@@ -90,12 +94,15 @@ fn test_subtraction() {
     let mut heap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
-            Ok(_) => (),
-            Err(error) => {
-                panic!("{}", error.message)
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error.message)
+                }
             }
-        },
+        }
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -105,7 +112,70 @@ fn test_subtraction() {
 }
 
 #[test]
-fn test_locals() {
+fn test_globals() {
+    let source = r#"
+        var two = 3.14;
+        println(two);
+        two = 2;
+        println(two);
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            disassemble_program(&heap);
+            let vm = Vm::new(heap);
+            match vm.set_debug(true).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error.message)
+                }
+            }
+        }
+        Err(error) => {
+            for error in error.all() {
+                eprintln!("{}", error);
+            }
+
+            panic!("Compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_locals_simple() {
+    let source = r#"
+    {
+        var two = 3.14;
+        println(two);
+    }
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let vm = Vm::new(heap);
+            match vm.set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error.message)
+                }
+            }
+        }
+        Err(error) => {
+            for error in error.all() {
+                eprintln!("{}", error);
+            }
+
+            panic!("Compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_locals_complex() {
     let source = r#"
         var two = "two";
         println(two);
@@ -120,16 +190,23 @@ fn test_locals() {
     let source_map = SourceMap::new(source.to_string());
     let mut heap = ObjectHeap::new();
 
-    if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        let mut vm = Vm::new(heap);
-        match vm.interpret(program) {
-            Ok(_) => (),
-            Err(error) => {
-                panic!("{}", error.message)
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let vm = Vm::new(heap);
+            match vm.set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error.message)
+                }
             }
         }
-    } else {
-        panic!("Compiler errors.")
+        Err(error) => {
+            for error in error.all() {
+                eprintln!("{}", error);
+            }
+
+            panic!("Compiler errors.")
+        }
     }
 }
 

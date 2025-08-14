@@ -404,25 +404,26 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
-                    let loc = self.get_previous_loc();
-                    let identifier_handle: ObjectHandle =
-                        pop_value!(self)
-                            .try_into()
-                            .map_err(|e: ValueConversionError| {
-                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                            })?;
+                    let identifier_handle: ObjectHandle = self
+                        .read_constant()?
+                        .try_into()
+                        .map_err(|e: ValueConversionError| {
+                            let loc = self.get_previous_loc();
+                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                        })?;
                     let value = pop_value!(self);
                     self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
-                    let loc = self.get_previous_loc();
-                    let identifier_handle: ObjectHandle =
-                        pop_value!(self)
-                            .try_into()
-                            .map_err(|e: ValueConversionError| {
-                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                            })?;
+                    let identifier_handle: ObjectHandle = self
+                        .read_constant()?
+                        .try_into()
+                        .map_err(|e: ValueConversionError| {
+                            let loc = self.get_previous_loc();
+                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                        })?;
                     let value = *self.globals.get(&identifier_handle).ok_or_else(|| {
+                        let loc = self.get_previous_loc();
                         let identifier_name = self
                             .heap
                             .get(identifier_handle)
@@ -440,12 +441,12 @@ impl Vm {
                 }
                 OpCode::SetGlobal => {
                     let loc = self.get_previous_loc();
-                    let identifier_handle: ObjectHandle =
-                        pop_value!(self)
-                            .try_into()
-                            .map_err(|e: ValueConversionError| {
-                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                            })?;
+                    let identifier_handle: ObjectHandle = self
+                        .read_constant()?
+                        .try_into()
+                        .map_err(|e: ValueConversionError| {
+                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                        })?;
 
                     if !self.globals.contains_key(&identifier_handle) {
                         let identifier_name = self

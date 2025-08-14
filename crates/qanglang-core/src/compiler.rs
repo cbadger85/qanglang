@@ -407,13 +407,13 @@ impl<'a> Compiler<'a> {
     ) -> Result<(), QangSyntaxError> {
         if self.scope_depth > 0 {
             self.mark_initialized();
+
             return Ok(());
         }
-
         let handle = handle.expect("Expected an object handle when defining global variables.");
 
-        self.emit_constant(Value::String(handle), span)?;
-        self.emit_opcode(OpCode::DefineGlobal, span);
+        let index = self.make_constant(Value::String(handle), span)?;
+        self.emit_opcode_and_byte(OpCode::DefineGlobal, index as u8, span);
 
         Ok(())
     }
@@ -423,6 +423,9 @@ impl<'a> Compiler<'a> {
         handle: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
+        if self.scope_depth == 0 {
+            return Ok(None);
+        }
         for i in (0..self.local_count).rev() {
             if let Some(local) = self.locals.get(i) {
                 if *local.name == *handle {
@@ -463,6 +466,28 @@ impl<'a> Compiler<'a> {
         } else {
             Ok(Some(self.heap.intern_string(identifer.into())))
         }
+    }
+
+    fn handle_variable(
+        &mut self,
+        handle: &str,
+        span: SourceSpan,
+        is_assignment: bool,
+    ) -> Result<(), QangSyntaxError> {
+        let (index, get_op, set_op) = {
+            if let Some(index) = self.resolve_local_variable(handle, span)? {
+                (index as u8, OpCode::GetLocal, OpCode::SetLocal)
+            } else {
+                let handle = self.heap.intern_string(handle.into());
+                let index = self.make_constant(Value::String(handle), span)?;
+                (index, OpCode::GetGlobal, OpCode::SetGlobal)
+            }
+        };
+
+        let op = if is_assignment { set_op } else { get_op };
+        self.emit_opcode_and_byte(op, index as u8, span);
+
+        Ok(())
     }
 }
 
@@ -571,15 +596,7 @@ impl<'a> AstVisitor for Compiler<'a> {
 
         match &assignment.target {
             ast::AssignmentTarget::Identifier(identifier) => {
-                if let Some(index) =
-                    self.resolve_local_variable(&identifier.name, assignment.target.span())?
-                {
-                    self.emit_opcode_and_byte(OpCode::SetLocal, index as u8, identifier.span);
-                } else {
-                    let handle = self.heap.intern_string(identifier.name.to_owned());
-                    self.emit_constant(Value::String(handle), identifier.span)?;
-                    self.emit_opcode(OpCode::SetGlobal, assignment.span);
-                };
+                self.handle_variable(&identifier.name, identifier.span, true)?;
             }
             _ => {
                 return Err(QangSyntaxError::new(
@@ -607,10 +624,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         var_decl: &ast::VariableDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let is_local = self.scope_depth > 0;
-        if is_local {
-            self.declare_variable(&var_decl.name.name, var_decl.name.span)?;
-        }
+        let global = self.parse_variable(&var_decl.name.name, var_decl.name.span)?;
 
         if let Some(expr) = &var_decl.initializer {
             self.visit_expression(expr, errors)?;
@@ -618,16 +632,11 @@ impl<'a> AstVisitor for Compiler<'a> {
             self.emit_opcode(OpCode::Nil, var_decl.span);
         }
 
-        if is_local {
-            self.mark_initialized();
-            self.emit_opcode_and_byte(OpCode::SetLocal, self.local_count as u8 - 1, var_decl.span);
-        } else {
-            let handle = self.heap.intern_string(var_decl.name.name.to_owned());
-
-            self.emit_constant(Value::String(handle), var_decl.name.span)?;
-
-            self.emit_opcode(OpCode::DefineGlobal, var_decl.span);
+        self.define_variable(global, var_decl.name.span)?;
+        if global.is_none() {
+            self.handle_variable(&var_decl.name.name, var_decl.span, true)?;
         }
+
         Ok(())
     }
 
@@ -636,13 +645,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         identifier: &ast::Identifier,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        if let Some(index) = self.resolve_local_variable(&identifier.name, identifier.span)? {
-            self.emit_opcode_and_byte(OpCode::GetLocal, index as u8, identifier.span);
-        } else {
-            let handle = self.heap.intern_string(identifier.name.to_owned());
-            self.emit_constant(Value::String(handle), identifier.span)?;
-            self.emit_opcode(OpCode::GetGlobal, identifier.span);
-        };
+        self.handle_variable(&identifier.name, identifier.span, false)?;
 
         Ok(())
     }

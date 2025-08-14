@@ -9,7 +9,7 @@ use crate::{
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    heap::{ClosureObject, FunctionObject, ObjectHandle},
+    memory::{ClosureObject, FunctionObject, ObjectHandle},
     qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, qang_typeof, system_time},
     value::{
         BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, FunctionValueKind, NIL_TYPE_STRING,

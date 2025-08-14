@@ -1,4 +1,4 @@
-use crate::{HeapObject, NativeFn, ObjectHeap, error::ValueConversionError, heap::ObjectHandle};
+use crate::{HeapObject, NativeFn, ObjectHeap, error::ValueConversionError, memory::ObjectHandle};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NativeFunction {

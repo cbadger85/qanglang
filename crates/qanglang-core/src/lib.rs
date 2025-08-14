@@ -3,7 +3,7 @@ mod chunk;
 mod compiler;
 mod debug;
 mod error;
-mod heap;
+mod memory;
 mod parser;
 mod qang_std;
 mod source;
@@ -12,10 +12,12 @@ mod value;
 mod vm;
 
 pub use chunk::SourceLocation;
-pub use compiler::{Compiler, CompilerError, CompilerPipeline, ErrorMessageFormat, QangProgram};
+pub use compiler::{
+    CompilerError, CompilerPipeline, CompilerVisitor, ErrorMessageFormat, QangProgram,
+};
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
-pub use heap::{FunctionObject, HeapObject, ObjectHandle, ObjectHeap};
+pub use memory::{FunctionObject, HeapObject, ObjectHandle, ObjectHeap};
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};

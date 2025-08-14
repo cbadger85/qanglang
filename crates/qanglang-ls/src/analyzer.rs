@@ -1,4 +1,4 @@
-use qanglang_core::{Compiler, CompilerError, ObjectHeap, Parser, SourceMap};
+use qanglang_core::{CompilerError, CompilerVisitor, ObjectHeap, Parser, SourceMap};
 
 pub struct Analyzer<'a> {
     source_map: &'a SourceMap,
@@ -16,7 +16,7 @@ impl<'a> Analyzer<'a> {
         let program = parser.parse();
         let errors = parser.into_reporter();
 
-        let _ = Compiler::new(&mut heap).compile(program, self.source_map, errors)?;
+        let _ = CompilerVisitor::new(&mut heap).compile(program, self.source_map, errors)?;
 
         Ok(())
     }

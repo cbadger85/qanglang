@@ -1,7 +1,7 @@
 use crate::{
     ObjectHeap,
     chunk::{Chunk, OpCode},
-    heap::HeapObject,
+    memory::HeapObject,
 };
 
 #[allow(dead_code)]

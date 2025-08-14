@@ -4,7 +4,7 @@ use crate::{
     ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    heap::{FunctionObject, ObjectHandle, ObjectHeap},
+    memory::{FunctionObject, ObjectHandle, ObjectHeap},
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
 };
@@ -42,18 +42,24 @@ impl QangProgram {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-struct Artifact {
+struct Compiler {
     kind: CompilerKind,
     function: FunctionObject,
-    previous: Option<Box<Artifact>>,
+    locals: Vec<Local>,
+    local_count: usize,
+    scope_depth: usize,
+    previous: Option<Box<Compiler>>,
 }
 
-impl Artifact {
+impl Compiler {
     fn new_script(handle: ObjectHandle) -> Self {
         Self {
             kind: CompilerKind::Script,
             function: FunctionObject::new(handle, 0),
             previous: None,
+            locals: Vec::with_capacity(u8::MAX as usize),
+            local_count: 0,
+            scope_depth: 0,
         }
     }
 
@@ -62,24 +68,27 @@ impl Artifact {
             kind: CompilerKind::Function,
             function: FunctionObject::new(handle, arity),
             previous: None,
+            locals: Vec::with_capacity(u8::MAX as usize),
+            local_count: 0,
+            scope_depth: 0,
         }
     }
 }
 
 #[derive(Debug, Clone, Default)]
-struct ArtifactStack {
-    artifacts: Vec<Artifact>,
+struct CompilerStack {
+    artifacts: Vec<Compiler>,
 }
 
-impl ArtifactStack {
+impl CompilerStack {
     fn new(handle: ObjectHandle) -> Self {
         Self {
-            artifacts: vec![Artifact::new_script(handle)],
+            artifacts: vec![Compiler::new_script(handle)],
         }
     }
 
     fn push(&mut self, handle: ObjectHandle, arity: usize) {
-        self.artifacts.push(Artifact::new_function(handle, arity));
+        self.artifacts.push(Compiler::new_function(handle, arity));
     }
 
     fn pop(&mut self) -> Option<FunctionObject> {
@@ -94,23 +103,26 @@ impl ArtifactStack {
         self.artifacts[self.artifacts.len() - 1].kind
     }
 
-    #[allow(dead_code)]
-    fn function(&self) -> &FunctionObject {
-        &self.artifacts[self.artifacts.len() - 1].function
+    fn current(&self) -> &Compiler {
+        &self.artifacts[self.artifacts.len() - 1]
+    }
+
+    fn current_mut(&mut self) -> &mut Compiler {
+        let len = self.artifacts.len() - 1;
+        &mut self.artifacts[len]
     }
 
     fn function_mut(&mut self) -> &mut FunctionObject {
-        let len = self.artifacts.len();
-        &mut self.artifacts[len - 1].function
+        &mut self.current_mut().function
     }
 
     #[allow(dead_code)]
-    fn iter(&self) -> impl Iterator<Item = &Artifact> {
+    fn iter(&self) -> impl Iterator<Item = &Compiler> {
         self.artifacts.iter().rev()
     }
 
     #[allow(dead_code)]
-    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Artifact> {
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Compiler> {
         self.artifacts.iter_mut().rev()
     }
 
@@ -145,7 +157,7 @@ impl<'a> CompilerPipeline<'a> {
         let program = parser.parse();
         let errors = parser.into_reporter();
 
-        match Compiler::new(self.heap).compile(program, &self.source_map, errors) {
+        match CompilerVisitor::new(self.heap).compile(program, &self.source_map, errors) {
             Ok(program) => {
                 let program = Rc::new(program);
                 self.heap
@@ -164,7 +176,7 @@ impl<'a> CompilerPipeline<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Default)]
 struct Local {
     name: Box<str>,
     depth: Option<usize>,
@@ -191,38 +203,32 @@ impl Default for CompilerKind {
     }
 }
 
-pub struct Compiler<'a> {
+pub struct CompilerVisitor<'a> {
     source_map: &'a SourceMap,
     heap: &'a mut ObjectHeap,
-    locals: Vec<Local>,
-    local_count: usize,
-    scope_depth: usize,
-    artifacts: ArtifactStack,
+    artifacts: CompilerStack,
 }
 
-impl<'a> Compiler<'a> {
+impl<'a> CompilerVisitor<'a> {
     pub fn new(heap: &'a mut ObjectHeap) -> Self {
         let handle = heap.intern_string("<script>".to_string().into_boxed_str());
-        let locals = Vec::with_capacity(u8::MAX as usize);
 
         Self {
             source_map: &DEFALT_SOURCE_MAP,
             heap,
-            locals,
-            local_count: 0,
-            scope_depth: 0,
-            artifacts: ArtifactStack::new(handle),
+            artifacts: CompilerStack::new(handle),
         }
     }
 
     fn reset(&mut self) {
+        let handle = self
+            .heap
+            .intern_string("<script>".to_string().into_boxed_str());
         self.source_map = &DEFALT_SOURCE_MAP;
-        self.locals = Vec::with_capacity(STACK_MAX);
-        self.local_count = 0;
-        self.scope_depth = 0;
+        self.artifacts = CompilerStack::new(handle);
     }
 
-    fn get_current_chunk(&mut self) -> &mut Chunk {
+    fn current_chunk_mut(&mut self) -> &mut Chunk {
         &mut self.artifacts.function_mut().chunk
     }
 
@@ -253,14 +259,14 @@ impl<'a> Compiler<'a> {
     fn emit_opcode(&mut self, opcode: OpCode, span: SourceSpan) {
         let line = self.source_map.get_line_number(span.start);
         let col = self.source_map.get_column_number(span.start);
-        self.get_current_chunk()
+        self.current_chunk_mut()
             .write_opcode(opcode, SourceLocation::new(line, col));
     }
 
     fn emit_byte(&mut self, byte: u8, span: SourceSpan) {
         let line = self.source_map.get_line_number(span.start);
         let col = self.source_map.get_column_number(span.start);
-        self.get_current_chunk()
+        self.current_chunk_mut()
             .write(byte, SourceLocation::new(line, col));
     }
 
@@ -268,11 +274,11 @@ impl<'a> Compiler<'a> {
         self.emit_opcode(opcode, span);
         self.emit_byte(0xff, span);
         self.emit_byte(0xff, span);
-        self.get_current_chunk().count() - 2
+        self.current_chunk_mut().count() - 2
     }
 
     fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        let jump = self.get_current_chunk().count() - offset - 2;
+        let jump = self.current_chunk_mut().count() - offset - 2;
 
         if jump > u16::MAX as usize {
             return Err(QangSyntaxError::new(
@@ -281,15 +287,15 @@ impl<'a> Compiler<'a> {
             ));
         }
 
-        self.get_current_chunk().code_mut()[offset] = ((jump >> 8) & 0xff) as u8;
-        self.get_current_chunk().code_mut()[offset + 1] = (jump & 0xff) as u8;
+        self.current_chunk_mut().code_mut()[offset] = ((jump >> 8) & 0xff) as u8;
+        self.current_chunk_mut().code_mut()[offset + 1] = (jump & 0xff) as u8;
 
         Ok(())
     }
 
     fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
         self.emit_opcode(OpCode::Loop, span);
-        let offset = self.get_current_chunk().count() - loop_start + 2;
+        let offset = self.current_chunk_mut().count() - loop_start + 2;
         if offset > u16::MAX as usize {
             return Err(QangSyntaxError::new(
                 "Loop body too large.".to_string(),
@@ -316,7 +322,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangSyntaxError> {
-        let index = self.get_current_chunk().add_constant(value);
+        let index = self.current_chunk_mut().add_constant(value);
 
         if index > u8::MAX as usize {
             Err(QangSyntaxError::new(
@@ -334,54 +340,71 @@ impl<'a> Compiler<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+        self.artifacts.current_mut().scope_depth += 1;
     }
 
     fn end_scope(&mut self, span: SourceSpan) {
-        self.scope_depth -= 1;
+        let current = self.artifacts.current_mut();
+        current.scope_depth -= 1;
 
-        while self.local_count > 0
-            && self
-                .locals
-                .get(self.local_count - 1)
-                .and_then(|l| l.depth)
-                .map(|local_depth| local_depth > self.scope_depth)
-                .unwrap_or(false)
-        {
+        // Calculate how many locals need to be popped
+        let mut pop_count = 0;
+        for i in (0..current.local_count).rev() {
+            if let Some(local) = current.locals.get(i) {
+                if let Some(depth) = local.depth {
+                    if depth > current.scope_depth {
+                        pop_count += 1;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // Update local_count first
+        current.local_count -= pop_count;
+
+        // Now emit the pop opcodes
+        for _ in 0..pop_count {
             self.emit_opcode(OpCode::Pop, span);
-            self.local_count -= 1;
         }
     }
 
     fn add_local(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        if self.local_count >= STACK_MAX {
+        let current = self.artifacts.current_mut();
+        if current.local_count >= STACK_MAX {
             Err(QangSyntaxError::new(
                 "Too many local variables in scope.".to_string(),
                 span,
             ))
         } else {
             let local = Local::new(handle.into());
-            if self.local_count < self.locals.len() {
+            if current.local_count < current.locals.len() {
                 // Reuse inactive local slot
-                self.locals[self.local_count] = local;
+                current.locals[current.local_count] = local;
             } else {
                 // Grow vec
-                self.locals.push(local);
+                current.locals.push(local);
             }
-            self.local_count += 1;
+            current.local_count += 1;
             Ok(())
         }
     }
 
     fn declare_variable(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        if self.scope_depth == 0 {
+        let current = self.artifacts.current();
+        if current.scope_depth == 0 {
             return Ok(());
         }
-        for i in (0..self.local_count).rev() {
-            if let Some(local) = self.locals.get(i) {
+        for i in (0..current.local_count).rev() {
+            if let Some(local) = current.locals.get(i) {
                 if local
                     .depth
-                    .map(|local_depth| local_depth < self.scope_depth)
+                    .map(|local_depth| local_depth < current.scope_depth)
                     .unwrap_or(false)
                 {
                     break;
@@ -405,7 +428,7 @@ impl<'a> Compiler<'a> {
         handle: Option<ObjectHandle>,
         span: SourceSpan,
     ) -> Result<(), QangSyntaxError> {
-        if self.scope_depth > 0 {
+        if self.artifacts.current().scope_depth > 0 {
             self.mark_initialized();
 
             return Ok(());
@@ -423,11 +446,12 @@ impl<'a> Compiler<'a> {
         handle: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
-        if self.scope_depth == 0 {
+        let current = self.artifacts.current();
+        if current.scope_depth == 0 {
             return Ok(None);
         }
-        for i in (0..self.local_count).rev() {
-            if let Some(local) = self.locals.get(i) {
+        for i in (0..current.local_count).rev() {
+            if let Some(local) = current.locals.get(i) {
                 if *local.name == *handle {
                     if local.depth.is_none() {
                         return Err(QangSyntaxError::new(
@@ -444,12 +468,13 @@ impl<'a> Compiler<'a> {
     }
 
     fn mark_initialized(&mut self) {
-        if self.scope_depth == 0 {
+        let current = self.artifacts.current_mut();
+        if current.scope_depth == 0 {
             return;
         }
-        if self.local_count > 0 {
-            if let Some(local) = self.locals.get_mut(self.local_count - 1) {
-                local.depth = Some(self.scope_depth)
+        if current.local_count > 0 {
+            if let Some(local) = current.locals.get_mut(current.local_count - 1) {
+                local.depth = Some(current.scope_depth)
             }
         }
     }
@@ -461,7 +486,7 @@ impl<'a> Compiler<'a> {
     ) -> Result<Option<ObjectHandle>, QangSyntaxError> {
         self.declare_variable(identifer, span)?;
 
-        if self.scope_depth > 0 {
+        if self.artifacts.current().scope_depth > 0 {
             Ok(None)
         } else {
             Ok(Some(self.heap.intern_string(identifer.into())))
@@ -491,7 +516,7 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl<'a> AstVisitor for Compiler<'a> {
+impl<'a> AstVisitor for CompilerVisitor<'a> {
     type Error = QangSyntaxError;
 
     fn visit_number_literal(
@@ -783,7 +808,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         while_stmt: &ast::WhileStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let loop_start = self.get_current_chunk().count();
+        let loop_start = self.current_chunk_mut().count();
         self.visit_expression(&while_stmt.condition, errors)?;
 
         let exit_jump = self.emit_jump(OpCode::JumpIfFalse, while_stmt.body.span());
@@ -816,12 +841,12 @@ impl<'a> AstVisitor for Compiler<'a> {
             }
         }
 
-        let mut loop_start = self.get_current_chunk().count();
+        let mut loop_start = self.current_chunk_mut().count();
         let mut exit_jump: Option<usize> = None;
 
         if let Some(condition) = &for_stmt.condition {
             let condition_jump = self.emit_jump(OpCode::Jump, condition.span());
-            loop_start = self.get_current_chunk().count();
+            loop_start = self.current_chunk_mut().count();
             self.visit_statement(&for_stmt.body, errors)?;
 
             if let Some(increment) = &for_stmt.increment {
@@ -870,14 +895,6 @@ impl<'a> AstVisitor for Compiler<'a> {
 
         self.artifacts
             .push(function_name_handle, func_decl.function.parameters.len());
-        let previous_locals = std::mem::take(&mut self.locals);
-        let previous_local_count = self.local_count;
-        let previous_scope_depth = self.scope_depth;
-
-        // Reset state for function compilation
-        self.locals = Vec::with_capacity(STACK_MAX);
-        self.local_count = 0;
-        self.scope_depth = 0;
         self.begin_scope();
 
         let parameter_span = SourceSpan::combine(
@@ -926,11 +943,6 @@ impl<'a> AstVisitor for Compiler<'a> {
             constant_index,
             func_decl.function.name.span,
         );
-
-        // Restore previous compiler state
-        self.locals = previous_locals;
-        self.local_count = previous_local_count;
-        self.scope_depth = previous_scope_depth;
 
         self.define_variable(function_identifier_handle, func_decl.function.name.span)?;
         Ok(())

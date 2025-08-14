@@ -36,6 +36,31 @@ impl From<&'static str> for NativeFunctionError {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct BinaryOperationError(pub String);
+
+impl BinaryOperationError {
+    pub fn new(message: &str) -> Self {
+        Self(message.to_string())
+    }
+
+    fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
+        QangRuntimeError::new(self.0, loc)
+    }
+}
+
+impl From<&'_ str> for BinaryOperationError {
+    fn from(value: &'_ str) -> Self {
+        BinaryOperationError::new(value)
+    }
+}
+
+impl From<ValueConversionError> for BinaryOperationError {
+    fn from(value: ValueConversionError) -> Self {
+        BinaryOperationError(value.into_message())
+    }
+}
+
 pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
 
 pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
@@ -261,7 +286,7 @@ impl Vm {
                     push_value!(self, Value::Nil)?;
                 }
                 OpCode::Add => {
-                    self.binary_operation(|a, b, heap, loc| match (&a, &b) {
+                    self.binary_operation(|a, b, heap| match (&a, &b) {
                         (Value::Number(num1), Value::Number(num2)) => {
                             Ok(Value::Number(num1 + num2))
                         }
@@ -271,11 +296,11 @@ impl Vm {
 
                             let str1: Box<str> = a
                                 .into_string(heap)
-                                .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
+                                .map_err(|e| BinaryOperationError::from(e))?;
 
                             let str2: Box<str> = b
                                 .into_string(heap)
-                                .map_err(|e: ValueConversionError| e.into_qang_error(loc))?;
+                                .map_err(|e| BinaryOperationError::from(e))?;
 
                             let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
                             str1_str2.push_str(&str1);
@@ -284,66 +309,59 @@ impl Vm {
                             let result = heap.intern_string(str1_str2.into_boxed_str());
                             Ok(Value::String(result))
                         }
-                        (Value::Number(_), _) => Err(QangRuntimeError::new(
-                            format!("Cannot add number to {}.", b.to_type_string()),
-                            loc,
-                        )),
-                        (Value::String(_), _) => Err(QangRuntimeError::new(
-                            format!("Cannot add string to {}.", b.to_type_string()),
-                            loc,
-                        )),
-                        (_, Value::Number(_)) => Err(QangRuntimeError::new(
-                            format!("Cannot add {} to number.", a.to_type_string()),
-                            loc,
-                        )),
-                        (_, Value::String(_)) => Err(QangRuntimeError::new(
-                            format!("Cannot add {} to string.", a.to_type_string()),
-                            loc,
-                        )),
-                        _ => Err(QangRuntimeError::new(
-                            "Both operands must be a numbers or strings.".to_string(),
-                            loc,
-                        )),
+                        (Value::Number(_), _) => {
+                            Err(format!("Cannot add number to {}.", b.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        (Value::String(_), _) => {
+                            Err(format!("Cannot add string to {}.", b.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        (_, Value::Number(_)) => {
+                            Err(format!("Cannot add {} to number.", a.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        (_, Value::String(_)) => {
+                            Err(format!("Cannot add {} to string.", a.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        _ => Err("Both operands must be a numbers or strings.".into()),
                     })?;
                 }
-                OpCode::Subtract => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::Subtract => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
 
                     Ok((a - b).into())
                 })?,
-                OpCode::Multiply => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::Multiply => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
 
                     Ok((a * b).into())
                 })?,
-                OpCode::Divide => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::Divide => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b
                         .try_into()
-                        .map_err(|_| {
-                            QangRuntimeError::new(
-                                "Both operands must be a number.".to_string(),
-                                loc,
-                            )
-                        })
+                        .map_err(|_| BinaryOperationError::new("Both operands must be a number."))
                         .and_then(|num| {
                             if num == 0.0 {
-                                Err(QangRuntimeError::new(
-                                    "Cannot divide by zero.".to_string(),
-                                    loc,
-                                ))
+                                Err("Cannot divide by zero.".into())
                             } else {
                                 Ok(num)
                             }
@@ -351,52 +369,50 @@ impl Vm {
 
                     Ok((a / b).into())
                 })?,
-                OpCode::Modulo => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::Modulo => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
 
                     Ok((a % b).into())
                 })?,
-                OpCode::Equal => {
-                    self.binary_operation(|a, b, _heap, _loc| Ok(Value::Boolean(a == b)))?
-                }
-                OpCode::Greater => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::Equal => self.binary_operation(|a, b, _heap| Ok(Value::Boolean(a == b)))?,
+                OpCode::Greater => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     Ok(Value::Boolean(a > b))
                 })?,
-                OpCode::GreaterEqual => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::GreaterEqual => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     Ok(Value::Boolean(a >= b))
                 })?,
-                OpCode::Less => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::Less => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     Ok(Value::Boolean(a < b))
                 })?,
-                OpCode::LessEqual => self.binary_operation(|a, b, _heap, loc| {
+                OpCode::LessEqual => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     let b: f64 = b.try_into().map_err(|_| {
-                        QangRuntimeError::new("Both operands must be a number.".to_string(), loc)
+                        BinaryOperationError::new("Both operands must be a number.")
                     })?;
                     Ok(Value::Boolean(a <= b))
                 })?,
@@ -408,8 +424,7 @@ impl Vm {
                         self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
-                                let loc = self.get_previous_loc();
-                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                                e.into_qang_error(self.get_previous_loc())
                             })?;
                     let value = pop_value!(self);
                     self.globals.insert(identifier_handle, value);
@@ -420,7 +435,7 @@ impl Vm {
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 let loc = self.get_previous_loc();
-                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                                e.into_qang_error(loc)
                             })?;
                     let value = *self.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.get_previous_loc();
@@ -440,19 +455,18 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
-                    let loc = self.get_previous_loc();
                     let identifier_handle: ObjectHandle =
                         self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
-                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                                e.into_qang_error(self.get_previous_loc())
                             })?;
 
                     if !self.globals.contains_key(&identifier_handle) {
                         let identifier_name = self
                             .get_identifier_name(identifier_handle)
                             .unwrap_or("<unknown>".to_string().into_boxed_str());
-
+                        let loc = self.get_previous_loc();
                         return Err(QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name).to_string(),
                             loc,
@@ -590,16 +604,16 @@ impl Vm {
 
     fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
     where
-        F: FnOnce(Value, Value, &mut ObjectHeap, SourceLocation) -> RuntimeResult<Value>,
+        F: FnOnce(Value, Value, &mut ObjectHeap) -> Result<Value, BinaryOperationError>,
     {
         #[cfg(feature = "profiler")]
         coz::scope!("binary_operation");
 
-        let op_loc = self.get_previous_loc();
         let b = pop_value!(self);
         let a = pop_value!(self);
 
-        let value = op(a, b, &mut self.heap, op_loc)?;
+        let value = op(a, b, &mut self.heap)
+            .map_err(|e: BinaryOperationError| e.into_qang_error(self.get_previous_loc()))?;
 
         push_value!(self, value)?;
         Ok(())

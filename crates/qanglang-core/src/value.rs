@@ -51,7 +51,21 @@ impl Value {
                 "nil".to_string()
             }
             Value::Boolean(boolean) => boolean.to_string(),
-            Value::FunctionDecl(_) => "nil".to_string(),
+            Value::FunctionDecl(function_handle) => {
+                let obj = heap.get(*function_handle);
+
+                let name_handle = match obj {
+                    Some(HeapObject::Function(function)) => function.name,
+                    _ => {
+                        return "nil".to_string();
+                    }
+                };
+
+                match heap.get(name_handle) {
+                    Some(HeapObject::String(name)) => name.to_string(),
+                    _ => "nil".to_string(),
+                }
+            }
             Value::Function(function) => match function {
                 FunctionValueKind::NativeFunction(function) => {
                     heap.get(function.name).and_then(|obj| match obj {

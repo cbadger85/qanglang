@@ -917,16 +917,22 @@ impl<'a> AstVisitor for Compiler<'a> {
             .expect("Unexpected end of artifact stack.");
 
         let function_handle = self.heap.allocate_object(function.into());
-        let constant_index =
-            self.make_constant(Value::FunctionDecl(function_handle), func_decl.span)?;
-        self.emit_opcode_and_byte(OpCode::Closure, constant_index, func_decl.span);
+        let constant_index = self.make_constant(
+            Value::FunctionDecl(function_handle),
+            func_decl.function.name.span,
+        )?;
+        self.emit_opcode_and_byte(
+            OpCode::Closure,
+            constant_index,
+            func_decl.function.name.span,
+        );
 
         // Restore previous compiler state
         self.locals = previous_locals;
         self.local_count = previous_local_count;
         self.scope_depth = previous_scope_depth;
 
-        self.define_variable(function_identifier_handle, func_decl.span)?;
+        self.define_variable(function_identifier_handle, func_decl.function.name.span)?;
         Ok(())
     }
 

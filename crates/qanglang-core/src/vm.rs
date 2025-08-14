@@ -514,12 +514,6 @@ impl Vm {
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Closure => {
-                    /*
-                    ObjFunction* function = AS_FUNCTION(READ_CONSTANT());
-                    ObjClosure* closure = newClosure(function);
-                    push(OBJ_VAL(closure));
-                    break;
-                     */
                     let constant = self.read_constant();
                     let closure = match constant {
                         Value::FunctionDecl(function_handle) => {

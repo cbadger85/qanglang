@@ -59,7 +59,7 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
             let constant = chunk.code()[offset + 1];
             print!("{:<16} {:4} '", "OP_CLOSURE", constant);
             let value = chunk.constants()[constant as usize];
-            println!("{}", value.to_display_string(&heap));
+            println!("{}'", value.to_display_string(&heap));
             return offset + 2;
         }
     }

@@ -101,7 +101,6 @@ fn main() {
             silent: _silent,
             eformat,
         }) => {
-            // Use the new clean source file resolution system
             let resolver = match qanglang_test::SourceFileResolver::new() {
                 Ok(resolver) => resolver,
                 Err(err) => {
@@ -140,7 +139,6 @@ fn main() {
             heap: _,
             eformat: _,
         }) => {
-            // Use the new clean test file resolution system
             let resolver = match qanglang_test::TestFileResolver::new() {
                 Ok(resolver) => resolver,
                 Err(err) => {

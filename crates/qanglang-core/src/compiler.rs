@@ -268,11 +268,11 @@ impl<'a> Compiler<'a> {
         self.emit_opcode(opcode, span);
         self.emit_byte(0xff, span);
         self.emit_byte(0xff, span);
-        self.get_current_chunk().code().len() - 2
+        self.get_current_chunk().count() - 2
     }
 
     fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        let jump = self.get_current_chunk().code().len() - offset - 2;
+        let jump = self.get_current_chunk().count() - offset - 2;
 
         if jump > u16::MAX as usize {
             return Err(QangSyntaxError::new(
@@ -289,7 +289,7 @@ impl<'a> Compiler<'a> {
 
     fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
         self.emit_opcode(OpCode::Loop, span);
-        let offset = self.get_current_chunk().code().len() - loop_start + 2;
+        let offset = self.get_current_chunk().count() - loop_start + 2;
         if offset > u16::MAX as usize {
             return Err(QangSyntaxError::new(
                 "Loop body too large.".to_string(),
@@ -783,7 +783,7 @@ impl<'a> AstVisitor for Compiler<'a> {
         while_stmt: &ast::WhileStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let loop_start = self.get_current_chunk().code().len();
+        let loop_start = self.get_current_chunk().count();
         self.visit_expression(&while_stmt.condition, errors)?;
 
         let exit_jump = self.emit_jump(OpCode::JumpIfFalse, while_stmt.body.span());
@@ -816,12 +816,12 @@ impl<'a> AstVisitor for Compiler<'a> {
             }
         }
 
-        let mut loop_start = self.get_current_chunk().code().len();
+        let mut loop_start = self.get_current_chunk().count();
         let mut exit_jump: Option<usize> = None;
 
         if let Some(condition) = &for_stmt.condition {
             let condition_jump = self.emit_jump(OpCode::Jump, condition.span());
-            loop_start = self.get_current_chunk().code().len();
+            loop_start = self.get_current_chunk().count();
             self.visit_statement(&for_stmt.body, errors)?;
 
             if let Some(increment) = &for_stmt.increment {

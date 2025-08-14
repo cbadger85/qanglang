@@ -1,5 +1,5 @@
 use crate::{
-    ObjectHeap,
+    ObjectHeap, Value,
     chunk::{Chunk, OpCode},
     memory::HeapObject,
 };
@@ -56,12 +56,39 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
         OpCode::Loop => jump_instruction("OP_LOOP", 1, chunk, offset),
         OpCode::Call => byte_instruction("OP_CALL", chunk, offset),
         OpCode::Closure => {
-            let constant = chunk.code()[offset + 1];
+            let mut offset = offset;
+            offset += 1; // Skip the opcode itself
+            let constant = chunk.code()[offset];
+            offset += 1;
+
             print!("{:<16} {:4} '", "OP_CLOSURE", constant);
             let value = chunk.constants()[constant as usize];
             println!("{}'", value.to_display_string(&heap));
-            return offset + 2;
+            let function_obj = match value {
+                Value::FunctionDecl(handle) => heap.get(handle),
+                _ => None,
+            };
+
+            if let Some(HeapObject::Function(function)) = function_obj {
+                for _j in 0..function.upvalue_count {
+                    let is_local = chunk.code()[offset];
+                    offset += 1;
+                    let index = chunk.code()[offset];
+                    offset += 1;
+
+                    println!(
+                        "{:04}      |                     {} {}",
+                        offset - 2,
+                        if is_local != 0 { "local" } else { "upvalue" },
+                        index
+                    );
+                }
+            }
+
+            offset
         }
+        OpCode::GetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
+        OpCode::SetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
     }
 }
 

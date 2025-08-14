@@ -32,6 +32,8 @@ pub enum OpCode {
     Loop,
     Call,
     Closure,
+    GetUpvalue,
+    SetUpvalue,
 }
 
 impl From<u8> for OpCode {
@@ -65,6 +67,8 @@ impl From<u8> for OpCode {
             25 => OpCode::Loop,
             26 => OpCode::Call,
             27 => OpCode::Closure,
+            28 => OpCode::GetUpvalue,
+            29 => OpCode::SetUpvalue,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

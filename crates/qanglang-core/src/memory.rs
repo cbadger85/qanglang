@@ -52,6 +52,7 @@ pub struct FunctionObject {
     pub arity: usize,
     pub name: ObjectHandle,
     pub chunk: Chunk,
+    pub upvalue_count: usize,
 }
 
 impl FunctionObject {
@@ -60,6 +61,7 @@ impl FunctionObject {
             name,
             arity,
             chunk: Chunk::new(),
+            upvalue_count: 0,
         }
     }
 }

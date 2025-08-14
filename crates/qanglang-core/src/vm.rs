@@ -542,6 +542,8 @@ impl Vm {
                     let handle: ObjectHandle = self.heap.allocate_object(closure);
                     push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
                 }
+                OpCode::SetUpvalue => todo!(),
+                OpCode::GetUpvalue => todo!(),
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.get_current_frame().value_slot;

@@ -226,11 +226,11 @@ impl Vm {
                 self.debug();
             }
 
-            let opcode: OpCode = self.read_byte()?.into();
+            let opcode: OpCode = self.read_byte().into();
 
             match opcode {
                 OpCode::Constant => {
-                    let constant = self.read_constant()?;
+                    let constant = self.read_constant();
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
@@ -404,24 +404,24 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
-                    let identifier_handle: ObjectHandle = self
-                        .read_constant()?
-                        .try_into()
-                        .map_err(|e: ValueConversionError| {
-                            let loc = self.get_previous_loc();
-                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                        })?;
+                    let identifier_handle: ObjectHandle =
+                        self.read_constant()
+                            .try_into()
+                            .map_err(|e: ValueConversionError| {
+                                let loc = self.get_previous_loc();
+                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                            })?;
                     let value = pop_value!(self);
                     self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
-                    let identifier_handle: ObjectHandle = self
-                        .read_constant()?
-                        .try_into()
-                        .map_err(|e: ValueConversionError| {
-                            let loc = self.get_previous_loc();
-                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                        })?;
+                    let identifier_handle: ObjectHandle =
+                        self.read_constant()
+                            .try_into()
+                            .map_err(|e: ValueConversionError| {
+                                let loc = self.get_previous_loc();
+                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                            })?;
                     let value = *self.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.get_previous_loc();
                         let identifier_name = self
@@ -441,12 +441,12 @@ impl Vm {
                 }
                 OpCode::SetGlobal => {
                     let loc = self.get_previous_loc();
-                    let identifier_handle: ObjectHandle = self
-                        .read_constant()?
-                        .try_into()
-                        .map_err(|e: ValueConversionError| {
-                            e.into_qang_error_with_trace(loc, self.get_stack_trace())
-                        })?;
+                    let identifier_handle: ObjectHandle =
+                        self.read_constant()
+                            .try_into()
+                            .map_err(|e: ValueConversionError| {
+                                e.into_qang_error_with_trace(loc, self.get_stack_trace())
+                            })?;
 
                     if !self.globals.contains_key(&identifier_handle) {
                         let identifier_name = self
@@ -462,7 +462,7 @@ impl Vm {
                     self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetLocal => {
-                    let slot = self.read_byte()?;
+                    let slot = self.read_byte();
                     let absolute_slot = self.get_current_frame().value_slot + 1 + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
@@ -474,28 +474,28 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetLocal => {
-                    let slot = self.read_byte()?;
+                    let slot = self.read_byte();
                     let value = self.peek(0);
                     let absolute_slot = self.get_current_frame().value_slot + 1 + slot as usize;
 
                     self.stack[absolute_slot] = value;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = self.read_short()?;
+                    let offset = self.read_short();
                     if !self.peek(0).is_truthy() {
                         self.get_current_frame_mut().ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = self.read_short()?;
+                    let offset = self.read_short();
                     self.get_current_frame_mut().ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = self.read_short()?;
+                    let offset = self.read_short();
                     self.get_current_frame_mut().ip -= offset;
                 }
                 OpCode::Call => {
-                    let arg_count = self.read_byte()? as usize;
+                    let arg_count = self.read_byte() as usize;
                     let function_value = self.peek(arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
@@ -506,31 +506,30 @@ impl Vm {
                     push(OBJ_VAL(closure));
                     break;
                      */
-                    let closure = self
-                        .read_constant()
-                        .and_then(|v| match v {
-                            Value::FunctionDecl(function_handle) => {
-                                self.heap.get(function_handle).ok_or_else(|| {
-                                    QangRuntimeError::new(
-                                        "No function found.".to_string(),
-                                        self.get_previous_loc(),
-                                    )
-                                })
-                            }
-                            _ => Err(QangRuntimeError::new(
-                                "Expected function value.".to_string(),
-                                self.get_previous_loc(),
-                            )),
-                        })
-                        .and_then(|obj| match obj {
-                            HeapObject::Function(function) => {
-                                Ok(HeapObject::Closure(ClosureObject::new(function.clone())))
-                            }
-                            _ => Err(QangRuntimeError::new(
-                                "Expected function.".to_string(),
-                                self.get_previous_loc(),
-                            )),
-                        })?;
+                    let constant = self.read_constant();
+                    let closure = match constant {
+                        Value::FunctionDecl(function_handle) => {
+                            self.heap.get(function_handle).ok_or_else(|| {
+                                QangRuntimeError::new(
+                                    "No function found.".to_string(),
+                                    self.get_previous_loc(),
+                                )
+                            })
+                        }
+                        _ => Err(QangRuntimeError::new(
+                            "Expected function value.".to_string(),
+                            self.get_previous_loc(),
+                        )),
+                    }
+                    .and_then(|obj| match obj {
+                        HeapObject::Function(function) => {
+                            Ok(HeapObject::Closure(ClosureObject::new(function.clone())))
+                        }
+                        _ => Err(QangRuntimeError::new(
+                            "Expected function.".to_string(),
+                            self.get_previous_loc(),
+                        )),
+                    })?;
 
                     let handle: ObjectHandle = self.heap.allocate_object(closure);
                     push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
@@ -554,14 +553,14 @@ impl Vm {
         }
     }
 
-    fn read_byte(&mut self) -> RuntimeResult<u8> {
+    fn read_byte(&mut self) -> u8 {
         let byte = self.get_current_function().chunk.code()[self.get_current_frame().ip];
         self.get_current_frame_mut().ip += 1;
-        Ok(byte)
+        byte
     }
 
-    fn read_constant(&mut self) -> RuntimeResult<Value> {
-        let index = self.read_byte()? as usize;
+    fn read_constant(&mut self) -> Value {
+        let index = self.read_byte() as usize;
         let constants = self.get_current_function().chunk.constants();
         debug_assert!(
             index < constants.len(),
@@ -569,13 +568,13 @@ impl Vm {
             index
         );
 
-        Ok(constants[index])
+        constants[index]
     }
 
-    fn read_short(&mut self) -> RuntimeResult<usize> {
-        let high_byte = self.read_byte()? as usize;
-        let low_byte = self.read_byte()? as usize;
-        Ok((high_byte << 8) | low_byte)
+    fn read_short(&mut self) -> usize {
+        let high_byte = self.read_byte() as usize;
+        let low_byte = self.read_byte() as usize;
+        (high_byte << 8) | low_byte
     }
 
     fn peek(&self, distance: usize) -> Value {

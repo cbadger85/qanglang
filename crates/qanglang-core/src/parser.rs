@@ -182,29 +182,49 @@ impl<'a> Parser<'a> {
     }
 
     fn is_lambda_start(&mut self) -> bool {
-        if let Some(token) = self.tokens.peek() {
-            if token.token_type == TokenType::RightParen {
-                self.tokens
-                    .peek_ahead(1)
-                    .map(|t| t.token_type == TokenType::Arrow)
-                    .unwrap_or(false)
+        self.check_lambda_pattern(false)
+    }
+
+    fn is_lambda_start_after_paren(&mut self) -> bool {
+        self.check_lambda_pattern(true)
+    }
+
+    fn check_lambda_pattern(&mut self, after_paren: bool) -> bool {
+        let (check_token, peek_offset) = if after_paren {
+            if let Some(current) = &self.current_token {
+                (current.token_type, 0)
             } else {
-                let mut offset = 1;
-                while self
-                    .tokens
-                    .peek_ahead(offset)
-                    .map(|t| t.token_type != TokenType::RightParen)
-                    .unwrap_or(false)
-                {
-                    offset += 1;
-                }
-                self.tokens
-                    .peek_ahead(offset + 1)
-                    .map(|t| t.token_type == TokenType::Arrow)
-                    .unwrap_or(false)
+                return false;
             }
         } else {
-            false
+            if let Some(token) = self.tokens.peek() {
+                (token.token_type, 1)
+            } else {
+                return false;
+            }
+        };
+
+        if check_token == TokenType::RightParen {
+            // Empty parameter list: () ->
+            self.tokens
+                .peek_ahead(peek_offset)
+                .map(|t| t.token_type == TokenType::Arrow)
+                .unwrap_or(false)
+        } else {
+            // Non-empty parameter list: look for ) ->
+            let mut offset = peek_offset;
+            while self
+                .tokens
+                .peek_ahead(offset)
+                .map(|t| t.token_type != TokenType::RightParen)
+                .unwrap_or(false)
+            {
+                offset += 1;
+            }
+            self.tokens
+                .peek_ahead(offset + 1)
+                .map(|t| t.token_type == TokenType::Arrow)
+                .unwrap_or(false)
         }
     }
 
@@ -852,79 +872,11 @@ mod expression_parser {
 
     fn grouping_or_lambda(parser: &mut Parser) -> ParseResult<ast::Expr> {
         // Check if this is a lambda by looking at the current parser state
-        // At this point, '(' has been consumed, so we check for lambda pattern
-        let is_lambda = if let Some(current) = &parser.current_token {
-            if current.token_type == TokenType::RightParen {
-                // Empty parameter list: () ->
-                parser
-                    .tokens
-                    .peek()
-                    .map(|t| t.token_type == TokenType::Arrow)
-                    .unwrap_or(false)
-            } else {
-                // Non-empty parameter list: look for ) ->
-                let mut offset = 0;
-                while parser
-                    .tokens
-                    .peek_ahead(offset)
-                    .map(|t| t.token_type != TokenType::RightParen)
-                    .unwrap_or(false)
-                {
-                    offset += 1;
-                }
-                parser
-                    .tokens
-                    .peek_ahead(offset + 1)
-                    .map(|t| t.token_type == TokenType::Arrow)
-                    .unwrap_or(false)
-            }
-        } else {
-            false
-        };
+        // At this point, '(' has been consumed, so we use is_lambda_start_after_paren
+        let is_lambda = parser.is_lambda_start_after_paren();
 
         if is_lambda {
-            // Parse lambda, but we need to adjust since '(' was already consumed
-            let start_span = parser.get_previous_span(); // Use previous span for '('
-
-            // Parse parameters manually since '(' is already consumed
-            let mut parameters = Vec::new();
-
-            if parser.match_token(TokenType::RightParen) {
-                // Empty parameters
-            } else {
-                // Parse parameter list
-                parser.consume(TokenType::Identifier, "Expect parameter name.")?;
-                parameters.push(parser.get_identifier()?);
-
-                while parser.match_token(TokenType::Comma) {
-                    if parser.check(TokenType::RightParen) {
-                        break;
-                    }
-                    parser.consume(TokenType::Identifier, "Expect parameter name.")?;
-                    parameters.push(parser.get_identifier()?);
-                }
-
-                parser.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
-            }
-
-            parser.consume(TokenType::Arrow, "Expect '->' after lambda parameters.")?;
-
-            let body = if parser.check(TokenType::LeftBrace) {
-                Box::new(ast::LambdaBody::Block(parser.block_statement()?))
-            } else {
-                let expr = parser.expression()?;
-                Box::new(ast::LambdaBody::Expr(Box::new(expr)))
-            };
-
-            let span = ast::SourceSpan::combine(start_span, body.span());
-
-            Ok(ast::Expr::Primary(ast::PrimaryExpr::Lambda(Box::new(
-                ast::LambdaExpr {
-                    parameters,
-                    body,
-                    span,
-                },
-            ))))
+            lambda(parser)
         } else {
             grouping(parser)
         }
@@ -938,6 +890,46 @@ mod expression_parser {
         )?;
 
         Ok(expr)
+    }
+
+    fn lambda(parser: &mut Parser) -> ParseResult<ast::Expr> {
+        let start_span = parser.get_previous_span();
+
+        let mut parameters = Vec::new();
+
+        if !parser.match_token(TokenType::RightParen) {
+            parser.consume(TokenType::Identifier, "Expect parameter name.")?;
+            parameters.push(parser.get_identifier()?);
+
+            while parser.match_token(TokenType::Comma) {
+                if parser.check(TokenType::RightParen) {
+                    break;
+                }
+                parser.consume(TokenType::Identifier, "Expect parameter name.")?;
+                parameters.push(parser.get_identifier()?);
+            }
+
+            parser.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+        }
+
+        parser.consume(TokenType::Arrow, "Expect '->' after lambda parameters.")?;
+
+        let body = if parser.check(TokenType::LeftBrace) {
+            Box::new(ast::LambdaBody::Block(parser.block_statement()?))
+        } else {
+            let expr = parser.expression()?;
+            Box::new(ast::LambdaBody::Expr(Box::new(expr)))
+        };
+
+        let span = ast::SourceSpan::combine(start_span, body.span());
+
+        Ok(ast::Expr::Primary(ast::PrimaryExpr::Lambda(Box::new(
+            ast::LambdaExpr {
+                parameters,
+                body,
+                span,
+            },
+        ))))
     }
 
     fn unary(parser: &mut Parser) -> ParseResult<ast::Expr> {

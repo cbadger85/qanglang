@@ -105,12 +105,10 @@ pub fn disassemble_program(heap: &ObjectHeap) {
 
     let mut function_count = 0;
 
-    // Iterate through all objects in the heap to find functions
     for (index, obj) in heap.iter_objects() {
         if let HeapObject::Function(function) = obj {
             function_count += 1;
 
-            // Get function name as string
             let function_name = match heap.get(function.name) {
                 Some(HeapObject::String(name_str)) => name_str.as_ref(),
                 _ => "<anonymous>",

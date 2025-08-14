@@ -135,28 +135,23 @@ impl<'a> Parser<'a> {
 
     fn synchronize(&mut self) {
         loop {
-            // If current_token is None, we've reached the end of input
             let current_token_type = match self.current_token.as_ref() {
                 Some(token) => &token.token_type,
                 None => {
-                    // No more tokens available - treat as EOF and exit
                     return;
                 }
             };
 
-            // Check if we've reached EOF
             if current_token_type == &TokenType::Eof {
                 break;
             }
 
-            // Check if previous token was a semicolon (good synchronization point)
             if let Some(prev_token) = &self.previous_token {
                 if prev_token.token_type == TokenType::Semicolon {
                     return;
                 }
             }
 
-            // Check if current token is a statement keyword (good synchronization point)
             match current_token_type {
                 TokenType::Class
                 | TokenType::Fn
@@ -431,11 +426,9 @@ impl<'a> Parser<'a> {
         let condition = self.expression()?;
         self.consume(TokenType::RightParen, "Expected ')'.")?;
 
-        // Parse then branch as any statement (block or expression)
         let then_branch = Box::new(self.statement()?);
 
         let (else_branch, span) = if self.match_token(TokenType::Else) {
-            // Parse else branch as any statement (block, expression, or another if)
             let else_stmt = self.statement()?;
             let span = ast::SourceSpan::combine(start_span, else_stmt.span());
             (Some(Box::new(else_stmt)), span)
@@ -504,7 +497,6 @@ impl<'a> Parser<'a> {
         self.advance();
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
 
-        // Parse initializer
         let initializer = if self.match_token(TokenType::Semicolon) {
             None
         } else if self.match_token(TokenType::Var) {
@@ -526,7 +518,6 @@ impl<'a> Parser<'a> {
             Some(ast::ForInitializer::Expr(expr))
         };
 
-        // Parse condition
         let condition = if self.check(TokenType::Semicolon) {
             None
         } else {
@@ -534,7 +525,6 @@ impl<'a> Parser<'a> {
         };
         self.consume(TokenType::Semicolon, "Expect ';' after for loop condition.")?;
 
-        // Parse increment
         let increment = if self.check(TokenType::RightParen) {
             None
         } else {
@@ -642,7 +632,6 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Validate that we have at least catch or finally
         if catch_clause.is_none() && finally_block.is_none() {
             return Err(QangSyntaxError::new(
                 "Expected 'catch' or 'finally' after try block.".to_string(),

@@ -106,7 +106,7 @@ pub struct ObjectHeap {
 
 impl ObjectHeap {
     pub fn new() -> Self {
-        Self::with_capacity(64) // Default initial capacity
+        Self::with_capacity(64)
     }
 
     pub fn with_capacity(initial_capacity: usize) -> Self {

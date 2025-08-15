@@ -49,105 +49,66 @@ struct Compiler {
     local_count: usize,
     scope_depth: usize,
     upvalues: Vec<Upvalue>,
-    upvalue_count: usize,
+    enclosing: Option<Box<Compiler>>,
 }
 
 impl Compiler {
-    fn new_script(handle: ObjectHandle) -> Self {
+    fn new(handle: ObjectHandle) -> Self {
+        let mut locals = Vec::with_capacity(u8::MAX as usize);
+        let local = Local::new("".into());
+        // locals.push(local);
+
         Self {
             kind: CompilerKind::Script,
             function: FunctionObject::new(handle, 0),
-            locals: Vec::with_capacity(u8::MAX as usize),
-            local_count: 0,
+            locals,
+            local_count: 0, // TODO change this to 1, the first slot is supposed to be reserved!
             scope_depth: 0,
             upvalues: Vec::with_capacity(u8::MAX as usize),
-            upvalue_count: 0,
+            enclosing: None,
         }
     }
 
-    fn new_function(handle: ObjectHandle, arity: usize) -> Self {
-        Self {
-            kind: CompilerKind::Function,
-            function: FunctionObject::new(handle, arity),
-            locals: Vec::with_capacity(u8::MAX as usize),
-            local_count: 0,
-            scope_depth: 0,
-            upvalues: Vec::with_capacity(u8::MAX as usize),
-            upvalue_count: 0,
-        }
-    }
-}
+    fn push(&mut self, handle: ObjectHandle, arity: usize) -> &mut Self {
+        let mut locals = Vec::with_capacity(u8::MAX as usize);
+        let local = Local::new("".into());
+        // locals.push(local);
 
-#[derive(Debug, Clone, Default)]
-struct CompilerStack {
-    compilers: Vec<Compiler>,
-}
+        let previous = std::mem::replace(
+            self,
+            Self {
+                kind: CompilerKind::Function,
+                function: FunctionObject::new(handle, arity),
+                locals,
+                local_count: 0, // TODO change this to 1, the first slot is supposed to be reserved!
+                scope_depth: 0,
+                upvalues: Vec::with_capacity(u8::MAX as usize),
+                enclosing: None,
+            },
+        );
 
-impl CompilerStack {
-    fn new(handle: ObjectHandle) -> Self {
-        Self {
-            compilers: vec![Compiler::new_script(handle)],
-        }
+        self.enclosing = Some(Box::new(previous));
+
+        self
     }
 
-    fn push(&mut self, handle: ObjectHandle, arity: usize) {
-        self.compilers.push(Compiler::new_function(handle, arity));
-    }
-
-    fn pop(&mut self) -> Option<Compiler> {
-        if self.compilers.len() > 1 {
-            self.compilers.pop()
+    fn pop(&mut self) -> Option<Self> {
+        if let Some(mut previous) = self.enclosing.take() {
+            std::mem::swap(&mut *previous, self);
+            return Some(*previous);
         } else {
             None
         }
     }
 
-    fn compiler_kind(&self) -> CompilerKind {
-        self.compilers[self.compilers.len() - 1].kind
-    }
-
-    fn current(&self) -> &Compiler {
-        &self.compilers[self.compilers.len() - 1]
-    }
-
-    fn current_mut(&mut self) -> &mut Compiler {
-        let len = self.compilers.len() - 1;
-        &mut self.compilers[len]
-    }
-
-    fn function_mut(&mut self) -> &mut FunctionObject {
-        &mut self.current_mut().function
-    }
-
-    fn function(&self) -> &FunctionObject {
-        &self.current().function
-    }
-
-    #[allow(dead_code)]
-    fn iter(&self) -> impl Iterator<Item = &Compiler> {
-        self.compilers.iter().rev()
-    }
-
-    #[allow(dead_code)]
-    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Compiler> {
-        self.compilers.iter_mut().rev()
-    }
-
-    fn into_function(mut self) -> FunctionObject {
-        self.compilers.pop().unwrap().function
-    }
-
-    fn resolve_local_in_compiler(
+    fn resolve_local_variable(
         &self,
-        compiler_index: usize,
-        name: &str,
+        handle: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
-        let compiler = &self.compilers[compiler_index];
-
-        for i in (0..compiler.local_count).rev() {
-            if let Some(local) = compiler.locals.get(i) {
-                if *local.name == *name {
+        for i in (0..self.local_count).rev() {
+            if let Some(local) = self.locals.get(i) {
+                if *local.name == *handle {
                     if local.depth.is_none() {
                         return Err(QangSyntaxError::new(
                             "Cannot read local variable during its initialization.".to_string(),
@@ -162,70 +123,24 @@ impl CompilerStack {
         Ok(None)
     }
 
-    fn resolve_upvalue_in_compiler(
-        &mut self,
-        compiler_index: usize,
-        name: &str,
+    fn resolve_upvalue(
+        &self,
+        handle: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
-        // If we're at the script level, no more enclosing scopes
-        if compiler_index == 0 {
-            return Ok(None);
-        }
+        match self.enclosing.as_ref() {
+            None => {
+                let upvalue = self.enclosing.as_ref().and_then(|compiler| {
+                    match compiler.resolve_upvalue(handle, span) {
+                        Ok(Some(upvalue)) => Some(upvalue),
+                        _ => None,
+                    }
+                });
 
-        // Look in the next enclosing scope
-        let next_enclosing_index = compiler_index - 1;
-        if let Some(local_index) =
-            self.resolve_local_in_compiler(next_enclosing_index, name, span)?
-        {
-            // Found as local in next enclosing scope
-            let upvalue_index =
-                self.add_upvalue_to_compiler(compiler_index, local_index, true, span)?;
-            return Ok(Some(upvalue_index));
-        }
-
-        // Recursively check for upvalues
-        if let Some(upvalue_index) =
-            self.resolve_upvalue_in_compiler(next_enclosing_index, name, span)?
-        {
-            let upvalue_index =
-                self.add_upvalue_to_compiler(compiler_index, upvalue_index, false, span)?;
-            return Ok(Some(upvalue_index));
-        }
-
-        Ok(None)
-    }
-
-    fn add_upvalue_to_compiler(
-        &mut self,
-        compiler_index: usize,
-        index: usize,
-        is_local: bool,
-        span: SourceSpan,
-    ) -> Result<usize, QangSyntaxError> {
-        let compiler = &mut self.compilers[compiler_index];
-        let upvalue_count = compiler.upvalue_count;
-
-        // Check if this upvalue already exists
-        for i in 0..upvalue_count {
-            let upvalue = &compiler.upvalues[i];
-            if upvalue.index == index as u8 && upvalue.is_local == is_local {
-                return Ok(i);
+                Ok(upvalue)
             }
+            Some(compiler) => compiler.resolve_local_variable(handle, span),
         }
-
-        if upvalue_count == u8::MAX as usize {
-            return Err(QangSyntaxError::new(
-                "Too many closure variables in function.".to_string(),
-                span,
-            ));
-        }
-
-        compiler.upvalues[upvalue_count].index = index as u8;
-        compiler.upvalues[upvalue_count].is_local = is_local;
-        compiler.upvalue_count += 1;
-
-        Ok(upvalue_count)
     }
 }
 
@@ -278,11 +193,16 @@ impl<'a> CompilerPipeline<'a> {
 struct Local {
     name: Box<str>,
     depth: Option<usize>,
+    is_captured: bool,
 }
 
 impl Local {
     fn new(name: Box<str>) -> Self {
-        Self { name, depth: None }
+        Self {
+            name,
+            depth: None,
+            is_captured: false,
+        }
     }
 }
 
@@ -290,22 +210,6 @@ impl Local {
 struct Upvalue {
     index: u8,
     is_local: bool,
-}
-
-impl Upvalue {
-    fn new(index: usize) -> Self {
-        Self {
-            index: index as u8,
-            is_local: false,
-        }
-    }
-
-    fn new_local(index: usize) -> Self {
-        Self {
-            index: index as u8,
-            is_local: true,
-        }
-    }
 }
 
 pub const FRAME_MAX: usize = 64;
@@ -326,7 +230,7 @@ impl Default for CompilerKind {
 pub struct CompilerVisitor<'a> {
     source_map: &'a SourceMap,
     heap: &'a mut ObjectHeap,
-    compiler_stack: CompilerStack,
+    compiler: Compiler,
 }
 
 impl<'a> CompilerVisitor<'a> {
@@ -336,7 +240,7 @@ impl<'a> CompilerVisitor<'a> {
         Self {
             source_map: &DEFALT_SOURCE_MAP,
             heap,
-            compiler_stack: CompilerStack::new(handle),
+            compiler: Compiler::new(handle),
         }
     }
 
@@ -345,11 +249,11 @@ impl<'a> CompilerVisitor<'a> {
             .heap
             .intern_string("<script>".to_string().into_boxed_str());
         self.source_map = &DEFALT_SOURCE_MAP;
-        self.compiler_stack = CompilerStack::new(handle);
+        self.compiler = Compiler::new(handle);
     }
 
     fn current_chunk_mut(&mut self) -> &mut Chunk {
-        &mut self.compiler_stack.function_mut().chunk
+        &mut self.compiler.function.chunk
     }
 
     pub fn compile(
@@ -369,10 +273,10 @@ impl<'a> CompilerVisitor<'a> {
         if errors.has_errors() {
             Err(CompilerError(errors.take_errors()))
         } else {
-            let artifacts = std::mem::take(&mut self.compiler_stack);
+            let artifacts = std::mem::take(&mut self.compiler);
             self.reset();
 
-            Ok(artifacts.into_function())
+            Ok(artifacts.function)
         }
     }
 
@@ -460,20 +364,25 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.compiler_stack.current_mut().scope_depth += 1;
+        self.compiler.scope_depth += 1;
     }
 
     fn end_scope(&mut self, span: SourceSpan) {
-        let current = self.compiler_stack.current_mut();
+        let current = &mut self.compiler;
         current.scope_depth -= 1;
 
-        // Calculate how many locals need to be popped
-        let mut pop_count = 0;
+        let mut instructions = Vec::new();
+
         for i in (0..current.local_count).rev() {
             if let Some(local) = current.locals.get(i) {
                 if let Some(depth) = local.depth {
                     if depth > current.scope_depth {
-                        pop_count += 1;
+                        let instruction = if local.is_captured {
+                            OpCode::CloseUpvalue
+                        } else {
+                            OpCode::Pop
+                        };
+                        instructions.push(instruction);
                     } else {
                         break;
                     }
@@ -485,17 +394,16 @@ impl<'a> CompilerVisitor<'a> {
             }
         }
 
-        // Update local_count first
-        current.local_count -= pop_count;
+        current.local_count -= instructions.len();
 
-        // Now emit the pop opcodes
-        for _ in 0..pop_count {
-            self.emit_opcode(OpCode::Pop, span);
+        // Emit the instructions in the order they were collected
+        for instruction in instructions {
+            self.emit_opcode(instruction, span);
         }
     }
 
     fn add_local(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        let current = self.compiler_stack.current_mut();
+        let current = &mut self.compiler;
         if current.local_count >= STACK_MAX {
             Err(QangSyntaxError::new(
                 "Too many local variables in scope.".to_string(),
@@ -507,6 +415,7 @@ impl<'a> CompilerVisitor<'a> {
                 // Reuse inactive local slot
                 current.locals[current.local_count] = local;
             } else {
+                // TODO delete this else, it will never happen, that's what the check above is for.
                 // Grow vec
                 current.locals.push(local);
             }
@@ -516,7 +425,7 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn declare_variable(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        let current = self.compiler_stack.current();
+        let current = &self.compiler;
         if current.scope_depth == 0 {
             return Ok(());
         }
@@ -548,7 +457,7 @@ impl<'a> CompilerVisitor<'a> {
         handle: Option<ObjectHandle>,
         span: SourceSpan,
     ) -> Result<(), QangSyntaxError> {
-        if self.compiler_stack.current().scope_depth > 0 {
+        if self.compiler.scope_depth > 0 {
             self.mark_initialized();
 
             return Ok(());
@@ -562,7 +471,7 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn mark_initialized(&mut self) {
-        let current = self.compiler_stack.current_mut();
+        let current = &mut self.compiler;
         if current.scope_depth == 0 {
             return;
         }
@@ -580,7 +489,7 @@ impl<'a> CompilerVisitor<'a> {
     ) -> Result<Option<ObjectHandle>, QangSyntaxError> {
         self.declare_variable(identifer, span)?;
 
-        if self.compiler_stack.current().scope_depth > 0 {
+        if self.compiler.scope_depth > 0 {
             Ok(None)
         } else {
             Ok(Some(self.heap.intern_string(identifer.into())))
@@ -616,31 +525,11 @@ impl<'a> CompilerVisitor<'a> {
         name: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
-        // If we're at the top level (script), there are no enclosing scopes
-        if self.compiler_stack.compilers.len() <= 1 {
-            return Ok(None);
+        if let Some(local) = self.compiler.resolve_upvalue(name, span)? {
+            self.add_upvalue(local, true, span).map(|value| Some(value))
+        } else {
+            Ok(None)
         }
-
-        // Look for the variable in the immediately enclosing scope
-        let enclosing_index = self.compiler_stack.compilers.len() - 2;
-        if let Some(local_index) =
-            self.compiler_stack
-                .resolve_local_in_compiler(enclosing_index, name, span)?
-        {
-            // Found it as a local variable in the enclosing scope
-            return Ok(Some(self.add_upvalue(local_index, true, span)?));
-        }
-
-        // If not found as a local, recursively check for upvalues in the enclosing compiler
-        if let Some(upvalue_index) =
-            self.compiler_stack
-                .resolve_upvalue_in_compiler(enclosing_index, name, span)?
-        {
-            // Found it as an upvalue in the enclosing scope
-            return Ok(Some(self.add_upvalue(upvalue_index, false, span)?));
-        }
-
-        Ok(None)
     }
 
     fn add_upvalue(
@@ -649,19 +538,38 @@ impl<'a> CompilerVisitor<'a> {
         is_local: bool,
         span: SourceSpan,
     ) -> Result<usize, QangSyntaxError> {
-        let current_compiler_index = self.compiler_stack.compilers.len() - 1;
-        self.compiler_stack
-            .add_upvalue_to_compiler(current_compiler_index, index, is_local, span)
+        let upvalue_count = self.compiler.function.upvalue_count;
+
+        for i in 0..upvalue_count {
+            let upvalue = self.compiler.upvalues[i];
+
+            if upvalue.index == index as u8 && upvalue.is_local == is_local {
+                return Ok(i);
+            }
+        }
+
+        if upvalue_count == u8::MAX as usize {
+            return Err(QangSyntaxError::new(
+                "Too many closure variables in function.".to_string(),
+                span,
+            ));
+        }
+
+        self.compiler.upvalues.push(Upvalue {
+            index: index as u8,
+            is_local,
+        });
+        self.compiler.function.upvalue_count += 1;
+
+        Ok(upvalue_count)
     }
 
     fn resolve_local_variable(
-        &mut self,
+        &self,
         handle: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
-        let current_index = self.compiler_stack.compilers.len() - 1;
-        self.compiler_stack
-            .resolve_local_in_compiler(current_index, handle, span)
+        self.compiler.resolve_local_variable(handle, span)
     }
 }
 
@@ -1042,7 +950,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 .intern_string(func_decl.function.name.name.to_owned())
         });
 
-        self.compiler_stack
+        self.compiler
             .push(function_name_handle, func_decl.function.parameters.len());
         self.begin_scope();
 
@@ -1078,7 +986,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.emit_return(func_decl.span);
 
         let compiler = self
-            .compiler_stack
+            .compiler
             .pop()
             .expect("Unexpected end of artifact stack.");
         let function = compiler.function;
@@ -1112,7 +1020,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         return_stmt: &ast::ReturnStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        if self.compiler_stack.compiler_kind() == CompilerKind::Script {
+        if self.compiler.kind == CompilerKind::Script {
             return Err(QangSyntaxError::new(
                 "Cannot return from top-level code.".to_string(),
                 return_stmt.span,

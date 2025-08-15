@@ -126,7 +126,7 @@ fn test_globals() {
         Ok(program) => {
             disassemble_program(&heap);
             let vm = Vm::new(heap);
-            match vm.set_debug(true).interpret(program) {
+            match vm.set_debug(false).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error.message)
@@ -1012,6 +1012,43 @@ fn test_recursive_function_calls() {
                 panic!("{}", error);
             }
         },
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_closures() {
+    let source = r#"
+        fn function_a() {
+            var a = 1;
+
+            fn function_b() {
+                return a;
+            }
+
+            return function_b;
+        }
+
+        println(function_a());
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

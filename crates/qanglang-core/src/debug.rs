@@ -55,6 +55,7 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
         OpCode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
         OpCode::Loop => jump_instruction("OP_LOOP", 1, chunk, offset),
         OpCode::Call => byte_instruction("OP_CALL", chunk, offset),
+        OpCode::CloseUpvalue => simple_instruction("OP_CLOSE_UPVALUE", offset),
         OpCode::Closure => {
             let mut offset = offset;
             offset += 1; // Skip the opcode itself

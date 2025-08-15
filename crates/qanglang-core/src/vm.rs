@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Range, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
 
 #[cfg(feature = "profiler")]
 use coz;
@@ -9,7 +9,7 @@ use crate::{
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    memory::{ClosureObject, FunctionObject, ObjectHandle},
+    memory::{ClosureObject, FunctionObject, ObjectHandle, Upvalue},
     qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, qang_typeof, system_time},
     value::{
         BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, FunctionValueKind, NIL_TYPE_STRING,
@@ -110,6 +110,7 @@ pub struct Vm {
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<ObjectHandle, Value>,
     heap: ObjectHeap,
+    upvalues: Vec<(usize, Rc<RefCell<Upvalue>>)>,
 }
 
 impl Vm {
@@ -150,6 +151,7 @@ impl Vm {
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals,
             heap,
+            upvalues: Vec::with_capacity(8),
         };
 
         vm.add_native_function("assert", 2, qang_assert)
@@ -227,7 +229,7 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
-        self.call(ClosureObject::new(program.into_function()), 0)?;
+        self.call(Rc::new(ClosureObject::new(program.into_function())), 0)?;
 
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
@@ -515,7 +517,7 @@ impl Vm {
                 }
                 OpCode::Closure => {
                     let constant = self.read_constant();
-                    let closure = match constant {
+                    let mut closure = match constant {
                         Value::FunctionDecl(function_handle) => {
                             self.heap.get(function_handle).ok_or_else(|| {
                                 QangRuntimeError::new(
@@ -530,20 +532,72 @@ impl Vm {
                         )),
                     }
                     .and_then(|obj| match obj {
-                        HeapObject::Function(function) => {
-                            Ok(HeapObject::Closure(ClosureObject::new(function.clone())))
-                        }
+                        HeapObject::Function(function) => Ok(ClosureObject::new(function.clone())),
                         _ => Err(QangRuntimeError::new(
                             "Expected function.".to_string(),
                             self.get_previous_loc(),
                         )),
                     })?;
 
-                    let handle: ObjectHandle = self.heap.allocate_object(closure);
+                    for i in 0..closure.upvalue_count {
+                        let is_local = self.read_byte() != 0;
+                        let index = self.read_byte() as usize;
+
+                        if is_local {
+                            let stack_slot = self.get_current_frame().value_slot + 1 + index;
+                            let upvalue = &mut closure.upvalues[i];
+                            self.capture_upvalue(stack_slot, upvalue);
+                        } else {
+                            let current_upvalue = self.get_current_frame().closure.upvalues[index]
+                                .borrow()
+                                .clone();
+                            closure
+                                .upvalues
+                                .push(Rc::new(RefCell::new(current_upvalue)));
+                        }
+                    }
+
+                    let handle: ObjectHandle = self
+                        .heap
+                        .allocate_object(HeapObject::Closure(Rc::new(closure)));
                     push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
                 }
-                OpCode::SetUpvalue => todo!(),
-                OpCode::GetUpvalue => todo!(),
+                OpCode::GetUpvalue => {
+                    let slot = self.read_byte() as usize;
+                    let upvalue = *self.get_current_frame().closure.upvalues[slot].borrow();
+
+                    match upvalue {
+                        Upvalue::Open(stack_slot) => {
+                            let value = self.stack[stack_slot];
+                            push_value!(self, value)?;
+                        }
+                        Upvalue::Closed(handle) => {
+                            push_value!(self, handle)?;
+                        }
+                    }
+                }
+                OpCode::SetUpvalue => {
+                    let slot = self.read_byte() as usize;
+                    let value = self.peek(0);
+
+                    let stack_slot = {
+                        let upvalue_rc = &self.get_current_frame().closure.upvalues[slot];
+                        if let Upvalue::Open(stack_slot) = *upvalue_rc.borrow() {
+                            Some(stack_slot)
+                        } else {
+                            *upvalue_rc.borrow_mut() = Upvalue::Closed(value);
+                            None
+                        }
+                    };
+
+                    if let Some(stack_slot) = stack_slot {
+                        self.stack[stack_slot] = value;
+                    }
+                }
+                OpCode::CloseUpvalue => {
+                    self.close_upvalue(self.stack_top - 1);
+                    pop_value!(self);
+                }
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.get_current_frame().value_slot;
@@ -561,6 +615,32 @@ impl Vm {
                 }
             };
         }
+    }
+
+    fn close_upvalue(&mut self, last_slot: usize) {
+        let mut i = self.upvalues.len();
+        while i > 0 {
+            i -= 1;
+            let (slot, upvalue) = &self.upvalues[i];
+
+            if *slot >= last_slot {
+                let value = self.stack[*slot];
+                *upvalue.borrow_mut() = Upvalue::Closed(value);
+                self.upvalues.remove(i);
+            }
+        }
+    }
+
+    fn capture_upvalue(&mut self, stack_slot: usize, dest: &mut Rc<RefCell<Upvalue>>) {
+        for (upvalue_slot, upvalue) in &self.upvalues {
+            if *upvalue_slot == stack_slot {
+                upvalue.clone_into(dest);
+                return;
+            }
+        }
+
+        *dest = Rc::new(RefCell::new(Upvalue::Open(stack_slot)));
+        self.upvalues.push((stack_slot, dest.clone()));
     }
 
     fn read_byte(&mut self) -> u8 {

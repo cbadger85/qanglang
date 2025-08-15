@@ -1,9 +1,10 @@
 use std::{
+    cell::RefCell,
     collections::{HashMap, hash_map::Entry},
     rc::Rc,
 };
 
-use crate::{chunk::Chunk, error::ValueConversionError};
+use crate::{Value, chunk::Chunk, error::ValueConversionError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Eq, Hash, PartialOrd)]
 pub struct ObjectHandle(usize);
@@ -33,11 +34,19 @@ impl From<ObjectHandle> for usize {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ClosureObject {
     pub function: Rc<FunctionObject>,
+    pub upvalue_count: usize,
+    pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
 }
 
 impl ClosureObject {
-    pub fn new(function: Rc<FunctionObject>) -> Rc<Self> {
-        Rc::new(Self { function })
+    pub fn new(function: Rc<FunctionObject>) -> Self {
+        let upvalue_count = function.upvalue_count;
+        let upvalues = Vec::with_capacity(upvalue_count);
+        Self {
+            function,
+            upvalues,
+            upvalue_count,
+        }
     }
 }
 
@@ -72,7 +81,13 @@ impl From<FunctionObject> for HeapObject {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum Upvalue {
+    Open(usize),
+    Closed(Value),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum HeapObject {
     String(Box<str>),
     Function(Rc<FunctionObject>),

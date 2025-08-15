@@ -545,15 +545,12 @@ impl Vm {
 
                         if is_local {
                             let stack_slot = self.get_current_frame().value_slot + 1 + index;
-                            let upvalue = &mut closure.upvalues[i];
-                            self.capture_upvalue(stack_slot, upvalue);
+                            self.capture_upvalue(stack_slot, &mut closure.upvalues[i]);
                         } else {
                             let current_upvalue = self.get_current_frame().closure.upvalues[index]
                                 .borrow()
                                 .clone();
-                            closure
-                                .upvalues
-                                .push(Rc::new(RefCell::new(current_upvalue)));
+                            closure.upvalues[i] = Rc::new(RefCell::new(current_upvalue));
                         }
                     }
 

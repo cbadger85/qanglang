@@ -124,23 +124,22 @@ impl Compiler {
     }
 
     fn resolve_upvalue(
-        &self,
+        &mut self,
         handle: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
-        match self.enclosing.as_ref() {
-            None => {
-                let upvalue = self.enclosing.as_ref().and_then(|compiler| {
-                    match compiler.resolve_upvalue(handle, span) {
-                        Ok(Some(upvalue)) => Some(upvalue),
-                        _ => None,
-                    }
-                });
-
-                Ok(upvalue)
+        if let Some(enclosing) = self.enclosing.as_mut() {
+            if let Some(local_index) = enclosing.resolve_local_variable(handle, span)? {
+                if let Some(local) = enclosing.locals.get_mut(local_index) {
+                    local.is_captured = true;
+                }
+                return Ok(Some(local_index));
             }
-            Some(compiler) => compiler.resolve_local_variable(handle, span),
+
+            return enclosing.resolve_upvalue(handle, span);
         }
+
+        Ok(None)
     }
 }
 

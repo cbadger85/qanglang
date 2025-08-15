@@ -41,7 +41,7 @@ pub struct ClosureObject {
 impl ClosureObject {
     pub fn new(function: Rc<FunctionObject>) -> Self {
         let upvalue_count = function.upvalue_count;
-        let upvalues = Vec::with_capacity(upvalue_count);
+        let upvalues = vec![Rc::new(RefCell::new(Upvalue::Open(0))); upvalue_count];
         Self {
             function,
             upvalues,

@@ -182,7 +182,8 @@ impl<'a> Parser<'a> {
     }
 
     fn is_lambda_start(&mut self) -> bool {
-        self.check_lambda_pattern(false)
+        // Lambda expressions must start with '(' immediately
+        self.check(TokenType::LeftParen) && self.check_lambda_pattern(false)
     }
 
     fn is_lambda_start_after_paren(&mut self) -> bool {
@@ -190,41 +191,73 @@ impl<'a> Parser<'a> {
     }
 
     fn check_lambda_pattern(&mut self, after_paren: bool) -> bool {
-        let (check_token, peek_offset) = if after_paren {
-            if let Some(current) = &self.current_token {
-                (current.token_type, 0)
+        if after_paren {
+            // After paren case - check current token and look ahead
+            let check_token = if let Some(current) = &self.current_token {
+                current.token_type
             } else {
                 return false;
-            }
-        } else {
-            if let Some(token) = self.tokens.peek() {
-                (token.token_type, 1)
-            } else {
-                return false;
-            }
-        };
+            };
 
-        if check_token == TokenType::RightParen {
-            // Empty parameter list: () ->
-            self.tokens
-                .peek_ahead(peek_offset)
-                .map(|t| t.token_type == TokenType::Arrow)
-                .unwrap_or(false)
-        } else {
-            // Non-empty parameter list: look for ) ->
-            let mut offset = peek_offset;
-            while self
-                .tokens
-                .peek_ahead(offset)
-                .map(|t| t.token_type != TokenType::RightParen)
-                .unwrap_or(false)
-            {
-                offset += 1;
+            if check_token == TokenType::RightParen {
+                // Empty parameter list: () ->
+                self.tokens
+                    .peek()
+                    .map(|t| t.token_type == TokenType::Arrow)
+                    .unwrap_or(false)
+            } else {
+                // Non-empty parameter list: look for ) ->
+                let mut offset = 0;
+                while self
+                    .tokens
+                    .peek_ahead(offset)
+                    .map(|t| t.token_type != TokenType::RightParen)
+                    .unwrap_or(false)
+                {
+                    offset += 1;
+                }
+                self.tokens
+                    .peek_ahead(offset + 1)
+                    .map(|t| t.token_type == TokenType::Arrow)
+                    .unwrap_or(false)
             }
-            self.tokens
-                .peek_ahead(offset + 1)
-                .map(|t| t.token_type == TokenType::Arrow)
-                .unwrap_or(false)
+        } else {
+            // Before paren case - must start with '(' immediately
+            if let Some(first_token) = self.tokens.peek() {
+                if first_token.token_type != TokenType::LeftParen {
+                    return false;
+                }
+                
+                // Check if it's followed by ) -> or parameters ) ->
+                if let Some(second_token) = self.tokens.peek_ahead(1) {
+                    if second_token.token_type == TokenType::RightParen {
+                        // Empty parameter list: () ->
+                        self.tokens
+                            .peek_ahead(2)
+                            .map(|t| t.token_type == TokenType::Arrow)
+                            .unwrap_or(false)
+                    } else {
+                        // Non-empty parameter list: look for ) ->
+                        let mut offset = 2;
+                        while self
+                            .tokens
+                            .peek_ahead(offset)
+                            .map(|t| t.token_type != TokenType::RightParen)
+                            .unwrap_or(false)
+                        {
+                            offset += 1;
+                        }
+                        self.tokens
+                            .peek_ahead(offset + 1)
+                            .map(|t| t.token_type == TokenType::Arrow)
+                            .unwrap_or(false)
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
         }
     }
 

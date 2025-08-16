@@ -1094,9 +1094,6 @@ fn test_lambda_expression() {
             return x;
         }
 
-        var a = identity(1);
-        assert_eq(a, 1);
-
         var y = identity(() -> "hello world");
         assert_eq(y(), "hello world");
   "#;

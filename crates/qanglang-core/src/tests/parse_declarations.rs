@@ -543,3 +543,13 @@ fn test_empty_lambda_parameters() {
         panic!("Expected variable declaration");
     }
 }
+
+#[test]
+fn test_variable_declaration_with_call_and_lambda() {
+    let source_code = r#"var y = identity(() -> "hello world");"#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}

@@ -67,10 +67,7 @@ fn test_lambda_closure_capture() {
   assert_eq(high_order()(), "inner");
 }
 
-// fn test_lambda_nested_scopes() {}
-
-// fn test_lambda_parameter_shadowing() {}
-
 fn test_immediately_invoked_lambda() {
   assert_eq((() -> nil)(), nil);
+  assert_eq(() -> { return nil; }(), nil);
 }

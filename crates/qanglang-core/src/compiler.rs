@@ -1113,34 +1113,32 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         call: &ast::CallExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        match call.callee.as_ref() {
-            ast::Expr::Primary(ast::PrimaryExpr::Identifier(identifier)) => {
-                match call.operation.as_ref() {
-                    ast::CallOperation::Call(args) => {
-                        if args.len() > u8::MAX as usize {
-                            return Err(QangSyntaxError::new(
-                                "Functions may only take up to 256 arguments.".to_string(),
-                                call.span,
-                            ));
-                        }
-
-                        self.visit_identifier(identifier, errors)?;
-
-                        for arg in args {
-                            self.visit_expression(arg, errors)?;
-                        }
-
-                        self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
-
-                        Ok(())
-                    }
-                    _ => Err(QangSyntaxError::new(
-                        "Expected function call.".to_string(),
+        match call.operation.as_ref() {
+            ast::CallOperation::Call(args) => {
+                if args.len() > u8::MAX as usize {
+                    return Err(QangSyntaxError::new(
+                        "Functions may only take up to 256 arguments.".to_string(),
                         call.span,
-                    )),
+                    ));
                 }
+
+                // Visit the callee expression (can be identifier, lambda, or any expression)
+                self.visit_expression(call.callee.as_ref(), errors)?;
+
+                // Visit all arguments
+                for arg in args {
+                    self.visit_expression(arg, errors)?;
+                }
+
+                // Emit the call instruction
+                self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
+
+                Ok(())
             }
-            _ => Ok(()),
+            _ => Err(QangSyntaxError::new(
+                "Expected function call.".to_string(),
+                call.span,
+            )),
         }
     }
 

@@ -2673,7 +2673,120 @@ fn test_lambda_as_immediately_invoked_expression() {
         "#;
     let source_map = SourceMap::new(source_code.to_string());
 
-    let (_program, errors) = parse_source(&source_map);
+    let (program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 1);
+
+    // Should be: var test = (() -> nil)();
+    if let ast::Decl::Variable(var_decl) = &program.decls[0] {
+        assert_eq!(var_decl.name.name.as_ref(), "test");
+        assert!(var_decl.initializer.is_some());
+
+        // The initializer should be a call expression: (() -> nil)()
+        if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
+            // The callee should be a lambda expression: () -> nil
+            if let ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda)) = call_expr.callee.as_ref() {
+                // Lambda should have no parameters
+                assert_eq!(lambda.parameters.len(), 0);
+                
+                // Lambda body should be an expression: nil
+                if let ast::LambdaBody::Expr(body_expr) = lambda.body.as_ref() {
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Nil(_)) = body_expr.as_ref() {
+                        // This is correct - lambda body is nil
+                    } else {
+                        panic!("Expected lambda body to be nil expression");
+                    }
+                } else {
+                    panic!("Expected lambda body to be an expression, not a block");
+                }
+            } else {
+                panic!("Expected lambda expression as callee");
+            }
+
+            // The call operation should be a function call with no arguments
+            if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                assert_eq!(args.len(), 0);
+            } else {
+                panic!("Expected call operation with no arguments");
+            }
+        } else {
+            panic!("Expected call expression for IIFE");
+        }
+    } else {
+        panic!("Expected variable declaration");
+    }
+}
+
+#[test]
+fn test_lambda_as_immediately_invoked_expression_with_args() {
+    let source_code = r#"
+            var result = ((x) -> x * 2)(5);
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+    assert_eq!(program.decls.len(), 1);
+
+    // Should be: var result = ((x) -> x * 2)(5);
+    if let ast::Decl::Variable(var_decl) = &program.decls[0] {
+        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert!(var_decl.initializer.is_some());
+
+        // The initializer should be a call expression: ((x) -> x * 2)(5)
+        if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
+            // The callee should be a lambda expression: (x) -> x * 2
+            if let ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda)) = call_expr.callee.as_ref() {
+                    // Lambda should have one parameter 'x'
+                    assert_eq!(lambda.parameters.len(), 1);
+                    assert_eq!(lambda.parameters[0].name.as_ref(), "x");
+                    
+                    // Lambda body should be an expression: x * 2
+                    if let ast::LambdaBody::Expr(body_expr) = lambda.body.as_ref() {
+                        if let ast::Expr::Factor(factor_expr) = body_expr.as_ref() {
+                            assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
+                            
+                            // Left side should be identifier 'x'
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(x_id)) = factor_expr.left.as_ref() {
+                                assert_eq!(x_id.name.as_ref(), "x");
+                            } else {
+                                panic!("Expected identifier 'x' in lambda body");
+                            }
+                            
+                            // Right side should be number literal 2
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = factor_expr.right.as_ref() {
+                                assert_eq!(num_lit.value, 2.0);
+                            } else {
+                                panic!("Expected number literal '2' in lambda body");
+                            }
+                        } else {
+                            panic!("Expected factor expression 'x * 2' in lambda body");
+                        }
+                    } else {
+                        panic!("Expected lambda body to be an expression, not a block");
+                    }
+            } else {
+                panic!("Expected lambda expression as callee");
+            }
+
+            // The call operation should be a function call with one argument (5)
+            if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                assert_eq!(args.len(), 1);
+                
+                if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = &args[0] {
+                    assert_eq!(num_lit.value, 5.0);
+                } else {
+                    panic!("Expected number literal '5' as argument");
+                }
+            } else {
+                panic!("Expected call operation with one argument");
+            }
+        } else {
+            panic!("Expected call expression for IIFE with argument");
+        }
+    } else {
+        panic!("Expected variable declaration");
+    }
 }

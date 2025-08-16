@@ -1115,7 +1115,36 @@ fn test_lambda_expression() {
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
             disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
+            match Vm::new(heap).set_debug(true).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_immediately_invoked_functional_expressions() {
+    let source = r#"
+  assert_eq((() -> nil)(), nil);
+  assert_eq(() -> { return nil; }(), nil);
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(true).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);

@@ -16,29 +16,27 @@ fn test_logical_or_with_false_operands() {
   assert_eq(false or false, false, "Expected false or false to be false.");
 }
 
-// TODO implement this when closures are done.
-// fn test_logical_and_short_circuit_evaluation() {
-//   var passed = true;
+fn test_logical_and_short_circuit_evaluation() {
+  var passed = true;
   
-//   fn failure() {
-//     passed = false;
-//   }
+  fn failure() {
+    passed = false;
+  }
 
-//   assert(false and failure());
-//   assert(passed, "Expected failure not to be called.");
-// }
+  assert(!(false and failure()));
+  assert(passed, "Expected failure not to be called.");
+}
 
-// TODO implement this when closures are done.
-// fn test_logical_or_short_circuit_evaluation() {
-//   var passed = true;
+fn test_logical_or_short_circuit_evaluation() {
+  var passed = true;
   
-//   fn failure() {
-//     passed = false;
-//   }
+  fn failure() {
+    passed = false;
+  }
 
-//   assert(true or failure());
-//   assert(passed, "Expected failure not to be called.");
-// }
+  assert(true or failure());
+  assert(passed, "Expected failure not to be called.");
+}
 
 
 fn test_unary_not_with_boolean_values() {

@@ -1381,54 +1381,6 @@ mod expression_parser {
                 )?;
                 ast::CallOperation::Index(index)
             }
-            tokenizer::TokenType::OptionalChaining => {
-                match parser
-                    .current_token
-                    .as_ref()
-                    .map(|t| t.token_type)
-                    .unwrap_or(TokenType::Eof)
-                {
-                    TokenType::Identifier => {
-                        parser.advance();
-                        let property_span = parser.get_previous_span();
-                        let property_name = parser
-                            .previous_token
-                            .as_ref()
-                            .map(|t| t.lexeme(parser.source_map))
-                            .unwrap();
-                        let property = ast::Identifier::new(
-                            property_name.iter().collect::<String>().into_boxed_str(),
-                            property_span,
-                        );
-
-                        ast::CallOperation::OptionalProperty(property)
-                    }
-                    TokenType::LeftSquareBracket => {
-                        parser.advance();
-                        let index = parser.expression()?;
-                        parser.consume(
-                            tokenizer::TokenType::RightSquareBracket,
-                            "Expect ']' after array index.",
-                        )?;
-                        ast::CallOperation::OptionalIndex(index)
-                    }
-                    TokenType::LeftParen => {
-                        parser.advance();
-                        let arguments = parse_arguments(parser)?;
-                        parser.consume(
-                            tokenizer::TokenType::RightParen,
-                            "Expect ')' after arguments.",
-                        )?;
-                        ast::CallOperation::OptionalCall(arguments)
-                    }
-                    _ => {
-                        return Err(QangSyntaxError::new(
-                            "Expected call expression or identifier.".to_string(),
-                            parser.get_current_span(),
-                        ));
-                    }
-                }
-            }
             _ => return Ok(left), // This shouldn't happen
         };
 
@@ -1623,11 +1575,6 @@ mod expression_parser {
                 precedence: Precedence::None,
             },
             tokenizer::TokenType::Dot => ParseRule {
-                prefix: None,
-                infix: Some(call),
-                precedence: Precedence::Call,
-            },
-            tokenizer::TokenType::OptionalChaining => ParseRule {
                 prefix: None,
                 infix: Some(call),
                 precedence: Precedence::Call,

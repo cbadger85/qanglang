@@ -52,7 +52,6 @@ pub enum TokenType {
     While,              // while
     Break,              // break
     Continue,           // continue
-    OptionalChaining,   // .?
     Pipe,               // |>
     Throw,              // throw
     Try,                // try
@@ -194,7 +193,6 @@ impl<'a> Tokenizer<'a> {
             '/' if self.match_char('*') => self.multi_line_comment(),
             '/' => self.make_token(TokenType::Slash, start),
             '%' => self.make_token(TokenType::Modulo, start),
-            '.' if self.match_char('?') => self.make_token(TokenType::OptionalChaining, start),
             '.' if self.peek_char().is_ascii_digit() => self.number(),
             '.' => self.make_token(TokenType::Dot, start),
             ',' => self.make_token(TokenType::Comma, start),

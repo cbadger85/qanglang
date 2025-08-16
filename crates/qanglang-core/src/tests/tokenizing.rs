@@ -75,7 +75,6 @@ fn test_single_character_tokens() {
     assert_single_token_type("!", TokenType::Bang);
     assert_single_token_type("<", TokenType::Less);
     assert_single_token_type(">", TokenType::Greater);
-    assert_single_token_type(".?", TokenType::OptionalChaining);
 }
 
 #[test]
@@ -450,18 +449,6 @@ fn test_boolean_expressions() {
 fn test_decimal_point_numbers() {
     assert_single_token_type(".5", TokenType::Number);
     assert_single_token_type(".123", TokenType::Number);
-}
-
-#[test]
-fn test_optional_chaining() {
-    let source = "user.?name";
-    let expected = vec![
-        TokenType::Identifier,
-        TokenType::OptionalChaining,
-        TokenType::Identifier,
-        TokenType::Eof,
-    ];
-    assert_token_types(source, &expected);
 }
 
 #[test]
@@ -904,7 +891,6 @@ fn test_operator_lexeme_content() {
         (">=", TokenType::GreaterEquals),
         ("->", TokenType::Arrow),
         ("==", TokenType::EqualsEquals),
-        (".?", TokenType::OptionalChaining),
         ("|>", TokenType::Pipe),
     ];
 

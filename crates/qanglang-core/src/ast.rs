@@ -471,12 +471,9 @@ pub struct CallExpr {
 /// Operations that can be chained on a call expression
 #[derive(Debug, Clone, PartialEq)]
 pub enum CallOperation {
-    Call(Vec<Expr>),              // ( arguments? )
-    Property(Identifier),         // . IDENTIFIER
-    OptionalProperty(Identifier), // .? IDENTIFIER
-    Index(Expr),                  // [ expression ]
-    OptionalIndex(Expr),          // .? [ expression ]
-    OptionalCall(Vec<Expr>),      // .? ( arguments? )
+    Call(Vec<Expr>),      // ( arguments? )
+    Property(Identifier), // . IDENTIFIER
+    Index(Expr),          // [ expression ]
 }
 
 impl CallOperation {
@@ -491,16 +488,7 @@ impl CallOperation {
                 }
             }
             CallOperation::Property(id) => id.span,
-            CallOperation::OptionalProperty(id) => id.span,
             CallOperation::Index(expr) => expr.span(),
-            CallOperation::OptionalIndex(expr) => expr.span(),
-            CallOperation::OptionalCall(args) => {
-                if args.is_empty() {
-                    SourceSpan::default()
-                } else {
-                    SourceSpan::combine(args[0].span(), args[args.len() - 1].span())
-                }
-            }
         }
     }
 }
@@ -1114,17 +1102,7 @@ pub trait AstVisitor {
                 Ok(())
             }
             CallOperation::Property(identifier) => self.visit_identifier(identifier, errors),
-            CallOperation::OptionalProperty(identifier) => {
-                self.visit_identifier(identifier, errors)
-            }
             CallOperation::Index(expr) => self.visit_expression(expr, errors),
-            CallOperation::OptionalIndex(expr) => self.visit_expression(expr, errors),
-            CallOperation::OptionalCall(args) => {
-                for arg in args {
-                    self.visit_expression(arg, errors)?;
-                }
-                Ok(())
-            }
         }
     }
 

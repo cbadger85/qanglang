@@ -215,7 +215,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>call</td>
       <td>=</td>
-      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | ".?" IDENTIFIER | ".?" "[" expression "]" | ".?" "(" arguments? ")" | "[" expression "]" )*</td>
+      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" )*</td>
       <td>;</td>
     </tr>
     <tr>

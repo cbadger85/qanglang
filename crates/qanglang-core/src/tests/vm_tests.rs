@@ -1061,9 +1061,15 @@ fn test_closures() {
 #[test]
 fn test_lambda_declaration() {
     let source = r#"
-        var lamdba = () -> "hello world";
+        var lambda = () -> "hello world";
 
         assert_eq(lambda(), "hello world");
+        
+        var lambda_two = () -> {
+            return "hello world";
+        };
+
+        assert_eq(lambda_two(), "hello world");
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
@@ -1096,6 +1102,12 @@ fn test_lambda_expression() {
 
         var y = identity(() -> "hello world");
         assert_eq(y(), "hello world");
+        
+        var z = identity(() -> {
+            return "hello world";
+        });
+            
+        assert_eq(z(), "hello world");
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();

@@ -227,7 +227,6 @@ impl<'a> Parser<'a> {
                 if first_token.token_type != TokenType::LeftParen {
                     return false;
                 }
-                
                 // Check if it's followed by ) -> or parameters ) ->
                 if let Some(second_token) = self.tokens.peek_ahead(1) {
                     if second_token.token_type == TokenType::RightParen {

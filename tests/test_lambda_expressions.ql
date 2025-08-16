@@ -71,6 +71,6 @@ fn test_lambda_closure_capture() {
 
 // fn test_lambda_parameter_shadowing() {}
 
-// fn test_immediately_invoked_lambda() {
-//   assert_eq((() -> nil)(), nil);
-// }
+fn test_immediately_invoked_lambda() {
+  assert_eq((() -> nil)(), nil);
+}

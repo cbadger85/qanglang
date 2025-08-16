@@ -181,10 +181,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn is_lambda_start(&mut self) -> bool {
-        // Lambda expressions must start with '(' immediately
-        self.check(TokenType::LeftParen) && self.check_lambda_pattern(false)
-    }
 
     fn is_lambda_start_after_paren(&mut self) -> bool {
         self.check_lambda_pattern(true)
@@ -199,7 +195,42 @@ impl<'a> Parser<'a> {
                 return false;
             };
 
-            if check_token == TokenType::RightParen {
+            // Special case: if we see another '(' after the first '(', we need to check if it's a lambda
+            // pattern like "(() -> nil)" where the inner () is the lambda parameter list
+            if check_token == TokenType::LeftParen {
+                // Look for () -> pattern starting from current position
+                if let Some(next_token) = self.tokens.peek() {
+                    if next_token.token_type == TokenType::RightParen {
+                        // Found "(()" pattern, check for -> after the )
+                        return self.tokens
+                            .peek_ahead(1)
+                            .map(|t| t.token_type == TokenType::Arrow)
+                            .unwrap_or(false);
+                    }
+                }
+                // For non-empty parameter lists like "(x) ->" or "(x, y) ->"
+                // we need to find the matching ) and then check for ->
+                let mut paren_depth = 1;
+                let mut offset = 0;
+                while let Some(token) = self.tokens.peek_ahead(offset) {
+                    match token.token_type {
+                        TokenType::LeftParen => paren_depth += 1,
+                        TokenType::RightParen => {
+                            paren_depth -= 1;
+                            if paren_depth == 0 {
+                                // Found matching ), check for -> after it
+                                return self.tokens
+                                    .peek_ahead(offset + 1)
+                                    .map(|t| t.token_type == TokenType::Arrow)
+                                    .unwrap_or(false);
+                            }
+                        }
+                        _ => {}
+                    }
+                    offset += 1;
+                }
+                false
+            } else if check_token == TokenType::RightParen {
                 // Empty parameter list: () ->
                 self.tokens
                     .peek()
@@ -235,6 +266,9 @@ impl<'a> Parser<'a> {
                             .peek_ahead(2)
                             .map(|t| t.token_type == TokenType::Arrow)
                             .unwrap_or(false)
+                    } else if second_token.token_type == TokenType::LeftParen {
+                        // If we see "((", this is a grouped expression, not a direct lambda
+                        false
                     } else {
                         // Non-empty parameter list: look for ) ->
                         let mut offset = 2;
@@ -312,14 +346,7 @@ impl<'a> Parser<'a> {
         let identifier = self.get_identifier()?;
 
         let initializer = if self.match_token(TokenType::Equals) {
-            if self.is_lambda_start() {
-                let lambda_expr = self.lambda_expression()?;
-                Some(ast::Expr::Primary(ast::PrimaryExpr::Lambda(Box::new(
-                    lambda_expr,
-                ))))
-            } else {
-                Some(self.expression()?)
-            }
+            Some(self.expression()?)
         } else {
             None
         };
@@ -726,27 +753,6 @@ impl<'a> Parser<'a> {
         self.assignment()
     }
 
-    fn lambda_expression(&mut self) -> ParseResult<ast::LambdaExpr> {
-        let start_span = self.get_current_span();
-
-        let parameters = self.argument_parameters()?;
-        self.consume(TokenType::Arrow, "Expect '->' after lambda parameters.")?;
-
-        let body = if self.check(TokenType::LeftBrace) {
-            Box::new(ast::LambdaBody::Block(self.block_statement()?))
-        } else {
-            let expr = self.expression()?;
-            Box::new(ast::LambdaBody::Expr(Box::new(expr)))
-        };
-
-        let span = ast::SourceSpan::combine(start_span, body.span());
-
-        Ok(ast::LambdaExpr {
-            parameters,
-            body,
-            span,
-        })
-    }
 
     fn function_expression(&mut self) -> ParseResult<ast::FunctionExpr> {
         let start_span = self.get_current_span();
@@ -908,7 +914,17 @@ mod expression_parser {
         let is_lambda = parser.is_lambda_start_after_paren();
 
         if is_lambda {
-            lambda(parser)
+            // Check if we're parsing a grouped lambda (like "(() -> nil)") vs direct lambda
+            let is_grouped_lambda = parser.check(TokenType::LeftParen);
+            
+            let lambda_expr = lambda(parser)?;
+            
+            // Only consume closing ')' if this is a grouped lambda
+            if is_grouped_lambda {
+                parser.consume(TokenType::RightParen, "Expect ')' after lambda expression.")?;
+            }
+            
+            Ok(lambda_expr)
         } else {
             grouping(parser)
         }
@@ -926,6 +942,11 @@ mod expression_parser {
 
     fn lambda(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let start_span = parser.get_previous_span();
+
+        // If we encounter a '(' at the start, consume it (start of parameter list)
+        if parser.check(TokenType::LeftParen) {
+            parser.advance();
+        }
 
         let mut parameters = Vec::new();
 

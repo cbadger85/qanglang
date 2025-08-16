@@ -54,15 +54,11 @@ struct Compiler {
 
 impl Compiler {
     fn new(handle: ObjectHandle) -> Self {
-        let mut locals = Vec::with_capacity(u8::MAX as usize);
-        let local = Local::new("".into());
-        // locals.push(local);
-
         Self {
             kind: CompilerKind::Script,
             function: FunctionObject::new(handle, 0),
-            locals,
-            local_count: 0, // TODO change this to 1, the first slot is supposed to be reserved!
+            locals: Vec::with_capacity(u8::MAX as usize),
+            local_count: 0,
             scope_depth: 0,
             upvalues: Vec::with_capacity(u8::MAX as usize),
             enclosing: None,
@@ -70,17 +66,13 @@ impl Compiler {
     }
 
     fn push(&mut self, handle: ObjectHandle, arity: usize) -> &mut Self {
-        let mut locals = Vec::with_capacity(u8::MAX as usize);
-        let local = Local::new("".into());
-        // locals.push(local);
-
         let previous = std::mem::replace(
             self,
             Self {
                 kind: CompilerKind::Function,
                 function: FunctionObject::new(handle, arity),
-                locals,
-                local_count: 0, // TODO change this to 1, the first slot is supposed to be reserved!
+                locals: Vec::with_capacity(u8::MAX as usize),
+                local_count: 0,
                 scope_depth: 0,
                 upvalues: Vec::with_capacity(u8::MAX as usize),
                 enclosing: None,
@@ -411,11 +403,8 @@ impl<'a> CompilerVisitor<'a> {
         } else {
             let local = Local::new(handle.into());
             if current.local_count < current.locals.len() {
-                // Reuse inactive local slot
                 current.locals[current.local_count] = local;
             } else {
-                // TODO delete this else, it will never happen, that's what the check above is for.
-                // Grow vec
                 current.locals.push(local);
             }
             current.local_count += 1;
@@ -851,14 +840,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         Ok(())
     }
 
-    fn visit_lambda_declaration(
-        &mut self,
-        _lambda_decl: &ast::LambdaDecl,
-        _errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
     fn visit_while_statement(
         &mut self,
         while_stmt: &ast::WhileStmt,
@@ -1033,6 +1014,97 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         }
 
         self.emit_opcode(OpCode::Return, return_stmt.span);
+        Ok(())
+    }
+
+    fn visit_lambda_declaration(
+        &mut self,
+        lamdba_decl: &ast::LambdaDecl,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        let lambda_identifier_handle =
+            self.parse_variable(&lamdba_decl.name.name, lamdba_decl.span)?;
+
+        self.visit_lambda_expression(&lamdba_decl.lambda, errors)?;
+
+        self.define_variable(lambda_identifier_handle, lamdba_decl.name.span)?;
+
+        Ok(())
+    }
+
+    fn visit_lambda_expression(
+        &mut self,
+        lambda_expr: &ast::LambdaExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        let lambda_name_handle = self.heap.intern_string("<anonymous>".into());
+
+        self.compiler
+            .push(lambda_name_handle, lambda_expr.parameters.len());
+        self.begin_scope();
+
+        let parameter_span = SourceSpan::combine(
+            lambda_expr
+                .parameters
+                .first()
+                .map(|p| p.span)
+                .unwrap_or(lambda_expr.span),
+            lambda_expr
+                .parameters
+                .last()
+                .map(|p| p.span)
+                .unwrap_or(lambda_expr.span),
+        );
+
+        if lambda_expr.parameters.len() > 255 {
+            return Err(QangSyntaxError::new(
+                "Cannot have more than 255 parameters.".to_string(),
+                parameter_span,
+            ));
+        }
+
+        for parameter in &lambda_expr.parameters {
+            let handle = self.parse_variable(&parameter.name, parameter.span)?;
+
+            self.define_variable(handle, parameter.span)?;
+        }
+
+        match lambda_expr.body.as_ref() {
+            ast::LambdaBody::Block(body) => {
+                self.visit_block_statement(&body, errors)?;
+                self.emit_return(lambda_expr.span);
+            }
+            ast::LambdaBody::Expr(expr) => {
+                self.visit_return_statement(
+                    &ast::ReturnStmt {
+                        value: Some(*expr.clone()),
+                        span: expr.span(),
+                    },
+                    errors,
+                )?;
+            }
+        }
+
+        let compiler = self
+            .compiler
+            .pop()
+            .expect("Unexpected end of artifact stack.");
+        let function = compiler.function;
+        let upvalue_count = function.upvalue_count;
+
+        let function_handle = self.heap.allocate_object(function.into());
+        let constant_index =
+            self.make_constant(Value::FunctionDecl(function_handle), lambda_expr.span)?;
+        self.emit_opcode_and_byte(OpCode::Closure, constant_index, lambda_expr.span);
+
+        for i in 0..upvalue_count {
+            let upvalue = compiler.upvalues[i];
+            let is_local_byte = if upvalue.is_local { 1 } else { 0 };
+
+            self.emit_byte(is_local_byte, lambda_expr.span);
+            self.emit_byte(upvalue.index, lambda_expr.span);
+        }
+
         Ok(())
     }
 

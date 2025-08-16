@@ -37,7 +37,6 @@ pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     }
 }
 
-#[allow(dead_code)] // TODO add this to the VM after closures are added.
 pub fn qang_assert_throws(
     args: &[Value],
     vm: &mut Vm,

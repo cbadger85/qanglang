@@ -10,7 +10,10 @@ use crate::{
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
     memory::{ClosureObject, FunctionObject, ObjectHandle, Upvalue},
-    qang_std::{qang_assert, qang_assert_eq, qang_print, qang_println, qang_typeof, system_time},
+    qang_std::{
+        qang_assert, qang_assert_eq, qang_assert_throws, qang_print, qang_println, qang_typeof,
+        system_time,
+    },
     value::{
         BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, FunctionValueKind, NIL_TYPE_STRING,
         NUMBER_TYPE_STRING, NativeFunction, STRING_TYPE_STRING,
@@ -156,6 +159,7 @@ impl Vm {
 
         vm.add_native_function("assert", 2, qang_assert)
             .add_native_function("assert_eq", 3, qang_assert_eq)
+            .add_native_function("assert_throws", 2, qang_assert_throws)
             .add_native_function("print", 1, qang_print)
             .add_native_function("println", 1, qang_println)
             .add_native_function("system_time", 0, system_time)

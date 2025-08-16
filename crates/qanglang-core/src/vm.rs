@@ -98,6 +98,61 @@ macro_rules! pop_value {
     };
 }
 
+macro_rules! get_current_frame {
+    ($vm:expr) => {
+        &$vm.frames[$vm.frame_count - 1]
+    };
+}
+
+macro_rules! get_current_frame_mut {
+    ($vm:expr) => {
+        &mut $vm.frames[$vm.frame_count - 1]
+    };
+}
+
+macro_rules! get_current_function {
+    ($vm:expr) => {
+        &get_current_frame!($vm).closure.function
+    };
+}
+
+macro_rules! read_byte {
+    ($vm:expr) => {{
+        let byte = get_current_function!($vm).chunk.code()[get_current_frame!($vm).ip];
+        get_current_frame_mut!($vm).ip += 1;
+        byte
+    }};
+}
+
+macro_rules! read_constant {
+    ($vm:expr) => {{
+        let index = read_byte!($vm) as usize;
+        let constants = get_current_function!($vm).chunk.constants();
+        constants[index]
+    }};
+}
+
+macro_rules! read_short {
+    ($vm:expr) => {{
+        let high_byte = read_byte!($vm) as usize;
+        let low_byte = read_byte!($vm) as usize;
+        (high_byte << 8) | low_byte
+    }};
+}
+
+macro_rules! peek {
+    ($vm:expr, $distance:expr) => {
+        if $vm.stack_top > $distance {
+            $vm.stack
+                .get($vm.stack_top - 1 - $distance)
+                .copied()
+                .unwrap_or(Value::Nil)
+        } else {
+            Value::Nil
+        }
+    };
+}
+
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
     closure: Rc<ClosureObject>,
@@ -189,37 +244,18 @@ impl Vm {
         self
     }
 
-    fn get_current_frame(&self) -> &CallFrame {
-        debug_assert!(self.frame_count > 0, "No active frame");
-        debug_assert!(
-            self.frame_count <= FRAME_MAX,
-            "Frame count {} exceeds max",
-            self.frame_count
-        );
-
-        #[cfg(feature = "profiler")]
-        coz::scope!("get_current_frame");
-
-        &self.frames[self.frame_count - 1]
-    }
-
-    fn get_current_frame_mut(&mut self) -> &mut CallFrame {
-        #[cfg(feature = "profiler")]
-        coz::scope!("get_current_frame_mut");
-        &mut self.frames[self.frame_count - 1]
-    }
 
     fn get_current_function(&self) -> &FunctionObject {
-        &self.get_current_frame().closure.function
+        &get_current_frame!(self).closure.function
     }
 
     fn get_current_loc(&self) -> SourceLocation {
-        self.get_loc_at(self.get_current_frame().ip)
+        self.get_loc_at(get_current_frame!(self).ip)
     }
 
     fn get_previous_loc(&self) -> SourceLocation {
-        if self.get_current_frame().ip > 0 {
-            self.get_loc_at(self.get_current_frame().ip - 1)
+        if get_current_frame!(self).ip > 0 {
+            self.get_loc_at(get_current_frame!(self).ip - 1)
         } else {
             SourceLocation::default()
         }
@@ -259,15 +295,15 @@ impl Vm {
                 self.debug();
             }
 
-            let opcode: OpCode = self.read_byte().into();
+            let opcode: OpCode = read_byte!(self).into();
 
             match opcode {
                 OpCode::Constant => {
-                    let constant = self.read_constant();
+                    let constant = read_constant!(self);
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
-                    if let Value::Number(number) = self.peek(0) {
+                    if let Value::Number(number) = peek!(self, 0) {
                         if let Some(stack_value) = self.stack.get_mut(self.stack_top - 1) {
                             *stack_value = Value::Number(-number);
                         }
@@ -279,7 +315,7 @@ impl Vm {
                     }
                 }
                 OpCode::Not => {
-                    let value = self.peek(0);
+                    let value = peek!(self, 0);
                     if let Some(stack_value) = self.stack.get_mut(self.stack_top - 1) {
                         *stack_value = Value::Boolean(!value.is_truthy());
                     }
@@ -425,7 +461,7 @@ impl Vm {
                 }
                 OpCode::DefineGlobal => {
                     let identifier_handle: StringHandle =
-                        self.read_constant()
+                        read_constant!(self)
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error(self.get_previous_loc())
@@ -435,7 +471,7 @@ impl Vm {
                 }
                 OpCode::GetGlobal => {
                     let identifier_handle: StringHandle =
-                        self.read_constant()
+                        read_constant!(self)
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 let loc = self.get_previous_loc();
@@ -453,7 +489,7 @@ impl Vm {
                 }
                 OpCode::SetGlobal => {
                     let identifier_handle: StringHandle =
-                        self.read_constant()
+                        read_constant!(self)
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error(self.get_previous_loc())
@@ -467,12 +503,12 @@ impl Vm {
                             loc,
                         ));
                     }
-                    let value = self.peek(0);
+                    let value = peek!(self, 0);
                     self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetLocal => {
-                    let slot = self.read_byte();
-                    let absolute_slot = self.get_current_frame().value_slot + 1 + slot as usize;
+                    let slot = read_byte!(self);
+                    let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
                         "Local slot {} out of bounds",
@@ -483,34 +519,34 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetLocal => {
-                    let slot = self.read_byte();
-                    let value = self.peek(0);
-                    let absolute_slot = self.get_current_frame().value_slot + 1 + slot as usize;
+                    let slot = read_byte!(self);
+                    let value = peek!(self, 0);
+                    let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
 
                     self.stack[absolute_slot] = value;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = self.read_short();
-                    if !self.peek(0).is_truthy() {
-                        self.get_current_frame_mut().ip += offset;
+                    let offset = read_short!(self);
+                    if !peek!(self, 0).is_truthy() {
+                        get_current_frame_mut!(self).ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = self.read_short();
-                    self.get_current_frame_mut().ip += offset;
+                    let offset = read_short!(self);
+                    get_current_frame_mut!(self).ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = self.read_short();
-                    self.get_current_frame_mut().ip -= offset;
+                    let offset = read_short!(self);
+                    get_current_frame_mut!(self).ip -= offset;
                 }
                 OpCode::Call => {
-                    let arg_count = self.read_byte() as usize;
-                    let function_value = self.peek(arg_count);
+                    let arg_count = read_byte!(self) as usize;
+                    let function_value = peek!(self, arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Closure => {
                     let handle: FunctionHandle =
-                        self.read_constant()
+                        read_constant!(self)
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 QangRuntimeError::new(
@@ -522,14 +558,14 @@ impl Vm {
                     let mut closure = ClosureObject::new(function);
 
                     for i in 0..closure.upvalue_count {
-                        let is_local = self.read_byte() != 0;
-                        let index = self.read_byte() as usize;
+                        let is_local = read_byte!(self) != 0;
+                        let index = read_byte!(self) as usize;
 
                         if is_local {
-                            let stack_slot = self.get_current_frame().value_slot + 1 + index;
+                            let stack_slot = get_current_frame!(self).value_slot + 1 + index;
                             self.capture_upvalue(stack_slot, &mut closure.upvalues[i]);
                         } else {
-                            let current_upvalue = self.get_current_frame().closure.upvalues[index]
+                            let current_upvalue = get_current_frame!(self).closure.upvalues[index]
                                 .borrow()
                                 .clone();
                             closure.upvalues[i] = Rc::new(RefCell::new(current_upvalue));
@@ -543,8 +579,8 @@ impl Vm {
                     )?;
                 }
                 OpCode::GetUpvalue => {
-                    let slot = self.read_byte() as usize;
-                    let upvalue = *self.get_current_frame().closure.upvalues[slot].borrow();
+                    let slot = read_byte!(self) as usize;
+                    let upvalue = *get_current_frame!(self).closure.upvalues[slot].borrow();
 
                     match upvalue {
                         Upvalue::Open(stack_slot) => {
@@ -557,11 +593,11 @@ impl Vm {
                     }
                 }
                 OpCode::SetUpvalue => {
-                    let slot = self.read_byte() as usize;
-                    let value = self.peek(0);
+                    let slot = read_byte!(self) as usize;
+                    let value = peek!(self, 0);
 
                     let stack_slot = {
-                        let upvalue_rc = &self.get_current_frame().closure.upvalues[slot];
+                        let upvalue_rc = &get_current_frame!(self).closure.upvalues[slot];
                         if let Upvalue::Open(stack_slot) = *upvalue_rc.borrow() {
                             Some(stack_slot)
                         } else {
@@ -580,7 +616,7 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
-                    let value_slot = self.get_current_frame().value_slot;
+                    let value_slot = get_current_frame!(self).value_slot;
                     self.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]
@@ -623,40 +659,6 @@ impl Vm {
         self.upvalues.push((stack_slot, dest.clone()));
     }
 
-    fn read_byte(&mut self) -> u8 {
-        let byte = self.get_current_function().chunk.code()[self.get_current_frame().ip];
-        self.get_current_frame_mut().ip += 1;
-        byte
-    }
-
-    fn read_constant(&mut self) -> Value {
-        let index = self.read_byte() as usize;
-        let constants = self.get_current_function().chunk.constants();
-        debug_assert!(
-            index < constants.len(),
-            "Constant index {} out of bounds",
-            index
-        );
-
-        constants[index]
-    }
-
-    fn read_short(&mut self) -> usize {
-        let high_byte = self.read_byte() as usize;
-        let low_byte = self.read_byte() as usize;
-        (high_byte << 8) | low_byte
-    }
-
-    fn peek(&self, distance: usize) -> Value {
-        if self.stack_top > distance {
-            self.stack
-                .get(self.stack_top - 1 - distance)
-                .copied()
-                .unwrap_or(Value::Nil)
-        } else {
-            Value::Nil
-        }
-    }
 
     fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
     where
@@ -723,7 +725,7 @@ impl Vm {
         self.frame_count += 1;
 
         let value_slot = self.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
-        let call_frame = self.get_current_frame_mut();
+        let call_frame = get_current_frame_mut!(self);
 
         call_frame.value_slot = value_slot;
         call_frame.closure.clone_from(&closure);
@@ -850,7 +852,7 @@ impl Vm {
         disassemble_instruction(
             &self.get_current_function().chunk,
             &self.heap,
-            self.get_current_frame().ip,
+            get_current_frame!(self).ip,
         );
     }
 }

@@ -4,6 +4,7 @@ mod compiler;
 mod debug;
 mod error;
 mod memory;
+mod object;
 mod parser;
 mod qang_std;
 mod source;
@@ -17,7 +18,8 @@ pub use compiler::{
 };
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
-pub use memory::{FunctionObject, HeapObject, ObjectHandle, ObjectHeap};
+pub use memory::{ObjectHandle, ObjectHeap};
+pub use object::{ClosureObject, FunctionObject, QangObject, Upvalue};
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};

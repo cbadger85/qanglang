@@ -1,7 +1,7 @@
 use crate::{
     ObjectHeap, Value,
     chunk::{Chunk, OpCode},
-    memory::HeapObject,
+    object::QangObject,
 };
 
 #[allow(dead_code)]
@@ -70,7 +70,7 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
                 _ => None,
             };
 
-            if let Some(HeapObject::Function(function)) = function_obj {
+            if let Some(QangObject::Function(function)) = function_obj {
                 for _j in 0..function.upvalue_count {
                     let is_local = chunk.code()[offset];
                     offset += 1;
@@ -134,11 +134,11 @@ pub fn disassemble_program(heap: &ObjectHeap) {
     let mut function_count = 0;
 
     for (index, obj) in heap.iter_objects() {
-        if let HeapObject::Function(function) = obj {
+        if let QangObject::Function(function) = obj {
             function_count += 1;
 
             let function_name = match heap.get(function.name) {
-                Some(HeapObject::String(name_str)) => name_str.as_ref(),
+                Some(QangObject::String(name_str)) => name_str.as_ref(),
                 _ => "<anonymous>",
             };
 

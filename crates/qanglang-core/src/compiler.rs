@@ -1,10 +1,11 @@
 use std::rc::Rc;
 
 use crate::{
-    ErrorReporter, QangSyntaxError, SourceMap, Value,
+    ErrorReporter, QangObject, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    memory::{FunctionObject, ObjectHandle, ObjectHeap},
+    memory::{ObjectHandle, ObjectHeap},
+    object::FunctionObject,
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
 };
@@ -165,7 +166,7 @@ impl<'a> CompilerPipeline<'a> {
             Ok(program) => {
                 let program = Rc::new(program);
                 self.heap
-                    .allocate_object(crate::HeapObject::Function(program.clone()));
+                    .allocate_object(QangObject::Function(program.clone()));
                 Ok(QangProgram(program.clone()))
             }
             Err(error) => Err(CompilerError(
@@ -1156,13 +1157,13 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 pipe.span,
             ));
         }
-        
+
         // Visit the left side (value to be piped)
         self.visit_expression(&pipe.left, errors)?;
-        
+
         // Emit call with 1 argument (the piped value)
         self.emit_opcode_and_byte(OpCode::Call, 1, pipe.span);
-        
+
         Ok(())
     }
 

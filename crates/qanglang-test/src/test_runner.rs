@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fs};
 
 use qanglang_core::{
-    CompilerPipeline, FunctionValueKind, HeapObject, ObjectHandle, ObjectHeap, SourceMap, Value, Vm,
+    CompilerPipeline, FunctionValueKind, QangObject, ObjectHandle, ObjectHeap, SourceMap, Value, Vm,
 };
 
 use crate::test_file::SourceFile;
@@ -163,7 +163,7 @@ fn extract_test_info(
     for (handle, value) in globals.iter() {
         // Get the identifier name for this global
         let identifier = heap.get(*handle).and_then(|obj| match obj {
-            HeapObject::String(name) => Some(name.as_ref()),
+            QangObject::String(name) => Some(name.as_ref()),
             _ => None,
         });
 
@@ -178,7 +178,7 @@ fn extract_test_info(
                 // Check if this is the test description
                 Value::String(string_handle) => {
                     if identifier == "test_description" {
-                        if let Some(HeapObject::String(desc)) = heap.get(*string_handle) {
+                        if let Some(QangObject::String(desc)) = heap.get(*string_handle) {
                             description = Some(desc.to_string());
                         }
                     }

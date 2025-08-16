@@ -1,4 +1,4 @@
-use crate::{HeapObject, NativeFn, ObjectHeap, error::ValueConversionError, memory::ObjectHandle};
+use crate::{NativeFn, QangObject, ObjectHeap, error::ValueConversionError, memory::ObjectHandle};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NativeFunction {
@@ -45,7 +45,7 @@ impl Value {
             Value::Nil => "nil".to_string(),
             Value::Number(number) => number.to_string(),
             Value::String(handle) => {
-                if let Some(HeapObject::String(str)) = heap.get(*handle) {
+                if let Some(QangObject::String(str)) = heap.get(*handle) {
                     return format!("{}", str);
                 }
                 "nil".to_string()
@@ -55,28 +55,28 @@ impl Value {
                 let obj = heap.get(*function_handle);
 
                 let name_handle = match obj {
-                    Some(HeapObject::Function(function)) => function.name,
+                    Some(QangObject::Function(function)) => function.name,
                     _ => {
                         return "nil".to_string();
                     }
                 };
 
                 match heap.get(name_handle) {
-                    Some(HeapObject::String(name)) => format!("<function>{}", name),
+                    Some(QangObject::String(name)) => format!("<function>{}", name),
                     _ => "nil".to_string(),
                 }
             }
             Value::Function(function) => match function {
                 FunctionValueKind::NativeFunction(function) => {
                     heap.get(function.name).and_then(|obj| match obj {
-                        HeapObject::String(name) => Some(format!("<function>{}", name)),
+                        QangObject::String(name) => Some(format!("<function>{}", name)),
                         _ => None,
                     })
                 }
                 FunctionValueKind::Closure(handle) => match heap.get(*handle) {
-                    Some(HeapObject::Closure(closure)) => {
+                    Some(QangObject::Closure(closure)) => {
                         heap.get(closure.function.name).and_then(|obj| match obj {
-                            HeapObject::String(name) => Some(format!("<function>{}", name)),
+                            QangObject::String(name) => Some(format!("<function>{}", name)),
                             _ => None,
                         })
                     }

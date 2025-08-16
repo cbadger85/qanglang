@@ -1,5 +1,5 @@
 use crate::{
-    CompilerPipeline, FunctionValueKind, HeapObject, ObjectHandle, ObjectHeap, SourceMap, Value,
+    CompilerPipeline, FunctionValueKind, ObjectHandle, ObjectHeap, QangObject, SourceMap, Value,
     Vm, disassemble_program,
 };
 
@@ -138,7 +138,7 @@ fn test_calling_functions_from_native() {
             match vm.call_function(function_handle, vec![Value::String(foo)]) {
                 Ok(Value::String(handle)) => {
                     let string = match vm.heap().get(handle) {
-                        Some(HeapObject::String(string)) => string,
+                        Some(QangObject::String(string)) => string,
                         _ => panic!("Not a string!"),
                     };
                     assert_eq!("foo".to_string(), string.clone().into_string());

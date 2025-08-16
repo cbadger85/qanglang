@@ -1,10 +1,6 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, hash_map::Entry},
-    rc::Rc,
-};
+use std::collections::{HashMap, hash_map::Entry};
 
-use crate::{Value, chunk::Chunk, error::ValueConversionError};
+use crate::QangObject;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Eq, Hash, PartialOrd)]
 pub struct ObjectHandle(usize);
@@ -31,92 +27,9 @@ impl From<ObjectHandle> for usize {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ClosureObject {
-    pub function: Rc<FunctionObject>,
-    pub upvalue_count: usize,
-    pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
-}
-
-impl ClosureObject {
-    pub fn new(function: Rc<FunctionObject>) -> Self {
-        let upvalue_count = function.upvalue_count;
-        let upvalues = vec![Rc::new(RefCell::new(Upvalue::Open(0))); upvalue_count];
-        Self {
-            function,
-            upvalues,
-            upvalue_count,
-        }
-    }
-}
-
-impl From<Rc<ClosureObject>> for HeapObject {
-    fn from(value: Rc<ClosureObject>) -> Self {
-        HeapObject::Closure(value)
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct FunctionObject {
-    pub arity: usize,
-    pub name: ObjectHandle,
-    pub chunk: Chunk,
-    pub upvalue_count: usize,
-}
-
-impl FunctionObject {
-    pub fn new(name: ObjectHandle, arity: usize) -> Self {
-        Self {
-            name,
-            arity,
-            chunk: Chunk::new(),
-            upvalue_count: 0,
-        }
-    }
-}
-
-impl From<FunctionObject> for HeapObject {
-    fn from(value: FunctionObject) -> Self {
-        HeapObject::Function(Rc::new(value))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Copy)]
-pub enum Upvalue {
-    Open(usize),
-    Closed(Value),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum HeapObject {
-    String(Box<str>),
-    Function(Rc<FunctionObject>),
-    Closure(Rc<ClosureObject>),
-}
-
-pub const fn get_object_value_type(value: &HeapObject) -> &'static str {
-    match value {
-        HeapObject::String(_) => "string",
-        HeapObject::Closure(_) | HeapObject::Function(_) => "function",
-    }
-}
-
-impl TryFrom<HeapObject> for Box<str> {
-    type Error = ValueConversionError;
-
-    fn try_from(value: HeapObject) -> Result<Self, Self::Error> {
-        match value {
-            HeapObject::String(string) => Ok(string),
-            _ => Err(ValueConversionError::new(
-                format!("Expected string, found {}.", get_object_value_type(&value)).as_str(),
-            )),
-        }
-    }
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
-    objects: Vec<Option<HeapObject>>,
+    objects: Vec<Option<QangObject>>,
     free_list: Vec<usize>,
     string_interner: HashMap<Box<str>, usize>,
 }
@@ -139,14 +52,14 @@ impl ObjectHeap {
             Entry::Occupied(entry) => ObjectHandle(*entry.get()),
             Entry::Vacant(entry) => {
                 let s = entry.into_key();
-                let handle = self.allocate_object(HeapObject::String(s.clone()));
+                let handle = self.allocate_object(QangObject::String(s.clone()));
                 self.string_interner.insert(s, handle.identifier());
                 handle
             }
         }
     }
 
-    pub fn allocate_object(&mut self, obj: HeapObject) -> ObjectHandle {
+    pub fn allocate_object(&mut self, obj: QangObject) -> ObjectHandle {
         #[cfg(feature = "profiler")]
         coz::progress!("heap_allocation");
         let index = if let Some(free_index) = self.free_list.pop() {
@@ -167,18 +80,18 @@ impl ObjectHeap {
         ObjectHandle(index)
     }
 
-    pub fn get(&self, handle: ObjectHandle) -> Option<&HeapObject> {
+    pub fn get(&self, handle: ObjectHandle) -> Option<&QangObject> {
         self.objects[handle.0].as_ref()
     }
 
-    pub fn get_mut(&mut self, handle: ObjectHandle) -> Option<&mut HeapObject> {
+    pub fn get_mut(&mut self, handle: ObjectHandle) -> Option<&mut QangObject> {
         self.objects[handle.0].as_mut()
     }
 
     pub fn free(&mut self, handle: ObjectHandle) {
         if let Some(obj) = self.objects[handle.0].take() {
             match obj {
-                HeapObject::String(_) => (),
+                QangObject::String(_) => (),
                 _ => self.free_list.push(handle.0),
             }
         }
@@ -198,7 +111,7 @@ impl ObjectHeap {
         }
     }
 
-    pub fn iter_objects(&self) -> impl Iterator<Item = (usize, &HeapObject)> {
+    pub fn iter_objects(&self) -> impl Iterator<Item = (usize, &QangObject)> {
         self.objects
             .iter()
             .enumerate()

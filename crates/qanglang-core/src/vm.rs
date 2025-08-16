@@ -4,12 +4,13 @@ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
 use coz;
 
 use crate::{
-    HeapObject, ObjectHeap, QangProgram, QangRuntimeError, Value,
+    QangObject, ObjectHeap, QangProgram, QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    memory::{ClosureObject, FunctionObject, ObjectHandle, Upvalue},
+    memory::ObjectHandle,
+    object::{ClosureObject, FunctionObject, Upvalue},
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_print, qang_println,
         qang_system_time, qang_to_string, qang_typeof,
@@ -450,7 +451,7 @@ impl Vm {
                             .heap
                             .get(identifier_handle)
                             .map(|obj| match &obj {
-                                HeapObject::String(string) => string.clone(),
+                                QangObject::String(string) => string.clone(),
                                 _ => "unknown".to_string().into_boxed_str(),
                             })
                             .unwrap_or("unknown".to_string().into_boxed_str());
@@ -537,7 +538,7 @@ impl Vm {
                         )),
                     }
                     .and_then(|obj| match obj {
-                        HeapObject::Function(function) => Ok(ClosureObject::new(function.clone())),
+                        QangObject::Function(function) => Ok(ClosureObject::new(function.clone())),
                         _ => Err(QangRuntimeError::new(
                             "Expected function.".to_string(),
                             self.get_previous_loc(),
@@ -559,9 +560,8 @@ impl Vm {
                         }
                     }
 
-                    let handle: ObjectHandle = self
-                        .heap
-                        .allocate_object(HeapObject::Closure(Rc::new(closure)));
+                    let handle: ObjectHandle =
+                        self.heap.allocate_object(QangObject::Closure(Rc::new(closure)));
                     push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
                 }
                 OpCode::GetUpvalue => {
@@ -712,7 +712,7 @@ impl Vm {
                     .ok_or_else(|| QangRuntimeError::new("Orphaned identifier".to_string(), loc))?;
 
                 let function = match obj {
-                    HeapObject::Closure(function) => function,
+                    QangObject::Closure(function) => function,
                     _ => {
                         return Err(QangRuntimeError::new(
                             "Value not callable.".to_string(),
@@ -799,7 +799,7 @@ impl Vm {
         })?;
 
         let closure = match obj {
-            HeapObject::Closure(closure) => closure,
+            QangObject::Closure(closure) => closure,
             _ => {
                 return Err(QangRuntimeError::new(
                     "Value not callable.".to_string(),
@@ -853,12 +853,10 @@ impl Vm {
     }
 
     fn get_identifier_name(&self, handle: ObjectHandle) -> Option<Box<str>> {
-        self.heap
-            .get(handle)
-            .and_then(|obj: &HeapObject| match &obj {
-                HeapObject::String(identifier) => Some(identifier.clone()),
-                _ => None,
-            })
+        self.heap.get(handle).and_then(|obj: &QangObject| match &obj {
+            QangObject::String(identifier) => Some(identifier.clone()),
+            _ => None,
+        })
     }
 
     pub fn heap(&self) -> &ObjectHeap {

@@ -1142,6 +1142,30 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         }
     }
 
+    fn visit_pipe_expression(
+        &mut self,
+        pipe: &ast::PipeExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        // Visit the right side (function) first
+        if let Some(right) = &pipe.right {
+            self.visit_expression(right, errors)?;
+        } else {
+            return Err(QangSyntaxError::new(
+                "Pipe expression missing right operand.".to_string(),
+                pipe.span,
+            ));
+        }
+        
+        // Visit the left side (value to be piped)
+        self.visit_expression(&pipe.left, errors)?;
+        
+        // Emit call with 1 argument (the piped value)
+        self.emit_opcode_and_byte(OpCode::Call, 1, pipe.span);
+        
+        Ok(())
+    }
+
     fn visit_class_declaration(
         &mut self,
         _class_decl: &ast::ClassDecl,

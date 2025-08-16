@@ -11,10 +11,10 @@ pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
 
     let message = args
         .get(1)
-        .and_then(|v| v.into_string(vm.heap()).ok())
-        .unwrap_or("Assertion failed.".into());
+        .map(|v| v.to_display_string(vm.heap()))
+        .unwrap_or_else(|| "Assertion failed.".to_string());
 
-    Err(NativeFunctionError(message.into_string()))
+    Err(NativeFunctionError(message))
 }
 
 pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
@@ -27,11 +27,11 @@ pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
 
     if a != b {
         let message = args
-            .get(2)
-            .and_then(|v| v.into_string(vm.heap()).ok())
-            .unwrap_or("Assertion failed.".into());
+            .get(1)
+            .map(|v| v.to_display_string(vm.heap()))
+            .unwrap_or_else(|| "Assertion failed.".to_string());
 
-        Err(NativeFunctionError(message.into_string()))
+        Err(NativeFunctionError(message))
     } else {
         Ok(None)
     }
@@ -56,8 +56,8 @@ pub fn qang_assert_throws(
         Ok(_) => {
             let message = args
                 .get(1)
-                .and_then(|v| v.into_string(vm.heap()).ok())
-                .unwrap_or("Expected function to throw, but did not.".into());
+                .map(|v| v.to_display_string(vm.heap()))
+                .unwrap_or_else(|| "Expected function to throw, but did not.".to_string());
 
             Err(NativeFunctionError::new(&message))
         }
@@ -107,7 +107,7 @@ pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     let value = args.first().copied().unwrap_or(Value::Nil);
 
     let value = value.to_display_string(vm.heap());
-    let value_handle = vm.heap_mut().intern_string(value.into_boxed_str());
+    let value_handle = vm.heap_mut().intern_string(&value);
 
     Ok(Some(Value::String(value_handle)))
 }

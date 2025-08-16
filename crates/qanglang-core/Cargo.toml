@@ -8,6 +8,7 @@ profiler = ["coz"]
 
 [dependencies]
 phf = { workspace = true }
+generational-arena = "0.2.9"
 
 [target.'cfg(unix)'.dependencies]
 coz = { workspace = true, optional = true }

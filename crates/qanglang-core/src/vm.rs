@@ -4,12 +4,12 @@ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
 use coz;
 
 use crate::{
-    QangObject, ObjectHeap, QangProgram, QangRuntimeError, Value,
+    ObjectHeap, QangProgram, QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
     error::{Trace, ValueConversionError},
-    memory::ObjectHandle,
+    memory::{ClosureHandle, FunctionHandle, StringHandle},
     object::{ClosureObject, FunctionObject, Upvalue},
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_print, qang_println,
@@ -112,7 +112,7 @@ pub struct Vm {
     frame_count: usize,
     stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
-    globals: HashMap<ObjectHandle, Value>,
+    globals: HashMap<StringHandle, Value>,
     heap: ObjectHeap,
     upvalues: Vec<(usize, Rc<RefCell<Upvalue>>)>,
 }
@@ -174,7 +174,7 @@ impl Vm {
     }
 
     pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
-        let identifier_handle = self.heap.intern_string(name.to_string().into_boxed_str());
+        let identifier_handle = self.heap.intern_string(name);
         let native_function = NativeFunction {
             name: identifier_handle,
             arity,
@@ -298,23 +298,19 @@ impl Vm {
                         (Value::Number(num1), Value::Number(num2)) => {
                             Ok(Value::Number(num1 + num2))
                         }
-                        (Value::String(_), Value::String(_)) => {
+                        (Value::String(handle1), Value::String(handle2)) => {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
 
-                            let str1: Box<str> = a
-                                .into_string(heap)
-                                .map_err(|e| BinaryOperationError::from(e))?;
+                            let str1 = heap.get_string(*handle1);
 
-                            let str2: Box<str> = b
-                                .into_string(heap)
-                                .map_err(|e| BinaryOperationError::from(e))?;
+                            let str2 = heap.get_string(*handle2);
 
                             let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
                             str1_str2.push_str(&str1);
                             str1_str2.push_str(&str2);
 
-                            let result = heap.intern_string(str1_str2.into_boxed_str());
+                            let result = heap.intern_string(&str1_str2);
                             Ok(Value::String(result))
                         }
                         (Value::Number(_), _) => {
@@ -428,7 +424,7 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
-                    let identifier_handle: ObjectHandle =
+                    let identifier_handle: StringHandle =
                         self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
@@ -438,7 +434,7 @@ impl Vm {
                     self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
-                    let identifier_handle: ObjectHandle =
+                    let identifier_handle: StringHandle =
                         self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
@@ -447,14 +443,7 @@ impl Vm {
                             })?;
                     let value = *self.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.get_previous_loc();
-                        let identifier_name = self
-                            .heap
-                            .get(identifier_handle)
-                            .map(|obj| match &obj {
-                                QangObject::String(string) => string.clone(),
-                                _ => "unknown".to_string().into_boxed_str(),
-                            })
-                            .unwrap_or("unknown".to_string().into_boxed_str());
+                        let identifier_name = self.heap.get_string(identifier_handle);
                         QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name),
                             loc,
@@ -463,7 +452,7 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
-                    let identifier_handle: ObjectHandle =
+                    let identifier_handle: StringHandle =
                         self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
@@ -471,9 +460,7 @@ impl Vm {
                             })?;
 
                     if !self.globals.contains_key(&identifier_handle) {
-                        let identifier_name = self
-                            .get_identifier_name(identifier_handle)
-                            .unwrap_or("<unknown>".to_string().into_boxed_str());
+                        let identifier_name = self.heap.get_string(identifier_handle);
                         let loc = self.get_previous_loc();
                         return Err(QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name).to_string(),
@@ -522,28 +509,17 @@ impl Vm {
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Closure => {
-                    let constant = self.read_constant();
-                    let mut closure = match constant {
-                        Value::FunctionDecl(function_handle) => {
-                            self.heap.get(function_handle).ok_or_else(|| {
+                    let handle: FunctionHandle =
+                        self.read_constant()
+                            .try_into()
+                            .map_err(|e: ValueConversionError| {
                                 QangRuntimeError::new(
-                                    "No function found.".to_string(),
+                                    e.message().to_string(),
                                     self.get_previous_loc(),
                                 )
-                            })
-                        }
-                        _ => Err(QangRuntimeError::new(
-                            "Expected function value.".to_string(),
-                            self.get_previous_loc(),
-                        )),
-                    }
-                    .and_then(|obj| match obj {
-                        QangObject::Function(function) => Ok(ClosureObject::new(function.clone())),
-                        _ => Err(QangRuntimeError::new(
-                            "Expected function.".to_string(),
-                            self.get_previous_loc(),
-                        )),
-                    })?;
+                            })?;
+                    let function = self.heap.clone_function(handle);
+                    let mut closure = ClosureObject::new(function);
 
                     for i in 0..closure.upvalue_count {
                         let is_local = self.read_byte() != 0;
@@ -560,9 +536,11 @@ impl Vm {
                         }
                     }
 
-                    let handle: ObjectHandle =
-                        self.heap.allocate_object(QangObject::Closure(Rc::new(closure)));
-                    push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
+                    let closure_handle = self.heap.allocate_closure(closure);
+                    push_value!(
+                        self,
+                        Value::Function(FunctionValueKind::Closure(closure_handle))
+                    )?;
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.read_byte() as usize;
@@ -700,39 +678,16 @@ impl Vm {
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
             Value::Function(FunctionValueKind::Closure(handle)) => {
-                let loc = if self.frame_count > 0 {
-                    self.get_previous_loc()
-                } else {
-                    SourceLocation::default()
-                };
-
-                let obj = self
-                    .heap
-                    .get(handle)
-                    .ok_or_else(|| QangRuntimeError::new("Orphaned identifier".to_string(), loc))?;
-
-                let function = match obj {
-                    QangObject::Closure(function) => function,
-                    _ => {
-                        return Err(QangRuntimeError::new(
-                            "Value not callable.".to_string(),
-                            loc,
-                        ));
-                    }
-                };
-
-                self.call(function.clone(), arg_count)
+                let closure = self.heap.clone_closure(handle);
+                self.call(closure, arg_count)
             }
             Value::Function(FunctionValueKind::NativeFunction(function)) => {
                 self.call_native_function(function, arg_count)
             }
             _ => {
-                let identifier = value
-                    .into_string(&self.heap)
-                    .ok()
-                    .unwrap_or("<unknown>".into());
+                let value_str = value.to_display_string(&self.heap);
                 Err(QangRuntimeError::new(
-                    format!("Identifier '{}' not callable.", identifier).to_string(),
+                    format!("Identifier '{}' not callable.", value_str).to_string(),
                     self.get_previous_loc(),
                 ))
             }
@@ -782,7 +737,7 @@ impl Vm {
 
     pub fn call_function(
         &mut self,
-        handle: ObjectHandle,
+        handle: ClosureHandle,
         args: Vec<Value>,
     ) -> RuntimeResult<Value> {
         let saved_stack_top = self.stack_top;
@@ -794,21 +749,9 @@ impl Vm {
             push_value!(self, *value)?;
         }
 
-        let obj = self.heap.get(handle).ok_or_else(|| {
-            QangRuntimeError::new("Orphaned identifier".to_string(), SourceLocation::default())
-        })?;
+        let closure = self.heap.clone_closure(handle);
 
-        let closure = match obj {
-            QangObject::Closure(closure) => closure,
-            _ => {
-                return Err(QangRuntimeError::new(
-                    "Value not callable.".to_string(),
-                    SourceLocation::default(),
-                ));
-            }
-        };
-
-        self.call(closure.clone(), args.len())?;
+        self.call(closure, args.len())?;
 
         match self.run() {
             Ok(return_value) => {
@@ -852,13 +795,6 @@ impl Vm {
         Ok(())
     }
 
-    fn get_identifier_name(&self, handle: ObjectHandle) -> Option<Box<str>> {
-        self.heap.get(handle).and_then(|obj: &QangObject| match &obj {
-            QangObject::String(identifier) => Some(identifier.clone()),
-            _ => None,
-        })
-    }
-
     pub fn heap(&self) -> &ObjectHeap {
         &self.heap
     }
@@ -867,7 +803,7 @@ impl Vm {
         &mut self.heap
     }
 
-    pub fn globals(&self) -> &HashMap<ObjectHandle, Value> {
+    pub fn globals(&self) -> &HashMap<StringHandle, Value> {
         &self.globals
     }
 
@@ -880,9 +816,7 @@ impl Vm {
 
         for frame_idx in frame_id_range {
             let frame = &self.frames[frame_idx];
-            let name = self
-                .get_identifier_name(frame.closure.function.name)
-                .unwrap_or("<unknown>".to_string().into_boxed_str());
+            let name = self.heap.get_string(frame.closure.function.name);
 
             let loc = if frame.ip > 0 {
                 frame

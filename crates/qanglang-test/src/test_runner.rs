@@ -1,7 +1,8 @@
 use std::{collections::HashMap, fs};
 
 use qanglang_core::{
-    CompilerPipeline, FunctionValueKind, QangObject, ObjectHandle, ObjectHeap, SourceMap, Value, Vm,
+    ClosureHandle, CompilerPipeline, FunctionValueKind, ObjectHeap, SourceMap, StringHandle, Value,
+    Vm,
 };
 
 use crate::test_file::SourceFile;
@@ -154,37 +155,30 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
 
 /// Extracts test description and test functions from the VM globals
 fn extract_test_info(
-    globals: &HashMap<ObjectHandle, Value>,
+    globals: &HashMap<StringHandle, Value>,
     heap: &ObjectHeap,
-) -> (Option<String>, Vec<(String, ObjectHandle)>) {
+) -> (Option<String>, Vec<(String, ClosureHandle)>) {
     let mut description = None;
     let mut test_functions = Vec::new();
 
     for (handle, value) in globals.iter() {
         // Get the identifier name for this global
-        let identifier = heap.get(*handle).and_then(|obj| match obj {
-            QangObject::String(name) => Some(name.as_ref()),
-            _ => None,
-        });
+        let identifier = heap.get_string(*handle);
 
-        if let Some(identifier) = identifier {
-            match value {
-                // Check if this is a test function (starts with "test_")
-                Value::Function(FunctionValueKind::Closure(func_handle)) => {
-                    if identifier.starts_with("test_") {
-                        test_functions.push((identifier.to_string(), *func_handle));
-                    }
+        match value {
+            // Check if this is a test function (starts with "test_")
+            Value::Function(FunctionValueKind::Closure(func_handle)) => {
+                if identifier.starts_with("test_") {
+                    test_functions.push((identifier.to_string(), *func_handle));
                 }
-                // Check if this is the test description
-                Value::String(string_handle) => {
-                    if identifier == "test_description" {
-                        if let Some(QangObject::String(desc)) = heap.get(*string_handle) {
-                            description = Some(desc.to_string());
-                        }
-                    }
-                }
-                _ => {}
             }
+            // Check if this is the test description
+            Value::String(string_handle) => {
+                if identifier == "test_description" {
+                    description = Some(heap.get_string(*string_handle).to_string());
+                }
+            }
+            _ => {}
         }
     }
 

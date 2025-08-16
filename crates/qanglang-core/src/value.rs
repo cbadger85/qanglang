@@ -1,10 +1,14 @@
-use crate::{NativeFn, QangObject, ObjectHeap, error::ValueConversionError, memory::ObjectHandle};
+use crate::{
+    NativeFn, ObjectHeap,
+    error::ValueConversionError,
+    memory::{ClosureHandle, FunctionHandle, StringHandle},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NativeFunction {
     pub function: NativeFn,
     pub arity: usize,
-    pub name: ObjectHandle,
+    pub name: StringHandle,
 }
 
 impl PartialEq for NativeFunction {
@@ -15,7 +19,7 @@ impl PartialEq for NativeFunction {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionValueKind {
-    Closure(ObjectHandle),
+    Closure(ClosureHandle),
     NativeFunction(NativeFunction),
 }
 
@@ -30,9 +34,9 @@ pub enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
-    String(ObjectHandle),
+    String(StringHandle),
     Function(FunctionValueKind),
-    FunctionDecl(ObjectHandle),
+    FunctionDecl(FunctionHandle),
 }
 
 impl Value {
@@ -40,50 +44,30 @@ impl Value {
         print!("{}", self.to_display_string(heap));
     }
 
+    // TODO change this to return a string slice.
     pub fn to_display_string(&self, heap: &ObjectHeap) -> String {
         match self {
             Value::Nil => "nil".to_string(),
             Value::Number(number) => number.to_string(),
-            Value::String(handle) => {
-                if let Some(QangObject::String(str)) = heap.get(*handle) {
-                    return format!("{}", str);
-                }
-                "nil".to_string()
-            }
+            Value::String(handle) => heap.get_string(*handle).to_string(),
             Value::Boolean(boolean) => boolean.to_string(),
             Value::FunctionDecl(function_handle) => {
-                let obj = heap.get(*function_handle);
+                let handle = heap.get_function(*function_handle).name;
+                let identifier = heap.get_string(handle);
 
-                let name_handle = match obj {
-                    Some(QangObject::Function(function)) => function.name,
-                    _ => {
-                        return "nil".to_string();
-                    }
-                };
-
-                match heap.get(name_handle) {
-                    Some(QangObject::String(name)) => format!("<function>{}", name),
-                    _ => "nil".to_string(),
-                }
+                format!("<function>{}", identifier)
             }
             Value::Function(function) => match function {
                 FunctionValueKind::NativeFunction(function) => {
-                    heap.get(function.name).and_then(|obj| match obj {
-                        QangObject::String(name) => Some(format!("<function>{}", name)),
-                        _ => None,
-                    })
+                    let identifier = heap.get_string(function.name);
+                    format!("<function>{}", identifier)
                 }
-                FunctionValueKind::Closure(handle) => match heap.get(*handle) {
-                    Some(QangObject::Closure(closure)) => {
-                        heap.get(closure.function.name).and_then(|obj| match obj {
-                            QangObject::String(name) => Some(format!("<function>{}", name)),
-                            _ => None,
-                        })
-                    }
-                    _ => None,
-                },
-            }
-            .unwrap_or("nil".to_string()),
+                FunctionValueKind::Closure(handle) => {
+                    let handle = heap.get_closure(*handle).function.name;
+                    let identifier = heap.get_string(handle);
+                    format!("<function>{}", identifier)
+                }
+            },
         }
     }
 
@@ -95,19 +79,6 @@ impl Value {
             Value::String(_) => STRING_TYPE_STRING,
             Value::Function(_) => FUNCTION_TYPE_STRING,
             Value::FunctionDecl(_) => FUNCTION_TYPE_STRING,
-        }
-    }
-
-    pub fn into_string(self, heap: &ObjectHeap) -> Result<Box<str>, ValueConversionError> {
-        match self {
-            Value::String(handle) => heap
-                .get(handle)
-                .cloned()
-                .ok_or(ValueConversionError::new("Expected string, found nil."))
-                .and_then(|v| v.try_into()),
-            _ => Err(ValueConversionError::new(
-                format!("Expected string, found {}.", self.to_type_string()).as_str(),
-            )),
         }
     }
 
@@ -134,23 +105,6 @@ impl TryFrom<Value> for f64 {
             Value::Number(number) => Ok(number),
             _ => Err(ValueConversionError::new(
                 format!("Expected number, found {}.", value.to_type_string()).as_str(),
-            )),
-        }
-    }
-}
-
-impl TryFrom<Value> for ObjectHandle {
-    type Error = ValueConversionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::String(handle) => Ok(handle),
-            _ => Err(ValueConversionError::new(
-                format!(
-                    "Expected referenced value, found {}.",
-                    value.to_type_string()
-                )
-                .as_str(),
             )),
         }
     }

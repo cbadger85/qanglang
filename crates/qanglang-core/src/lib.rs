@@ -18,8 +18,8 @@ pub use compiler::{
 };
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
-pub use memory::{ObjectHandle, ObjectHeap};
-pub use object::{ClosureObject, FunctionObject, QangObject, Upvalue};
+pub use memory::{ClosureHandle, FunctionHandle, ObjectHeap, StringHandle};
+pub use object::{ClosureObject, FunctionObject, Upvalue};
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};

@@ -1,6 +1,6 @@
 use crate::{
-    CompilerPipeline, FunctionValueKind, ObjectHandle, ObjectHeap, QangObject, SourceMap, Value,
-    Vm, disassemble_program,
+    CompilerPipeline, FunctionValueKind, ObjectHeap, SourceMap, Value, Vm, disassemble_program,
+    memory::ClosureHandle,
 };
 
 #[test]
@@ -96,7 +96,7 @@ fn test_calling_functions_from_native() {
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
 
-    fn find_function_handle(identifier: &str, vm: &mut Vm) -> ObjectHandle {
+    fn find_function_handle(identifier: &str, vm: &mut Vm) -> ClosureHandle {
         let function_identifier_handle = vm.heap_mut().intern_string(identifier.into());
         let (_, value) = vm
             .globals()
@@ -137,11 +137,8 @@ fn test_calling_functions_from_native() {
 
             match vm.call_function(function_handle, vec![Value::String(foo)]) {
                 Ok(Value::String(handle)) => {
-                    let string = match vm.heap().get(handle) {
-                        Some(QangObject::String(string)) => string,
-                        _ => panic!("Not a string!"),
-                    };
-                    assert_eq!("foo".to_string(), string.clone().into_string());
+                    let string = vm.heap().get_string(handle);
+                    assert_eq!("foo".to_string(), string.to_string());
                 }
                 Err(error) => {
                     println!("{}", error.message);

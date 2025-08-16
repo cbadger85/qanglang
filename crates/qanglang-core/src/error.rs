@@ -46,13 +46,16 @@ impl std::error::Error for QangSyntaxError {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Trace {
-    callee: Box<str>,
+    callee: String,
     loc: SourceLocation,
 }
 
 impl Trace {
-    pub fn new(callee: Box<str>, loc: SourceLocation) -> Self {
-        Self { callee, loc }
+    pub fn new(callee: &str, loc: SourceLocation) -> Self {
+        Self {
+            callee: callee.to_string(),
+            loc,
+        }
     }
 }
 

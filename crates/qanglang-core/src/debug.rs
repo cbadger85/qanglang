@@ -1,7 +1,6 @@
 use crate::{
     ObjectHeap, Value,
     chunk::{Chunk, OpCode},
-    object::QangObject,
 };
 
 #[allow(dead_code)]
@@ -66,11 +65,11 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
             let value = chunk.constants()[constant as usize];
             println!("{}'", value.to_display_string(&heap));
             let function_obj = match value {
-                Value::FunctionDecl(handle) => heap.get(handle),
+                Value::FunctionDecl(handle) => Some(heap.get_function(handle)),
                 _ => None,
             };
 
-            if let Some(QangObject::Function(function)) = function_obj {
+            if let Some(function) = function_obj {
                 for _j in 0..function.upvalue_count {
                     let is_local = chunk.code()[offset];
                     offset += 1;
@@ -133,23 +132,18 @@ pub fn disassemble_program(heap: &ObjectHeap) {
 
     let mut function_count = 0;
 
-    for (index, obj) in heap.iter_objects() {
-        if let QangObject::Function(function) = obj {
-            function_count += 1;
+    for (index, function) in heap.iter_functions() {
+        function_count += 1;
 
-            let function_name = match heap.get(function.name) {
-                Some(QangObject::String(name_str)) => name_str.as_ref(),
-                _ => "<anonymous>",
-            };
+        let function_name = heap.get_string(function.name);
 
-            println!(
-                "Function #{} (Object #{}) - {}:",
-                function_count, index, function_name
-            );
-            println!("  Arity: {}", function.arity);
-            disassemble_chunk(&function.chunk, heap, function_name);
-            println!();
-        }
+        println!(
+            "Function #{} (Object #{}) - {}:",
+            function_count, index, function_name
+        );
+        println!("  Arity: {}", function.arity);
+        disassemble_chunk(&function.chunk, heap, function_name);
+        println!();
     }
 
     if function_count == 0 {

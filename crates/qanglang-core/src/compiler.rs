@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use crate::{
-    ErrorReporter, QangObject, QangSyntaxError, SourceMap, Value,
+    ErrorReporter, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    memory::{ObjectHandle, ObjectHeap},
+    memory::{ObjectHeap, StringHandle},
     object::FunctionObject,
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
@@ -54,7 +54,7 @@ struct Compiler {
 }
 
 impl Compiler {
-    fn new(handle: ObjectHandle) -> Self {
+    fn new(handle: StringHandle) -> Self {
         Self {
             kind: CompilerKind::Script,
             function: FunctionObject::new(handle, 0),
@@ -66,7 +66,7 @@ impl Compiler {
         }
     }
 
-    fn push(&mut self, handle: ObjectHandle, arity: usize) -> &mut Self {
+    fn push(&mut self, handle: StringHandle, arity: usize) -> &mut Self {
         let previous = std::mem::replace(
             self,
             Self {
@@ -165,9 +165,8 @@ impl<'a> CompilerPipeline<'a> {
         match CompilerVisitor::new(self.heap).compile(program, &self.source_map, errors) {
             Ok(program) => {
                 let program = Rc::new(program);
-                self.heap
-                    .allocate_object(QangObject::Function(program.clone()));
-                Ok(QangProgram(program.clone()))
+                self.heap.allocate_function(program.clone());
+                Ok(QangProgram(program))
             }
             Err(error) => Err(CompilerError(
                 error
@@ -227,7 +226,7 @@ pub struct CompilerVisitor<'a> {
 
 impl<'a> CompilerVisitor<'a> {
     pub fn new(heap: &'a mut ObjectHeap) -> Self {
-        let handle = heap.intern_string("<script>".to_string().into_boxed_str());
+        let handle = heap.intern_string("<script>");
 
         Self {
             source_map: &DEFALT_SOURCE_MAP,
@@ -237,9 +236,7 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn reset(&mut self) {
-        let handle = self
-            .heap
-            .intern_string("<script>".to_string().into_boxed_str());
+        let handle = self.heap.intern_string("<script>");
         self.source_map = &DEFALT_SOURCE_MAP;
         self.compiler = Compiler::new(handle);
     }
@@ -443,7 +440,7 @@ impl<'a> CompilerVisitor<'a> {
 
     fn define_variable(
         &mut self,
-        handle: Option<ObjectHandle>,
+        handle: Option<StringHandle>,
         span: SourceSpan,
     ) -> Result<(), QangSyntaxError> {
         if self.compiler.scope_depth > 0 {
@@ -475,7 +472,7 @@ impl<'a> CompilerVisitor<'a> {
         &mut self,
         identifer: &str,
         span: SourceSpan,
-    ) -> Result<Option<ObjectHandle>, QangSyntaxError> {
+    ) -> Result<Option<StringHandle>, QangSyntaxError> {
         self.declare_variable(identifer, span)?;
 
         if self.compiler.scope_depth > 0 {
@@ -578,7 +575,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         string: &ast::StringLiteral,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let handle = self.heap.intern_string(string.value.to_owned());
+        let handle = self.heap.intern_string(&string.value);
         self.emit_constant(Value::String(handle), string.span)
     }
 
@@ -926,10 +923,8 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let function_identifier_handle =
             self.parse_variable(&func_decl.function.name.name, func_decl.function.span)?;
 
-        let function_name_handle = function_identifier_handle.unwrap_or_else(|| {
-            self.heap
-                .intern_string(func_decl.function.name.name.to_owned())
-        });
+        let function_name_handle = function_identifier_handle
+            .unwrap_or_else(|| self.heap.intern_string(&func_decl.function.name.name));
 
         self.compiler
             .push(function_name_handle, func_decl.function.parameters.len());
@@ -973,7 +968,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let function = compiler.function;
         let upvalue_count = function.upvalue_count;
 
-        let function_handle = self.heap.allocate_object(function.into());
+        let function_handle = self.heap.allocate_function(Rc::new(function));
         let constant_index = self.make_constant(
             Value::FunctionDecl(function_handle),
             func_decl.function.name.span,
@@ -1093,7 +1088,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let function = compiler.function;
         let upvalue_count = function.upvalue_count;
 
-        let function_handle = self.heap.allocate_object(function.into());
+        let function_handle = self.heap.allocate_function(Rc::new(function));
         let constant_index =
             self.make_constant(Value::FunctionDecl(function_handle), lambda_expr.span)?;
         self.emit_opcode_and_byte(OpCode::Closure, constant_index, lambda_expr.span);

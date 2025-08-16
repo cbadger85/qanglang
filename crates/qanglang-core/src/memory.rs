@@ -1,37 +1,60 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::{collections::HashMap, rc::Rc};
 
-use crate::QangObject;
+use generational_arena::{Arena, Index};
 
-#[derive(Debug, Clone, Copy, PartialEq, Default, Eq, Hash, PartialOrd)]
-pub struct ObjectHandle(usize);
+use crate::{ClosureObject, FunctionObject, FunctionValueKind, Value, ValueConversionError};
 
-impl ObjectHandle {
-    pub fn new(handle_id: usize) -> Self {
-        Self(handle_id)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
+pub struct StringHandle(usize);
 
-    pub fn identifier(&self) -> usize {
-        self.0
-    }
-}
+impl TryFrom<Value> for StringHandle {
+    type Error = ValueConversionError;
 
-impl From<usize> for ObjectHandle {
-    fn from(value: usize) -> Self {
-        ObjectHandle(value)
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::String(handle) => Ok(handle),
+            _ => Err(ValueConversionError::new("Expected string.")),
+        }
     }
 }
 
-impl From<ObjectHandle> for usize {
-    fn from(value: ObjectHandle) -> Self {
-        value.0
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+pub struct ClosureHandle(Index);
+
+impl TryFrom<Value> for ClosureHandle {
+    type Error = ValueConversionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Function(kind) => match kind {
+                FunctionValueKind::Closure(handle) => Ok(handle),
+                _ => Err(ValueConversionError::new("Expected function.")),
+            },
+            _ => Err(ValueConversionError::new("Expected function.")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+pub struct FunctionHandle(usize);
+
+impl TryFrom<Value> for FunctionHandle {
+    type Error = ValueConversionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::FunctionDecl(handle) => Ok(handle),
+            _ => Err(ValueConversionError::new("Expected function.")),
+        }
     }
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
-    objects: Vec<Option<QangObject>>,
-    free_list: Vec<usize>,
-    string_interner: HashMap<Box<str>, usize>,
+    strings: Vec<String>,
+    functions: Vec<Rc<FunctionObject>>,
+    closures: Arena<Rc<ClosureObject>>,
+    string_interner: HashMap<String, StringHandle>,
 }
 
 impl ObjectHeap {
@@ -41,80 +64,81 @@ impl ObjectHeap {
 
     pub fn with_capacity(initial_capacity: usize) -> Self {
         Self {
-            objects: Vec::with_capacity(initial_capacity),
-            free_list: Vec::new(),
             string_interner: HashMap::new(),
+            functions: Vec::with_capacity(initial_capacity),
+            closures: Arena::with_capacity(initial_capacity),
+            strings: Vec::with_capacity(initial_capacity),
         }
     }
 
-    pub fn intern_string(&mut self, s: Box<str>) -> ObjectHandle {
-        match self.string_interner.entry(s) {
-            Entry::Occupied(entry) => ObjectHandle(*entry.get()),
-            Entry::Vacant(entry) => {
-                let s = entry.into_key();
-                let handle = self.allocate_object(QangObject::String(s.clone()));
-                self.string_interner.insert(s, handle.identifier());
-                handle
-            }
-        }
-    }
-
-    pub fn allocate_object(&mut self, obj: QangObject) -> ObjectHandle {
-        #[cfg(feature = "profiler")]
-        coz::progress!("heap_allocation");
-        let index = if let Some(free_index) = self.free_list.pop() {
-            self.objects[free_index] = Some(obj);
-            free_index
+    pub fn intern_string(&mut self, s: &str) -> StringHandle {
+        if self.string_interner.contains_key(s) {
+            self.string_interner[s]
         } else {
-            if self.objects.len() == self.objects.capacity() {
-                let new_capacity = if self.objects.capacity() == 0 {
+            if self.strings.len() == self.strings.capacity() {
+                let new_capacity = if self.strings.capacity() == 0 {
                     64
                 } else {
-                    self.objects.capacity() * 2
+                    self.strings.capacity() * 2
                 };
-                self.objects.reserve(new_capacity - self.objects.capacity());
+                self.strings.reserve(new_capacity - self.strings.capacity());
             }
-            self.objects.push(Some(obj));
-            self.objects.len() - 1
-        };
-        ObjectHandle(index)
-    }
+            self.strings.push(s.to_string());
+            let handle = StringHandle(self.strings.len() - 1);
 
-    pub fn get(&self, handle: ObjectHandle) -> Option<&QangObject> {
-        self.objects[handle.0].as_ref()
-    }
+            self.string_interner.insert(s.to_string(), handle);
 
-    pub fn get_mut(&mut self, handle: ObjectHandle) -> Option<&mut QangObject> {
-        self.objects[handle.0].as_mut()
-    }
-
-    pub fn free(&mut self, handle: ObjectHandle) {
-        if let Some(obj) = self.objects[handle.0].take() {
-            match obj {
-                QangObject::String(_) => (),
-                _ => self.free_list.push(handle.0),
-            }
+            handle
         }
+    }
+
+    pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
+        let index = self.closures.insert(Rc::new(closure));
+        ClosureHandle(index)
+    }
+
+    pub fn allocate_function(&mut self, function: Rc<FunctionObject>) -> FunctionHandle {
+        if self.functions.len() == self.functions.capacity() {
+            let new_capacity = if self.functions.capacity() == 0 {
+                64
+            } else {
+                self.functions.capacity() * 2
+            };
+            self.functions
+                .reserve(new_capacity - self.functions.capacity());
+        }
+        self.functions.push(function);
+        FunctionHandle(self.functions.len() - 1)
+    }
+
+    pub fn get_string(&self, handle: StringHandle) -> &str {
+        &self.strings[handle.0]
+    }
+
+    pub fn clone_function(&self, handle: FunctionHandle) -> Rc<FunctionObject> {
+        self.functions[handle.0].clone()
+    }
+
+    pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
+        &self.functions[handle.0]
+    }
+
+    pub fn clone_closure(&self, handle: ClosureHandle) -> Rc<ClosureObject> {
+        self.closures[handle.0].clone()
+    }
+
+    pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
+        &self.closures[handle.0]
     }
 
     pub fn garbage_collect(&mut self) {
-        for (index, obj) in self.objects.iter().enumerate() {
-            match obj {
-                Some(_obj) => todo!(
-                    "Check if object is in use, if it is not, free it using the index of {}",
-                    index
-                ),
-                _ => {
-                    continue;
-                }
-            }
-        }
+        todo!();
     }
 
-    pub fn iter_objects(&self) -> impl Iterator<Item = (usize, &QangObject)> {
-        self.objects
+    pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {
+        self.functions
             .iter()
             .enumerate()
-            .filter_map(|(index, obj_opt)| obj_opt.as_ref().map(|obj| (index, obj)))
+            .map(|(index, obj)| ((index, obj.as_ref())))
     }
 }

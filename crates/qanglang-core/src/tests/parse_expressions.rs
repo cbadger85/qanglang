@@ -2665,3 +2665,15 @@ fn test_lambda_as_expression() {
 
     assert_no_parse_errors(&errors);
 }
+
+#[test]
+fn test_lambda_as_immediately_invoked_expression() {
+    let source_code = r#"
+            var test = (() -> nil)();
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (_program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}

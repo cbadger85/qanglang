@@ -62,21 +62,21 @@ impl Value {
                 };
 
                 match heap.get(name_handle) {
-                    Some(HeapObject::String(name)) => name.to_string(),
+                    Some(HeapObject::String(name)) => format!("<function>{}", name),
                     _ => "nil".to_string(),
                 }
             }
             Value::Function(function) => match function {
                 FunctionValueKind::NativeFunction(function) => {
                     heap.get(function.name).and_then(|obj| match obj {
-                        HeapObject::String(str) => Some(str.to_string()),
+                        HeapObject::String(name) => Some(format!("<function>{}", name)),
                         _ => None,
                     })
                 }
                 FunctionValueKind::Closure(handle) => match heap.get(*handle) {
                     Some(HeapObject::Closure(closure)) => {
                         heap.get(closure.function.name).and_then(|obj| match obj {
-                            HeapObject::String(str) => Some(str.to_string()),
+                            HeapObject::String(name) => Some(format!("<function>{}", name)),
                             _ => None,
                         })
                     }

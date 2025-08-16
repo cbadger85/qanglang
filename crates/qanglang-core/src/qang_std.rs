@@ -87,7 +87,10 @@ pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
     Ok(Some(Value::String(handle)))
 }
 
-pub fn system_time(_args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_system_time(
+    _args: &[Value],
+    _vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let start = SystemTime::now();
@@ -97,12 +100,14 @@ pub fn system_time(_args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, Nativ
 
     let time: f64 = since_the_epoch.as_millis() as f64;
 
-    // println!("naive time is: {}", time);
-
     Ok(Some(time.into()))
 }
 
-mod tests {
-    #[test]
-    fn test_qang_assert() {}
+pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let value = args.first().copied().unwrap_or(Value::Nil);
+
+    let value = value.to_display_string(vm.heap());
+    let value_handle = vm.heap_mut().intern_string(value.into_boxed_str());
+
+    Ok(Some(Value::String(value_handle)))
 }

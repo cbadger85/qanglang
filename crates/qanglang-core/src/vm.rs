@@ -618,6 +618,10 @@ impl Vm {
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = get_current_frame!(self).value_slot;
+                    
+                    // Close upvalues for the current function's locals
+                    self.close_upvalue(value_slot);
+                    
                     self.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]

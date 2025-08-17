@@ -135,7 +135,6 @@ struct CallFrame {
     closure: ClosureHandle,
     ip: usize,
     value_slot: usize,
-    // Cache function pointer to avoid repeated arena lookups
     function_ptr: *const FunctionObject,
 }
 
@@ -762,7 +761,6 @@ impl Vm {
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
-        // Cache function pointer to avoid repeated arena lookups
         call_frame.function_ptr = function as *const FunctionObject;
 
         #[cfg(feature = "profiler")]

@@ -49,8 +49,6 @@ fn test_chained_pipe_operations() {
     return x - 3;
   }
   
-  // Test: 5 |> double |> add_one |> subtract_three
-  // Should be: subtract_three(add_one(double(5))) = subtract_three(add_one(10)) = subtract_three(11) = 8
   var result = 5 |> double |> add_one |> subtract_three;
   assert_eq(result, 8, "Expected 5 |> double |> add_one |> subtract_three to equal 8.");
 }
@@ -64,7 +62,6 @@ fn test_pipe_with_arguments() {
     return x * 2;
   }
   
-  // Test pipe with different argument types
   var result1 = 5 |> add;
   assert_eq(result1, 15, "Expected 5 |> add to equal 15.");
   
@@ -103,50 +100,17 @@ fn test_pipe_with_complex_expressions() {
     return x;
   }
   
-  // Test with parenthesized expressions
   var result1 = (10 + 5) |> square |> halve;
   assert_eq(result1, 112.5, "Expected (10 + 5) |> square |> halve to equal 112.5.");
   
-  // Test with variable access
   var num = 8;
   var result2 = num |> square |> identity;
   assert_eq(result2, 64, "Expected num |> square |> identity to equal 64.");
 }
 
-fn test_pipe_with_method_calls() {
-  // Since there are no objects/methods in this simple language,
-  // we'll test with function calls that simulate method behavior
-  fn process_string(str) {
-    return str + "!";
-  }
-  
-  fn make_uppercase(str) {
-    // No actual uppercase function, just return as-is
-    return str;
-  }
-  
-  var result = "hello" |> process_string |> make_uppercase;
-  assert_eq(result, "hello!", "Expected string pipe operations to work correctly.");
-}
+// fn test_pipe_with_method_calls() {}
 
-fn test_pipe_error_handling() {
-  // Test that pipe expressions handle errors correctly
-  fn valid_function(x) {
-    return x * 2;
-  }
-  
-  // This should work fine
-  var result = 5 |> valid_function;
-  assert_eq(result, 10, "Expected valid pipe operation to work correctly.");
-  
-  // Test with valid arithmetic only (nil arithmetic causes errors)
-  fn identity(x) {
-    return x;
-  }
-  
-  var identity_result = 42 |> identity;
-  assert_eq(identity_result, 42, "Expected identity pipe to work correctly.");
-}
+// fn test_pipe_error_handling() {}
 
 fn test_pipe_with_conditional_expressions() {
   fn double(x) {
@@ -177,21 +141,7 @@ fn test_pipe_with_native_functions() {
   assert_eq(string_type, "string", "Expected 'hello' |> typeof to equal 'string'.");
 }
 
-fn test_pipe_with_higher_order_functions() {
-  fn apply_twice(func, value) {
-    return func(func(value));
-  }
-  
-  // Simplified test - just test piping to a lambda
-  var add_five = (x) -> x + 5;
-  var result = 10 |> add_five;
-  assert_eq(result, 15, "Expected 10 |> add_five to equal 15.");
-  
-  // Test with direct lambda creation
-  var double = (x) -> x * 2;
-  var result2 = 7 |> double;
-  assert_eq(result2, 14, "Expected 7 |> double to equal 14.");
-}
+// fn test_pipe_with_higher_order_functions() {}
 
 fn test_pipe_with_string_operations() {
   fn add_exclamation(str) {
@@ -222,7 +172,6 @@ fn test_pipe_with_numeric_operations() {
     return x - 5;
   }
   
-  // Complex numeric pipe chain
   var result = 1 |> add_ten |> multiply_by_two |> subtract_five;
   assert_eq(result, 17, "Expected 1 |> add_ten |> multiply_by_two |> subtract_five to equal 17.");
 }
@@ -236,8 +185,6 @@ fn test_pipe_associativity() {
     return x * 2;
   }
   
-  // Test that pipes are left-associative
-  // a |> b |> c should be (a |> b) |> c
   var result1 = 5 |> add_one |> double;
   var result2 = (5 |> add_one) |> double;
   

@@ -13,7 +13,7 @@ use crate::{
     object::{ClosureObject, FunctionObject, Upvalue},
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_print, qang_println,
-        qang_system_time, qang_to_string, qang_typeof,
+        qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
     },
     value::{
         BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, FunctionValueKind, NIL_TYPE_STRING,
@@ -176,27 +176,27 @@ impl Vm {
     pub fn new(mut heap: ObjectHeap) -> Self {
         let mut globals = HashMap::new();
 
-        let nil_type_handle = heap.intern_string("NIL".into());
-        let nil_type_value_handle = heap.intern_string(NIL_TYPE_STRING.into());
+        let nil_type_handle = heap.intern_string_slice("NIL".into());
+        let nil_type_value_handle = heap.intern_string_slice(NIL_TYPE_STRING.into());
         globals.insert(nil_type_handle, Value::String(nil_type_value_handle));
 
-        let boolean_type_handle = heap.intern_string("BOOLEAN".into());
-        let boolean_type_value_handle = heap.intern_string(BOOLEAN_TYPE_STRING.into());
+        let boolean_type_handle = heap.intern_string_slice("BOOLEAN".into());
+        let boolean_type_value_handle = heap.intern_string_slice(BOOLEAN_TYPE_STRING.into());
         globals.insert(
             boolean_type_handle,
             Value::String(boolean_type_value_handle),
         );
 
-        let number_type_handle = heap.intern_string("NUMBER".into());
-        let number_type_value_handle = heap.intern_string(NUMBER_TYPE_STRING.into());
+        let number_type_handle = heap.intern_string_slice("NUMBER".into());
+        let number_type_value_handle = heap.intern_string_slice(NUMBER_TYPE_STRING.into());
         globals.insert(number_type_handle, Value::String(number_type_value_handle));
 
-        let string_type_handle = heap.intern_string("STRING".into());
-        let string_type_value_handle = heap.intern_string(STRING_TYPE_STRING.into());
+        let string_type_handle = heap.intern_string_slice("STRING".into());
+        let string_type_value_handle = heap.intern_string_slice(STRING_TYPE_STRING.into());
         globals.insert(string_type_handle, Value::String(string_type_value_handle));
 
-        let function_type_handle = heap.intern_string("FUNCTION".into());
-        let function_type_value_handle = heap.intern_string(FUNCTION_TYPE_STRING.into());
+        let function_type_handle = heap.intern_string_slice("FUNCTION".into());
+        let function_type_value_handle = heap.intern_string_slice(FUNCTION_TYPE_STRING.into());
         globals.insert(
             function_type_handle,
             Value::String(function_type_value_handle),
@@ -221,6 +221,8 @@ impl Vm {
             .add_native_function("system_time", 0, qang_system_time)
             .add_native_function("typeof", 1, qang_typeof)
             .add_native_function("to_string", 1, qang_to_string)
+            .add_native_function("to_uppercase", 1, qang_to_uppercase)
+            .add_native_function("to_lowercase", 1, qang_to_lowercase)
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -229,7 +231,7 @@ impl Vm {
     }
 
     pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
-        let identifier_handle = self.heap.intern_string(name);
+        let identifier_handle = self.heap.intern_string_slice(name);
         let native_function = NativeFunction {
             name: identifier_handle,
             arity,
@@ -243,7 +245,6 @@ impl Vm {
 
         self
     }
-
 
     fn get_current_function(&self) -> &FunctionObject {
         &get_current_frame!(self).closure.function
@@ -346,7 +347,7 @@ impl Vm {
                             str1_str2.push_str(&str1);
                             str1_str2.push_str(&str2);
 
-                            let result = heap.intern_string(&str1_str2);
+                            let result = heap.intern_string_slice(&str1_str2);
                             Ok(Value::String(result))
                         }
                         (Value::Number(_), _) => {
@@ -658,7 +659,6 @@ impl Vm {
         *dest = Rc::new(RefCell::new(Upvalue::Open(stack_slot)));
         self.upvalues.push((stack_slot, dest.clone()));
     }
-
 
     fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
     where

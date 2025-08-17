@@ -71,7 +71,7 @@ impl ObjectHeap {
         }
     }
 
-    pub fn intern_string(&mut self, s: &str) -> StringHandle {
+    pub fn intern_string_slice(&mut self, s: &str) -> StringHandle {
         if self.string_interner.contains_key(s) {
             self.string_interner[s]
         } else {
@@ -87,6 +87,27 @@ impl ObjectHeap {
             let handle = StringHandle(self.strings.len() - 1);
 
             self.string_interner.insert(s.to_string(), handle);
+
+            handle
+        }
+    }
+
+    pub fn intern_string(&mut self, s: String) -> StringHandle {
+        if self.string_interner.contains_key(&s) {
+            self.string_interner[&s]
+        } else {
+            if self.strings.len() == self.strings.capacity() {
+                let new_capacity = if self.strings.capacity() == 0 {
+                    64
+                } else {
+                    self.strings.capacity() * 2
+                };
+                self.strings.reserve(new_capacity - self.strings.capacity());
+            }
+            self.strings.push(s.clone());
+            let handle = StringHandle(self.strings.len() - 1);
+
+            self.string_interner.insert(s, handle);
 
             handle
         }

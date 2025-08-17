@@ -226,7 +226,7 @@ pub struct CompilerVisitor<'a> {
 
 impl<'a> CompilerVisitor<'a> {
     pub fn new(heap: &'a mut ObjectHeap) -> Self {
-        let handle = heap.intern_string("<script>");
+        let handle = heap.intern_string_slice("<script>");
 
         Self {
             source_map: &DEFALT_SOURCE_MAP,
@@ -236,7 +236,7 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn reset(&mut self) {
-        let handle = self.heap.intern_string("<script>");
+        let handle = self.heap.intern_string_slice("<script>");
         self.source_map = &DEFALT_SOURCE_MAP;
         self.compiler = Compiler::new(handle);
     }
@@ -478,7 +478,7 @@ impl<'a> CompilerVisitor<'a> {
         if self.compiler.scope_depth > 0 {
             Ok(None)
         } else {
-            Ok(Some(self.heap.intern_string(identifer.into())))
+            Ok(Some(self.heap.intern_string_slice(identifer.into())))
         }
     }
 
@@ -494,7 +494,7 @@ impl<'a> CompilerVisitor<'a> {
             } else if let Some(index) = self.resolve_upvalue(handle, span)? {
                 (index as u8, OpCode::GetUpvalue, OpCode::SetUpvalue)
             } else {
-                let handle = self.heap.intern_string(handle.into());
+                let handle = self.heap.intern_string_slice(handle.into());
                 let index = self.make_constant(Value::String(handle), span)?;
                 (index, OpCode::GetGlobal, OpCode::SetGlobal)
             }
@@ -575,7 +575,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         string: &ast::StringLiteral,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let handle = self.heap.intern_string(&string.value);
+        let handle = self.heap.intern_string_slice(&string.value);
         self.emit_constant(Value::String(handle), string.span)
     }
 
@@ -924,7 +924,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.parse_variable(&func_decl.function.name.name, func_decl.function.span)?;
 
         let function_name_handle = function_identifier_handle
-            .unwrap_or_else(|| self.heap.intern_string(&func_decl.function.name.name));
+            .unwrap_or_else(|| self.heap.intern_string_slice(&func_decl.function.name.name));
 
         self.compiler
             .push(function_name_handle, func_decl.function.parameters.len());
@@ -1033,7 +1033,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         lambda_expr: &ast::LambdaExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let lambda_name_handle = self.heap.intern_string("<anonymous>".into());
+        let lambda_name_handle = self.heap.intern_string_slice("<anonymous>".into());
 
         self.compiler
             .push(lambda_name_handle, lambda_expr.parameters.len());

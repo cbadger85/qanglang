@@ -27,7 +27,7 @@ pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
 
     if a != b {
         let message = args
-            .get(1)
+            .get(2)
             .map(|v| v.to_display_string(vm.heap()))
             .unwrap_or_else(|| "Assertion failed.".to_string());
 
@@ -82,7 +82,9 @@ pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Native
 pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
 
-    let handle = vm.heap_mut().intern_string(value.to_type_string().into());
+    let handle = vm
+        .heap_mut()
+        .intern_string_slice(value.to_type_string().into());
 
     Ok(Some(Value::String(handle)))
 }
@@ -107,7 +109,45 @@ pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     let value = args.first().copied().unwrap_or(Value::Nil);
 
     let value = value.to_display_string(vm.heap());
-    let value_handle = vm.heap_mut().intern_string(&value);
+    let value_handle = vm.heap_mut().intern_string_slice(&value);
 
     Ok(Some(Value::String(value_handle)))
+}
+
+pub fn qang_to_uppercase(
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let value = args.first().copied().unwrap_or(Value::Nil);
+
+    if let Value::String(handle) = value {
+        let uppercase_string = vm.heap().get_string(handle).to_uppercase();
+        let uppercase_handle = vm.heap_mut().intern_string(uppercase_string);
+
+        Ok(Some(Value::String(uppercase_handle)))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            value.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_to_lowercase(
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let value = args.first().copied().unwrap_or(Value::Nil);
+
+    if let Value::String(handle) = value {
+        let lowercase_string = vm.heap().get_string(handle).to_lowercase();
+        let lowercase_handle = vm.heap_mut().intern_string(lowercase_string);
+
+        Ok(Some(Value::String(lowercase_handle)))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            value.to_type_string()
+        )))
+    }
 }

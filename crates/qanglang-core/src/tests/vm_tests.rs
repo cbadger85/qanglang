@@ -97,7 +97,7 @@ fn test_calling_functions_from_native() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     fn find_function_handle(identifier: &str, vm: &mut Vm) -> ClosureHandle {
-        let function_identifier_handle = vm.heap_mut().intern_string(identifier.into());
+        let function_identifier_handle = vm.heap_mut().intern_string_slice(identifier.into());
         let (_, value) = vm
             .globals()
             .iter()
@@ -133,7 +133,7 @@ fn test_calling_functions_from_native() {
                 _ => panic!("Unexpected type conversion."),
             }
 
-            let foo = vm.heap_mut().intern_string("foo".into());
+            let foo = vm.heap_mut().intern_string_slice("foo".into());
 
             match vm.call_function(function_handle, vec![Value::String(foo)]) {
                 Ok(Value::String(handle)) => {

@@ -266,3 +266,44 @@ fn test_immediately_invoked_functional_expressions() {
         }
     }
 }
+
+#[test]
+fn test_closures() {
+    let source = r#"
+        fn make_counter() {
+            var count = 0;
+            return () -> {
+                count = count + 1;
+                return count;
+            };
+        }
+ 
+        fn perform_count() {
+            var counter = make_counter();
+            return count();
+        }
+
+        assert_eq(perform_count(), 1);
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            disassemble_program(&heap);
+            match Vm::new(heap).set_debug(true).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

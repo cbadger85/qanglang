@@ -88,14 +88,14 @@ macro_rules! push_value {
 }
 
 macro_rules! pop_value {
-    ($vm:expr) => {
-        if $vm.stack_top > 0 {
-            $vm.stack_top -= 1;
-            $vm.stack[$vm.stack_top]
-        } else {
-            panic!("Stack underflow: unexpected empty stack.")
-        }
-    };
+    ($vm:expr) => {{
+        debug_assert!(
+            $vm.stack_top > 0,
+            "Stack underflow: unexpected empty stack."
+        );
+        $vm.stack_top -= 1;
+        $vm.stack[$vm.stack_top]
+    }};
 }
 
 macro_rules! get_current_frame {

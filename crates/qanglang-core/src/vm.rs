@@ -112,8 +112,9 @@ macro_rules! get_current_frame_mut {
 
 macro_rules! get_current_closure {
     ($vm:expr) => {{
-        let handle = get_current_frame!($vm).closure;
-        $vm.heap.get_closure(handle)
+        let frame = get_current_frame!($vm);
+        debug_assert!(!frame.closure_ptr.is_null(), "Closure pointer is null");
+        unsafe { &*frame.closure_ptr }
     }};
 }
 
@@ -130,11 +131,32 @@ macro_rules! peek {
     };
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct CallFrame {
     closure: ClosureHandle,
     ip: usize,
     value_slot: usize,
+    // Cache frequently accessed pointers to avoid repeated arena lookups
+    closure_ptr: *const ClosureObject,
+    code_ptr: *const u8,
+    code_len: usize,
+    constants_ptr: *const Value,
+    constants_len: usize,
+}
+
+impl Default for CallFrame {
+    fn default() -> Self {
+        Self {
+            closure: ClosureHandle::default(),
+            ip: 0,
+            value_slot: 0,
+            closure_ptr: std::ptr::null(),
+            code_ptr: std::ptr::null(),
+            code_len: 0,
+            constants_ptr: std::ptr::null(),
+            constants_len: 0,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -224,8 +246,9 @@ impl Vm {
     }
 
     fn get_current_function(&self) -> &FunctionObject {
-        let closure_handle = get_current_frame!(self).closure;
-        &self.heap.get_closure(closure_handle).function
+        let frame = get_current_frame!(self);
+        debug_assert!(!frame.closure_ptr.is_null(), "Closure pointer is null");
+        unsafe { &(*frame.closure_ptr).function }
     }
 
     fn get_current_loc(&self) -> SourceLocation {
@@ -250,19 +273,18 @@ impl Vm {
     }
 
     fn read_byte(&mut self) -> u8 {
-        let handle = get_current_frame!(self).closure;
-        let closure = self.heap.get_closure(handle);
-        let byte = closure.function.chunk.code()[get_current_frame!(self).ip];
-        get_current_frame_mut!(self).ip += 1;
+        let frame = get_current_frame_mut!(self);
+        debug_assert!(frame.ip < frame.code_len, "IP out of bounds");
+        let byte = unsafe { *frame.code_ptr.add(frame.ip) };
+        frame.ip += 1;
         byte
     }
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_byte() as usize;
-        let handle = get_current_frame!(self).closure;
-        let closure = self.heap.get_closure(handle);
-        let constants = closure.function.chunk.constants();
-        constants[index]
+        let frame = &self.frames[self.frame_count - 1];
+        debug_assert!(index < frame.constants_len, "Constant index out of bounds");
+        unsafe { *frame.constants_ptr.add(index) }
     }
 
     fn read_short(&mut self) -> usize {
@@ -734,9 +756,20 @@ impl Vm {
         let value_slot = self.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
         let call_frame = get_current_frame_mut!(self);
 
+        // Get closure and cache pointers for fast access during execution
+        let closure = self.heap.get_closure(closure_handle);
+        let code_slice = closure.function.chunk.code();
+        let constants_slice = closure.function.chunk.constants();
+
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
+        // Cache pointers to avoid repeated arena lookups and derefs
+        call_frame.closure_ptr = closure as *const ClosureObject;
+        call_frame.code_ptr = code_slice.as_ptr();
+        call_frame.code_len = code_slice.len();
+        call_frame.constants_ptr = constants_slice.as_ptr();
+        call_frame.constants_len = constants_slice.len();
 
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");

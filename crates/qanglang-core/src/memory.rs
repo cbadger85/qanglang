@@ -131,11 +131,40 @@ impl ObjectHeap {
     }
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
+        if self.closures.len() == self.closures.capacity() {
+            let new_capacity = if self.closures.capacity() == 0 {
+                64
+            } else {
+                self.closures.capacity() * 2
+            };
+
+            self.closures
+                .reserve(new_capacity - self.closures.capacity());
+        }
+        let index = self.closures.insert(closure);
+        ClosureHandle(index)
+    }
+
+    pub fn force_allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
         let index = self.closures.insert(closure);
         ClosureHandle(index)
     }
 
     pub fn allocate_value(&mut self, value: Value) -> ValueHandle {
+        if self.values.len() == self.values.capacity() {
+            let new_capacity = if self.values.capacity() == 0 {
+                64
+            } else {
+                self.values.capacity() * 2
+            };
+
+            self.values.reserve(new_capacity - self.values.capacity());
+        }
+        let index = self.values.insert(value);
+        ValueHandle(index)
+    }
+
+    pub fn force_allocate_value(&mut self, value: Value) -> ValueHandle {
         let index = self.values.insert(value);
         ValueHandle(index)
     }
@@ -182,8 +211,16 @@ impl ObjectHeap {
         &mut self.values[handle.0]
     }
 
-    pub fn garbage_collect(&mut self) {
-        todo!();
+    pub fn can_allocate_closure(&self) -> bool {
+        self.closures.len() < self.closures.capacity() - 16
+    }
+
+    pub fn can_allocate_value(&self) -> bool {
+        self.values.len() < self.values.capacity() - 16
+    }
+
+    pub fn garbage_collect(&mut self, _roots: &[Value]) {
+        todo!("Implement mark and sweep garbage collection using provided roots");
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {

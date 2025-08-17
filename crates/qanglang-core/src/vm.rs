@@ -75,17 +75,17 @@ type OpenUpvalueEntry = (StackSlot, Vec<(ClosureHandle, UpvalueIndex)>);
 
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {
-        if $vm.stack_top >= STACK_MAX {
+        if $vm.state.stack_top >= STACK_MAX {
             Err(QangRuntimeError::new(
                 format!(
                     "Stack overflow: maximum stack size of {} exceeded",
                     STACK_MAX
                 ),
-                $vm.get_current_loc(),
+                $vm.state.get_current_loc(),
             ))
         } else {
-            $vm.stack[$vm.stack_top] = $value;
-            $vm.stack_top += 1;
+            $vm.state.stack[$vm.state.stack_top] = $value;
+            $vm.state.stack_top += 1;
             Ok(())
         }
     };
@@ -94,23 +94,35 @@ macro_rules! push_value {
 macro_rules! pop_value {
     ($vm:expr) => {{
         debug_assert!(
-            $vm.stack_top > 0,
+            $vm.state.stack_top > 0,
             "Stack underflow: unexpected empty stack."
         );
-        $vm.stack_top -= 1;
-        $vm.stack[$vm.stack_top]
+        $vm.state.stack_top -= 1;
+        $vm.state.stack[$vm.state.stack_top]
     }};
 }
 
 macro_rules! get_current_frame {
     ($vm:expr) => {
-        &$vm.frames[$vm.frame_count - 1]
+        &$vm.state.frames[$vm.state.frame_count - 1]
     };
 }
 
 macro_rules! get_current_frame_mut {
     ($vm:expr) => {
-        &mut $vm.frames[$vm.frame_count - 1]
+        &mut $vm.state.frames[$vm.state.frame_count - 1]
+    };
+}
+
+macro_rules! get_current_frame_state {
+    ($state:expr) => {
+        &$state.frames[$state.frame_count - 1]
+    };
+}
+
+macro_rules! get_current_frame_mut_state {
+    ($state:expr) => {
+        &mut $state.frames[$state.frame_count - 1]
     };
 }
 
@@ -123,15 +135,34 @@ macro_rules! get_current_closure {
 
 macro_rules! peek {
     ($vm:expr, $distance:expr) => {
-        if $vm.stack_top > $distance {
-            $vm.stack
-                .get($vm.stack_top - 1 - $distance)
+        if $vm.state.stack_top > $distance {
+            $vm.state
+                .stack
+                .get($vm.state.stack_top - 1 - $distance)
                 .copied()
                 .unwrap_or(Value::Nil)
         } else {
             Value::Nil
         }
     };
+}
+
+macro_rules! gc_allocate {
+    // Closure allocation
+    ($vm:expr, closure: $value:expr) => {{
+        if !$vm.heap.can_allocate_closure() {
+            $vm.collect_garbage();
+        }
+        $vm.heap.force_allocate_closure($value)
+    }};
+
+    // Value allocation
+    ($vm:expr, value: $value:expr) => {{
+        if !$vm.heap.can_allocate_value() {
+            $vm.collect_garbage();
+        }
+        $vm.heap.force_allocate_value($value)
+    }};
 }
 
 #[derive(Debug, Clone)]
@@ -152,16 +183,104 @@ impl Default for CallFrame {
 }
 
 #[derive(Clone)]
-pub struct Vm {
-    is_debug: bool,
+pub struct VmState {
     stack_top: usize,
     frame_count: usize,
     stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
     globals: HashMap<StringHandle, Value>,
-    heap: ObjectHeap,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
+}
+
+#[derive(Clone)]
+pub struct Vm {
+    is_debug: bool,
+    state: VmState,
+    heap: ObjectHeap,
+}
+
+impl VmState {
+    fn get_current_function(&self) -> &FunctionObject {
+        debug_assert!(
+            !self.current_function_ptr.is_null(),
+            "Function pointer is null"
+        );
+        unsafe { &*self.current_function_ptr }
+    }
+
+    fn get_current_loc(&self) -> SourceLocation {
+        self.get_loc_at(get_current_frame_state!(self).ip)
+    }
+
+    fn get_previous_loc(&self) -> SourceLocation {
+        if get_current_frame_state!(self).ip > 0 {
+            self.get_loc_at(get_current_frame_state!(self).ip - 1)
+        } else {
+            SourceLocation::default()
+        }
+    }
+
+    fn get_loc_at(&self, index: usize) -> SourceLocation {
+        self.get_current_function()
+            .chunk
+            .locs()
+            .get(index)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    fn read_byte(&mut self) -> u8 {
+        let frame = get_current_frame_mut_state!(self);
+        debug_assert!(
+            !self.current_function_ptr.is_null(),
+            "Function pointer is null"
+        );
+        let code = unsafe { (*self.current_function_ptr).chunk.code() };
+        debug_assert!(frame.ip < code.len(), "IP out of bounds");
+        let byte = code[frame.ip];
+        frame.ip += 1;
+        byte
+    }
+
+    fn read_constant(&mut self) -> Value {
+        let index = self.read_byte() as usize;
+        debug_assert!(
+            !self.current_function_ptr.is_null(),
+            "Function pointer is null"
+        );
+        let constants = unsafe { (*self.current_function_ptr).chunk.constants() };
+        debug_assert!(index < constants.len(), "Constant index out of bounds");
+        constants[index]
+    }
+
+    fn read_short(&mut self) -> usize {
+        let high_byte = self.read_byte() as usize;
+        let low_byte = self.read_byte() as usize;
+        (high_byte << 8) | low_byte
+    }
+
+    pub fn gather_roots(&self) -> Vec<Value> {
+        let mut roots = Vec::new();
+
+        // Stack roots
+        roots.extend_from_slice(&self.stack[..self.stack_top]);
+
+        // Global roots
+        roots.extend(self.globals.values().copied());
+
+        // Frame closure roots
+        for frame in &self.frames[..self.frame_count] {
+            roots.push(Value::Function(FunctionValueKind::Closure(frame.closure)));
+        }
+
+        // Upvalue roots
+        for (stack_slot, _) in &self.open_upvalues {
+            roots.push(self.stack[*stack_slot]);
+        }
+
+        roots
+    }
 }
 
 impl Vm {
@@ -194,16 +313,20 @@ impl Vm {
             Value::String(function_type_value_handle),
         );
 
-        let vm = Self {
-            is_debug: false,
+        let state = VmState {
             frame_count: 0,
             stack_top: 1,
             stack: vec![Value::Nil; STACK_MAX],
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals,
-            heap,
             open_upvalues: Vec::with_capacity(8),
             current_function_ptr: std::ptr::null(),
+        };
+
+        let vm = Self {
+            is_debug: false,
+            state,
+            heap,
         };
 
         vm.add_native_function("assert", 2, qang_assert)
@@ -231,7 +354,7 @@ impl Vm {
             function,
         };
 
-        self.globals.insert(
+        self.state.globals.insert(
             identifier_handle,
             Value::Function(FunctionValueKind::NativeFunction(native_function)),
         );
@@ -239,63 +362,13 @@ impl Vm {
         self
     }
 
-    fn get_current_function(&self) -> &FunctionObject {
-        debug_assert!(!self.current_function_ptr.is_null(), "Function pointer is null");
-        unsafe { &*self.current_function_ptr }
-    }
-
-    fn get_current_loc(&self) -> SourceLocation {
-        self.get_loc_at(get_current_frame!(self).ip)
-    }
-
-    fn get_previous_loc(&self) -> SourceLocation {
-        if get_current_frame!(self).ip > 0 {
-            self.get_loc_at(get_current_frame!(self).ip - 1)
-        } else {
-            SourceLocation::default()
-        }
-    }
-
-    fn get_loc_at(&self, index: usize) -> SourceLocation {
-        self.get_current_function()
-            .chunk
-            .locs()
-            .get(index)
-            .copied()
-            .unwrap_or_default()
-    }
-
-    fn read_byte(&mut self) -> u8 {
-        let frame = get_current_frame_mut!(self);
-        debug_assert!(!self.current_function_ptr.is_null(), "Function pointer is null");
-        let code = unsafe { (*self.current_function_ptr).chunk.code() };
-        debug_assert!(frame.ip < code.len(), "IP out of bounds");
-        let byte = code[frame.ip];
-        frame.ip += 1;
-        byte
-    }
-
-    fn read_constant(&mut self) -> Value {
-        let index = self.read_byte() as usize;
-        debug_assert!(!self.current_function_ptr.is_null(), "Function pointer is null");
-        let constants = unsafe { (*self.current_function_ptr).chunk.constants() };
-        debug_assert!(index < constants.len(), "Constant index out of bounds");
-        constants[index]
-    }
-
-    fn read_short(&mut self) -> usize {
-        let high_byte = self.read_byte() as usize;
-        let low_byte = self.read_byte() as usize;
-        (high_byte << 8) | low_byte
-    }
-
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
         let function_rc = program.into_function();
         let upvalue_count = function_rc.upvalue_count;
         let function_handle = self.heap.allocate_function((*function_rc).clone());
-        let handle = self
-            .heap
-            .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
+
+        let handle =
+            gc_allocate!(self, closure: ClosureObject::new(function_handle, upvalue_count));
         self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]
@@ -320,28 +393,30 @@ impl Vm {
                 self.debug();
             }
 
-            let opcode: OpCode = self.read_byte().into();
+            let opcode: OpCode = self.state.read_byte().into();
 
             match opcode {
                 OpCode::Constant => {
-                    let constant = self.read_constant();
+                    let constant = self.state.read_constant();
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
                     if let Value::Number(number) = peek!(self, 0) {
-                        if let Some(stack_value) = self.stack.get_mut(self.stack_top - 1) {
+                        if let Some(stack_value) =
+                            self.state.stack.get_mut(self.state.stack_top - 1)
+                        {
                             *stack_value = Value::Number(-number);
                         }
                     } else {
                         return Err(QangRuntimeError::new(
                             "Operand must be a number.".to_string(),
-                            self.get_previous_loc(),
+                            self.state.get_previous_loc(),
                         ));
                     }
                 }
                 OpCode::Not => {
                     let value = peek!(self, 0);
-                    if let Some(stack_value) = self.stack.get_mut(self.stack_top - 1) {
+                    if let Some(stack_value) = self.state.stack.get_mut(self.state.stack_top - 1) {
                         *stack_value = Value::Boolean(!value.is_truthy());
                     }
                 }
@@ -486,24 +561,24 @@ impl Vm {
                 }
                 OpCode::DefineGlobal => {
                     let identifier_handle: StringHandle =
-                        self.read_constant()
-                            .try_into()
-                            .map_err(|e: ValueConversionError| {
-                                e.into_qang_error(self.get_previous_loc())
-                            })?;
+                        self.state.read_constant().try_into().map_err(
+                            |e: ValueConversionError| {
+                                e.into_qang_error(self.state.get_previous_loc())
+                            },
+                        )?;
                     let value = pop_value!(self);
-                    self.globals.insert(identifier_handle, value);
+                    self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
                     let identifier_handle: StringHandle =
-                        self.read_constant()
-                            .try_into()
-                            .map_err(|e: ValueConversionError| {
-                                let loc = self.get_previous_loc();
+                        self.state.read_constant().try_into().map_err(
+                            |e: ValueConversionError| {
+                                let loc = self.state.get_previous_loc();
                                 e.into_qang_error(loc)
-                            })?;
-                    let value = *self.globals.get(&identifier_handle).ok_or_else(|| {
-                        let loc = self.get_previous_loc();
+                            },
+                        )?;
+                    let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
+                        let loc = self.state.get_previous_loc();
                         let identifier_name = self.heap.get_string(identifier_handle);
                         QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name),
@@ -514,25 +589,25 @@ impl Vm {
                 }
                 OpCode::SetGlobal => {
                     let identifier_handle: StringHandle =
-                        self.read_constant()
-                            .try_into()
-                            .map_err(|e: ValueConversionError| {
-                                e.into_qang_error(self.get_previous_loc())
-                            })?;
+                        self.state.read_constant().try_into().map_err(
+                            |e: ValueConversionError| {
+                                e.into_qang_error(self.state.get_previous_loc())
+                            },
+                        )?;
 
-                    if !self.globals.contains_key(&identifier_handle) {
+                    if !self.state.globals.contains_key(&identifier_handle) {
                         let identifier_name = self.heap.get_string(identifier_handle);
-                        let loc = self.get_previous_loc();
+                        let loc = self.state.get_previous_loc();
                         return Err(QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name).to_string(),
                             loc,
                         ));
                     }
                     let value = peek!(self, 0);
-                    self.globals.insert(identifier_handle, value);
+                    self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetLocal => {
-                    let slot = self.read_byte();
+                    let slot = self.state.read_byte();
                     let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
@@ -540,53 +615,51 @@ impl Vm {
                         absolute_slot
                     );
 
-                    let value = self.stack[absolute_slot];
+                    let value = self.state.stack[absolute_slot];
                     push_value!(self, value)?;
                 }
                 OpCode::SetLocal => {
-                    let slot = self.read_byte();
+                    let slot = self.state.read_byte();
                     let value = peek!(self, 0);
                     let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
 
-                    self.stack[absolute_slot] = value;
+                    self.state.stack[absolute_slot] = value;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = self.read_short();
+                    let offset = self.state.read_short();
                     if !peek!(self, 0).is_truthy() {
                         get_current_frame_mut!(self).ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = self.read_short();
+                    let offset = self.state.read_short();
                     get_current_frame_mut!(self).ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = self.read_short();
+                    let offset = self.state.read_short();
                     get_current_frame_mut!(self).ip -= offset;
                 }
                 OpCode::Call => {
-                    let arg_count = self.read_byte() as usize;
+                    let arg_count = self.state.read_byte() as usize;
                     let function_value = peek!(self, arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Closure => {
-                    let handle: FunctionHandle =
-                        self.read_constant()
-                            .try_into()
-                            .map_err(|e: ValueConversionError| {
-                                QangRuntimeError::new(
-                                    e.message().to_string(),
-                                    self.get_previous_loc(),
-                                )
-                            })?;
-                    let function = self.heap.get_function(handle);
-                    let closure = ClosureObject::new(handle, function.upvalue_count);
-
-                    let closure_handle = self.heap.allocate_closure(closure);
+                    let handle: FunctionHandle = self.state.read_constant().try_into().map_err(
+                        |e: ValueConversionError| {
+                            QangRuntimeError::new(
+                                e.message().to_string(),
+                                self.state.get_previous_loc(),
+                            )
+                        },
+                    )?;
+                    let upvalue_count = self.heap.get_function(handle).upvalue_count;
+                    let closure_handle =
+                        gc_allocate!(self, closure: ClosureObject::new(handle, upvalue_count));
 
                     for i in 0..self.heap.get_closure(closure_handle).upvalue_count {
-                        let is_local = self.read_byte() != 0;
-                        let index = self.read_byte() as usize;
+                        let is_local = self.state.read_byte() != 0;
+                        let index = self.state.read_byte() as usize;
 
                         if is_local {
                             let stack_slot = get_current_frame!(self).value_slot + 1 + index;
@@ -602,12 +675,12 @@ impl Vm {
                     )?;
                 }
                 OpCode::GetUpvalue => {
-                    let slot = self.read_byte() as usize;
+                    let slot = self.state.read_byte() as usize;
                     let upvalue = get_current_closure!(self).upvalues[slot];
 
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
-                            let value = self.stack[stack_slot];
+                            let value = self.state.stack[stack_slot];
                             push_value!(self, value)?;
                         }
                         UpvalueReference::Closed(value_handle) => {
@@ -617,14 +690,14 @@ impl Vm {
                     }
                 }
                 OpCode::SetUpvalue => {
-                    let slot = self.read_byte() as usize;
+                    let slot = self.state.read_byte() as usize;
                     let value = peek!(self, 0);
                     let current_closure_handle = get_current_frame!(self).closure;
 
                     let upvalue = self.heap.get_closure(current_closure_handle).upvalues[slot];
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
-                            self.stack[stack_slot] = value;
+                            self.state.stack[stack_slot] = value;
                         }
                         UpvalueReference::Closed(value_handle) => {
                             *self.heap.get_value_mut(value_handle) = value;
@@ -632,7 +705,7 @@ impl Vm {
                     }
                 }
                 OpCode::CloseUpvalue => {
-                    self.close_upvalue(self.stack_top - 1);
+                    self.close_upvalue(self.state.stack_top - 1);
                     pop_value!(self);
                 }
                 OpCode::Return => {
@@ -642,45 +715,47 @@ impl Vm {
                     // Close upvalues for the current function's locals
                     self.close_upvalue(value_slot);
 
-                    self.frame_count -= 1;
+                    self.state.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    if self.frame_count == 0 {
+                    if self.state.frame_count == 0 {
                         return Ok(result);
                     }
 
                     // Restore the previous function pointer
-                    let previous_frame = &self.frames[self.frame_count - 1];
+                    let previous_frame = &self.state.frames[self.state.frame_count - 1];
                     let previous_closure = self.heap.get_closure(previous_frame.closure);
                     let previous_function = self.heap.get_function(previous_closure.function);
-                    self.current_function_ptr = previous_function as *const FunctionObject;
+                    self.state.current_function_ptr = previous_function as *const FunctionObject;
 
-                    self.stack_top = value_slot + 1;
-                    self.stack[value_slot] = result;
+                    self.state.stack_top = value_slot + 1;
+                    self.state.stack[value_slot] = result;
                 }
             };
         }
     }
 
     fn close_upvalue(&mut self, last_slot: StackSlot) {
-        let mut i = self.open_upvalues.len();
+        let mut i = self.state.open_upvalues.len();
         while i > 0 {
             i -= 1;
-            let (stack_slot, closures) = &mut self.open_upvalues[i];
+            let stack_slot = self.state.open_upvalues[i].0;
 
-            if *stack_slot >= last_slot {
-                let value = self.stack[*stack_slot];
-                let value_handle = self.heap.allocate_value(value);
+            if stack_slot >= last_slot {
+                let value = self.state.stack[stack_slot];
+
+                let value_handle = gc_allocate!(self, value: value);
+
+                // Extract the closures list by removing and then updating
+                let (_, closures_to_update) = self.state.open_upvalues.remove(i);
 
                 // Update all closures that reference this stack slot
-                for (closure_handle, upvalue_index) in closures.iter() {
+                for (closure_handle, upvalue_index) in closures_to_update.iter() {
                     self.heap.get_closure_mut(*closure_handle).upvalues[*upvalue_index] =
                         UpvalueReference::Closed(value_handle);
                 }
-
-                self.open_upvalues.remove(i);
             }
         }
     }
@@ -692,7 +767,7 @@ impl Vm {
         upvalue_index: UpvalueIndex,
     ) {
         // Check if there's already an open upvalue for this stack slot
-        for (open_slot, closures) in &mut self.open_upvalues {
+        for (open_slot, closures) in &mut self.state.open_upvalues {
             if *open_slot == stack_slot {
                 // Add this closure to the list for this stack slot
                 closures.push((closure_handle, upvalue_index));
@@ -705,7 +780,8 @@ impl Vm {
         // Create a new open upvalue
         self.heap.get_closure_mut(closure_handle).upvalues[upvalue_index] =
             UpvalueReference::Open(stack_slot);
-        self.open_upvalues
+        self.state
+            .open_upvalues
             .push((stack_slot, vec![(closure_handle, upvalue_index)]));
     }
 
@@ -720,7 +796,7 @@ impl Vm {
         let a = pop_value!(self);
 
         let value = op(a, b, &mut self.heap)
-            .map_err(|e: BinaryOperationError| e.into_qang_error(self.get_previous_loc()))?;
+            .map_err(|e: BinaryOperationError| e.into_qang_error(self.state.get_previous_loc()))?;
 
         push_value!(self, value)?;
         Ok(())
@@ -736,7 +812,7 @@ impl Vm {
                 let value_str = value.to_display_string(&self.heap);
                 Err(QangRuntimeError::new(
                     format!("Identifier '{}' not callable.", value_str).to_string(),
-                    self.get_previous_loc(),
+                    self.state.get_previous_loc(),
                 ))
             }
         }
@@ -749,8 +825,8 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::progress!("before_call");
 
-        let loc = if self.frame_count > 0 {
-            self.get_previous_loc()
+        let loc = if self.state.frame_count > 0 {
+            self.state.get_previous_loc()
         } else {
             SourceLocation::default()
         };
@@ -769,13 +845,13 @@ impl Vm {
             }
         };
 
-        if self.frame_count >= FRAME_MAX {
+        if self.state.frame_count >= FRAME_MAX {
             return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
         }
 
-        self.frame_count += 1;
+        self.state.frame_count += 1;
 
-        let value_slot = self.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
+        let value_slot = self.state.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
         let call_frame = get_current_frame_mut!(self);
 
         // Get closure and function, cache function pointer for fast access during execution
@@ -785,7 +861,7 @@ impl Vm {
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
-        self.current_function_ptr = function as *const FunctionObject;
+        self.state.current_function_ptr = function as *const FunctionObject;
 
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");
@@ -798,9 +874,9 @@ impl Vm {
         handle: ClosureHandle,
         args: Vec<Value>,
     ) -> RuntimeResult<Value> {
-        let saved_stack_top = self.stack_top;
-        let saved_frame_count = self.frame_count;
-        let saved_function_ptr = self.current_function_ptr;
+        let saved_stack_top = self.state.stack_top;
+        let saved_frame_count = self.state.frame_count;
+        let saved_function_ptr = self.state.current_function_ptr;
 
         push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
 
@@ -813,16 +889,16 @@ impl Vm {
         match self.run() {
             Ok(return_value) => {
                 // Reset the VM state to before the function call
-                self.stack_top = saved_stack_top;
-                self.frame_count = saved_frame_count;
-                self.current_function_ptr = saved_function_ptr;
+                self.state.stack_top = saved_stack_top;
+                self.state.frame_count = saved_frame_count;
+                self.state.current_function_ptr = saved_function_ptr;
                 Ok(return_value)
             }
             Err(error) => {
                 // Reset the VM state to before the function call
-                self.stack_top = saved_stack_top;
-                self.frame_count = saved_frame_count;
-                self.current_function_ptr = saved_function_ptr;
+                self.state.stack_top = saved_stack_top;
+                self.state.frame_count = saved_frame_count;
+                self.state.current_function_ptr = saved_function_ptr;
                 Err(error)
             }
         }
@@ -833,7 +909,7 @@ impl Vm {
         function: NativeFunction,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let loc = self.get_previous_loc();
+        let loc = self.state.get_previous_loc();
         let mut args = vec![Value::Nil; function.arity];
 
         for i in (0..arg_count).rev() {
@@ -854,6 +930,11 @@ impl Vm {
         Ok(())
     }
 
+    fn collect_garbage(&mut self) {
+        let roots = self.state.gather_roots();
+        self.heap.garbage_collect(&roots);
+    }
+
     pub fn heap(&self) -> &ObjectHeap {
         &self.heap
     }
@@ -863,18 +944,18 @@ impl Vm {
     }
 
     pub fn globals(&self) -> &HashMap<StringHandle, Value> {
-        &self.globals
+        &self.state.globals
     }
 
     fn get_stack_trace(&self) -> Vec<Trace> {
-        self.get_stack_trace_from_frames(0..self.frame_count)
+        self.get_stack_trace_from_frames(0..self.state.frame_count)
     }
 
     fn get_stack_trace_from_frames(&self, frame_id_range: Range<usize>) -> Vec<Trace> {
         let mut traces = Vec::new();
 
         for frame_idx in frame_id_range {
-            let frame = &self.frames[frame_idx];
+            let frame = &self.state.frames[frame_idx];
             let closure = self.heap.get_closure(frame.closure);
             let function = self.heap.get_function(closure.function);
 
@@ -899,8 +980,8 @@ impl Vm {
 
     fn debug(&self) {
         print!("          ");
-        for i in 0..self.stack_top {
-            if let Some(value) = self.stack.get(i) {
+        for i in 0..self.state.stack_top {
+            if let Some(value) = self.state.stack.get(i) {
                 value.print(&self.heap);
                 print!(" ");
             }
@@ -908,7 +989,7 @@ impl Vm {
         println!();
 
         disassemble_instruction(
-            &self.get_current_function().chunk,
+            &self.state.get_current_function().chunk,
             &self.heap,
             get_current_frame!(self).ip,
         );

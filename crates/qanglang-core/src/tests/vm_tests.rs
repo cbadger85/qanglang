@@ -270,17 +270,37 @@ fn test_immediately_invoked_functional_expressions() {
 #[test]
 fn test_closures() {
     let source = r#"
+        fn make_working_counter() {
+            var count = 0;
+            var counter = () -> {
+                assert_eq(typeof(count), NUMBER, "Expected " + NUMBER + " but found " + typeof(count));
+                println("typeof count " + (count |> to_string));
+                count = count + 1;
+                return count;
+            };
+
+            var value = counter();
+            assert_eq(value, 1, "Expected value to be 1."); // This test passes.
+
+            return true;
+        }
+
+        assert(make_working_counter());
+
         fn make_counter() {
             var count = 0;
             return () -> {
+                assert_eq(typeof(count), NUMBER, "Expected " + NUMBER + " but found " + typeof(count));
+                println("typeof count " + (count |> to_string));
                 count = count + 1;
                 return count;
             };
         }
- 
-        fn perform_count() {
-            var counter = make_counter();
-            return count();
+                
+            fn perform_count() {
+                var counter = make_counter();
+                assert_eq(typeof(counter), FUNCTION, "Expected " + FUNCTION + " but found " + typeof(counter));
+            return counter();
         }
 
         assert_eq(perform_count(), 1);
@@ -291,8 +311,8 @@ fn test_closures() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap).set_debug(true).interpret(program) {
+            // disassemble_program(&heap);
+            match Vm::new(heap).set_debug(false).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);

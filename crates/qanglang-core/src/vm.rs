@@ -139,7 +139,6 @@ struct CallFrame {
     closure: ClosureHandle,
     ip: usize,
     value_slot: usize,
-    function_ptr: *const FunctionObject,
 }
 
 impl Default for CallFrame {
@@ -148,7 +147,6 @@ impl Default for CallFrame {
             closure: ClosureHandle::default(),
             ip: 0,
             value_slot: 0,
-            function_ptr: std::ptr::null(),
         }
     }
 }
@@ -163,6 +161,7 @@ pub struct Vm {
     globals: HashMap<StringHandle, Value>,
     heap: ObjectHeap,
     open_upvalues: Vec<OpenUpvalueEntry>,
+    current_function_ptr: *const FunctionObject,
 }
 
 impl Vm {
@@ -204,6 +203,7 @@ impl Vm {
             globals,
             heap,
             open_upvalues: Vec::with_capacity(8),
+            current_function_ptr: std::ptr::null(),
         };
 
         vm.add_native_function("assert", 2, qang_assert)
@@ -240,9 +240,8 @@ impl Vm {
     }
 
     fn get_current_function(&self) -> &FunctionObject {
-        let frame = get_current_frame!(self);
-        debug_assert!(!frame.function_ptr.is_null(), "Function pointer is null");
-        unsafe { &*frame.function_ptr }
+        debug_assert!(!self.current_function_ptr.is_null(), "Function pointer is null");
+        unsafe { &*self.current_function_ptr }
     }
 
     fn get_current_loc(&self) -> SourceLocation {
@@ -268,8 +267,8 @@ impl Vm {
 
     fn read_byte(&mut self) -> u8 {
         let frame = get_current_frame_mut!(self);
-        debug_assert!(!frame.function_ptr.is_null(), "Function pointer is null");
-        let code = unsafe { (*frame.function_ptr).chunk.code() };
+        debug_assert!(!self.current_function_ptr.is_null(), "Function pointer is null");
+        let code = unsafe { (*self.current_function_ptr).chunk.code() };
         debug_assert!(frame.ip < code.len(), "IP out of bounds");
         let byte = code[frame.ip];
         frame.ip += 1;
@@ -278,9 +277,8 @@ impl Vm {
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_byte() as usize;
-        let frame = &self.frames[self.frame_count - 1];
-        debug_assert!(!frame.function_ptr.is_null(), "Function pointer is null");
-        let constants = unsafe { (*frame.function_ptr).chunk.constants() };
+        debug_assert!(!self.current_function_ptr.is_null(), "Function pointer is null");
+        let constants = unsafe { (*self.current_function_ptr).chunk.constants() };
         debug_assert!(index < constants.len(), "Constant index out of bounds");
         constants[index]
     }
@@ -653,6 +651,12 @@ impl Vm {
                         return Ok(result);
                     }
 
+                    // Restore the previous function pointer
+                    let previous_frame = &self.frames[self.frame_count - 1];
+                    let previous_closure = self.heap.get_closure(previous_frame.closure);
+                    let previous_function = self.heap.get_function(previous_closure.function);
+                    self.current_function_ptr = previous_function as *const FunctionObject;
+
                     self.stack_top = value_slot + 1;
                     self.stack[value_slot] = result;
                 }
@@ -781,7 +785,7 @@ impl Vm {
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
-        call_frame.function_ptr = function as *const FunctionObject;
+        self.current_function_ptr = function as *const FunctionObject;
 
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");
@@ -796,6 +800,7 @@ impl Vm {
     ) -> RuntimeResult<Value> {
         let saved_stack_top = self.stack_top;
         let saved_frame_count = self.frame_count;
+        let saved_function_ptr = self.current_function_ptr;
 
         push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
 
@@ -810,12 +815,14 @@ impl Vm {
                 // Reset the VM state to before the function call
                 self.stack_top = saved_stack_top;
                 self.frame_count = saved_frame_count;
+                self.current_function_ptr = saved_function_ptr;
                 Ok(return_value)
             }
             Err(error) => {
                 // Reset the VM state to before the function call
                 self.stack_top = saved_stack_top;
                 self.frame_count = saved_frame_count;
+                self.current_function_ptr = saved_function_ptr;
                 Err(error)
             }
         }

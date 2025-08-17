@@ -27,6 +27,15 @@ impl Default for ClosureHandle {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+pub struct ValueHandle(Index);
+
+impl Default for ValueHandle {
+    fn default() -> Self {
+        ValueHandle(Index::from_raw_parts(0, 0))
+    }
+}
+
 impl TryFrom<Value> for ClosureHandle {
     type Error = ValueConversionError;
 
@@ -60,6 +69,7 @@ pub struct ObjectHeap {
     strings: Vec<String>,
     functions: Vec<FunctionObject>,
     closures: Arena<ClosureObject>,
+    values: Arena<Value>,
     string_interner: HashMap<String, StringHandle>,
 }
 
@@ -74,6 +84,7 @@ impl ObjectHeap {
             functions: Vec::with_capacity(initial_capacity),
             closures: Arena::with_capacity(initial_capacity),
             strings: Vec::with_capacity(initial_capacity),
+            values: Arena::with_capacity(initial_capacity),
         }
     }
 
@@ -124,6 +135,11 @@ impl ObjectHeap {
         ClosureHandle(index)
     }
 
+    pub fn allocate_value(&mut self, value: Value) -> ValueHandle {
+        let index = self.values.insert(value);
+        ValueHandle(index)
+    }
+
     pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
         if self.functions.len() == self.functions.capacity() {
             let new_capacity = if self.functions.capacity() == 0 {
@@ -156,6 +172,14 @@ impl ObjectHeap {
 
     pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
         &mut self.closures[handle.0]
+    }
+
+    pub fn get_value(&self, handle: ValueHandle) -> &Value {
+        &self.values[handle.0]
+    }
+
+    pub fn get_value_mut(&mut self, handle: ValueHandle) -> &mut Value {
+        &mut self.values[handle.0]
     }
 
     pub fn garbage_collect(&mut self) {

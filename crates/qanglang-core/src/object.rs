@@ -1,17 +1,15 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::{Value, chunk::Chunk, memory::{FunctionHandle, StringHandle}};
+use crate::{chunk::Chunk, memory::{FunctionHandle, StringHandle, ValueHandle}};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ClosureObject {
     pub function: FunctionHandle,
     pub upvalue_count: usize,
-    pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
+    pub upvalues: Vec<UpvalueReference>,
 }
 
 impl ClosureObject {
     pub fn new(function: FunctionHandle, upvalue_count: usize) -> Self {
-        let upvalues = vec![Rc::new(RefCell::new(Upvalue::Open(0))); upvalue_count];
+        let upvalues = vec![UpvalueReference::Open(0); upvalue_count];
         Self {
             function,
             upvalues,
@@ -21,9 +19,9 @@ impl ClosureObject {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub enum Upvalue {
+pub enum UpvalueReference {
     Open(usize),
-    Closed(Value),
+    Closed(ValueHandle),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

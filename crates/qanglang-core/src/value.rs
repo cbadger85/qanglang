@@ -63,8 +63,9 @@ impl Value {
                     format!("<function>{}", identifier)
                 }
                 FunctionValueKind::Closure(handle) => {
-                    let handle = heap.get_closure(*handle).function.name;
-                    let identifier = heap.get_string(handle);
+                    let closure = heap.get_closure(*handle);
+                    let function = heap.get_function(closure.function);
+                    let identifier = heap.get_string(function.name);
                     format!("<function>{}", identifier)
                 }
             },

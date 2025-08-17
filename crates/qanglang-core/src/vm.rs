@@ -113,8 +113,7 @@ macro_rules! get_current_frame_mut {
 macro_rules! get_current_closure {
     ($vm:expr) => {{
         let frame = get_current_frame!($vm);
-        debug_assert!(!frame.closure_ptr.is_null(), "Closure pointer is null");
-        unsafe { &*frame.closure_ptr }
+        $vm.heap.get_closure(frame.closure)
     }};
 }
 
@@ -136,12 +135,8 @@ struct CallFrame {
     closure: ClosureHandle,
     ip: usize,
     value_slot: usize,
-    // Cache frequently accessed pointers to avoid repeated arena lookups
-    closure_ptr: *const ClosureObject,
-    code_ptr: *const u8,
-    code_len: usize,
-    constants_ptr: *const Value,
-    constants_len: usize,
+    // Cache function pointer to avoid repeated arena lookups
+    function_ptr: *const FunctionObject,
 }
 
 impl Default for CallFrame {
@@ -150,11 +145,7 @@ impl Default for CallFrame {
             closure: ClosureHandle::default(),
             ip: 0,
             value_slot: 0,
-            closure_ptr: std::ptr::null(),
-            code_ptr: std::ptr::null(),
-            code_len: 0,
-            constants_ptr: std::ptr::null(),
-            constants_len: 0,
+            function_ptr: std::ptr::null(),
         }
     }
 }
@@ -247,8 +238,8 @@ impl Vm {
 
     fn get_current_function(&self) -> &FunctionObject {
         let frame = get_current_frame!(self);
-        debug_assert!(!frame.closure_ptr.is_null(), "Closure pointer is null");
-        unsafe { &(*frame.closure_ptr).function }
+        debug_assert!(!frame.function_ptr.is_null(), "Function pointer is null");
+        unsafe { &*frame.function_ptr }
     }
 
     fn get_current_loc(&self) -> SourceLocation {
@@ -274,8 +265,10 @@ impl Vm {
 
     fn read_byte(&mut self) -> u8 {
         let frame = get_current_frame_mut!(self);
-        debug_assert!(frame.ip < frame.code_len, "IP out of bounds");
-        let byte = unsafe { *frame.code_ptr.add(frame.ip) };
+        debug_assert!(!frame.function_ptr.is_null(), "Function pointer is null");
+        let code = unsafe { (*frame.function_ptr).chunk.code() };
+        debug_assert!(frame.ip < code.len(), "IP out of bounds");
+        let byte = code[frame.ip];
         frame.ip += 1;
         byte
     }
@@ -283,8 +276,10 @@ impl Vm {
     fn read_constant(&mut self) -> Value {
         let index = self.read_byte() as usize;
         let frame = &self.frames[self.frame_count - 1];
-        debug_assert!(index < frame.constants_len, "Constant index out of bounds");
-        unsafe { *frame.constants_ptr.add(index) }
+        debug_assert!(!frame.function_ptr.is_null(), "Function pointer is null");
+        let constants = unsafe { (*frame.function_ptr).chunk.constants() };
+        debug_assert!(index < constants.len(), "Constant index out of bounds");
+        constants[index]
     }
 
     fn read_short(&mut self) -> usize {
@@ -294,9 +289,12 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
+        let function_rc = program.into_function();
+        let upvalue_count = function_rc.upvalue_count;
+        let function_handle = self.heap.allocate_function((*function_rc).clone());
         let handle = self
             .heap
-            .allocate_closure(ClosureObject::new(program.into_function()));
+            .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
         self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]
@@ -580,8 +578,8 @@ impl Vm {
                                     self.get_previous_loc(),
                                 )
                             })?;
-                    let function = self.heap.clone_function(handle);
-                    let mut closure = ClosureObject::new(function);
+                    let function = self.heap.get_function(handle);
+                    let mut closure = ClosureObject::new(handle, function.upvalue_count);
 
                     for i in 0..closure.upvalue_count {
                         let is_local = self.read_byte() != 0;
@@ -736,8 +734,9 @@ impl Vm {
 
         let final_arg_count = {
             let closure = self.heap.get_closure(closure_handle);
-            if arg_count < closure.function.arity {
-                let arity = closure.function.arity;
+            let function = self.heap.get_function(closure.function);
+            if arg_count < function.arity {
+                let arity = function.arity;
                 for _ in arg_count..arity {
                     push_value!(self, Value::Nil)?;
                 }
@@ -756,20 +755,15 @@ impl Vm {
         let value_slot = self.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
         let call_frame = get_current_frame_mut!(self);
 
-        // Get closure and cache pointers for fast access during execution
+        // Get closure and function, cache function pointer for fast access during execution
         let closure = self.heap.get_closure(closure_handle);
-        let code_slice = closure.function.chunk.code();
-        let constants_slice = closure.function.chunk.constants();
+        let function = self.heap.get_function(closure.function);
 
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
-        // Cache pointers to avoid repeated arena lookups and derefs
-        call_frame.closure_ptr = closure as *const ClosureObject;
-        call_frame.code_ptr = code_slice.as_ptr();
-        call_frame.code_len = code_slice.len();
-        call_frame.constants_ptr = constants_slice.as_ptr();
-        call_frame.constants_len = constants_slice.len();
+        // Cache function pointer to avoid repeated arena lookups
+        call_frame.function_ptr = function as *const FunctionObject;
 
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");
@@ -857,12 +851,12 @@ impl Vm {
         for frame_idx in frame_id_range {
             let frame = &self.frames[frame_idx];
             let closure = self.heap.get_closure(frame.closure);
+            let function = self.heap.get_function(closure.function);
 
-            let name = self.heap.get_string(closure.function.name);
+            let name = self.heap.get_string(function.name);
 
             let loc = if frame.ip > 0 {
-                closure
-                    .function
+                function
                     .chunk
                     .locs()
                     .get(frame.ip - 1)

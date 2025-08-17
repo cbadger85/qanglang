@@ -165,7 +165,7 @@ impl<'a> CompilerPipeline<'a> {
         match CompilerVisitor::new(self.heap).compile(program, &self.source_map, errors) {
             Ok(program) => {
                 let program = Rc::new(program);
-                self.heap.allocate_function(program.clone());
+                self.heap.allocate_function((*program).clone());
                 Ok(QangProgram(program))
             }
             Err(error) => Err(CompilerError(
@@ -968,7 +968,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let function = compiler.function;
         let upvalue_count = function.upvalue_count;
 
-        let function_handle = self.heap.allocate_function(Rc::new(function));
+        let function_handle = self.heap.allocate_function(function);
         let constant_index = self.make_constant(
             Value::FunctionDecl(function_handle),
             func_decl.function.name.span,
@@ -1088,7 +1088,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let function = compiler.function;
         let upvalue_count = function.upvalue_count;
 
-        let function_handle = self.heap.allocate_function(Rc::new(function));
+        let function_handle = self.heap.allocate_function(function);
         let constant_index =
             self.make_constant(Value::FunctionDecl(function_handle), lambda_expr.span)?;
         self.emit_opcode_and_byte(OpCode::Closure, constant_index, lambda_expr.span);

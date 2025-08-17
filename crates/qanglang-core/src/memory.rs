@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use generational_arena::{Arena, Index};
 
@@ -41,7 +41,7 @@ impl TryFrom<Value> for ClosureHandle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
 pub struct FunctionHandle(usize);
 
 impl TryFrom<Value> for FunctionHandle {
@@ -58,7 +58,7 @@ impl TryFrom<Value> for FunctionHandle {
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
     strings: Vec<String>,
-    functions: Vec<Rc<FunctionObject>>,
+    functions: Vec<FunctionObject>,
     closures: Arena<ClosureObject>,
     string_interner: HashMap<String, StringHandle>,
 }
@@ -124,7 +124,7 @@ impl ObjectHeap {
         ClosureHandle(index)
     }
 
-    pub fn allocate_function(&mut self, function: Rc<FunctionObject>) -> FunctionHandle {
+    pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
         if self.functions.len() == self.functions.capacity() {
             let new_capacity = if self.functions.capacity() == 0 {
                 64
@@ -142,8 +142,8 @@ impl ObjectHeap {
         &self.strings[handle.0]
     }
 
-    pub fn clone_function(&self, handle: FunctionHandle) -> Rc<FunctionObject> {
-        self.functions[handle.0].clone()
+    pub fn clone_function(&self, handle: FunctionHandle) -> &FunctionObject {
+        &self.functions[handle.0]
     }
 
     pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
@@ -166,6 +166,6 @@ impl ObjectHeap {
         self.functions
             .iter()
             .enumerate()
-            .map(|(index, obj)| ((index, obj.as_ref())))
+            .map(|(index, obj)| (index, obj))
     }
 }

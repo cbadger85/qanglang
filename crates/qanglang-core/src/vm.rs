@@ -102,37 +102,6 @@ macro_rules! pop_value {
     }};
 }
 
-macro_rules! get_current_frame {
-    ($vm:expr) => {
-        &$vm.state.frames[$vm.state.frame_count - 1]
-    };
-}
-
-macro_rules! get_current_frame_mut {
-    ($vm:expr) => {
-        &mut $vm.state.frames[$vm.state.frame_count - 1]
-    };
-}
-
-macro_rules! get_current_frame_state {
-    ($state:expr) => {
-        &$state.frames[$state.frame_count - 1]
-    };
-}
-
-macro_rules! get_current_frame_mut_state {
-    ($state:expr) => {
-        &mut $state.frames[$state.frame_count - 1]
-    };
-}
-
-macro_rules! get_current_closure {
-    ($vm:expr) => {{
-        let frame = get_current_frame!($vm);
-        $vm.heap.get_closure(frame.closure)
-    }};
-}
-
 macro_rules! peek {
     ($vm:expr, $distance:expr) => {
         if $vm.state.stack_top > $distance {
@@ -164,6 +133,7 @@ macro_rules! gc_allocate {
         $vm.heap.force_allocate_value($value)
     }};
 }
+
 
 #[derive(Debug, Clone)]
 struct CallFrame {
@@ -203,12 +173,12 @@ impl VmState {
     }
 
     fn get_current_loc(&self) -> SourceLocation {
-        self.get_loc_at(get_current_frame_state!(self).ip)
+        self.get_loc_at(self.frames[self.frame_count - 1].ip)
     }
 
     fn get_previous_loc(&self) -> SourceLocation {
-        if get_current_frame_state!(self).ip > 0 {
-            self.get_loc_at(get_current_frame_state!(self).ip - 1)
+        if self.frames[self.frame_count - 1].ip > 0 {
+            self.get_loc_at(self.frames[self.frame_count - 1].ip - 1)
         } else {
             SourceLocation::default()
         }
@@ -224,7 +194,7 @@ impl VmState {
     }
 
     fn read_byte(&mut self) -> u8 {
-        let frame = get_current_frame_mut_state!(self);
+        let frame = &mut self.frames[self.frame_count - 1];
         debug_assert!(
             !self.current_function_ptr.is_null(),
             "Function pointer is null"
@@ -608,7 +578,7 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.state.read_byte();
-                    let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
+                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot + 1 + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
                         "Local slot {} out of bounds",
@@ -621,23 +591,23 @@ impl Vm {
                 OpCode::SetLocal => {
                     let slot = self.state.read_byte();
                     let value = peek!(self, 0);
-                    let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
+                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot + 1 + slot as usize;
 
                     self.state.stack[absolute_slot] = value;
                 }
                 OpCode::JumpIfFalse => {
                     let offset = self.state.read_short();
                     if !peek!(self, 0).is_truthy() {
-                        get_current_frame_mut!(self).ip += offset;
+                        self.state.frames[self.state.frame_count - 1].ip += offset;
                     }
                 }
                 OpCode::Jump => {
                     let offset = self.state.read_short();
-                    get_current_frame_mut!(self).ip += offset;
+                    self.state.frames[self.state.frame_count - 1].ip += offset;
                 }
                 OpCode::Loop => {
                     let offset = self.state.read_short();
-                    get_current_frame_mut!(self).ip -= offset;
+                    self.state.frames[self.state.frame_count - 1].ip -= offset;
                 }
                 OpCode::Call => {
                     let arg_count = self.state.read_byte() as usize;
@@ -662,10 +632,11 @@ impl Vm {
                         let index = self.state.read_byte() as usize;
 
                         if is_local {
-                            let stack_slot = get_current_frame!(self).value_slot + 1 + index;
+                            let stack_slot = self.state.frames[self.state.frame_count - 1].value_slot + 1 + index;
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {
-                            let current_upvalue = get_current_closure!(self).upvalues[index];
+                            let current_closure = self.heap.get_closure(self.state.frames[self.state.frame_count - 1].closure);
+                            let current_upvalue = current_closure.upvalues[index];
                             self.heap.get_closure_mut(closure_handle).upvalues[i] = current_upvalue;
                         }
                     }
@@ -676,7 +647,8 @@ impl Vm {
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
-                    let upvalue = get_current_closure!(self).upvalues[slot];
+                    let current_closure = self.heap.get_closure(self.state.frames[self.state.frame_count - 1].closure);
+                    let upvalue = current_closure.upvalues[slot];
 
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
@@ -692,7 +664,7 @@ impl Vm {
                 OpCode::SetUpvalue => {
                     let slot = self.state.read_byte() as usize;
                     let value = peek!(self, 0);
-                    let current_closure_handle = get_current_frame!(self).closure;
+                    let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
 
                     let upvalue = self.heap.get_closure(current_closure_handle).upvalues[slot];
                     match upvalue {
@@ -710,7 +682,7 @@ impl Vm {
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
-                    let value_slot = get_current_frame!(self).value_slot;
+                    let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
 
                     // Close upvalues for the current function's locals
                     self.close_upvalue(value_slot);
@@ -852,7 +824,7 @@ impl Vm {
         self.state.frame_count += 1;
 
         let value_slot = self.state.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
-        let call_frame = get_current_frame_mut!(self);
+        let call_frame = &mut self.state.frames[self.state.frame_count - 1];
 
         // Get closure and function, cache function pointer for fast access during execution
         let closure = self.heap.get_closure(closure_handle);
@@ -991,7 +963,7 @@ impl Vm {
         disassemble_instruction(
             &self.state.get_current_function().chunk,
             &self.heap,
-            get_current_frame!(self).ip,
+            self.state.frames[self.state.frame_count - 1].ip,
         );
     }
 }

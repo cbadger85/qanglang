@@ -193,13 +193,6 @@ pub struct VmState {
     current_function_ptr: *const FunctionObject,
 }
 
-#[derive(Clone)]
-pub struct Vm {
-    is_debug: bool,
-    state: VmState,
-    heap: ObjectHeap,
-}
-
 impl VmState {
     fn get_current_function(&self) -> &FunctionObject {
         debug_assert!(
@@ -281,6 +274,13 @@ impl VmState {
 
         roots
     }
+}
+
+#[derive(Clone)]
+pub struct Vm {
+    is_debug: bool,
+    state: VmState,
+    heap: ObjectHeap,
 }
 
 impl Vm {

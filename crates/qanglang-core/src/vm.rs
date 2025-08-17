@@ -110,15 +110,18 @@ macro_rules! get_current_frame_mut {
     };
 }
 
-macro_rules! get_current_function {
-    ($vm:expr) => {
-        &get_current_frame!($vm).closure.function
-    };
+macro_rules! get_current_closure {
+    ($vm:expr) => {{
+        let handle = get_current_frame!($vm).closure;
+        $vm.heap.get_closure(handle)
+    }};
 }
 
 macro_rules! read_byte {
     ($vm:expr) => {{
-        let byte = get_current_function!($vm).chunk.code()[get_current_frame!($vm).ip];
+        let handle = get_current_frame!($vm).closure;
+        let closure = $vm.heap.get_closure(handle);
+        let byte = closure.function.chunk.code()[get_current_frame!($vm).ip];
         get_current_frame_mut!($vm).ip += 1;
         byte
     }};
@@ -127,7 +130,9 @@ macro_rules! read_byte {
 macro_rules! read_constant {
     ($vm:expr) => {{
         let index = read_byte!($vm) as usize;
-        let constants = get_current_function!($vm).chunk.constants();
+        let handle = get_current_frame!($vm).closure;
+        let closure = $vm.heap.get_closure(handle);
+        let constants = closure.function.chunk.constants();
         constants[index]
     }};
 }
@@ -155,7 +160,7 @@ macro_rules! peek {
 
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
-    closure: Rc<ClosureObject>,
+    closure: ClosureHandle,
     ip: usize,
     value_slot: usize,
 }
@@ -247,7 +252,8 @@ impl Vm {
     }
 
     fn get_current_function(&self) -> &FunctionObject {
-        &get_current_frame!(self).closure.function
+        let closure_handle = get_current_frame!(self).closure;
+        &self.heap.get_closure(closure_handle).function
     }
 
     fn get_current_loc(&self) -> SourceLocation {
@@ -272,7 +278,10 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
-        self.call(Rc::new(ClosureObject::new(program.into_function())), 0)?;
+        let handle = self
+            .heap
+            .allocate_closure(ClosureObject::new(program.into_function()));
+        self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]
         coz::scope!("vm_interpret");
@@ -566,9 +575,8 @@ impl Vm {
                             let stack_slot = get_current_frame!(self).value_slot + 1 + index;
                             self.capture_upvalue(stack_slot, &mut closure.upvalues[i]);
                         } else {
-                            let current_upvalue = get_current_frame!(self).closure.upvalues[index]
-                                .borrow()
-                                .clone();
+                            let current_upvalue =
+                                get_current_closure!(self).upvalues[index].borrow().clone();
                             closure.upvalues[i] = Rc::new(RefCell::new(current_upvalue));
                         }
                     }
@@ -581,7 +589,7 @@ impl Vm {
                 }
                 OpCode::GetUpvalue => {
                     let slot = read_byte!(self) as usize;
-                    let upvalue = *get_current_frame!(self).closure.upvalues[slot].borrow();
+                    let upvalue = *get_current_closure!(self).upvalues[slot].borrow();
 
                     match upvalue {
                         Upvalue::Open(stack_slot) => {
@@ -598,7 +606,7 @@ impl Vm {
                     let value = peek!(self, 0);
 
                     let stack_slot = {
-                        let upvalue_rc = &get_current_frame!(self).closure.upvalues[slot];
+                        let upvalue_rc = &get_current_closure!(self).upvalues[slot];
                         if let Upvalue::Open(stack_slot) = *upvalue_rc.borrow() {
                             Some(stack_slot)
                         } else {
@@ -618,10 +626,10 @@ impl Vm {
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = get_current_frame!(self).value_slot;
-                    
+
                     // Close upvalues for the current function's locals
                     self.close_upvalue(value_slot);
-                    
+
                     self.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]
@@ -683,10 +691,7 @@ impl Vm {
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
-            Value::Function(FunctionValueKind::Closure(handle)) => {
-                let closure = self.heap.clone_closure(handle);
-                self.call(closure, arg_count)
-            }
+            Value::Function(FunctionValueKind::Closure(handle)) => self.call(handle, arg_count),
             Value::Function(FunctionValueKind::NativeFunction(function)) => {
                 self.call_native_function(function, arg_count)
             }
@@ -700,7 +705,7 @@ impl Vm {
         }
     }
 
-    fn call(&mut self, closure: Rc<ClosureObject>, arg_count: usize) -> RuntimeResult<()> {
+    fn call(&mut self, closure_handle: ClosureHandle, arg_count: usize) -> RuntimeResult<()> {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
 
@@ -713,13 +718,17 @@ impl Vm {
             SourceLocation::default()
         };
 
-        let final_arg_count = if arg_count < closure.function.arity {
-            for _ in arg_count..closure.function.arity {
-                push_value!(self, Value::Nil)?;
+        let final_arg_count = {
+            let closure = self.heap.get_closure(closure_handle);
+            if arg_count < closure.function.arity {
+                let arity = closure.function.arity;
+                for _ in arg_count..arity {
+                    push_value!(self, Value::Nil)?;
+                }
+                arity
+            } else {
+                arg_count
             }
-            closure.function.arity
-        } else {
-            arg_count
         };
 
         if self.frame_count >= FRAME_MAX {
@@ -732,7 +741,7 @@ impl Vm {
         let call_frame = get_current_frame_mut!(self);
 
         call_frame.value_slot = value_slot;
-        call_frame.closure.clone_from(&closure);
+        call_frame.closure = closure_handle;
         call_frame.ip = 0;
 
         #[cfg(feature = "profiler")]
@@ -755,9 +764,7 @@ impl Vm {
             push_value!(self, *value)?;
         }
 
-        let closure = self.heap.clone_closure(handle);
-
-        self.call(closure, args.len())?;
+        self.call(handle, args.len())?;
 
         match self.run() {
             Ok(return_value) => {
@@ -822,11 +829,12 @@ impl Vm {
 
         for frame_idx in frame_id_range {
             let frame = &self.frames[frame_idx];
-            let name = self.heap.get_string(frame.closure.function.name);
+            let closure = self.heap.get_closure(frame.closure);
+
+            let name = self.heap.get_string(closure.function.name);
 
             let loc = if frame.ip > 0 {
-                frame
-                    .closure
+                closure
                     .function
                     .chunk
                     .locs()

@@ -21,6 +21,12 @@ impl TryFrom<Value> for StringHandle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 pub struct ClosureHandle(Index);
 
+impl Default for ClosureHandle {
+    fn default() -> Self {
+        ClosureHandle(Index::from_raw_parts(0, 0))
+    }
+}
+
 impl TryFrom<Value> for ClosureHandle {
     type Error = ValueConversionError;
 
@@ -53,7 +59,7 @@ impl TryFrom<Value> for FunctionHandle {
 pub struct ObjectHeap {
     strings: Vec<String>,
     functions: Vec<Rc<FunctionObject>>,
-    closures: Arena<Rc<ClosureObject>>,
+    closures: Arena<ClosureObject>,
     string_interner: HashMap<String, StringHandle>,
 }
 
@@ -114,7 +120,7 @@ impl ObjectHeap {
     }
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
-        let index = self.closures.insert(Rc::new(closure));
+        let index = self.closures.insert(closure);
         ClosureHandle(index)
     }
 
@@ -144,12 +150,12 @@ impl ObjectHeap {
         &self.functions[handle.0]
     }
 
-    pub fn clone_closure(&self, handle: ClosureHandle) -> Rc<ClosureObject> {
-        self.closures[handle.0].clone()
-    }
-
     pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
         &self.closures[handle.0]
+    }
+
+    pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
+        &mut self.closures[handle.0]
     }
 
     pub fn garbage_collect(&mut self) {

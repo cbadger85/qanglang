@@ -117,34 +117,6 @@ macro_rules! get_current_closure {
     }};
 }
 
-macro_rules! read_byte {
-    ($vm:expr) => {{
-        let handle = get_current_frame!($vm).closure;
-        let closure = $vm.heap.get_closure(handle);
-        let byte = closure.function.chunk.code()[get_current_frame!($vm).ip];
-        get_current_frame_mut!($vm).ip += 1;
-        byte
-    }};
-}
-
-macro_rules! read_constant {
-    ($vm:expr) => {{
-        let index = read_byte!($vm) as usize;
-        let handle = get_current_frame!($vm).closure;
-        let closure = $vm.heap.get_closure(handle);
-        let constants = closure.function.chunk.constants();
-        constants[index]
-    }};
-}
-
-macro_rules! read_short {
-    ($vm:expr) => {{
-        let high_byte = read_byte!($vm) as usize;
-        let low_byte = read_byte!($vm) as usize;
-        (high_byte << 8) | low_byte
-    }};
-}
-
 macro_rules! peek {
     ($vm:expr, $distance:expr) => {
         if $vm.stack_top > $distance {
@@ -277,6 +249,28 @@ impl Vm {
             .unwrap_or_default()
     }
 
+    fn read_byte(&mut self) -> u8 {
+        let handle = get_current_frame!(self).closure;
+        let closure = self.heap.get_closure(handle);
+        let byte = closure.function.chunk.code()[get_current_frame!(self).ip];
+        get_current_frame_mut!(self).ip += 1;
+        byte
+    }
+
+    fn read_constant(&mut self) -> Value {
+        let index = self.read_byte() as usize;
+        let handle = get_current_frame!(self).closure;
+        let closure = self.heap.get_closure(handle);
+        let constants = closure.function.chunk.constants();
+        constants[index]
+    }
+
+    fn read_short(&mut self) -> usize {
+        let high_byte = self.read_byte() as usize;
+        let low_byte = self.read_byte() as usize;
+        (high_byte << 8) | low_byte
+    }
+
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
         let handle = self
             .heap
@@ -305,11 +299,11 @@ impl Vm {
                 self.debug();
             }
 
-            let opcode: OpCode = read_byte!(self).into();
+            let opcode: OpCode = self.read_byte().into();
 
             match opcode {
                 OpCode::Constant => {
-                    let constant = read_constant!(self);
+                    let constant = self.read_constant();
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
@@ -471,7 +465,7 @@ impl Vm {
                 }
                 OpCode::DefineGlobal => {
                     let identifier_handle: StringHandle =
-                        read_constant!(self)
+                        self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error(self.get_previous_loc())
@@ -481,7 +475,7 @@ impl Vm {
                 }
                 OpCode::GetGlobal => {
                     let identifier_handle: StringHandle =
-                        read_constant!(self)
+                        self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 let loc = self.get_previous_loc();
@@ -499,7 +493,7 @@ impl Vm {
                 }
                 OpCode::SetGlobal => {
                     let identifier_handle: StringHandle =
-                        read_constant!(self)
+                        self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 e.into_qang_error(self.get_previous_loc())
@@ -517,7 +511,7 @@ impl Vm {
                     self.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetLocal => {
-                    let slot = read_byte!(self);
+                    let slot = self.read_byte();
                     let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
@@ -529,34 +523,34 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetLocal => {
-                    let slot = read_byte!(self);
+                    let slot = self.read_byte();
                     let value = peek!(self, 0);
                     let absolute_slot = get_current_frame!(self).value_slot + 1 + slot as usize;
 
                     self.stack[absolute_slot] = value;
                 }
                 OpCode::JumpIfFalse => {
-                    let offset = read_short!(self);
+                    let offset = self.read_short();
                     if !peek!(self, 0).is_truthy() {
                         get_current_frame_mut!(self).ip += offset;
                     }
                 }
                 OpCode::Jump => {
-                    let offset = read_short!(self);
+                    let offset = self.read_short();
                     get_current_frame_mut!(self).ip += offset;
                 }
                 OpCode::Loop => {
-                    let offset = read_short!(self);
+                    let offset = self.read_short();
                     get_current_frame_mut!(self).ip -= offset;
                 }
                 OpCode::Call => {
-                    let arg_count = read_byte!(self) as usize;
+                    let arg_count = self.read_byte() as usize;
                     let function_value = peek!(self, arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Closure => {
                     let handle: FunctionHandle =
-                        read_constant!(self)
+                        self.read_constant()
                             .try_into()
                             .map_err(|e: ValueConversionError| {
                                 QangRuntimeError::new(
@@ -568,8 +562,8 @@ impl Vm {
                     let mut closure = ClosureObject::new(function);
 
                     for i in 0..closure.upvalue_count {
-                        let is_local = read_byte!(self) != 0;
-                        let index = read_byte!(self) as usize;
+                        let is_local = self.read_byte() != 0;
+                        let index = self.read_byte() as usize;
 
                         if is_local {
                             let stack_slot = get_current_frame!(self).value_slot + 1 + index;
@@ -588,7 +582,7 @@ impl Vm {
                     )?;
                 }
                 OpCode::GetUpvalue => {
-                    let slot = read_byte!(self) as usize;
+                    let slot = self.read_byte() as usize;
                     let upvalue = *get_current_closure!(self).upvalues[slot].borrow();
 
                     match upvalue {
@@ -602,7 +596,7 @@ impl Vm {
                     }
                 }
                 OpCode::SetUpvalue => {
-                    let slot = read_byte!(self) as usize;
+                    let slot = self.read_byte() as usize;
                     let value = peek!(self, 0);
 
                     let stack_slot = {

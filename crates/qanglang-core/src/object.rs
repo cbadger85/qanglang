@@ -1,4 +1,7 @@
+use generational_arena::Index;
+
 use crate::{
+    Value,
     chunk::Chunk,
     memory::{FunctionHandle, StringHandle, ValueHandle},
 };
@@ -47,18 +50,21 @@ impl FunctionObject {
 }
 
 // Idea for array implementation
-// const CHUNK_SIZE: usize = 32;
+const CHUNK_SIZE: usize = 32;
 
-// #[derive(Debug, Clone)]
-// pub enum ArrayElement {
-//     Header {
-//         first_chunk: Option<Index>,
-//         length: usize,
-//         chunks_count: usize
-//     },
-//     Chunk {
-//         data: [Option<Value>; CHUNK_SIZE],
-//         next_chunk: Option<Index>,
-//         used: usize // how many slots are actually used
-//     },
-// }
+// This becomes a Value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+
+pub struct ArrayHeader {
+    first_chunk: Option<Index>,
+    length: usize,
+    chunks_count: usize,
+}
+
+// This get's an arena allocator for it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayChunk {
+    data: [Option<Value>; CHUNK_SIZE],
+    next_chunk: Option<Index>,
+    used: usize, // how many slots are actually used
+}

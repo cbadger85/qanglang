@@ -5,7 +5,10 @@ use generational_arena::{Arena, Index};
 use crate::{ClosureObject, FunctionObject, FunctionValueKind, Value, ValueConversionError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct StringHandle(usize);
+pub struct StringHandle {
+    index: usize,
+    pub is_literal: bool,
+}
 
 impl TryFrom<Value> for StringHandle {
     type Error = ValueConversionError;
@@ -19,11 +22,17 @@ impl TryFrom<Value> for StringHandle {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-pub struct ClosureHandle(Index);
+pub struct ClosureHandle {
+    index: Index,
+    pub name_handle: StringHandle,
+}
 
 impl Default for ClosureHandle {
     fn default() -> Self {
-        ClosureHandle(Index::from_raw_parts(0, 0))
+        ClosureHandle {
+            index: Index::from_raw_parts(0, 0),
+            name_handle: StringHandle::default(),
+        }
     }
 }
 
@@ -51,7 +60,10 @@ impl TryFrom<Value> for ClosureHandle {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct FunctionHandle(usize);
+pub struct FunctionHandle {
+    index: usize,
+    pub name_handle: StringHandle,
+}
 
 impl TryFrom<Value> for FunctionHandle {
     type Error = ValueConversionError;
@@ -101,7 +113,10 @@ impl ObjectHeap {
                 self.strings.reserve(new_capacity - self.strings.capacity());
             }
             self.strings.push(s.to_string());
-            let handle = StringHandle(self.strings.len() - 1);
+            let handle = StringHandle {
+                index: self.strings.len() - 1,
+                is_literal: true,
+            };
 
             self.string_interner.insert(s.to_string(), handle);
 
@@ -122,7 +137,10 @@ impl ObjectHeap {
                 self.strings.reserve(new_capacity - self.strings.capacity());
             }
             self.strings.push(s.clone());
-            let handle = StringHandle(self.strings.len() - 1);
+            let handle = StringHandle {
+                index: self.strings.len() - 1,
+                is_literal: true,
+            };
 
             self.string_interner.insert(s, handle);
 
@@ -131,7 +149,7 @@ impl ObjectHeap {
     }
 
     pub fn get_string(&self, handle: StringHandle) -> &str {
-        &self.strings[handle.0]
+        &self.strings[handle.index]
     }
 
     pub fn can_allocate_closure(&self) -> bool {
@@ -139,11 +157,13 @@ impl ObjectHeap {
     }
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
+        let name_handle = closure.function.name_handle;
         let index = self.closures.insert(closure);
-        ClosureHandle(index)
+        ClosureHandle { index, name_handle }
     }
 
     pub fn force_allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
+        let name_handle = closure.function.name_handle;
         if self.closures.len() == self.closures.capacity() {
             let new_capacity = if self.closures.capacity() == 0 {
                 64
@@ -155,19 +175,19 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.closures.capacity());
         }
         let index = self.closures.insert(closure);
-        ClosureHandle(index)
+        ClosureHandle { index, name_handle }
     }
 
     pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
-        &self.closures[handle.0]
+        &self.closures[handle.index]
     }
 
     pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
-        &mut self.closures[handle.0]
+        &mut self.closures[handle.index]
     }
 
     pub fn free_closure(&mut self, handle: ClosureHandle) {
-        self.closures.remove(handle.0);
+        self.closures.remove(handle.index);
     }
 
     pub fn can_allocate_value(&self) -> bool {
@@ -206,6 +226,7 @@ impl ObjectHeap {
     }
 
     pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
+        let name_handle = function.name;
         if self.functions.len() == self.functions.capacity() {
             let new_capacity = if self.functions.capacity() == 0 {
                 64
@@ -216,11 +237,14 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.functions.capacity());
         }
         self.functions.push(function);
-        FunctionHandle(self.functions.len() - 1)
+        FunctionHandle {
+            index: self.functions.len() - 1,
+            name_handle,
+        }
     }
 
     pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
-        &self.functions[handle.0]
+        &self.functions[handle.index]
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {
@@ -232,205 +256,5 @@ impl ObjectHeap {
 
     pub fn collect_garbage(&mut self, _roots: &[Value]) {
         // todo!("Implement mark and sweep garbage collection using provided roots");
-    }
-}
-
-use rustc_hash::FxHasher;
-use std::hash::{Hash, Hasher};
-
-fn hash_value(value: &Value) -> u64 {
-    let mut hasher = FxHasher::default();
-    match value {
-        Value::Nil => 0u8.hash(&mut hasher),
-        Value::Boolean(b) => b.hash(&mut hasher),
-        Value::Number(n) => n.to_bits().hash(&mut hasher),
-        Value::String(handle) => handle.hash(&mut hasher),
-        Value::Function(kind) => kind.hash(&mut hasher),
-        Value::FunctionDecl(handle) => handle.hash(&mut hasher),
-    }
-    hasher.finish()
-}
-
-pub struct HashMapObject {
-    buckets: Arena<Bucket>,
-    bucket_indices: Vec<generational_arena::Index>,
-    len: usize,
-    capacity: usize,
-}
-
-#[derive(Clone, Copy)]
-enum Bucket {
-    Empty,
-    Occupied { key: Value, value: Value },
-    Tombstone,
-}
-
-impl Default for Bucket {
-    fn default() -> Self {
-        Bucket::Empty
-    }
-}
-
-impl HashMapObject {
-    const LOAD_FACTOR_THRESHOLD: f64 = 0.75;
-
-    pub fn with_capacity(capacity: usize) -> Self {
-        let mut buckets = Arena::with_capacity(capacity);
-        let mut bucket_indices = Vec::with_capacity(capacity);
-        
-        for _ in 0..capacity {
-            let index = buckets.insert(Bucket::Empty);
-            bucket_indices.push(index);
-        }
-
-        Self {
-            buckets,
-            bucket_indices,
-            len: 0,
-            capacity,
-        }
-    }
-
-    pub fn new() -> Self {
-        Self::with_capacity(16)
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    fn find_slot(&self, key: &Value) -> (usize, bool) {
-        let hash = hash_value(key);
-        let mut index = (hash as usize) % self.capacity;
-        
-        loop {
-            let bucket = &self.buckets[self.bucket_indices[index]];
-            match bucket {
-                Bucket::Empty => return (index, false),
-                Bucket::Tombstone => {
-                    // Continue probing, but remember this slot for insertion
-                },
-                Bucket::Occupied { key: existing_key, .. } => {
-                    if existing_key == key {
-                        return (index, true);
-                    }
-                }
-            }
-            index = (index + 1) % self.capacity;
-        }
-    }
-
-    fn find_insert_slot(&self, key: &Value) -> usize {
-        let hash = hash_value(key);
-        let mut index = (hash as usize) % self.capacity;
-        let mut tombstone_index = None;
-        
-        loop {
-            let bucket = &self.buckets[self.bucket_indices[index]];
-            match bucket {
-                Bucket::Empty => return tombstone_index.unwrap_or(index),
-                Bucket::Tombstone => {
-                    if tombstone_index.is_none() {
-                        tombstone_index = Some(index);
-                    }
-                },
-                Bucket::Occupied { key: existing_key, .. } => {
-                    if existing_key == key {
-                        return index;
-                    }
-                }
-            }
-            index = (index + 1) % self.capacity;
-        }
-    }
-
-    pub fn get(&self, key: &Value) -> Option<&Value> {
-        let (index, found) = self.find_slot(key);
-        if found {
-            if let Bucket::Occupied { value, .. } = &self.buckets[self.bucket_indices[index]] {
-                Some(value)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-
-    pub fn insert(&mut self, key: Value, value: Value) -> Option<Value> {
-        if self.len as f64 / self.capacity as f64 > Self::LOAD_FACTOR_THRESHOLD {
-            self.resize();
-        }
-
-        let index = self.find_insert_slot(&key);
-        let bucket_index = self.bucket_indices[index];
-        let old_bucket = self.buckets[bucket_index];
-        
-        let old_value = match old_bucket {
-            Bucket::Occupied { key: existing_key, value: old_value } if existing_key == key => {
-                Some(old_value)
-            },
-            _ => {
-                self.len += 1;
-                None
-            }
-        };
-
-        self.buckets[bucket_index] = Bucket::Occupied { key, value };
-        old_value
-    }
-
-    pub fn remove(&mut self, key: &Value) -> Option<Value> {
-        let (index, found) = self.find_slot(key);
-        if found {
-            let bucket_index = self.bucket_indices[index];
-            if let Bucket::Occupied { value, .. } = self.buckets[bucket_index] {
-                self.buckets[bucket_index] = Bucket::Tombstone;
-                self.len -= 1;
-                Some(value)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-
-    fn resize(&mut self) {
-        let old_capacity = self.capacity;
-        let old_bucket_indices = std::mem::take(&mut self.bucket_indices);
-        
-        self.capacity = old_capacity * 2;
-        self.bucket_indices = Vec::with_capacity(self.capacity);
-        
-        // Create new empty buckets
-        for _ in 0..self.capacity {
-            let index = self.buckets.insert(Bucket::Empty);
-            self.bucket_indices.push(index);
-        }
-
-        let old_len = self.len;
-        self.len = 0;
-
-        // Rehash all existing entries
-        for old_index in old_bucket_indices {
-            if let Bucket::Occupied { key, value } = self.buckets[old_index] {
-                self.insert(key, value);
-            }
-            // Free the old bucket
-            self.buckets.remove(old_index);
-        }
-
-        debug_assert_eq!(self.len, old_len);
-    }
-}
-
-impl Default for HashMapObject {
-    fn default() -> Self {
-        Self::new()
     }
 }

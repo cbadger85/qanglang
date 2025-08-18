@@ -13,7 +13,7 @@ use crate::{
     memory::{ClosureHandle, FunctionHandle, StringHandle},
     object::{ClosureObject, FunctionObject, UpvalueReference},
     qang_std::{
-        qang_assert, qang_assert_eq, qang_assert_throws, qang_print, qang_println,
+        qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
         qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
     },
     value::{
@@ -314,6 +314,7 @@ impl Vm {
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("to_uppercase", 1, qang_to_uppercase)
             .add_native_function("to_lowercase", 1, qang_to_lowercase)
+            .add_native_function("hash", 1, qang_hash)
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -324,7 +325,7 @@ impl Vm {
     pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
         let identifier_handle = self.heap.intern_string_slice(name);
         let native_function = NativeFunction {
-            name: identifier_handle,
+            name_handle: identifier_handle,
             arity,
             function,
         };

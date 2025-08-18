@@ -3,17 +3,19 @@ use crate::{
     error::ValueConversionError,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
+use rustc_hash::FxHasher;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct NativeFunction {
     pub function: NativeFn,
     pub arity: usize,
-    pub name: StringHandle,
+    pub name_handle: StringHandle,
 }
 
 impl PartialEq for NativeFunction {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        self.name_handle == other.name_handle
     }
 }
 
@@ -44,7 +46,6 @@ impl Value {
         print!("{}", self.to_display_string(heap));
     }
 
-    // TODO change this to return a string slice.
     pub fn to_display_string(&self, heap: &ObjectHeap) -> String {
         match self {
             Value::Nil => "nil".to_string(),
@@ -52,20 +53,16 @@ impl Value {
             Value::String(handle) => heap.get_string(*handle).to_string(),
             Value::Boolean(boolean) => boolean.to_string(),
             Value::FunctionDecl(function_handle) => {
-                let handle = heap.get_function(*function_handle).name;
-                let identifier = heap.get_string(handle);
-
+                let identifier = heap.get_string(function_handle.name_handle);
                 format!("<function>{}", identifier)
             }
             Value::Function(function) => match function {
                 FunctionValueKind::NativeFunction(function) => {
-                    let identifier = heap.get_string(function.name);
+                    let identifier = heap.get_string(function.name_handle);
                     format!("<function>{}", identifier)
                 }
                 FunctionValueKind::Closure(handle) => {
-                    let closure = heap.get_closure(*handle);
-                    let function = heap.get_function(closure.function);
-                    let identifier = heap.get_string(function.name);
+                    let identifier = heap.get_string(handle.name_handle);
                     format!("<function>{}", identifier)
                 }
             },
@@ -90,11 +87,30 @@ impl Value {
             _ => true,
         }
     }
+
+    pub fn hash(&self) -> u64 {
+        let mut hasher = FxHasher::default();
+        match self {
+            Value::Nil => 0u8.hash(&mut hasher),
+            Value::Boolean(b) => b.hash(&mut hasher),
+            Value::Number(n) => n.to_bits().hash(&mut hasher),
+            Value::String(handle) => handle.hash(&mut hasher),
+            Value::Function(kind) => kind.hash(&mut hasher),
+            Value::FunctionDecl(handle) => handle.hash(&mut hasher),
+        }
+        hasher.finish()
+    }
 }
 
 impl From<f64> for Value {
     fn from(num: f64) -> Self {
         Value::Number(num)
+    }
+}
+
+impl From<u64> for Value {
+    fn from(num: u64) -> Self {
+        Value::Number(num as f64)
     }
 }
 

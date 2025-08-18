@@ -120,22 +120,18 @@ macro_rules! peek {
 macro_rules! gc_allocate {
     // Closure allocation
     ($vm:expr, closure: $value:expr) => {{
-        if $vm.heap.can_allocate_closure() {
-            $vm.heap.allocate_closure($value)
-        } else {
+        if !$vm.heap.can_allocate_closure() {
             $vm.collect_garbage();
-            $vm.heap.force_allocate_closure($value)
         }
+        $vm.heap.force_allocate_closure($value)
     }};
 
     // Value allocation
     ($vm:expr, value: $value:expr) => {{
-        if $vm.heap.can_allocate_value() {
-            $vm.heap.allocate_value($value)
-        } else {
+        if !$vm.heap.can_allocate_value() {
             $vm.collect_garbage();
-            $vm.heap.force_allocate_value($value)
         }
+        $vm.heap.force_allocate_value($value)
     }};
 }
 
@@ -820,9 +816,11 @@ impl Vm {
             SourceLocation::default()
         };
 
+        // Get closure and function, cache function pointer for fast access during execution
+        let closure = self.heap.get_closure(closure_handle);
+        let function = self.heap.get_function(closure.function);
+
         let final_arg_count = {
-            let closure = self.heap.get_closure(closure_handle);
-            let function = self.heap.get_function(closure.function);
             if arg_count < function.arity {
                 let arity = function.arity;
                 for _ in arg_count..arity {
@@ -842,10 +840,6 @@ impl Vm {
 
         let value_slot = self.state.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
         let call_frame = &mut self.state.frames[self.state.frame_count - 1];
-
-        // Get closure and function, cache function pointer for fast access during execution
-        let closure = self.heap.get_closure(closure_handle);
-        let function = self.heap.get_function(closure.function);
 
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;

@@ -1154,21 +1154,62 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         pipe: &ast::PipeExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        // Visit the right side (function) first
         if let Some(right) = &pipe.right {
-            self.visit_expression(right, errors)?;
+            match right.as_ref() {
+                // Case 1: Right side is a function call - partial application
+                ast::Expr::Call(call_expr) => {
+                    // Extract arguments from the call operation
+                    let args = match call_expr.operation.as_ref() {
+                        ast::CallOperation::Call(arguments) => arguments,
+                        _ => {
+                            return Err(QangSyntaxError::new(
+                                "Pipe expression with non-call operation not supported.".to_string(),
+                                call_expr.span,
+                            ));
+                        }
+                    };
+
+                    // Visit the function (callee) - don't call it, just get the function value
+                    self.visit_expression(&call_expr.callee, errors)?;
+                    
+                    // Visit the piped value (becomes first argument)
+                    self.visit_expression(&pipe.left, errors)?;
+                    
+                    // Visit all the existing arguments
+                    for arg in args {
+                        self.visit_expression(arg, errors)?;
+                    }
+                    
+                    // Call with 1 + existing args
+                    let total_args = 1 + args.len();
+                    if total_args > u8::MAX as usize {
+                        return Err(QangSyntaxError::new(
+                            "Functions may only take up to 256 arguments.".to_string(),
+                            pipe.span,
+                        ));
+                    }
+                    
+                    self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.span);
+                }
+                
+                // Case 2: Right side is just an expression - current behavior  
+                _ => {
+                    // Visit the function
+                    self.visit_expression(right, errors)?;
+                    
+                    // Visit the piped value
+                    self.visit_expression(&pipe.left, errors)?;
+                    
+                    // Call with 1 argument
+                    self.emit_opcode_and_byte(OpCode::Call, 1, pipe.span);
+                }
+            }
         } else {
             return Err(QangSyntaxError::new(
                 "Pipe expression missing right operand.".to_string(),
                 pipe.span,
             ));
         }
-
-        // Visit the left side (value to be piped)
-        self.visit_expression(&pipe.left, errors)?;
-
-        // Emit call with 1 argument (the piped value)
-        self.emit_opcode_and_byte(OpCode::Call, 1, pipe.span);
 
         Ok(())
     }

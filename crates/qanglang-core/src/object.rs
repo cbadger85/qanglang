@@ -1,4 +1,7 @@
-use crate::{chunk::Chunk, memory::{FunctionHandle, StringHandle, ValueHandle}};
+use crate::{
+    chunk::Chunk,
+    memory::{FunctionHandle, StringHandle, ValueHandle},
+};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ClosureObject {
@@ -42,3 +45,20 @@ impl FunctionObject {
         }
     }
 }
+
+// Idea for array implementation
+// const CHUNK_SIZE: usize = 32;
+
+// #[derive(Debug, Clone)]
+// pub enum ArrayElement {
+//     Header {
+//         first_chunk: Option<Index>,
+//         length: usize,
+//         chunks_count: usize
+//     },
+//     Chunk {
+//         data: [Option<Value>; CHUNK_SIZE],
+//         next_chunk: Option<Index>,
+//         used: usize // how many slots are actually used
+//     },
+// }

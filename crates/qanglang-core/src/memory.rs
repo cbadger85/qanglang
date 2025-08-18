@@ -220,7 +220,7 @@ impl ObjectHeap {
     }
 
     pub fn collect_garbage(&mut self, _roots: &[Value]) {
-        todo!("Implement mark and sweep garbage collection using provided roots");
+        // todo!("Implement mark and sweep garbage collection using provided roots");
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {

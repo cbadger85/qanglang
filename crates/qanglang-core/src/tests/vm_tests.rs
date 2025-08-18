@@ -327,3 +327,115 @@ fn test_closures() {
         }
     }
 }
+
+#[test]
+fn test_pipe_partial_application() {
+    let source = r#"
+        // Test basic partial application
+        fn add(a, b) {
+            return a + b;
+        }
+        
+        var result1 = 5 |> add(3);
+        assert_eq(result1, 8);
+        
+        // Test with string concatenation
+        fn concat(str1, str2) {
+            return str1 + str2;
+        }
+        
+        var result2 = "hello " |> concat("world!");
+        assert_eq(result2, "hello world!");
+        
+        // Test with multiple arguments
+        fn triple_add(a, b, c) {
+            return a + b + c;
+        }
+        
+        var result3 = 1 |> triple_add(2, 3);
+        assert_eq(result3, 6);
+        
+        // Test backward compatibility - function without parentheses
+        fn double(x) {
+            return x * 2;
+        }
+        
+        var result4 = 5 |> double;
+        assert_eq(result4, 10);
+        
+        // Test empty parentheses (equivalent to no parentheses)
+        var result5 = 5 |> double();
+        assert_eq(result5, 10);
+        
+        // Test with built-in functions
+        var result6 = 42 |> to_string;
+        assert_eq(typeof(result6), "string");
+        assert_eq(result6, "42");
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_pipe_chaining() {
+    let source = r#"
+        fn add_one(x) {
+            return x + 1;
+        }
+        
+        fn multiply_by(x, factor) {
+            return x * factor;
+        }
+        
+        fn to_string_with_suffix(x, suffix) {
+            return to_string(x) + suffix;
+        }
+        
+        // Test chaining pipes
+        var result = 5 |> add_one |> multiply_by(3) |> to_string_with_suffix(" units");
+        assert_eq(result, "18 units");
+        
+        // Test that original functions still work normally
+        assert_eq(add_one(5), 6);
+        assert_eq(multiply_by(6, 3), 18);
+        assert_eq(to_string_with_suffix(18, " units"), "18 units");
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

@@ -1,7 +1,8 @@
-use std::{collections::HashMap, ops::Range};
+use std::ops::Range;
 
 #[cfg(feature = "profiler")]
 use coz;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
     ObjectHeap, QangProgram, QangRuntimeError, Value,
@@ -157,7 +158,7 @@ pub struct VmState {
     frame_count: usize,
     stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
-    globals: HashMap<StringHandle, Value>,
+    globals: FxHashMap<StringHandle, Value>,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
 }
@@ -254,7 +255,7 @@ pub struct Vm {
 
 impl Vm {
     pub fn new(mut heap: ObjectHeap) -> Self {
-        let mut globals = HashMap::new();
+        let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
         let nil_type_handle = heap.intern_string_slice("NIL".into());
         let nil_type_value_handle = heap.intern_string_slice(NIL_TYPE_STRING.into());
@@ -925,7 +926,7 @@ impl Vm {
         &mut self.heap
     }
 
-    pub fn globals(&self) -> &HashMap<StringHandle, Value> {
+    pub fn globals(&self) -> &FxHashMap<StringHandle, Value> {
         &self.state.globals
     }
 

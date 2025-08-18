@@ -1,9 +1,10 @@
-use std::{collections::HashMap, fs};
+use std::fs;
 
 use qanglang_core::{
     ClosureHandle, CompilerPipeline, FunctionValueKind, ObjectHeap, SourceMap, StringHandle, Value,
     Vm,
 };
+use rustc_hash::FxHashMap;
 
 use crate::test_file::SourceFile;
 
@@ -155,7 +156,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
 
 /// Extracts test description and test functions from the VM globals
 fn extract_test_info(
-    globals: &HashMap<StringHandle, Value>,
+    globals: &FxHashMap<StringHandle, Value>,
     heap: &ObjectHeap,
 ) -> (Option<String>, Vec<(String, ClosureHandle)>) {
     let mut description = None;

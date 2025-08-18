@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 qanglang-core = { path = "../qanglang-core" }
+rustc-hash = { workspace = true }

@@ -219,7 +219,7 @@ impl ObjectHeap {
         self.values.len() < self.values.capacity() - 16
     }
 
-    pub fn garbage_collect(&mut self, _roots: &[Value]) {
+    pub fn collect_garbage(&mut self, _roots: &[Value]) {
         todo!("Implement mark and sweep garbage collection using provided roots");
     }
 

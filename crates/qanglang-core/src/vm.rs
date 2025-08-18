@@ -914,7 +914,7 @@ impl Vm {
 
     fn collect_garbage(&mut self) {
         let roots = self.state.gather_roots();
-        self.heap.garbage_collect(&roots);
+        self.heap.collect_garbage(&roots);
     }
 
     pub fn heap(&self) -> &ObjectHeap {

@@ -4,7 +4,7 @@ use crate::{
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct NativeFunction {
     pub function: NativeFn,
     pub arity: usize,
@@ -17,7 +17,7 @@ impl PartialEq for NativeFunction {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 pub enum FunctionValueKind {
     Closure(ClosureHandle),
     NativeFunction(NativeFunction),

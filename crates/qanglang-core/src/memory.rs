@@ -130,7 +130,20 @@ impl ObjectHeap {
         }
     }
 
+    pub fn get_string(&self, handle: StringHandle) -> &str {
+        &self.strings[handle.0]
+    }
+
+    pub fn can_allocate_closure(&self) -> bool {
+        self.closures.len() < self.closures.capacity()
+    }
+
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
+        let index = self.closures.insert(closure);
+        ClosureHandle(index)
+    }
+
+    pub fn force_allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
         if self.closures.len() == self.closures.capacity() {
             let new_capacity = if self.closures.capacity() == 0 {
                 64
@@ -145,12 +158,28 @@ impl ObjectHeap {
         ClosureHandle(index)
     }
 
-    pub fn force_allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
-        let index = self.closures.insert(closure);
-        ClosureHandle(index)
+    pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
+        &self.closures[handle.0]
+    }
+
+    pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
+        &mut self.closures[handle.0]
+    }
+
+    pub fn free_closure(&mut self, handle: ClosureHandle) {
+        self.closures.remove(handle.0);
+    }
+
+    pub fn can_allocate_value(&self) -> bool {
+        self.values.len() < self.values.capacity()
     }
 
     pub fn allocate_value(&mut self, value: Value) -> ValueHandle {
+        let index = self.values.insert(value);
+        ValueHandle(index)
+    }
+
+    pub fn force_allocate_value(&mut self, value: Value) -> ValueHandle {
         if self.values.len() == self.values.capacity() {
             let new_capacity = if self.values.capacity() == 0 {
                 64
@@ -164,9 +193,16 @@ impl ObjectHeap {
         ValueHandle(index)
     }
 
-    pub fn force_allocate_value(&mut self, value: Value) -> ValueHandle {
-        let index = self.values.insert(value);
-        ValueHandle(index)
+    pub fn get_value(&self, handle: ValueHandle) -> &Value {
+        &self.values[handle.0]
+    }
+
+    pub fn get_value_mut(&mut self, handle: ValueHandle) -> &mut Value {
+        &mut self.values[handle.0]
+    }
+
+    pub fn free_value(&mut self, handle: ValueHandle) {
+        self.values.remove(handle.0);
     }
 
     pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
@@ -183,44 +219,8 @@ impl ObjectHeap {
         FunctionHandle(self.functions.len() - 1)
     }
 
-    pub fn get_string(&self, handle: StringHandle) -> &str {
-        &self.strings[handle.0]
-    }
-
-    pub fn clone_function(&self, handle: FunctionHandle) -> &FunctionObject {
-        &self.functions[handle.0]
-    }
-
     pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
         &self.functions[handle.0]
-    }
-
-    pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
-        &self.closures[handle.0]
-    }
-
-    pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
-        &mut self.closures[handle.0]
-    }
-
-    pub fn get_value(&self, handle: ValueHandle) -> &Value {
-        &self.values[handle.0]
-    }
-
-    pub fn get_value_mut(&mut self, handle: ValueHandle) -> &mut Value {
-        &mut self.values[handle.0]
-    }
-
-    pub fn can_allocate_closure(&self) -> bool {
-        self.closures.len() < self.closures.capacity() - 16
-    }
-
-    pub fn can_allocate_value(&self) -> bool {
-        self.values.len() < self.values.capacity() - 16
-    }
-
-    pub fn collect_garbage(&mut self, _roots: &[Value]) {
-        // todo!("Implement mark and sweep garbage collection using provided roots");
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {
@@ -228,5 +228,9 @@ impl ObjectHeap {
             .iter()
             .enumerate()
             .map(|(index, obj)| (index, obj))
+    }
+
+    pub fn collect_garbage(&mut self, _roots: &[Value]) {
+        // todo!("Implement mark and sweep garbage collection using provided roots");
     }
 }

@@ -120,18 +120,22 @@ macro_rules! peek {
 macro_rules! gc_allocate {
     // Closure allocation
     ($vm:expr, closure: $value:expr) => {{
-        if !$vm.heap.can_allocate_closure() {
+        if $vm.heap.can_allocate_closure() {
+            $vm.heap.allocate_closure($value)
+        } else {
             $vm.collect_garbage();
+            $vm.heap.force_allocate_closure($value)
         }
-        $vm.heap.force_allocate_closure($value)
     }};
 
     // Value allocation
     ($vm:expr, value: $value:expr) => {{
-        if !$vm.heap.can_allocate_value() {
+        if $vm.heap.can_allocate_value() {
+            $vm.heap.allocate_value($value)
+        } else {
             $vm.collect_garbage();
+            $vm.heap.force_allocate_value($value)
         }
-        $vm.heap.force_allocate_value($value)
     }};
 }
 

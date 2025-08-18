@@ -8,7 +8,6 @@ members = [
 ]
 
 [workspace.dependencies]
-phf = { version = "0.11.3", features = ["macros"]}
 rustc-hash = "2.1.1"
 coz = "0.1"
 

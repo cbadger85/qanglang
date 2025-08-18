@@ -9,7 +9,7 @@ pub fn disassemble_chunk(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
 
     let mut offset = 0;
 
-    while offset < chunk.count() {
+    while offset < chunk.code.len() {
         offset = disassemble_instruction(chunk, heap, offset);
     }
 }
@@ -17,13 +17,13 @@ pub fn disassemble_chunk(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
 pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) -> usize {
     print!("{:04} ", offset);
 
-    if offset > 0 && chunk.locs()[offset].line == chunk.locs()[offset - 1].line {
+    if offset > 0 && chunk.locs[offset].line == chunk.locs[offset - 1].line {
         print!("   | ");
     } else {
-        print!("{:04} ", chunk.locs()[offset].line);
+        print!("{:04} ", chunk.locs[offset].line);
     }
 
-    let instruction = chunk.code()[offset];
+    let instruction = chunk.code[offset];
     let opcode = OpCode::from(instruction);
 
     match opcode {
@@ -58,11 +58,11 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
         OpCode::Closure => {
             let mut offset = offset;
             offset += 1; // Skip the opcode itself
-            let constant = chunk.code()[offset];
+            let constant = chunk.code[offset];
             offset += 1;
 
             print!("{:<16} {:4} '", "OP_CLOSURE", constant);
-            let value = chunk.constants()[constant as usize];
+            let value = chunk.constants[constant as usize];
             println!("{}'", value.to_display_string(&heap));
             let function_obj = match value {
                 Value::FunctionDecl(handle) => Some(heap.get_function(handle)),
@@ -71,9 +71,9 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
 
             if let Some(function) = function_obj {
                 for _j in 0..function.upvalue_count {
-                    let is_local = chunk.code()[offset];
+                    let is_local = chunk.code[offset];
                     offset += 1;
-                    let index = chunk.code()[offset];
+                    let index = chunk.code[offset];
                     offset += 1;
 
                     println!(
@@ -93,11 +93,11 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
 }
 
 fn constant_instruction(name: &str, chunk: &Chunk, heap: &ObjectHeap, offset: usize) -> usize {
-    let constant = chunk.code()[offset + 1] as usize;
+    let constant = chunk.code[offset + 1] as usize;
     print!("{:<16} {:4} '", name, constant);
 
     chunk
-        .constants()
+        .constants
         .get(constant)
         .copied()
         .unwrap_or_default()
@@ -113,13 +113,13 @@ fn simple_instruction(name: &str, offset: usize) -> usize {
 }
 
 fn byte_instruction(name: &str, chunk: &Chunk, offset: usize) -> usize {
-    let slot = chunk.code()[offset + 1];
+    let slot = chunk.code[offset + 1];
     println!("{:<16} {:4}", name, slot);
     offset + 2
 }
 
 fn jump_instruction(name: &str, sign: i32, chunk: &Chunk, offset: usize) -> usize {
-    let jump = ((chunk.code()[offset + 1] as u16) << 8) | (chunk.code()[offset + 2] as u16);
+    let jump = ((chunk.code[offset + 1] as u16) << 8) | (chunk.code[offset + 2] as u16);
     let target = offset as i32 + 3 + sign * (jump as i32);
     println!("{:<16} {:4} -> {}", name, offset, target);
     offset + 3

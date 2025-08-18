@@ -298,11 +298,11 @@ impl<'a> CompilerVisitor<'a> {
         self.emit_opcode(opcode, span);
         self.emit_byte(0xff, span);
         self.emit_byte(0xff, span);
-        self.current_chunk_mut().count() - 2
+        self.current_chunk_mut().code.len() - 2
     }
 
     fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        let jump = self.current_chunk_mut().count() - offset - 2;
+        let jump = self.current_chunk_mut().code.len() - offset - 2;
 
         if jump > u16::MAX as usize {
             return Err(QangSyntaxError::new(
@@ -311,15 +311,15 @@ impl<'a> CompilerVisitor<'a> {
             ));
         }
 
-        self.current_chunk_mut().code_mut()[offset] = ((jump >> 8) & 0xff) as u8;
-        self.current_chunk_mut().code_mut()[offset + 1] = (jump & 0xff) as u8;
+        self.current_chunk_mut().code[offset] = ((jump >> 8) & 0xff) as u8;
+        self.current_chunk_mut().code[offset + 1] = (jump & 0xff) as u8;
 
         Ok(())
     }
 
     fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
         self.emit_opcode(OpCode::Loop, span);
-        let offset = self.current_chunk_mut().count() - loop_start + 2;
+        let offset = self.current_chunk_mut().code.len() - loop_start + 2;
         if offset > u16::MAX as usize {
             return Err(QangSyntaxError::new(
                 "Loop body too large.".to_string(),
@@ -854,7 +854,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         while_stmt: &ast::WhileStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let loop_start = self.current_chunk_mut().count();
+        let loop_start = self.current_chunk_mut().code.len();
         self.visit_expression(&while_stmt.condition, errors)?;
 
         let exit_jump = self.emit_jump(OpCode::JumpIfFalse, while_stmt.body.span());
@@ -887,12 +887,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             }
         }
 
-        let mut loop_start = self.current_chunk_mut().count();
+        let mut loop_start = self.current_chunk_mut().code.len();
         let mut exit_jump: Option<usize> = None;
 
         if let Some(condition) = &for_stmt.condition {
             let condition_jump = self.emit_jump(OpCode::Jump, condition.span());
-            loop_start = self.current_chunk_mut().count();
+            loop_start = self.current_chunk_mut().code.len();
             self.visit_statement(&for_stmt.body, errors)?;
 
             if let Some(increment) = &for_stmt.increment {
@@ -1163,7 +1163,8 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                         ast::CallOperation::Call(arguments) => arguments,
                         _ => {
                             return Err(QangSyntaxError::new(
-                                "Pipe expression with non-call operation not supported.".to_string(),
+                                "Pipe expression with non-call operation not supported."
+                                    .to_string(),
                                 call_expr.span,
                             ));
                         }
@@ -1171,15 +1172,15 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
                     // Visit the function (callee) - don't call it, just get the function value
                     self.visit_expression(&call_expr.callee, errors)?;
-                    
+
                     // Visit the piped value (becomes first argument)
                     self.visit_expression(&pipe.left, errors)?;
-                    
+
                     // Visit all the existing arguments
                     for arg in args {
                         self.visit_expression(arg, errors)?;
                     }
-                    
+
                     // Call with 1 + existing args
                     let total_args = 1 + args.len();
                     if total_args > u8::MAX as usize {
@@ -1188,18 +1189,18 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                             pipe.span,
                         ));
                     }
-                    
+
                     self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.span);
                 }
-                
-                // Case 2: Right side is just an expression - current behavior  
+
+                // Case 2: Right side is just an expression - current behavior
                 _ => {
                     // Visit the function
                     self.visit_expression(right, errors)?;
-                    
+
                     // Visit the piped value
                     self.visit_expression(&pipe.left, errors)?;
-                    
+
                     // Call with 1 argument
                     self.emit_opcode_and_byte(OpCode::Call, 1, pipe.span);
                 }

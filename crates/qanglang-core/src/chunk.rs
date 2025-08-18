@@ -147,9 +147,9 @@ impl SourceLocation {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Chunk {
-    code: Vec<u8>,
-    locs: Vec<SourceLocation>,
-    constants: Vec<Value>,
+    pub code: Vec<u8>,
+    pub locs: Vec<SourceLocation>,
+    pub constants: Vec<Value>,
 }
 
 impl Chunk {
@@ -173,25 +173,5 @@ impl Chunk {
     pub fn add_constant(&mut self, value: Value) -> usize {
         self.constants.push(value);
         self.constants.len() - 1
-    }
-
-    pub fn count(&self) -> usize {
-        self.code.len()
-    }
-
-    pub fn code(&self) -> &[u8] {
-        &self.code
-    }
-
-    pub fn code_mut(&mut self) -> &mut [u8] {
-        &mut self.code
-    }
-
-    pub fn constants(&self) -> &[Value] {
-        &self.constants
-    }
-
-    pub fn locs(&self) -> &[SourceLocation] {
-        &self.locs
     }
 }

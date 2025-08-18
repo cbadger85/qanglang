@@ -187,7 +187,7 @@ impl VmState {
     fn get_loc_at(&self, index: usize) -> SourceLocation {
         self.get_current_function()
             .chunk
-            .locs()
+            .locs
             .get(index)
             .copied()
             .unwrap_or_default()
@@ -199,7 +199,8 @@ impl VmState {
             !self.current_function_ptr.is_null(),
             "Function pointer is null"
         );
-        let code = unsafe { (*self.current_function_ptr).chunk.code() };
+
+        let code = unsafe { &(*self.current_function_ptr).chunk.code };
         debug_assert!(frame.ip < code.len(), "IP out of bounds");
         let byte = code[frame.ip];
         frame.ip += 1;
@@ -212,7 +213,7 @@ impl VmState {
             !self.current_function_ptr.is_null(),
             "Function pointer is null"
         );
-        let constants = unsafe { (*self.current_function_ptr).chunk.constants() };
+        let constants = unsafe { &(*self.current_function_ptr).chunk.constants };
         debug_assert!(index < constants.len(), "Constant index out of bounds");
         constants[index]
     }
@@ -947,7 +948,7 @@ impl Vm {
             let loc = if frame.ip > 0 {
                 function
                     .chunk
-                    .locs()
+                    .locs
                     .get(frame.ip - 1)
                     .copied()
                     .unwrap_or_default()

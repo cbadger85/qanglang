@@ -274,7 +274,7 @@ fn test_closures() {
             var count = 0;
             var counter = () -> {
                 assert_eq(typeof(count), NUMBER, "Expected " + NUMBER + " but found " + typeof(count));
-                println("typeof count " + (count |> to_string));
+                println("typeof count " + typeof(count));
                 count = count + 1;
                 return count;
             };
@@ -291,7 +291,7 @@ fn test_closures() {
             var count = 0;
             return () -> {
                 assert_eq(typeof(count), NUMBER, "Expected " + NUMBER + " but found " + typeof(count));
-                println("typeof count " + (count |> to_string));
+                println("typeof count " + typeof(count));
                 count = count + 1;
                 return count;
             };

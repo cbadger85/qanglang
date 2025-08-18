@@ -134,7 +134,6 @@ macro_rules! gc_allocate {
     }};
 }
 
-
 #[derive(Debug, Clone)]
 struct CallFrame {
     closure: ClosureHandle,
@@ -333,9 +332,8 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
-        let function_rc = program.into_function();
-        let upvalue_count = function_rc.upvalue_count;
-        let function_handle = self.heap.allocate_function((*function_rc).clone());
+        let function_handle = program.into_handle();
+        let upvalue_count = self.heap.get_function(function_handle).upvalue_count;
 
         let handle =
             gc_allocate!(self, closure: ClosureObject::new(function_handle, upvalue_count));
@@ -578,7 +576,9 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.state.read_byte();
-                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot + 1 + slot as usize;
+                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot
+                        + 1
+                        + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
                         "Local slot {} out of bounds",
@@ -591,7 +591,9 @@ impl Vm {
                 OpCode::SetLocal => {
                     let slot = self.state.read_byte();
                     let value = peek!(self, 0);
-                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot + 1 + slot as usize;
+                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot
+                        + 1
+                        + slot as usize;
 
                     self.state.stack[absolute_slot] = value;
                 }
@@ -632,10 +634,15 @@ impl Vm {
                         let index = self.state.read_byte() as usize;
 
                         if is_local {
-                            let stack_slot = self.state.frames[self.state.frame_count - 1].value_slot + 1 + index;
+                            let stack_slot = self.state.frames[self.state.frame_count - 1]
+                                .value_slot
+                                + 1
+                                + index;
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {
-                            let current_closure = self.heap.get_closure(self.state.frames[self.state.frame_count - 1].closure);
+                            let current_closure = self
+                                .heap
+                                .get_closure(self.state.frames[self.state.frame_count - 1].closure);
                             let current_upvalue = current_closure.upvalues[index];
                             self.heap.get_closure_mut(closure_handle).upvalues[i] = current_upvalue;
                         }
@@ -647,7 +654,9 @@ impl Vm {
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
-                    let current_closure = self.heap.get_closure(self.state.frames[self.state.frame_count - 1].closure);
+                    let current_closure = self
+                        .heap
+                        .get_closure(self.state.frames[self.state.frame_count - 1].closure);
                     let upvalue = current_closure.upvalues[slot];
 
                     match upvalue {
@@ -664,7 +673,8 @@ impl Vm {
                 OpCode::SetUpvalue => {
                     let slot = self.state.read_byte() as usize;
                     let value = peek!(self, 0);
-                    let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
+                    let current_closure_handle =
+                        self.state.frames[self.state.frame_count - 1].closure;
 
                     let upvalue = self.heap.get_closure(current_closure_handle).upvalues[slot];
                     match upvalue {

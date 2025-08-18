@@ -1,13 +1,15 @@
-use std::rc::Rc;
-
 use crate::{
-    ErrorReporter, QangSyntaxError, SourceMap, Value,
+    ErrorReporter, FunctionHandle, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
     memory::{ObjectHeap, StringHandle},
     object::FunctionObject,
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
+    value::{
+        BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING,
+        STRING_TYPE_STRING,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,14 +32,14 @@ impl CompilerError {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct QangProgram(Rc<FunctionObject>);
+pub struct QangProgram(FunctionHandle);
 
 impl QangProgram {
-    pub fn new(function: FunctionObject) -> Self {
-        Self(Rc::new(function))
+    pub fn new(handle: FunctionHandle) -> Self {
+        Self(handle)
     }
 
-    pub fn into_function(self) -> Rc<FunctionObject> {
+    pub fn into_handle(self) -> FunctionHandle {
         self.0
     }
 }
@@ -164,9 +166,18 @@ impl<'a> CompilerPipeline<'a> {
 
         match CompilerVisitor::new(self.heap).compile(program, &self.source_map, errors) {
             Ok(program) => {
-                let program = Rc::new(program);
-                self.heap.allocate_function((*program).clone());
-                Ok(QangProgram(program))
+                self.heap.intern_string_slice("NIL".into());
+                self.heap.intern_string_slice(NIL_TYPE_STRING.into());
+                self.heap.intern_string_slice("BOOLEAN".into());
+                self.heap.intern_string_slice(BOOLEAN_TYPE_STRING.into());
+                self.heap.intern_string_slice("NUMBER".into());
+                self.heap.intern_string_slice(NUMBER_TYPE_STRING.into());
+                self.heap.intern_string_slice("STRING".into());
+                self.heap.intern_string_slice(STRING_TYPE_STRING.into());
+                self.heap.intern_string_slice("FUNCTION".into());
+                self.heap.intern_string_slice(FUNCTION_TYPE_STRING.into());
+                let program = program;
+                Ok(QangProgram(self.heap.allocate_function(program)))
             }
             Err(error) => Err(CompilerError(
                 error

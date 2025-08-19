@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use generational_arena::{Arena, Index};
 
-use crate::{ClosureObject, FunctionObject, FunctionValueKind, Value, ValueConversionError};
+use crate::{
+    ClosureObject, FunctionObject, FunctionValueKind, Value, ValueConversionError, debug_log,
+    object::Upvalue,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
 pub struct StringHandle {
@@ -37,11 +40,11 @@ impl Default for ClosureHandle {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-pub struct ValueHandle(Index);
+pub struct UpvalueHandle(Index);
 
-impl Default for ValueHandle {
+impl Default for UpvalueHandle {
     fn default() -> Self {
-        ValueHandle(Index::from_raw_parts(0, 0))
+        UpvalueHandle(Index::from_raw_parts(0, 0))
     }
 }
 
@@ -81,8 +84,9 @@ pub struct ObjectHeap {
     strings: Vec<String>,
     functions: Vec<FunctionObject>,
     closures: Arena<ClosureObject>,
-    values: Arena<Value>,
+    upvalues: Arena<Upvalue>,
     string_interner: HashMap<String, StringHandle>,
+    is_debug: bool,
 }
 
 impl ObjectHeap {
@@ -96,11 +100,18 @@ impl ObjectHeap {
             functions: Vec::with_capacity(initial_capacity),
             closures: Arena::with_capacity(initial_capacity),
             strings: Vec::with_capacity(initial_capacity),
-            values: Arena::with_capacity(initial_capacity),
+            upvalues: Arena::with_capacity(initial_capacity),
+            is_debug: false,
         }
     }
 
+    pub fn debug(mut self, is_debug: bool) -> Self {
+        self.is_debug = is_debug;
+        self
+    }
+
     pub fn intern_string_slice(&mut self, s: &str) -> StringHandle {
+        debug_log!(self.is_debug, "Allocating string...");
         if self.string_interner.contains_key(s) {
             self.string_interner[s]
         } else {
@@ -125,6 +136,7 @@ impl ObjectHeap {
     }
 
     pub fn intern_string(&mut self, s: String) -> StringHandle {
+        debug_log!(self.is_debug, "Allocating string...");
         if self.string_interner.contains_key(&s) {
             self.string_interner[&s]
         } else {
@@ -157,12 +169,14 @@ impl ObjectHeap {
     }
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
+        debug_log!(self.is_debug, "Allocating closure...");
         let name_handle = closure.function.name_handle;
         let index = self.closures.insert(closure);
         ClosureHandle { index, name_handle }
     }
 
     pub fn force_allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
+        debug_log!(self.is_debug, "Allocating closure...");
         let name_handle = closure.function.name_handle;
         if self.closures.len() == self.closures.capacity() {
             let new_capacity = if self.closures.capacity() == 0 {
@@ -187,45 +201,67 @@ impl ObjectHeap {
     }
 
     pub fn free_closure(&mut self, handle: ClosureHandle) {
+        debug_log!(self.is_debug, "Freeing function...");
         self.closures.remove(handle.index);
     }
 
-    pub fn can_allocate_value(&self) -> bool {
-        self.values.len() < self.values.capacity()
+    pub fn mark_closure(&mut self, handle: ClosureHandle) {
+        let closure = &mut self.closures[handle.index];
+        closure.is_marked = true;
     }
 
-    pub fn allocate_value(&mut self, value: Value) -> ValueHandle {
-        let index = self.values.insert(value);
-        ValueHandle(index)
+    pub fn can_allocate_upvalue(&self) -> bool {
+        self.upvalues.len() < self.upvalues.capacity()
     }
 
-    pub fn force_allocate_value(&mut self, value: Value) -> ValueHandle {
-        if self.values.len() == self.values.capacity() {
-            let new_capacity = if self.values.capacity() == 0 {
+    pub fn allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
+        debug_log!(self.is_debug, "Allocating upvalue...");
+        let index = self.upvalues.insert(Upvalue {
+            value,
+            is_marked: false,
+        });
+        UpvalueHandle(index)
+    }
+
+    pub fn force_allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
+        debug_log!(self.is_debug, "Allocating upvalue...");
+        if self.upvalues.len() == self.upvalues.capacity() {
+            let new_capacity = if self.upvalues.capacity() == 0 {
                 64
             } else {
-                self.values.capacity() * 2
+                self.upvalues.capacity() * 2
             };
 
-            self.values.reserve(new_capacity - self.values.capacity());
+            self.upvalues
+                .reserve(new_capacity - self.upvalues.capacity());
         }
-        let index = self.values.insert(value);
-        ValueHandle(index)
+        let index = self.upvalues.insert(Upvalue {
+            value,
+            is_marked: false,
+        });
+        UpvalueHandle(index)
     }
 
-    pub fn get_value(&self, handle: ValueHandle) -> &Value {
-        &self.values[handle.0]
+    pub fn get_upvalue(&self, handle: UpvalueHandle) -> &Value {
+        &self.upvalues[handle.0].value
     }
 
-    pub fn get_value_mut(&mut self, handle: ValueHandle) -> &mut Value {
-        &mut self.values[handle.0]
+    pub fn get_upvalue_mut(&mut self, handle: UpvalueHandle) -> &mut Value {
+        &mut self.upvalues[handle.0].value
     }
 
-    pub fn free_value(&mut self, handle: ValueHandle) {
-        self.values.remove(handle.0);
+    pub fn free_upvalue(&mut self, handle: UpvalueHandle) {
+        debug_log!(self.is_debug, "Freeing upvalue...");
+        self.upvalues.remove(handle.0);
+    }
+
+    pub fn mark_upvalue(&mut self, handle: UpvalueHandle) {
+        let upvalue = &mut self.upvalues[handle.0];
+        upvalue.is_marked = true;
     }
 
     pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
+        debug_log!(self.is_debug, "Allocating function...");
         let name_handle = function.name;
         if self.functions.len() == self.functions.capacity() {
             let new_capacity = if self.functions.capacity() == 0 {
@@ -254,7 +290,7 @@ impl ObjectHeap {
             .map(|(index, obj)| (index, obj))
     }
 
-    pub fn collect_garbage(&mut self, _roots: &[Value]) {
+    pub fn collect_garbage(&mut self, _roots: Vec<ClosureHandle>) {
         // todo!("Implement mark and sweep garbage collection using provided roots");
     }
 }

@@ -155,3 +155,15 @@ pub fn disassemble_program(heap: &ObjectHeap) {
         );
     }
 }
+
+#[macro_export]
+macro_rules! debug_log {
+    ($is_debug:expr, $message:expr) => {{
+        #[cfg(debug_assertions)]
+        {
+            if $is_debug {
+                println!("{}", $message);
+            }
+        }
+    }};
+}

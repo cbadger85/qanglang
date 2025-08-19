@@ -1,6 +1,7 @@
 use crate::{
+    Value,
     chunk::Chunk,
-    memory::{FunctionHandle, StringHandle, ValueHandle},
+    memory::{FunctionHandle, StringHandle, UpvalueHandle},
 };
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -8,6 +9,7 @@ pub struct ClosureObject {
     pub function: FunctionHandle,
     pub upvalue_count: usize,
     pub upvalues: Vec<UpvalueReference>,
+    pub is_marked: bool,
 }
 
 impl ClosureObject {
@@ -17,6 +19,7 @@ impl ClosureObject {
             function,
             upvalues,
             upvalue_count,
+            is_marked: false,
         }
     }
 }
@@ -24,7 +27,13 @@ impl ClosureObject {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum UpvalueReference {
     Open(usize),
-    Closed(ValueHandle),
+    Closed(UpvalueHandle),
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Upvalue {
+    pub value: Value,
+    pub is_marked: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

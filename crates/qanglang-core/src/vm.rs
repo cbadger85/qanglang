@@ -9,6 +9,7 @@ use crate::{
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
+    debug_log,
     error::{Trace, ValueConversionError},
     memory::{ClosureHandle, FunctionHandle, StringHandle},
     object::{ClosureObject, FunctionObject, UpvalueReference},
@@ -128,10 +129,10 @@ macro_rules! gc_allocate {
 
     // Value allocation
     ($vm:expr, value: $value:expr) => {{
-        if !$vm.heap.can_allocate_value() {
+        if !$vm.heap.can_allocate_upvalue() {
             $vm.collect_garbage();
         }
-        $vm.heap.force_allocate_value($value)
+        $vm.heap.force_allocate_upvalue($value)
     }};
 }
 
@@ -225,7 +226,7 @@ impl VmState {
     }
 
     pub fn gather_roots(&self) -> Vec<Value> {
-        let mut roots = Vec::new();
+        let mut roots = Vec::with_capacity(64);
 
         // Stack roots
         roots.extend_from_slice(&self.stack[..self.stack_top]);
@@ -360,8 +361,11 @@ impl Vm {
             #[cfg(feature = "profiler")]
             coz::progress!("vm_instructions");
 
-            if self.is_debug {
-                self.debug();
+            #[cfg(debug_assertions)]
+            {
+                if self.is_debug {
+                    self.debug_print();
+                }
             }
 
             let opcode: OpCode = self.state.read_byte().into();
@@ -668,7 +672,7 @@ impl Vm {
                             push_value!(self, value)?;
                         }
                         UpvalueReference::Closed(value_handle) => {
-                            let value = *self.heap.get_value(value_handle);
+                            let value = *self.heap.get_upvalue(value_handle);
                             push_value!(self, value)?;
                         }
                     }
@@ -685,7 +689,7 @@ impl Vm {
                             self.state.stack[stack_slot] = value;
                         }
                         UpvalueReference::Closed(value_handle) => {
-                            *self.heap.get_value_mut(value_handle) = value;
+                            *self.heap.get_upvalue_mut(value_handle) = value;
                         }
                     }
                 }
@@ -913,9 +917,48 @@ impl Vm {
         Ok(())
     }
 
+    pub fn mark_roots(&mut self) -> Vec<ClosureHandle> {
+        let mut closure_roots: Vec<ClosureHandle> = Vec::with_capacity(64);
+        for value in &self.state.stack[..self.state.stack_top] {
+            match value {
+                Value::Function(FunctionValueKind::Closure(handle)) => {
+                    closure_roots.push(*handle);
+                }
+                _ => (),
+            }
+        }
+
+        for value in self.globals().values() {
+            match value {
+                Value::Function(FunctionValueKind::Closure(handle)) => {
+                    closure_roots.push(*handle);
+                }
+                _ => (),
+            }
+        }
+
+        for frame in &self.state.frames[..self.state.frame_count] {
+            closure_roots.push(frame.closure);
+        }
+
+        for (_, closures) in &self.state.open_upvalues {
+            for (closure_handle, _) in closures {
+                closure_roots.push(*closure_handle);
+            }
+        }
+
+        for root in &closure_roots {
+            self.heap.mark_closure(*root);
+        }
+
+        closure_roots
+    }
+
     fn collect_garbage(&mut self) {
-        let roots = self.state.gather_roots();
-        self.heap.collect_garbage(&roots);
+        debug_log!(self.is_debug, "--gc begin");
+        let roots = self.mark_roots();
+        self.heap.collect_garbage(roots);
+        debug_log!(self.is_debug, "--gc end");
     }
 
     pub fn heap(&self) -> &ObjectHeap {
@@ -961,7 +1004,7 @@ impl Vm {
         traces
     }
 
-    fn debug(&self) {
+    fn debug_print(&self) {
         print!("          ");
         for i in 0..self.state.stack_top {
             if let Some(value) = self.state.stack.get(i) {

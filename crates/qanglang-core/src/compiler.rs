@@ -2,8 +2,7 @@ use crate::{
     ErrorReporter, FunctionHandle, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    memory::{ObjectHeap, StringHandle},
-    object::FunctionObject,
+    memory::{FunctionObject, ObjectHeap, StringHandle},
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
     value::{

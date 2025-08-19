@@ -3,15 +3,12 @@ use std::collections::HashMap;
 use generational_arena::{Arena, Index};
 
 use crate::{
-    ClosureObject, FunctionObject, FunctionValueKind, Value, ValueConversionError, debug_log,
-    object::Upvalue,
+    ClosureObject, FunctionObject, FunctionValueKind, Upvalue, Value, ValueConversionError,
+    debug_log,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct StringHandle {
-    index: usize,
-    pub is_literal: bool,
-}
+pub struct StringHandle(usize);
 
 impl TryFrom<Value> for StringHandle {
     type Error = ValueConversionError;
@@ -25,17 +22,11 @@ impl TryFrom<Value> for StringHandle {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-pub struct ClosureHandle {
-    index: Index,
-    pub name_handle: StringHandle,
-}
+pub struct ClosureHandle(Index);
 
 impl Default for ClosureHandle {
     fn default() -> Self {
-        ClosureHandle {
-            index: Index::from_raw_parts(0, 0),
-            name_handle: StringHandle::default(),
-        }
+        ClosureHandle(Index::from_raw_parts(0, 0))
     }
 }
 
@@ -63,10 +54,7 @@ impl TryFrom<Value> for ClosureHandle {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct FunctionHandle {
-    index: usize,
-    pub name_handle: StringHandle,
-}
+pub struct FunctionHandle(usize);
 
 impl TryFrom<Value> for FunctionHandle {
     type Error = ValueConversionError;
@@ -124,10 +112,7 @@ impl ObjectHeap {
                 self.strings.reserve(new_capacity - self.strings.capacity());
             }
             self.strings.push(s.to_string());
-            let handle = StringHandle {
-                index: self.strings.len() - 1,
-                is_literal: true,
-            };
+            let handle = StringHandle(self.strings.len() - 1);
 
             self.string_interner.insert(s.to_string(), handle);
 
@@ -149,10 +134,7 @@ impl ObjectHeap {
                 self.strings.reserve(new_capacity - self.strings.capacity());
             }
             self.strings.push(s.clone());
-            let handle = StringHandle {
-                index: self.strings.len() - 1,
-                is_literal: true,
-            };
+            let handle = StringHandle(self.strings.len() - 1);
 
             self.string_interner.insert(s, handle);
 
@@ -161,7 +143,7 @@ impl ObjectHeap {
     }
 
     pub fn get_string(&self, handle: StringHandle) -> &str {
-        &self.strings[handle.index]
+        &self.strings[handle.0]
     }
 
     pub fn can_allocate_closure(&self) -> bool {
@@ -170,14 +152,12 @@ impl ObjectHeap {
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
         debug_log!(self.is_debug, "Allocating closure...");
-        let name_handle = closure.function.name_handle;
         let index = self.closures.insert(closure);
-        ClosureHandle { index, name_handle }
+        ClosureHandle(index)
     }
 
     pub fn force_allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
         debug_log!(self.is_debug, "Allocating closure...");
-        let name_handle = closure.function.name_handle;
         if self.closures.len() == self.closures.capacity() {
             let new_capacity = if self.closures.capacity() == 0 {
                 64
@@ -189,24 +169,24 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.closures.capacity());
         }
         let index = self.closures.insert(closure);
-        ClosureHandle { index, name_handle }
+        ClosureHandle(index)
     }
 
     pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
-        &self.closures[handle.index]
+        &self.closures[handle.0]
     }
 
     pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
-        &mut self.closures[handle.index]
+        &mut self.closures[handle.0]
     }
 
     pub fn free_closure(&mut self, handle: ClosureHandle) {
         debug_log!(self.is_debug, "Freeing function...");
-        self.closures.remove(handle.index);
+        self.closures.remove(handle.0);
     }
 
     pub fn mark_closure(&mut self, handle: ClosureHandle) {
-        let closure = &mut self.closures[handle.index];
+        let closure = &mut self.closures[handle.0];
         closure.is_marked = true;
     }
 
@@ -262,7 +242,6 @@ impl ObjectHeap {
 
     pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
         debug_log!(self.is_debug, "Allocating function...");
-        let name_handle = function.name;
         if self.functions.len() == self.functions.capacity() {
             let new_capacity = if self.functions.capacity() == 0 {
                 64
@@ -273,14 +252,11 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.functions.capacity());
         }
         self.functions.push(function);
-        FunctionHandle {
-            index: self.functions.len() - 1,
-            name_handle,
-        }
+        FunctionHandle(self.functions.len() - 1)
     }
 
     pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
-        &self.functions[handle.index]
+        &self.functions[handle.0]
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {

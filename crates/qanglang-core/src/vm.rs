@@ -11,8 +11,10 @@ use crate::{
     debug::disassemble_instruction,
     debug_log,
     error::{Trace, ValueConversionError},
-    memory::{ClosureHandle, FunctionHandle, StringHandle},
-    object::{ClosureObject, FunctionObject, UpvalueReference},
+    memory::{
+        ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, StringHandle,
+        UpvalueReference,
+    },
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
         qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
@@ -228,21 +230,34 @@ impl VmState {
     pub fn gather_roots(&self) -> Vec<Value> {
         let mut roots = Vec::with_capacity(64);
 
-        // Stack roots
-        roots.extend_from_slice(&self.stack[..self.stack_top]);
+        // Stack roots - filter for Function values only
+        roots.extend(
+            self.stack[..self.stack_top]
+                .iter()
+                .filter(|v| matches!(v, Value::Function(_)))
+                .copied(), // or .cloned() if Value doesn't implement Copy
+        );
 
-        // Global roots
-        roots.extend(self.globals.values().copied());
+        // Global roots - filter for Function values only
+        roots.extend(
+            self.globals
+                .values()
+                .filter(|v| matches!(v, Value::Function(_)))
+                .copied(),
+        );
 
-        // Frame closure roots
+        // Frame closure roots - these are already Function values
         for frame in &self.frames[..self.frame_count] {
             roots.push(Value::Function(FunctionValueKind::Closure(frame.closure)));
         }
 
-        // Upvalue roots
-        for (stack_slot, _) in &self.open_upvalues {
-            roots.push(self.stack[*stack_slot]);
-        }
+        // Upvalue roots - filter for Function values only
+        roots.extend(
+            self.open_upvalues
+                .iter()
+                .map(|(stack_slot, _)| self.stack[*stack_slot])
+                .filter(|v| matches!(v, Value::Function(_))),
+        );
 
         roots
     }
@@ -392,14 +407,14 @@ impl Vm {
                 OpCode::Not => {
                     let value = peek!(self, 0);
                     if let Some(stack_value) = self.state.stack.get_mut(self.state.stack_top - 1) {
-                        *stack_value = Value::Boolean(!value.is_truthy());
+                        *stack_value = (!value.is_truthy()).into();
                     }
                 }
                 OpCode::True => {
-                    push_value!(self, Value::Boolean(true))?;
+                    push_value!(self, Value::True)?;
                 }
                 OpCode::False => {
-                    push_value!(self, Value::Boolean(false))?;
+                    push_value!(self, Value::False)?;
                 }
                 OpCode::Nil => {
                     push_value!(self, Value::Nil)?;
@@ -494,7 +509,7 @@ impl Vm {
 
                     Ok((a % b).into())
                 })?,
-                OpCode::Equal => self.binary_operation(|a, b, _heap| Ok(Value::Boolean(a == b)))?,
+                OpCode::Equal => self.binary_operation(|a, b, _heap| Ok((a == b).into()))?,
                 OpCode::Greater => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
@@ -502,7 +517,7 @@ impl Vm {
                     let b: f64 = b.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
-                    Ok(Value::Boolean(a > b))
+                    Ok((a > b).into())
                 })?,
                 OpCode::GreaterEqual => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
@@ -511,7 +526,7 @@ impl Vm {
                     let b: f64 = b.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
-                    Ok(Value::Boolean(a >= b))
+                    Ok((a >= b).into())
                 })?,
                 OpCode::Less => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
@@ -520,7 +535,7 @@ impl Vm {
                     let b: f64 = b.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
-                    Ok(Value::Boolean(a < b))
+                    Ok((a < b).into())
                 })?,
                 OpCode::LessEqual => self.binary_operation(|a, b, _heap| {
                     let a: f64 = a.try_into().map_err(|_| {
@@ -529,7 +544,7 @@ impl Vm {
                     let b: f64 = b.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
-                    Ok(Value::Boolean(a <= b))
+                    Ok((a <= b).into())
                 })?,
                 OpCode::Pop => {
                     pop_value!(self);

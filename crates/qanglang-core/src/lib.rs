@@ -3,8 +3,7 @@ mod chunk;
 mod compiler;
 mod debug;
 mod error;
-mod memory;
-mod object;
+pub mod memory;
 mod parser;
 mod qang_std;
 mod source;
@@ -18,8 +17,10 @@ pub use compiler::{
 };
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
-pub use memory::{ClosureHandle, FunctionHandle, ObjectHeap, StringHandle, UpvalueHandle};
-pub use object::{ClosureObject, FunctionObject, UpvalueReference};
+pub use memory::{
+    ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle, HashMapObject,
+    ObjectHeap, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
+};
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};

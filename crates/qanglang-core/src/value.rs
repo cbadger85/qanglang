@@ -6,17 +6,11 @@ use crate::{
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone, Copy)]
 pub struct NativeFunctionObject {
     pub function: NativeFn,
     pub arity: usize,
     pub name_handle: StringHandle,
-}
-
-impl PartialEq for NativeFunctionObject {
-    fn eq(&self, other: &Self) -> bool {
-        self.name_handle == other.name_handle
-    }
 }
 
 pub const NIL_TYPE_STRING: &str = "nil";

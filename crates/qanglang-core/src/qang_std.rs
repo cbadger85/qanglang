@@ -66,25 +66,23 @@ pub fn qang_assert_throws(
 }
 
 pub fn qang_print(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or_else(|| Value::Nil);
+    let value = args.first().copied().unwrap_or(Value::Nil);
     let value = value.to_display_string(vm.heap());
     print!("{}", value);
     Ok(None)
 }
 
 pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or_else(|| Value::Nil);
+    let value = args.first().copied().unwrap_or(Value::Nil);
     let value = value.to_display_string(vm.heap());
     println!("{}", value);
     Ok(None)
 }
 
 pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or_else(|| Value::Nil);
+    let value = args.first().copied().unwrap_or(Value::Nil);
 
-    let handle = vm
-        .heap_mut()
-        .intern_string_slice(value.to_type_string().into());
+    let handle = vm.heap_mut().intern_string_slice(value.to_type_string());
 
     Ok(Some(Value::String(handle)))
 }
@@ -106,7 +104,7 @@ pub fn qang_system_time(
 }
 
 pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or_else(|| Value::Nil);
+    let value = args.first().copied().unwrap_or(Value::Nil);
 
     let value = value.to_display_string(vm.heap());
     let value_handle = vm.heap_mut().intern_string_slice(&value);
@@ -118,7 +116,7 @@ pub fn qang_to_uppercase(
     args: &[Value],
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or_else(|| Value::Nil);
+    let value = args.first().copied().unwrap_or(Value::Nil);
 
     if let Value::String(handle) = value {
         let uppercase_string = vm.heap().get_string(handle).to_uppercase();
@@ -137,7 +135,7 @@ pub fn qang_to_lowercase(
     args: &[Value],
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or_else(|| Value::Nil);
+    let value = args.first().copied().unwrap_or(Value::Nil);
 
     if let Value::String(handle) = value {
         let lowercase_string = vm.heap().get_string(handle).to_lowercase();

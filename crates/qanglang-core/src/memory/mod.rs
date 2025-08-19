@@ -1,4 +1,5 @@
 mod arena;
+#[allow(dead_code)]
 mod hashmap_arena;
 mod heap;
 mod object;

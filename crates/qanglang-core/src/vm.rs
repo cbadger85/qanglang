@@ -215,6 +215,7 @@ impl VmState {
         (high_byte << 8) | low_byte
     }
 
+    #[allow(dead_code)]
     pub fn gather_roots(&self) -> Vec<Value> {
         let mut roots = Vec::with_capacity(64);
 
@@ -266,27 +267,27 @@ impl Vm {
         println!("f64 size: {:?}", std::mem::size_of::<f64>());
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
-        let nil_type_handle = heap.intern_string_slice("NIL".into());
-        let nil_type_value_handle = heap.intern_string_slice(NIL_TYPE_STRING.into());
+        let nil_type_handle = heap.intern_string_slice("NIL");
+        let nil_type_value_handle = heap.intern_string_slice(NIL_TYPE_STRING);
         globals.insert(nil_type_handle, Value::String(nil_type_value_handle));
 
-        let boolean_type_handle = heap.intern_string_slice("BOOLEAN".into());
-        let boolean_type_value_handle = heap.intern_string_slice(BOOLEAN_TYPE_STRING.into());
+        let boolean_type_handle = heap.intern_string_slice("BOOLEAN");
+        let boolean_type_value_handle = heap.intern_string_slice(BOOLEAN_TYPE_STRING);
         globals.insert(
             boolean_type_handle,
             Value::String(boolean_type_value_handle),
         );
 
-        let number_type_handle = heap.intern_string_slice("NUMBER".into());
-        let number_type_value_handle = heap.intern_string_slice(NUMBER_TYPE_STRING.into());
+        let number_type_handle = heap.intern_string_slice("NUMBER");
+        let number_type_value_handle = heap.intern_string_slice(NUMBER_TYPE_STRING);
         globals.insert(number_type_handle, Value::String(number_type_value_handle));
 
-        let string_type_handle = heap.intern_string_slice("STRING".into());
-        let string_type_value_handle = heap.intern_string_slice(STRING_TYPE_STRING.into());
+        let string_type_handle = heap.intern_string_slice("STRING");
+        let string_type_value_handle = heap.intern_string_slice(STRING_TYPE_STRING);
         globals.insert(string_type_handle, Value::String(string_type_value_handle));
 
-        let function_type_handle = heap.intern_string_slice("FUNCTION".into());
-        let function_type_value_handle = heap.intern_string_slice(FUNCTION_TYPE_STRING.into());
+        let function_type_handle = heap.intern_string_slice("FUNCTION");
+        let function_type_value_handle = heap.intern_string_slice(FUNCTION_TYPE_STRING);
         globals.insert(
             function_type_handle,
             Value::String(function_type_value_handle),
@@ -425,8 +426,8 @@ impl Vm {
                             let str2 = heap.get_string(*handle2);
 
                             let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
-                            str1_str2.push_str(&str1);
-                            str1_str2.push_str(&str2);
+                            str1_str2.push_str(str1);
+                            str1_str2.push_str(str2);
 
                             let result = heap.intern_string_slice(&str1_str2);
                             Ok(Value::String(result))
@@ -938,20 +939,14 @@ impl Vm {
     pub fn mark_roots(&mut self) -> Vec<ClosureHandle> {
         let mut closure_roots: Vec<ClosureHandle> = Vec::with_capacity(64);
         for value in &self.state.stack[..self.state.stack_top] {
-            match value {
-                Value::Closure(handle) => {
-                    closure_roots.push(*handle);
-                }
-                _ => (),
+            if let Value::Closure(handle) = value {
+                closure_roots.push(*handle);
             }
         }
 
         for value in self.globals().values() {
-            match value {
-                Value::Closure(handle) => {
-                    closure_roots.push(*handle);
-                }
-                _ => (),
+            if let Value::Closure(handle) = value {
+                closure_roots.push(*handle);
             }
         }
 
@@ -1022,6 +1017,7 @@ impl Vm {
         traces
     }
 
+    #[cfg(debug_assertions)]
     fn debug_print(&self) {
         print!("          ");
         for i in 0..self.state.stack_top {

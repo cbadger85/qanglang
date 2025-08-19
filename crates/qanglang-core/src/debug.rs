@@ -63,7 +63,7 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
 
             print!("{:<16} {:4} '", "OP_CLOSURE", constant);
             let value = chunk.constants[constant as usize];
-            println!("{}'", value.to_display_string(&heap));
+            println!("{}'", value.to_display_string(heap));
             let function_obj = match value {
                 Value::FunctionDecl(handle) => Some(heap.get_function(handle)),
                 _ => None,

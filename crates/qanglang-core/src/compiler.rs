@@ -89,7 +89,7 @@ impl Compiler {
     fn pop(&mut self) -> Option<Self> {
         if let Some(mut previous) = self.enclosing.take() {
             std::mem::swap(&mut *previous, self);
-            return Some(*previous);
+            Some(*previous)
         } else {
             None
         }
@@ -165,17 +165,16 @@ impl<'a> CompilerPipeline<'a> {
 
         match CompilerVisitor::new(self.heap).compile(program, &self.source_map, errors) {
             Ok(program) => {
-                self.heap.intern_string_slice("NIL".into());
-                self.heap.intern_string_slice(NIL_TYPE_STRING.into());
-                self.heap.intern_string_slice("BOOLEAN".into());
-                self.heap.intern_string_slice(BOOLEAN_TYPE_STRING.into());
-                self.heap.intern_string_slice("NUMBER".into());
-                self.heap.intern_string_slice(NUMBER_TYPE_STRING.into());
-                self.heap.intern_string_slice("STRING".into());
-                self.heap.intern_string_slice(STRING_TYPE_STRING.into());
-                self.heap.intern_string_slice("FUNCTION".into());
-                self.heap.intern_string_slice(FUNCTION_TYPE_STRING.into());
-                let program = program;
+                self.heap.intern_string_slice("NIL");
+                self.heap.intern_string_slice(NIL_TYPE_STRING);
+                self.heap.intern_string_slice("BOOLEAN");
+                self.heap.intern_string_slice(BOOLEAN_TYPE_STRING);
+                self.heap.intern_string_slice("NUMBER");
+                self.heap.intern_string_slice(NUMBER_TYPE_STRING);
+                self.heap.intern_string_slice("STRING");
+                self.heap.intern_string_slice(STRING_TYPE_STRING);
+                self.heap.intern_string_slice("FUNCTION");
+                self.heap.intern_string_slice(FUNCTION_TYPE_STRING);
                 Ok(QangProgram(self.heap.allocate_function(program)))
             }
             Err(error) => Err(CompilerError(
@@ -461,7 +460,7 @@ impl<'a> CompilerVisitor<'a> {
         let handle = handle.expect("Expected an object handle when defining global variables.");
 
         let index = self.make_constant(Value::String(handle), span)?;
-        self.emit_opcode_and_byte(OpCode::DefineGlobal, index as u8, span);
+        self.emit_opcode_and_byte(OpCode::DefineGlobal, index, span);
 
         Ok(())
     }
@@ -488,7 +487,7 @@ impl<'a> CompilerVisitor<'a> {
         if self.compiler.scope_depth > 0 {
             Ok(None)
         } else {
-            Ok(Some(self.heap.intern_string_slice(identifer.into())))
+            Ok(Some(self.heap.intern_string_slice(identifer)))
         }
     }
 
@@ -504,14 +503,14 @@ impl<'a> CompilerVisitor<'a> {
             } else if let Some(index) = self.resolve_upvalue(handle, span)? {
                 (index as u8, OpCode::GetUpvalue, OpCode::SetUpvalue)
             } else {
-                let handle = self.heap.intern_string_slice(handle.into());
+                let handle = self.heap.intern_string_slice(handle);
                 let index = self.make_constant(Value::String(handle), span)?;
                 (index, OpCode::GetGlobal, OpCode::SetGlobal)
             }
         };
 
         let op = if is_assignment { set_op } else { get_op };
-        self.emit_opcode_and_byte(op, index as u8, span);
+        self.emit_opcode_and_byte(op, index, span);
 
         Ok(())
     }
@@ -522,7 +521,7 @@ impl<'a> CompilerVisitor<'a> {
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
         if let Some(local) = self.compiler.resolve_upvalue(name, span)? {
-            self.add_upvalue(local, true, span).map(|value| Some(value))
+            self.add_upvalue(local, true, span).map(Some)
         } else {
             Ok(None)
         }
@@ -1043,7 +1042,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         lambda_expr: &ast::LambdaExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let lambda_name_handle = self.heap.intern_string_slice("<anonymous>".into());
+        let lambda_name_handle = self.heap.intern_string_slice("<anonymous>");
 
         self.compiler
             .push(lambda_name_handle, lambda_expr.parameters.len());
@@ -1077,7 +1076,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
         match lambda_expr.body.as_ref() {
             ast::LambdaBody::Block(body) => {
-                self.visit_block_statement(&body, errors)?;
+                self.visit_block_statement(body, errors)?;
                 self.emit_return(lambda_expr.span);
             }
             ast::LambdaBody::Expr(expr) => {

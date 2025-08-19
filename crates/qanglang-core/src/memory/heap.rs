@@ -101,8 +101,7 @@ impl ObjectHeap {
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
         debug_log!(self.is_debug, "Allocating closure...");
-        let index = self.closures.insert(closure);
-        index
+        self.closures.insert(closure)
     }
 
     pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
@@ -129,11 +128,10 @@ impl ObjectHeap {
 
     pub fn allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
         debug_log!(self.is_debug, "Allocating upvalue...");
-        let index = self.upvalues.insert(Upvalue {
+        self.upvalues.insert(Upvalue {
             value,
             is_marked: false,
-        });
-        index
+        })
     }
 
     pub fn get_upvalue(&self, handle: UpvalueHandle) -> &Value {
@@ -174,10 +172,7 @@ impl ObjectHeap {
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {
-        self.functions
-            .iter()
-            .enumerate()
-            .map(|(index, obj)| (index, obj))
+        self.functions.iter().enumerate()
     }
 
     pub fn allocate_native_function(

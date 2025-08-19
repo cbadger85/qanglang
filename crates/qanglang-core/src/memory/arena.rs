@@ -362,7 +362,7 @@ mod tests {
         let mut arena = Arena::new();
         let idx1 = arena.insert(42);
         let idx2 = arena.insert(84);
-        
+
         assert_eq!(arena.len(), 2);
         assert!(!arena.is_empty());
         assert_eq!(arena.get(idx1), Some(&42));
@@ -373,11 +373,11 @@ mod tests {
     fn test_insert_and_get_mut() {
         let mut arena = Arena::new();
         let idx = arena.insert(42);
-        
+
         if let Some(value) = arena.get_mut(idx) {
             *value = 100;
         }
-        
+
         assert_eq!(arena.get(idx), Some(&100));
     }
 
@@ -385,7 +385,7 @@ mod tests {
     fn test_index_access() {
         let mut arena = Arena::new();
         let idx = arena.insert(42);
-        
+
         assert_eq!(arena[idx], 42);
         arena[idx] = 100;
         assert_eq!(arena[idx], 100);
@@ -395,7 +395,10 @@ mod tests {
     #[should_panic(expected = "No element at index")]
     fn test_index_access_invalid() {
         let arena: Arena<i32> = Arena::new();
-        let invalid_idx = Index { index: 0, generation: 0 };
+        let invalid_idx = Index {
+            index: 0,
+            generation: 0,
+        };
         let _ = arena[invalid_idx];
     }
 
@@ -404,7 +407,7 @@ mod tests {
         let mut arena = Arena::new();
         let idx1 = arena.insert(42);
         let idx2 = arena.insert(84);
-        
+
         assert_eq!(arena.len(), 2);
         assert_eq!(arena.remove(idx1), Some(42));
         assert_eq!(arena.len(), 1);
@@ -415,14 +418,20 @@ mod tests {
     #[test]
     fn test_remove_nonexistent() {
         let mut arena: Arena<i32> = Arena::new();
-        let invalid_idx = Index { index: 0, generation: 0 };
+        let invalid_idx = Index {
+            index: 0,
+            generation: 0,
+        };
         assert_eq!(arena.remove(invalid_idx), None);
     }
 
     #[test]
     fn test_remove_out_of_bounds() {
         let mut arena: Arena<i32> = Arena::new();
-        let out_of_bounds_idx = Index { index: 100, generation: 0 };
+        let out_of_bounds_idx = Index {
+            index: 100,
+            generation: 0,
+        };
         assert_eq!(arena.remove(out_of_bounds_idx), None);
     }
 
@@ -430,10 +439,10 @@ mod tests {
     fn test_generation_invalidation() {
         let mut arena = Arena::new();
         let idx = arena.insert(42);
-        
+
         // Remove the element, which should increment generation
         assert_eq!(arena.remove(idx), Some(42));
-        
+
         // The old index should no longer be valid
         assert_eq!(arena.get(idx), None);
         assert_eq!(arena.remove(idx), None);
@@ -445,17 +454,17 @@ mod tests {
         let idx1 = arena.insert(1);
         let idx2 = arena.insert(2);
         let idx3 = arena.insert(3);
-        
+
         // Remove middle element
         arena.remove(idx2);
-        
+
         // Insert new element, should reuse the freed slot
         let idx4 = arena.insert(4);
-        
+
         // The new element should be at the same index but with different generation
         assert_eq!(idx4.index, idx2.index);
         assert_ne!(idx4.generation, idx2.generation);
-        
+
         assert_eq!(arena.get(idx1), Some(&1));
         assert_eq!(arena.get(idx2), None); // Old reference invalid
         assert_eq!(arena.get(idx3), Some(&3));
@@ -466,11 +475,11 @@ mod tests {
     fn test_capacity_growth() {
         let mut arena = Arena::with_capacity(2);
         assert_eq!(arena.capacity(), 2);
-        
+
         arena.insert(1);
         arena.insert(2);
         assert_eq!(arena.capacity(), 2);
-        
+
         // This should trigger capacity growth
         arena.insert(3);
         assert!(arena.capacity() > 2);
@@ -480,7 +489,7 @@ mod tests {
     fn test_reserve() {
         let mut arena: Arena<i32> = Arena::with_capacity(2);
         assert_eq!(arena.capacity(), 2);
-        
+
         arena.reserve(5);
         assert_eq!(arena.capacity(), 7); // 2 + 5
     }
@@ -506,10 +515,10 @@ mod tests {
         let idx1 = arena.insert(10);
         let idx2 = arena.insert(20);
         let idx3 = arena.insert(30);
-        
+
         let mut items: Vec<_> = arena.iter().collect();
         items.sort_by_key(|(_, val)| *val);
-        
+
         assert_eq!(items.len(), 3);
         assert_eq!(items[0], (idx1, &10));
         assert_eq!(items[1], (idx2, &20));
@@ -522,11 +531,11 @@ mod tests {
         arena.insert(10);
         arena.insert(20);
         arena.insert(30);
-        
+
         for (_, value) in arena.iter_mut() {
             *value *= 2;
         }
-        
+
         let values: Vec<_> = arena.iter().map(|(_, &val)| val).collect();
         assert!(values.contains(&20));
         assert!(values.contains(&40));
@@ -539,12 +548,12 @@ mod tests {
         let _idx1 = arena.insert(10);
         let idx2 = arena.insert(20);
         let _idx3 = arena.insert(30);
-        
+
         arena.remove(idx2);
-        
+
         let items: Vec<_> = arena.iter().collect();
         assert_eq!(items.len(), 2);
-        
+
         let values: Vec<_> = items.iter().map(|(_, val)| **val).collect();
         assert!(values.contains(&10));
         assert!(values.contains(&30));
@@ -557,7 +566,7 @@ mod tests {
         arena.insert(1);
         arena.insert(2);
         arena.insert(3);
-        
+
         let count = (&arena).into_iter().count();
         assert_eq!(count, 3);
     }
@@ -568,11 +577,11 @@ mod tests {
         arena.insert(1);
         arena.insert(2);
         arena.insert(3);
-        
+
         for (_, value) in &mut arena {
             *value += 10;
         }
-        
+
         let values: Vec<_> = arena.iter().map(|(_, &val)| val).collect();
         assert!(values.contains(&11));
         assert!(values.contains(&12));
@@ -585,7 +594,7 @@ mod tests {
         arena.insert(1);
         arena.insert(2);
         arena.insert(3);
-        
+
         let iter = arena.iter();
         assert_eq!(iter.size_hint(), (3, Some(3)));
         assert_eq!(iter.len(), 3);
@@ -596,10 +605,10 @@ mod tests {
         let mut arena = Arena::new();
         arena.insert(1);
         arena.insert(2);
-        
+
         let iter = arena.iter();
         assert_eq!(iter.len(), 2);
-        
+
         let iter_mut = arena.iter_mut();
         assert_eq!(iter_mut.len(), 2);
     }
@@ -609,7 +618,7 @@ mod tests {
         let arena: Arena<i32> = Arena::new();
         let items: Vec<_> = arena.iter().collect();
         assert!(items.is_empty());
-        
+
         let iter = arena.iter();
         assert_eq!(iter.size_hint(), (0, Some(0)));
         assert_eq!(iter.len(), 0);
@@ -619,13 +628,13 @@ mod tests {
     fn test_generation_overflow_safety() {
         let mut arena = Arena::new();
         let idx = arena.insert(42);
-        
+
         // Simulate many removes to test generation handling
         for _ in 0..10 {
             arena.remove(idx);
             arena.insert(1);
         }
-        
+
         // Original index should still be invalid
         assert_eq!(arena.get(idx), None);
     }
@@ -634,7 +643,7 @@ mod tests {
     fn test_multiple_remove_same_index() {
         let mut arena = Arena::new();
         let idx = arena.insert(42);
-        
+
         assert_eq!(arena.remove(idx), Some(42));
         assert_eq!(arena.remove(idx), None);
         assert_eq!(arena.remove(idx), None);
@@ -644,19 +653,19 @@ mod tests {
     fn test_stress_insert_remove() {
         let mut arena = Arena::new();
         let mut indices = Vec::new();
-        
+
         // Insert many elements
         for i in 0..100 {
             indices.push(arena.insert(i));
         }
         assert_eq!(arena.len(), 100);
-        
+
         // Remove every other element
         for i in (0..indices.len()).step_by(2) {
             arena.remove(indices[i]);
         }
         assert_eq!(arena.len(), 50);
-        
+
         // Insert more elements (should reuse freed slots)
         for i in 100..150 {
             arena.insert(i);
@@ -669,9 +678,9 @@ mod tests {
         let mut arena = Arena::new();
         let idx1 = arena.insert(42);
         let idx2 = arena.insert(84);
-        
+
         let cloned = arena.clone();
-        
+
         assert_eq!(cloned.len(), arena.len());
         assert_eq!(cloned.get(idx1), arena.get(idx1));
         assert_eq!(cloned.get(idx2), arena.get(idx2));
@@ -681,26 +690,41 @@ mod tests {
     fn test_debug_formatting() {
         let mut arena = Arena::new();
         arena.insert(42);
-        
+
         let debug_str = format!("{:?}", arena);
         assert!(debug_str.contains("Arena"));
-        
-        let idx = Index { index: 0, generation: 0 };
+
+        let idx = Index {
+            index: 0,
+            generation: 0,
+        };
         let debug_idx = format!("{:?}", idx);
         assert!(debug_idx.contains("Index"));
     }
 
     #[test]
     fn test_index_equality_and_ordering() {
-        let idx1 = Index { index: 0, generation: 0 };
-        let idx2 = Index { index: 0, generation: 0 };
-        let idx3 = Index { index: 1, generation: 0 };
-        let idx4 = Index { index: 0, generation: 1 };
-        
+        let idx1 = Index {
+            index: 0,
+            generation: 0,
+        };
+        let idx2 = Index {
+            index: 0,
+            generation: 0,
+        };
+        let idx3 = Index {
+            index: 1,
+            generation: 0,
+        };
+        let idx4 = Index {
+            index: 0,
+            generation: 1,
+        };
+
         assert_eq!(idx1, idx2);
         assert_ne!(idx1, idx3);
         assert_ne!(idx1, idx4);
-        
+
         assert!(idx1 < idx3);
         assert!(idx1 < idx4);
     }
@@ -709,7 +733,7 @@ mod tests {
     fn test_large_capacity() {
         let mut arena = Arena::with_capacity(1000);
         assert_eq!(arena.capacity(), 1000);
-        
+
         for i in 0..500 {
             arena.insert(i);
         }

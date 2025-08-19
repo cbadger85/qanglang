@@ -4,17 +4,17 @@ use crate::{
     memory::{BucketChunkHandle, FunctionHandle, StringHandle, UpvalueHandle},
 };
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClosureObject {
     pub function: FunctionHandle,
     pub upvalue_count: usize,
-    pub upvalues: Vec<UpvalueReference>,
+    pub upvalues: [UpvalueReference; 256],
     pub is_marked: bool,
 }
 
 impl ClosureObject {
     pub fn new(function: FunctionHandle, upvalue_count: usize) -> Self {
-        let upvalues = vec![UpvalueReference::Open(0); upvalue_count];
+        let upvalues = std::array::from_fn(|_| UpvalueReference::default());
         Self {
             function,
             upvalues,
@@ -28,6 +28,12 @@ impl ClosureObject {
 pub enum UpvalueReference {
     Open(usize),
     Closed(UpvalueHandle),
+}
+
+impl Default for UpvalueReference {
+    fn default() -> Self {
+        Self::Open(0)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

@@ -214,42 +214,6 @@ impl VmState {
         let low_byte = self.read_byte() as usize;
         (high_byte << 8) | low_byte
     }
-
-    #[allow(dead_code)]
-    pub fn gather_roots(&self) -> Vec<Value> {
-        let mut roots = Vec::with_capacity(64);
-
-        // Stack roots - filter for Function values only
-        roots.extend(
-            self.stack[..self.stack_top]
-                .iter()
-                .filter(|v| matches!(v, Value::Closure(_)))
-                .copied(), // or .cloned() if Value doesn't implement Copy
-        );
-
-        // Global roots - filter for Function values only
-        roots.extend(
-            self.globals
-                .values()
-                .filter(|v| matches!(v, Value::Closure(_)))
-                .copied(),
-        );
-
-        // Frame closure roots - these are already Function values
-        for frame in &self.frames[..self.frame_count] {
-            roots.push(Value::Closure(frame.closure));
-        }
-
-        // Upvalue roots - filter for Function values only
-        roots.extend(
-            self.open_upvalues
-                .iter()
-                .map(|(stack_slot, _)| self.stack[*stack_slot])
-                .filter(|v| matches!(v, Value::Closure(_))),
-        );
-
-        roots
-    }
 }
 
 #[derive(Clone)]
@@ -936,32 +900,35 @@ impl Vm {
         Ok(())
     }
 
-    pub fn mark_roots(&mut self) -> Vec<ClosureHandle> {
-        let mut closure_roots: Vec<ClosureHandle> = Vec::with_capacity(64);
+    pub fn mark_roots(&mut self) -> Vec<Value> {
+        let mut closure_roots: Vec<Value> = Vec::with_capacity(64);
         for value in &self.state.stack[..self.state.stack_top] {
-            if let Value::Closure(handle) = value {
-                closure_roots.push(*handle);
+            if matches!(value, Value::Closure(_)) {
+                closure_roots.push(*value);
             }
         }
 
         for value in self.globals().values() {
-            if let Value::Closure(handle) = value {
-                closure_roots.push(*handle);
+            if matches!(value, Value::Closure(_)) {
+                closure_roots.push(*value);
             }
         }
 
         for frame in &self.state.frames[..self.state.frame_count] {
-            closure_roots.push(frame.closure);
+            closure_roots.push(Value::Closure(frame.closure));
         }
 
         for (_, closures) in &self.state.open_upvalues {
             for (closure_handle, _) in closures {
-                closure_roots.push(*closure_handle);
+                closure_roots.push(Value::Closure(*closure_handle));
             }
         }
 
         for root in &closure_roots {
-            self.heap.mark_closure(*root);
+            match root {
+                Value::Closure(handle) => self.heap.mark_closure(*handle),
+                _ => (),
+            }
         }
 
         closure_roots

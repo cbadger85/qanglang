@@ -197,7 +197,7 @@ impl ObjectHeap {
         &self.native_functions[handle]
     }
 
-    pub fn collect_garbage(&mut self, _roots: Vec<ClosureHandle>) {
+    pub fn collect_garbage(&mut self, _roots: Vec<Value>) {
         // todo!("Implement mark and sweep garbage collection using provided roots");
     }
 }

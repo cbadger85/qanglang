@@ -1,5 +1,5 @@
 use crate::{
-    NativeFn, ObjectHeap,
+    NativeFn, NativeFunctionHandle, ObjectHeap,
     error::ValueConversionError,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
@@ -7,13 +7,13 @@ use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, Hash)]
-pub struct NativeFunction {
+pub struct NativeFunctionObject {
     pub function: NativeFn,
     pub arity: usize,
     pub name_handle: StringHandle,
 }
 
-impl PartialEq for NativeFunction {
+impl PartialEq for NativeFunctionObject {
     fn eq(&self, other: &Self) -> bool {
         self.name_handle == other.name_handle
     }
@@ -33,7 +33,7 @@ pub enum Value {
     Number(f64),
     String(StringHandle),
     Closure(ClosureHandle),
-    NativeFunction(NativeFunction),
+    NativeFunction(NativeFunctionHandle),
     FunctionDecl(FunctionHandle),
 }
 
@@ -60,7 +60,8 @@ impl Value {
                 let identifier = heap.get_string(function.name);
                 format!("<function>{}", identifier)
             }
-            Value::NativeFunction(function) => {
+            Value::NativeFunction(handle) => {
+                let function = heap.get_native_function(*handle);
                 let identifier = heap.get_string(function.name_handle);
                 format!("<function>{}", identifier)
             }

@@ -5,7 +5,7 @@ use coz;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
-    ObjectHeap, QangProgram, QangRuntimeError, Value,
+    NativeFunctionHandle, ObjectHeap, QangProgram, QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug::disassemble_instruction,
@@ -21,7 +21,7 @@ use crate::{
     },
     value::{
         BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING,
-        NativeFunction, STRING_TYPE_STRING,
+        NativeFunctionObject, STRING_TYPE_STRING,
     },
 };
 
@@ -336,15 +336,16 @@ impl Vm {
 
     pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
         let identifier_handle = self.heap.intern_string_slice(name);
-        let native_function = NativeFunction {
+        let native_function = NativeFunctionObject {
             name_handle: identifier_handle,
             arity,
             function,
         };
+        let handle = self.heap.allocate_native_function(native_function);
 
         self.state
             .globals
-            .insert(identifier_handle, Value::NativeFunction(native_function));
+            .insert(identifier_handle, Value::NativeFunction(handle));
 
         self
     }
@@ -823,12 +824,6 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::progress!("before_call");
 
-        let loc = if self.state.frame_count > 0 {
-            self.state.get_previous_loc()
-        } else {
-            SourceLocation::default()
-        };
-
         // Get closure and function, cache function pointer for fast access during execution
         let closure = self.heap.get_closure(closure_handle);
         let function = self.heap.get_function(closure.function);
@@ -846,6 +841,11 @@ impl Vm {
         };
 
         if self.state.frame_count >= FRAME_MAX {
+            let loc = if self.state.frame_count > 0 {
+                self.state.get_previous_loc()
+            } else {
+                SourceLocation::default()
+            };
             return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
         }
 
@@ -902,10 +902,10 @@ impl Vm {
 
     fn call_native_function(
         &mut self,
-        function: NativeFunction,
+        handle: NativeFunctionHandle,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let loc = self.state.get_previous_loc();
+        let function = self.heap.get_native_function(handle);
         let mut args = vec![Value::Nil; function.arity];
 
         for i in (0..arg_count).rev() {
@@ -915,10 +915,14 @@ impl Vm {
                 pop_value!(self); // discard values that are passed in but not needed by the function.
             }
         }
+
         pop_value!(self); // pop function off the stack now that it has been called.
 
         let value = (function.function)(args.as_slice(), self)
-            .map_err(|e: NativeFunctionError| e.into_qang_error(loc))?
+            .map_err(|e: NativeFunctionError| {
+                let loc = self.state.get_previous_loc();
+                e.into_qang_error(loc)
+            })?
             .unwrap_or_default();
 
         push_value!(self, value)?;

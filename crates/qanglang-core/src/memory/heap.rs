@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use generational_arena::{Arena, Index};
 
-use crate::{ClosureObject, FunctionObject, Upvalue, Value, ValueConversionError, debug_log};
+use crate::{
+    ClosureObject, FunctionObject, Upvalue, Value, ValueConversionError, debug_log,
+    value::NativeFunctionObject,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
 pub struct StringHandle(usize);
@@ -61,6 +64,20 @@ impl TryFrom<Value> for FunctionHandle {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
+pub struct NativeFunctionHandle(usize);
+
+impl TryFrom<Value> for NativeFunctionHandle {
+    type Error = ValueConversionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::NativeFunction(handle) => Ok(handle),
+            _ => Err(ValueConversionError::new("Expected function.")),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
     strings: Vec<String>,
@@ -68,6 +85,7 @@ pub struct ObjectHeap {
     closures: Arena<ClosureObject>,
     upvalues: Arena<Upvalue>,
     string_interner: HashMap<String, StringHandle>,
+    native_functions: Vec<NativeFunctionObject>,
     is_debug: bool,
 }
 
@@ -83,6 +101,7 @@ impl ObjectHeap {
             closures: Arena::with_capacity(initial_capacity),
             strings: Vec::with_capacity(initial_capacity),
             upvalues: Arena::with_capacity(initial_capacity),
+            native_functions: Vec::with_capacity(initial_capacity),
             is_debug: false,
         }
     }
@@ -258,6 +277,28 @@ impl ObjectHeap {
             .iter()
             .enumerate()
             .map(|(index, obj)| (index, obj))
+    }
+
+    pub fn allocate_native_function(
+        &mut self,
+        function: NativeFunctionObject,
+    ) -> NativeFunctionHandle {
+        debug_log!(self.is_debug, "Allocating function...");
+        if self.native_functions.len() == self.native_functions.capacity() {
+            let new_capacity = if self.native_functions.capacity() == 0 {
+                64
+            } else {
+                self.native_functions.capacity() * 2
+            };
+            self.native_functions
+                .reserve(new_capacity - self.native_functions.capacity());
+        }
+        self.native_functions.push(function);
+        NativeFunctionHandle(self.native_functions.len() - 1)
+    }
+
+    pub fn get_native_function(&self, handle: NativeFunctionHandle) -> &NativeFunctionObject {
+        &self.native_functions[handle.0]
     }
 
     pub fn collect_garbage(&mut self, _roots: Vec<ClosureHandle>) {

@@ -64,6 +64,7 @@ fn test_pipe_operator() {
         var foo = 12 |> to_string;
         assert_eq(typeof(foo), "string");
         assert_eq((12 |> to_string) + " is a number", "12 is a number");
+        println((12 |> to_string) + " is a number");
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut heap: ObjectHeap = ObjectHeap::new();
@@ -426,6 +427,35 @@ fn test_pipe_chaining() {
                 panic!("{}", error);
             }
         },
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_native_function_with_return() {
+    let source = r#"
+        var time = system_time();
+        assert_eq(typeof(time), NUMBER);
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap: ObjectHeap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            // disassemble_program(&heap);
+            match Vm::new(heap).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

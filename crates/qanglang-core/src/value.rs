@@ -26,6 +26,7 @@ pub const STRING_TYPE_STRING: &str = "string";
 pub const FUNCTION_TYPE_STRING: &str = "function";
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[repr(u8)]
 pub enum Value {
     Nil,
     True,

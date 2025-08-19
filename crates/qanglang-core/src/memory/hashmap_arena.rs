@@ -1,18 +1,12 @@
+use crate::memory::arena::{Arena, Index};
 use crate::{HashMapObject, Value};
-use generational_arena::{Arena, Index};
 
 const CHUNK_SIZE: usize = 8; // Buckets per chunk
 const DEFAULT_CAPACITY: usize = 16;
 const LOAD_FACTOR_THRESHOLD: f64 = 0.75;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
 pub struct HashMapHandle(Index);
-
-impl Default for HashMapHandle {
-    fn default() -> Self {
-        HashMapHandle(Index::from_raw_parts(0, 0))
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct BucketChunk {
@@ -20,14 +14,8 @@ pub struct BucketChunk {
     pub next_chunk: Option<BucketChunkHandle>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
 pub struct BucketChunkHandle(Index);
-
-impl Default for BucketChunkHandle {
-    fn default() -> Self {
-        BucketChunkHandle(Index::from_raw_parts(0, 0))
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bucket {

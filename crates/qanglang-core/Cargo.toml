@@ -8,7 +8,6 @@ profiler = ["coz"]
 
 [dependencies]
 phf = { version = "0.11.3", features = ["macros"]}
-generational-arena = "0.2.9"
 rustc-hash = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

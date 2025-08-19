@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use crate::memory::Index;
 #[cfg(feature = "profiler")]
 use coz;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -11,10 +12,7 @@ use crate::{
     debug::disassemble_instruction,
     debug_log,
     error::{Trace, ValueConversionError},
-    memory::{
-        ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, StringHandle,
-        UpvalueReference,
-    },
+    memory::{ClosureHandle, ClosureObject, FunctionObject, StringHandle, UpvalueReference},
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
         qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
@@ -126,7 +124,7 @@ macro_rules! gc_allocate {
         if !$vm.heap.can_allocate_closure() {
             $vm.collect_garbage();
         }
-        $vm.heap.force_allocate_closure($value)
+        $vm.heap.allocate_closure($value)
     }};
 
     // Value allocation
@@ -134,25 +132,15 @@ macro_rules! gc_allocate {
         if !$vm.heap.can_allocate_upvalue() {
             $vm.collect_garbage();
         }
-        $vm.heap.force_allocate_upvalue($value)
+        $vm.heap.allocate_upvalue($value)
     }};
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct CallFrame {
     closure: ClosureHandle,
     ip: usize,
     value_slot: usize,
-}
-
-impl Default for CallFrame {
-    fn default() -> Self {
-        Self {
-            closure: ClosureHandle::default(),
-            ip: 0,
-            value_slot: 0,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -272,6 +260,10 @@ pub struct Vm {
 
 impl Vm {
     pub fn new(mut heap: ObjectHeap) -> Self {
+        println!("Value size: {:?}", std::mem::size_of::<Value>());
+        println!("Index size: {:?}", std::mem::size_of::<Index>());
+        println!("usize size: {:?}", std::mem::size_of::<usize>());
+        println!("f64 size: {:?}", std::mem::size_of::<f64>());
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
         let nil_type_handle = heap.intern_string_slice("NIL".into());
@@ -550,23 +542,30 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
-                    let identifier_handle: StringHandle =
-                        self.state.read_constant().try_into().map_err(
-                            |e: ValueConversionError| {
-                                e.into_qang_error(self.state.get_previous_loc())
-                            },
-                        )?;
+                    let constant = self.state.read_constant();
+                    let identifier_handle = match constant {
+                        Value::String(handle) => handle,
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Expected identifier.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    };
                     let value = pop_value!(self);
                     self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
-                    let identifier_handle: StringHandle =
-                        self.state.read_constant().try_into().map_err(
-                            |e: ValueConversionError| {
-                                let loc = self.state.get_previous_loc();
-                                e.into_qang_error(loc)
-                            },
-                        )?;
+                    let constant = self.state.read_constant();
+                    let identifier_handle = match constant {
+                        Value::String(handle) => handle,
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Expected identifier.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    };
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
                         let identifier_name = self.heap.get_string(identifier_handle);
@@ -578,12 +577,16 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
-                    let identifier_handle: StringHandle =
-                        self.state.read_constant().try_into().map_err(
-                            |e: ValueConversionError| {
-                                e.into_qang_error(self.state.get_previous_loc())
-                            },
-                        )?;
+                    let constant = self.state.read_constant();
+                    let identifier_handle = match constant {
+                        Value::String(handle) => handle,
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Expected identifier.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    };
 
                     if !self.state.globals.contains_key(&identifier_handle) {
                         let identifier_name = self.heap.get_string(identifier_handle);
@@ -639,14 +642,16 @@ impl Vm {
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Closure => {
-                    let handle: FunctionHandle = self.state.read_constant().try_into().map_err(
-                        |e: ValueConversionError| {
-                            QangRuntimeError::new(
-                                e.message().to_string(),
+                    let constant = self.state.read_constant();
+                    let handle = match constant {
+                        Value::FunctionDecl(handle) => handle,
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Expected function.".to_string(),
                                 self.state.get_previous_loc(),
-                            )
-                        },
-                    )?;
+                            ));
+                        }
+                    };
                     let upvalue_count = self.heap.get_function(handle).upvalue_count;
                     let closure_handle =
                         gc_allocate!(self, closure: ClosureObject::new(handle, upvalue_count));

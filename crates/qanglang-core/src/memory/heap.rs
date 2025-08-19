@@ -1,82 +1,18 @@
+use crate::memory::arena::{Arena, Index};
+use crate::{
+    ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
+};
 use std::collections::HashMap;
 
-use generational_arena::{Arena, Index};
+pub type StringHandle = usize;
 
-use crate::{
-    ClosureObject, FunctionObject, Upvalue, Value, ValueConversionError, debug_log,
-    value::NativeFunctionObject,
-};
+pub type ClosureHandle = Index;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct StringHandle(usize);
+pub type UpvalueHandle = Index;
 
-impl TryFrom<Value> for StringHandle {
-    type Error = ValueConversionError;
+pub type FunctionHandle = usize;
 
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::String(handle) => Ok(handle),
-            _ => Err(ValueConversionError::new("Expected string.")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-pub struct ClosureHandle(Index);
-
-impl Default for ClosureHandle {
-    fn default() -> Self {
-        ClosureHandle(Index::from_raw_parts(0, 0))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-pub struct UpvalueHandle(Index);
-
-impl Default for UpvalueHandle {
-    fn default() -> Self {
-        UpvalueHandle(Index::from_raw_parts(0, 0))
-    }
-}
-
-impl TryFrom<Value> for ClosureHandle {
-    type Error = ValueConversionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Closure(handle) => Ok(handle),
-            _ => Err(ValueConversionError::new("Expected function.")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct FunctionHandle(usize);
-
-impl TryFrom<Value> for FunctionHandle {
-    type Error = ValueConversionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::FunctionDecl(handle) => Ok(handle),
-            _ => Err(ValueConversionError::new("Expected function.")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct NativeFunctionHandle(usize);
-
-impl TryFrom<Value> for NativeFunctionHandle {
-    type Error = ValueConversionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::NativeFunction(handle) => Ok(handle),
-            _ => Err(ValueConversionError::new("Expected function.")),
-        }
-    }
-}
+pub type NativeFunctionHandle = usize;
 
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
@@ -125,7 +61,7 @@ impl ObjectHeap {
                 self.strings.reserve(new_capacity - self.strings.capacity());
             }
             self.strings.push(s.to_string());
-            let handle = StringHandle(self.strings.len() - 1);
+            let handle = self.strings.len() - 1;
 
             self.string_interner.insert(s.to_string(), handle);
 
@@ -147,7 +83,7 @@ impl ObjectHeap {
                 self.strings.reserve(new_capacity - self.strings.capacity());
             }
             self.strings.push(s.clone());
-            let handle = StringHandle(self.strings.len() - 1);
+            let handle = self.strings.len() - 1;
 
             self.string_interner.insert(s, handle);
 
@@ -156,7 +92,7 @@ impl ObjectHeap {
     }
 
     pub fn get_string(&self, handle: StringHandle) -> &str {
-        &self.strings[handle.0]
+        &self.strings[handle]
     }
 
     pub fn can_allocate_closure(&self) -> bool {
@@ -166,40 +102,24 @@ impl ObjectHeap {
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
         debug_log!(self.is_debug, "Allocating closure...");
         let index = self.closures.insert(closure);
-        ClosureHandle(index)
-    }
-
-    pub fn force_allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
-        debug_log!(self.is_debug, "Allocating closure...");
-        if self.closures.len() == self.closures.capacity() {
-            let new_capacity = if self.closures.capacity() == 0 {
-                64
-            } else {
-                self.closures.capacity() * 2
-            };
-
-            self.closures
-                .reserve(new_capacity - self.closures.capacity());
-        }
-        let index = self.closures.insert(closure);
-        ClosureHandle(index)
+        index
     }
 
     pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
-        &self.closures[handle.0]
+        &self.closures[handle]
     }
 
     pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
-        &mut self.closures[handle.0]
+        &mut self.closures[handle]
     }
 
     pub fn free_closure(&mut self, handle: ClosureHandle) {
         debug_log!(self.is_debug, "Freeing function...");
-        self.closures.remove(handle.0);
+        self.closures.remove(handle);
     }
 
     pub fn mark_closure(&mut self, handle: ClosureHandle) {
-        let closure = &mut self.closures[handle.0];
+        let closure = &mut self.closures[handle];
         closure.is_marked = true;
     }
 
@@ -213,43 +133,24 @@ impl ObjectHeap {
             value,
             is_marked: false,
         });
-        UpvalueHandle(index)
-    }
-
-    pub fn force_allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
-        debug_log!(self.is_debug, "Allocating upvalue...");
-        if self.upvalues.len() == self.upvalues.capacity() {
-            let new_capacity = if self.upvalues.capacity() == 0 {
-                64
-            } else {
-                self.upvalues.capacity() * 2
-            };
-
-            self.upvalues
-                .reserve(new_capacity - self.upvalues.capacity());
-        }
-        let index = self.upvalues.insert(Upvalue {
-            value,
-            is_marked: false,
-        });
-        UpvalueHandle(index)
+        index
     }
 
     pub fn get_upvalue(&self, handle: UpvalueHandle) -> &Value {
-        &self.upvalues[handle.0].value
+        &self.upvalues[handle].value
     }
 
     pub fn get_upvalue_mut(&mut self, handle: UpvalueHandle) -> &mut Value {
-        &mut self.upvalues[handle.0].value
+        &mut self.upvalues[handle].value
     }
 
     pub fn free_upvalue(&mut self, handle: UpvalueHandle) {
         debug_log!(self.is_debug, "Freeing upvalue...");
-        self.upvalues.remove(handle.0);
+        self.upvalues.remove(handle);
     }
 
     pub fn mark_upvalue(&mut self, handle: UpvalueHandle) {
-        let upvalue = &mut self.upvalues[handle.0];
+        let upvalue = &mut self.upvalues[handle];
         upvalue.is_marked = true;
     }
 
@@ -265,11 +166,11 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.functions.capacity());
         }
         self.functions.push(function);
-        FunctionHandle(self.functions.len() - 1)
+        self.functions.len() - 1
     }
 
     pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
-        &self.functions[handle.0]
+        &self.functions[handle]
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {
@@ -294,11 +195,11 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.native_functions.capacity());
         }
         self.native_functions.push(function);
-        NativeFunctionHandle(self.native_functions.len() - 1)
+        self.native_functions.len() - 1
     }
 
     pub fn get_native_function(&self, handle: NativeFunctionHandle) -> &NativeFunctionObject {
-        &self.native_functions[handle.0]
+        &self.native_functions[handle]
     }
 
     pub fn collect_garbage(&mut self, _roots: Vec<ClosureHandle>) {

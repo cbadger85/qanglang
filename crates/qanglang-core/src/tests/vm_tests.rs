@@ -447,15 +447,12 @@ fn test_native_function_with_return() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            // disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

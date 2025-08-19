@@ -19,12 +19,6 @@ impl PartialEq for NativeFunction {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash)]
-pub enum FunctionValueKind {
-    Closure(ClosureHandle),
-    NativeFunction(NativeFunction),
-}
-
 pub const NIL_TYPE_STRING: &str = "nil";
 pub const BOOLEAN_TYPE_STRING: &str = "boolean";
 pub const NUMBER_TYPE_STRING: &str = "number";
@@ -38,7 +32,8 @@ pub enum Value {
     False,
     Number(f64),
     String(StringHandle),
-    Function(FunctionValueKind),
+    Closure(ClosureHandle),
+    NativeFunction(NativeFunction),
     FunctionDecl(FunctionHandle),
 }
 
@@ -59,18 +54,16 @@ impl Value {
                 let identifier = heap.get_string(function.name);
                 format!("<function>{}", identifier)
             }
-            Value::Function(function) => match function {
-                FunctionValueKind::NativeFunction(function) => {
-                    let identifier = heap.get_string(function.name_handle);
-                    format!("<function>{}", identifier)
-                }
-                FunctionValueKind::Closure(handle) => {
-                    let closure = heap.get_closure(*handle);
-                    let function = heap.get_function(closure.function);
-                    let identifier = heap.get_string(function.name);
-                    format!("<function>{}", identifier)
-                }
-            },
+            Value::Closure(handle) => {
+                let closure = heap.get_closure(*handle);
+                let function = heap.get_function(closure.function);
+                let identifier = heap.get_string(function.name);
+                format!("<function>{}", identifier)
+            }
+            Value::NativeFunction(function) => {
+                let identifier = heap.get_string(function.name_handle);
+                format!("<function>{}", identifier)
+            }
         }
     }
 
@@ -81,7 +74,8 @@ impl Value {
             Value::False => BOOLEAN_TYPE_STRING,
             Value::Number(_) => NUMBER_TYPE_STRING,
             Value::String(_) => STRING_TYPE_STRING,
-            Value::Function(_) => FUNCTION_TYPE_STRING,
+            Value::Closure(_) => FUNCTION_TYPE_STRING,
+            Value::NativeFunction(_) => FUNCTION_TYPE_STRING,
             Value::FunctionDecl(_) => FUNCTION_TYPE_STRING,
         }
     }
@@ -98,7 +92,8 @@ impl Value {
             Value::False => false.hash(&mut hasher),
             Value::Number(n) => n.to_bits().hash(&mut hasher),
             Value::String(handle) => handle.hash(&mut hasher),
-            Value::Function(kind) => kind.hash(&mut hasher),
+            Value::Closure(handle) => handle.hash(&mut hasher),
+            Value::NativeFunction(func) => func.hash(&mut hasher),
             Value::FunctionDecl(handle) => handle.hash(&mut hasher),
         }
         hasher.finish()

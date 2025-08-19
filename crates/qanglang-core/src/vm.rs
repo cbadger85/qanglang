@@ -20,8 +20,8 @@ use crate::{
         qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
     },
     value::{
-        BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, FunctionValueKind, NIL_TYPE_STRING,
-        NUMBER_TYPE_STRING, NativeFunction, STRING_TYPE_STRING,
+        BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING,
+        NativeFunction, STRING_TYPE_STRING,
     },
 };
 
@@ -234,7 +234,7 @@ impl VmState {
         roots.extend(
             self.stack[..self.stack_top]
                 .iter()
-                .filter(|v| matches!(v, Value::Function(_)))
+                .filter(|v| matches!(v, Value::Closure(_)))
                 .copied(), // or .cloned() if Value doesn't implement Copy
         );
 
@@ -242,13 +242,13 @@ impl VmState {
         roots.extend(
             self.globals
                 .values()
-                .filter(|v| matches!(v, Value::Function(_)))
+                .filter(|v| matches!(v, Value::Closure(_)))
                 .copied(),
         );
 
         // Frame closure roots - these are already Function values
         for frame in &self.frames[..self.frame_count] {
-            roots.push(Value::Function(FunctionValueKind::Closure(frame.closure)));
+            roots.push(Value::Closure(frame.closure));
         }
 
         // Upvalue roots - filter for Function values only
@@ -256,7 +256,7 @@ impl VmState {
             self.open_upvalues
                 .iter()
                 .map(|(stack_slot, _)| self.stack[*stack_slot])
-                .filter(|v| matches!(v, Value::Function(_))),
+                .filter(|v| matches!(v, Value::Closure(_))),
         );
 
         roots
@@ -342,10 +342,9 @@ impl Vm {
             function,
         };
 
-        self.state.globals.insert(
-            identifier_handle,
-            Value::Function(FunctionValueKind::NativeFunction(native_function)),
-        );
+        self.state
+            .globals
+            .insert(identifier_handle, Value::NativeFunction(native_function));
 
         self
     }
@@ -669,10 +668,7 @@ impl Vm {
                             self.heap.get_closure_mut(closure_handle).upvalues[i] = current_upvalue;
                         }
                     }
-                    push_value!(
-                        self,
-                        Value::Function(FunctionValueKind::Closure(closure_handle))
-                    )?;
+                    push_value!(self, Value::Closure(closure_handle))?;
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
@@ -808,10 +804,8 @@ impl Vm {
 
     fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
-            Value::Function(FunctionValueKind::Closure(handle)) => self.call(handle, arg_count),
-            Value::Function(FunctionValueKind::NativeFunction(function)) => {
-                self.call_native_function(function, arg_count)
-            }
+            Value::Closure(handle) => self.call(handle, arg_count),
+            Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             _ => {
                 let value_str = value.to_display_string(&self.heap);
                 Err(QangRuntimeError::new(
@@ -880,7 +874,7 @@ impl Vm {
         let saved_frame_count = self.state.frame_count;
         let saved_function_ptr = self.state.current_function_ptr;
 
-        push_value!(self, Value::Function(FunctionValueKind::Closure(handle)))?;
+        push_value!(self, Value::Closure(handle))?;
 
         for value in &args {
             push_value!(self, *value)?;
@@ -936,7 +930,7 @@ impl Vm {
         let mut closure_roots: Vec<ClosureHandle> = Vec::with_capacity(64);
         for value in &self.state.stack[..self.state.stack_top] {
             match value {
-                Value::Function(FunctionValueKind::Closure(handle)) => {
+                Value::Closure(handle) => {
                     closure_roots.push(*handle);
                 }
                 _ => (),
@@ -945,7 +939,7 @@ impl Vm {
 
         for value in self.globals().values() {
             match value {
-                Value::Function(FunctionValueKind::Closure(handle)) => {
+                Value::Closure(handle) => {
                     closure_roots.push(*handle);
                 }
                 _ => (),

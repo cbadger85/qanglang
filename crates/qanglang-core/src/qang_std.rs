@@ -1,4 +1,4 @@
-use crate::{FunctionValueKind, NativeFunctionError, Value, Vm};
+use crate::{NativeFunctionError, Value, Vm};
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args
@@ -46,7 +46,7 @@ pub fn qang_assert_throws(
         .ok_or(NativeFunctionError::new("No arguments provided."))?;
 
     let function_handle = match assertion {
-        Value::Function(FunctionValueKind::Closure(function_handle)) => *function_handle,
+        Value::Closure(function_handle) => *function_handle,
         _ => return Err("First argument must be a function.".into()),
     };
 

@@ -24,7 +24,7 @@ pub use memory::{
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};
-pub use value::{FunctionValueKind, Value};
+pub use value::Value;
 pub use vm::{NativeFn, NativeFunctionError, Vm};
 
 #[cfg(test)]

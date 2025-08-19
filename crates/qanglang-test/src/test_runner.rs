@@ -1,8 +1,7 @@
 use std::fs;
 
 use qanglang_core::{
-    ClosureHandle, CompilerPipeline, FunctionValueKind, ObjectHeap, SourceMap, StringHandle, Value,
-    Vm,
+    ClosureHandle, CompilerPipeline, ObjectHeap, SourceMap, StringHandle, Value, Vm,
 };
 use rustc_hash::FxHashMap;
 
@@ -168,7 +167,7 @@ fn extract_test_info(
 
         match value {
             // Check if this is a test function (starts with "test_")
-            Value::Function(FunctionValueKind::Closure(func_handle)) => {
+            Value::Closure(func_handle) => {
                 if identifier.starts_with("test_") {
                     test_functions.push((identifier.to_string(), *func_handle));
                 }

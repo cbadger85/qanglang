@@ -2,10 +2,7 @@ use std::collections::HashMap;
 
 use generational_arena::{Arena, Index};
 
-use crate::{
-    ClosureObject, FunctionObject, FunctionValueKind, Upvalue, Value, ValueConversionError,
-    debug_log,
-};
+use crate::{ClosureObject, FunctionObject, Upvalue, Value, ValueConversionError, debug_log};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
 pub struct StringHandle(usize);
@@ -44,10 +41,7 @@ impl TryFrom<Value> for ClosureHandle {
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Value::Function(kind) => match kind {
-                FunctionValueKind::Closure(handle) => Ok(handle),
-                _ => Err(ValueConversionError::new("Expected function.")),
-            },
+            Value::Closure(handle) => Ok(handle),
             _ => Err(ValueConversionError::new("Expected function.")),
         }
     }

@@ -1,6 +1,5 @@
 use crate::{
-    CompilerPipeline, FunctionValueKind, ObjectHeap, SourceMap, Value, Vm, disassemble_program,
-    memory::ClosureHandle,
+    CompilerPipeline, ObjectHeap, SourceMap, Value, Vm, disassemble_program, memory::ClosureHandle,
 };
 
 #[test]
@@ -105,7 +104,7 @@ fn test_calling_functions_from_native() {
             .unwrap();
 
         match value {
-            Value::Function(FunctionValueKind::Closure(handle)) => *handle,
+            Value::Closure(handle) => *handle,
             _ => panic!("Identity function not found!"),
         }
     }
@@ -377,14 +376,12 @@ fn test_pipe_partial_application() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);
@@ -423,14 +420,12 @@ fn test_pipe_chaining() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => {
-            match Vm::new(heap).set_debug(false).interpret(program) {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
+        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
             }
-        }
+        },
         Err(errors) => {
             for error in errors.all() {
                 println!("{}", error.message);

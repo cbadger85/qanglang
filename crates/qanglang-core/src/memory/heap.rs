@@ -270,8 +270,8 @@ impl ObjectHeap {
 
         self.trace_references(roots);
 
-        // TODO figure out a better way to dynamically calculate an initial capacity based on the size of the heap.
-        let mut deleted_values: Vec<Index> = Vec::with_capacity(1024);
+        let mut deleted_values: Vec<Index> =
+            Vec::with_capacity(self.closures.len() + self.upvalues.len());
 
         for (index, upvalue) in self.upvalues.iter_mut() {
             if upvalue.is_marked {

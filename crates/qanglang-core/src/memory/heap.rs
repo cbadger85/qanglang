@@ -1,8 +1,9 @@
+use crate::UpvalueReference;
 use crate::memory::arena::{Arena, Index};
 use crate::{
     ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 pub type StringHandle = usize;
 
@@ -197,7 +198,64 @@ impl ObjectHeap {
         &self.native_functions[handle]
     }
 
-    pub fn collect_garbage(&mut self, _roots: Vec<Value>) {
-        // todo!("Implement mark and sweep garbage collection using provided roots");
+    pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
+        self.trace_references(roots);
+
+        let mut deleted_values: Vec<Index> = Vec::with_capacity(1024);
+
+        for (index, upvalue) in self.upvalues.iter_mut() {
+            if upvalue.is_marked {
+                upvalue.is_marked = false;
+            } else {
+                deleted_values.push(index);
+            }
+        }
+
+        for index in deleted_values.drain(..) {
+            self.upvalues.remove(index);
+        }
+
+        for (index, closure) in self.closures.iter_mut() {
+            if closure.is_marked {
+                closure.is_marked = false;
+            } else {
+                deleted_values.push(index);
+            }
+        }
+
+        for index in deleted_values.drain(..) {
+            self.closures.remove(index);
+        }
+    }
+
+    fn trace_references(&mut self, mut gray_list: VecDeque<Value>) {
+        while !gray_list.is_empty() {
+            let value = gray_list.pop_front().unwrap();
+
+            match value {
+                Value::Closure(handle) => {
+                    let closure = &mut self.closures[handle];
+
+                    if closure.is_marked {
+                        continue;
+                    }
+
+                    closure.is_marked = true;
+
+                    for i in 0..closure.upvalue_count {
+                        if let UpvalueReference::Closed(handle) = closure.upvalues[i] {
+                            let upvalue = &mut self.upvalues[handle];
+                            if upvalue.is_marked {
+                                continue;
+                            }
+                            upvalue.is_marked = true;
+
+                            gray_list.push_back(upvalue.value);
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
     }
 }

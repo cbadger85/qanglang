@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::VecDeque, ops::Range};
 
 use crate::memory::Index;
 #[cfg(feature = "profiler")]
@@ -900,34 +900,18 @@ impl Vm {
         Ok(())
     }
 
-    pub fn mark_roots(&mut self) -> Vec<Value> {
-        let mut closure_roots: Vec<Value> = Vec::with_capacity(64);
-        for value in &self.state.stack[..self.state.stack_top] {
-            if matches!(value, Value::Closure(_)) {
-                closure_roots.push(*value);
-            }
-        }
-
-        for value in self.globals().values() {
-            if matches!(value, Value::Closure(_)) {
-                closure_roots.push(*value);
-            }
-        }
+    pub fn gather_roots(&mut self) -> VecDeque<Value> {
+        let mut closure_roots = VecDeque::with_capacity(1024);
+        closure_roots.extend(&self.state.stack[..self.state.stack_top]);
+        closure_roots.extend(self.globals().values());
 
         for frame in &self.state.frames[..self.state.frame_count] {
-            closure_roots.push(Value::Closure(frame.closure));
+            closure_roots.push_back(Value::Closure(frame.closure));
         }
 
         for (_, closures) in &self.state.open_upvalues {
             for (closure_handle, _) in closures {
-                closure_roots.push(Value::Closure(*closure_handle));
-            }
-        }
-
-        for root in &closure_roots {
-            match root {
-                Value::Closure(handle) => self.heap.mark_closure(*handle),
-                _ => (),
+                closure_roots.push_back(Value::Closure(*closure_handle));
             }
         }
 
@@ -936,7 +920,7 @@ impl Vm {
 
     fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
-        let roots = self.mark_roots();
+        let roots = self.gather_roots();
         self.heap.collect_garbage(roots);
         debug_log!(self.is_debug, "--gc end");
     }

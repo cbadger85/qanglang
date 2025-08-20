@@ -307,8 +307,9 @@ impl Vm {
         let function_handle = program.into_handle();
         let upvalue_count = self.heap.get_function(function_handle).upvalue_count;
 
-        let handle =
-            gc_allocate!(self, closure: ClosureObject::new(function_handle, upvalue_count));
+        let handle = self
+            .heap
+            .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
         self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]

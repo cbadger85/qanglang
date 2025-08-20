@@ -812,12 +812,15 @@ impl Vm {
             } else {
                 SourceLocation::default()
             };
-            return Err(QangRuntimeError::new("Stack overflow.".to_string(), loc));
+            return Err(QangRuntimeError::new(
+                "Maximum call depth exceeded.".to_string(),
+                loc,
+            ));
         }
 
         self.state.frame_count += 1;
 
-        let value_slot = self.state.stack_top - final_arg_count - 1; // This should overwrite the function identifier with its return value.
+        let value_slot = self.state.stack_top - final_arg_count - 1;
         let call_frame = &mut self.state.frames[self.state.frame_count - 1];
 
         call_frame.value_slot = value_slot;
@@ -848,22 +851,16 @@ impl Vm {
 
         self.call(handle, args.len())?;
 
-        match self.run() {
-            Ok(return_value) => {
-                // Reset the VM state to before the function call
-                self.state.stack_top = saved_stack_top;
-                self.state.frame_count = saved_frame_count;
-                self.state.current_function_ptr = saved_function_ptr;
-                Ok(return_value)
-            }
-            Err(error) => {
-                // Reset the VM state to before the function call
-                self.state.stack_top = saved_stack_top;
-                self.state.frame_count = saved_frame_count;
-                self.state.current_function_ptr = saved_function_ptr;
-                Err(error)
-            }
-        }
+        let result = match self.run() {
+            Ok(return_value) => Ok(return_value),
+            Err(error) => Err(error),
+        };
+
+        self.state.stack_top = saved_stack_top;
+        self.state.frame_count = saved_frame_count;
+        self.state.current_function_ptr = saved_function_ptr;
+
+        result
     }
 
     fn call_native_function(

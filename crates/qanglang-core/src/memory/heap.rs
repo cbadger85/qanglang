@@ -47,8 +47,13 @@ impl ObjectHeap {
         }
     }
 
-    pub fn debug(mut self, is_debug: bool) -> Self {
+    pub fn set_debug(mut self, is_debug: bool) -> Self {
         self.is_debug = is_debug;
+        self
+    }
+
+    pub fn set_bytes_until_gc(mut self, bytes: u64) -> Self {
+        self.bytes_until_gc = bytes;
         self
     }
 

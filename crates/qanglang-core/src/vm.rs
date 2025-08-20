@@ -121,7 +121,7 @@ macro_rules! peek {
 macro_rules! gc_allocate {
     // Closure allocation
     ($vm:expr, closure: $value:expr) => {{
-        if !$vm.heap.can_allocate_closure() {
+        if !$vm.heap.should_collect_garbage() {
             $vm.collect_garbage();
         }
         $vm.heap.allocate_closure($value)
@@ -129,7 +129,7 @@ macro_rules! gc_allocate {
 
     // Value allocation
     ($vm:expr, value: $value:expr) => {{
-        if !$vm.heap.can_allocate_upvalue() {
+        if !$vm.heap.should_collect_garbage() {
             $vm.collect_garbage();
         }
         $vm.heap.allocate_upvalue($value)

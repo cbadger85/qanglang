@@ -86,6 +86,13 @@ impl ObjectHeap {
 
             self.string_interner.insert(s, handle);
 
+            debug_log!(
+                self.is_debug,
+                "Allocated {} bytes for string: {:?}",
+                std::mem::size_of::<String>() * 2 + std::mem::size_of::<StringHandle>(),
+                handle
+            );
+
             handle
         }
     }
@@ -94,13 +101,14 @@ impl ObjectHeap {
         &self.strings[handle]
     }
 
-    pub fn can_allocate_closure(&self) -> bool {
-        self.closures.len() < self.closures.capacity()
-    }
-
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
         let handle = self.closures.insert(closure);
-        debug_log!(self.is_debug, "Allocating closure: {:?}", handle);
+        debug_log!(
+            self.is_debug,
+            "Allocated {} bytes for closure: {:?}",
+            std::mem::size_of::<ClosureObject>(),
+            handle
+        );
         handle
     }
 
@@ -113,8 +121,13 @@ impl ObjectHeap {
     }
 
     pub fn free_closure(&mut self, handle: ClosureHandle) {
-        debug_log!(self.is_debug, "Freeing closure: {:?}", handle);
         self.closures.remove(handle);
+        debug_log!(
+            self.is_debug,
+            "Freed {} byes for closure: {:?}",
+            std::mem::size_of::<ClosureObject>(),
+            handle
+        );
     }
 
     pub fn mark_closure(&mut self, handle: ClosureHandle) {
@@ -122,16 +135,17 @@ impl ObjectHeap {
         closure.is_marked = true;
     }
 
-    pub fn can_allocate_upvalue(&self) -> bool {
-        self.upvalues.len() < self.upvalues.capacity()
-    }
-
     pub fn allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
         let handle = self.upvalues.insert(Upvalue {
             value,
             is_marked: false,
         });
-        debug_log!(self.is_debug, "Allocating upvalue: {:?}", handle);
+        debug_log!(
+            self.is_debug,
+            "Allocated {} byes for upvalue: {:?}",
+            std::mem::size_of::<Upvalue>(),
+            handle
+        );
         handle
     }
 
@@ -146,6 +160,12 @@ impl ObjectHeap {
     pub fn free_upvalue(&mut self, handle: UpvalueHandle) {
         debug_log!(self.is_debug, "Freeing upvalue: {:?}", handle);
         self.upvalues.remove(handle);
+        debug_log!(
+            self.is_debug,
+            "Freed {} byes for upvalue: {:?}",
+            std::mem::size_of::<Upvalue>(),
+            handle
+        );
     }
 
     pub fn mark_upvalue(&mut self, handle: UpvalueHandle) {
@@ -165,7 +185,16 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.functions.capacity());
         }
         self.functions.push(function);
-        self.functions.len() - 1
+        let handle = self.functions.len() - 1;
+
+        debug_log!(
+            self.is_debug,
+            "Allocated {} bytes for function: {:?}",
+            std::mem::size_of::<FunctionObject>(),
+            handle
+        );
+
+        handle
     }
 
     pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
@@ -190,11 +219,35 @@ impl ObjectHeap {
                 .reserve(new_capacity - self.native_functions.capacity());
         }
         self.native_functions.push(function);
-        self.native_functions.len() - 1
+        let handle = self.native_functions.len() - 1;
+
+        debug_log!(
+            self.is_debug,
+            "Allocated {} bytes for native function: {:?}",
+            std::mem::size_of::<NativeFunctionObject>(),
+            handle
+        );
+
+        handle
     }
 
     pub fn get_native_function(&self, handle: NativeFunctionHandle) -> &NativeFunctionObject {
         &self.native_functions[handle]
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn should_collect_garbage(&mut self) -> bool {
+        self.closures.len() < self.closures.capacity()
+            || self.upvalues.len() < self.upvalues.capacity()
+    }
+    #[cfg(not(debug_assertions))]
+    pub fn should_collect_garbage(&mut self) -> bool {
+        // TODO use algorithm based on bytes allocated and next_gc amount
+        false
+    }
+
+    pub fn total_allocated_bytes(&self) -> u64 {
+        0
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {

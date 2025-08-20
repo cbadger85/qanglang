@@ -25,6 +25,7 @@ impl ClosureObject {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[repr(u8)]
 pub enum UpvalueReference {
     Open(usize),
     Closed(UpvalueHandle),

@@ -265,19 +265,12 @@ impl ObjectHeap {
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
-        let total_bytes_before_gc = {
-            #[cfg(debug_assertions)]
-            {
-                self.total_allocated_bytes()
-            }
+        #[cfg(debug_assertions)]
+        let total_bytes_before_gc = self.total_allocated_bytes();
 
-            #[cfg(not(debug_assertions))]
-            {
-                0
-            }
-        };
         self.trace_references(roots);
 
+        // TODO figure out a better way to dynamically calculate an initial capacity based on the size of the heap.
         let mut deleted_values: Vec<Index> = Vec::with_capacity(1024);
 
         for (index, upvalue) in self.upvalues.iter_mut() {
@@ -312,7 +305,7 @@ impl ObjectHeap {
         {
             println!(
                 "Collected {} bytes. Next collection at {} bytes.",
-                total_bytes_before_gc + new_allocated_bytes,
+                total_bytes_before_gc - new_allocated_bytes,
                 self.bytes_until_gc
             );
         }

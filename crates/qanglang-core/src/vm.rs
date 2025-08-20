@@ -897,7 +897,11 @@ impl Vm {
     }
 
     pub fn gather_roots(&mut self) -> VecDeque<Value> {
-        let mut closure_roots = VecDeque::with_capacity(1024);
+        let capacity = self.state.stack_top
+            + self.globals().len()
+            + self.state.frame_count
+            + self.state.open_upvalues.len();
+        let mut closure_roots = VecDeque::with_capacity(capacity);
         closure_roots.extend(&self.state.stack[..self.state.stack_top]);
         closure_roots.extend(self.globals().values());
 
@@ -916,12 +920,6 @@ impl Vm {
 
     fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
-
-        #[cfg(debug_assertions)]
-        {
-            let total_before_gc = self.heap.total_allocated_bytes();
-        }
-
         let roots = self.gather_roots();
         self.heap.collect_garbage(roots);
         debug_log!(self.is_debug, "--gc end");

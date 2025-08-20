@@ -1,12 +1,30 @@
+use crate::Value;
 use crate::memory::arena::{Arena, Index};
-use crate::{HashMapObject, Value};
 
 const CHUNK_SIZE: usize = 8; // Buckets per chunk
 const DEFAULT_CAPACITY: usize = 16;
 const LOAD_FACTOR_THRESHOLD: f64 = 0.75;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Default)]
-pub struct HashMapHandle(Index);
+pub type HashMapHandle = Index;
+
+#[derive(Debug, Clone)]
+pub struct HashMapObject {
+    pub first_chunk: Option<BucketChunkHandle>,
+    pub len: usize,
+    pub capacity: usize,
+    pub is_marked: bool,
+}
+
+impl HashMapObject {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            first_chunk: None,
+            len: 0,
+            capacity,
+            is_marked: false,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct BucketChunk {
@@ -70,15 +88,14 @@ impl HashMapArena {
 
     pub fn new_hashmap_with_capacity(&mut self, capacity: usize) -> HashMapHandle {
         let hashmap = HashMapObject::new(capacity);
-        let index = self.hashmaps.insert(hashmap);
-        HashMapHandle(index)
+        self.hashmaps.insert(hashmap)
     }
 
     pub fn insert(&mut self, handle: HashMapHandle, key: Value, value: Value) -> Option<Value> {
         let hash = key.hash();
 
         // Check if we need to resize before inserting
-        if let Some(hashmap) = self.hashmaps.get(handle.0) {
+        if let Some(hashmap) = self.hashmaps.get(handle) {
             let load_factor = hashmap.len as f64 / hashmap.capacity as f64;
             if load_factor >= LOAD_FACTOR_THRESHOLD {
                 self.resize_hashmap(handle);
@@ -95,7 +112,7 @@ impl HashMapArena {
         value: Value,
         hash: u64,
     ) -> Option<Value> {
-        let capacity = self.hashmaps.get(handle.0)?.capacity;
+        let capacity = self.hashmaps.get(handle)?.capacity;
         let bucket_index = (hash as usize) % capacity;
 
         // Find or create the bucket position
@@ -114,7 +131,7 @@ impl HashMapArena {
                     BucketKind::Empty | BucketKind::Tombstone => {
                         // Found insertion point
                         bucket.kind = BucketKind::Occupied { key, value };
-                        if let Some(hashmap) = self.hashmaps.get_mut(handle.0) {
+                        if let Some(hashmap) = self.hashmaps.get_mut(handle) {
                             hashmap.len += 1;
                         }
                         return None;
@@ -165,7 +182,7 @@ impl HashMapArena {
     }
 
     pub fn get(&self, handle: HashMapHandle, key: &Value) -> Option<Value> {
-        let hashmap = self.hashmaps.get(handle.0)?;
+        let hashmap = self.hashmaps.get(handle)?;
         let hash = key.hash();
         let bucket_index = (hash as usize) % hashmap.capacity;
 
@@ -222,7 +239,7 @@ impl HashMapArena {
     }
 
     pub fn remove(&mut self, handle: HashMapHandle, key: &Value) -> Option<Value> {
-        let hashmap = self.hashmaps.get(handle.0)?;
+        let hashmap = self.hashmaps.get(handle)?;
         let hash = key.hash();
         let bucket_index = (hash as usize) % hashmap.capacity;
 
@@ -248,7 +265,7 @@ impl HashMapArena {
                     } => {
                         if existing_key == *key {
                             bucket.kind = BucketKind::Tombstone;
-                            if let Some(hashmap) = self.hashmaps.get_mut(handle.0) {
+                            if let Some(hashmap) = self.hashmaps.get_mut(handle) {
                                 hashmap.len -= 1;
                             }
                             return Some(value);
@@ -283,7 +300,7 @@ impl HashMapArena {
     }
 
     pub fn len(&self, handle: HashMapHandle) -> usize {
-        self.hashmaps.get(handle.0).map(|hm| hm.len).unwrap_or(0)
+        self.hashmaps.get(handle).map(|hm| hm.len).unwrap_or(0)
     }
 
     pub fn is_empty(&self, handle: HashMapHandle) -> bool {
@@ -295,7 +312,7 @@ impl HashMapArena {
         handle: HashMapHandle,
         bucket_index: usize,
     ) -> (BucketChunkHandle, usize) {
-        let hashmap = self.hashmaps.get_mut(handle.0).unwrap();
+        let hashmap = self.hashmaps.get_mut(handle).unwrap();
 
         // Create first chunk if needed
         if hashmap.first_chunk.is_none() {
@@ -315,7 +332,7 @@ impl HashMapArena {
         handle: HashMapHandle,
         bucket_index: usize,
     ) -> Option<(BucketChunkHandle, usize)> {
-        let hashmap = self.hashmaps.get(handle.0)?;
+        let hashmap = self.hashmaps.get(handle)?;
         let chunk_handle = hashmap.first_chunk?;
         let bucket_idx_in_chunk = bucket_index % CHUNK_SIZE;
 
@@ -324,19 +341,19 @@ impl HashMapArena {
 
     fn resize_hashmap(&mut self, handle: HashMapHandle) {
         // Double the capacity
-        let old_capacity = self.hashmaps.get(handle.0).unwrap().capacity;
+        let old_capacity = self.hashmaps.get(handle).unwrap().capacity;
         let new_capacity = old_capacity * 2;
 
         // Collect all existing key-value pairs
         let mut pairs = Vec::new();
-        if let Some(hashmap) = self.hashmaps.get(handle.0)
+        if let Some(hashmap) = self.hashmaps.get(handle)
             && let Some(first_chunk) = hashmap.first_chunk
         {
             self.collect_all_pairs(first_chunk, &mut pairs);
         }
 
         // Clear the hashmap and update capacity
-        if let Some(hashmap) = self.hashmaps.get_mut(handle.0) {
+        if let Some(hashmap) = self.hashmaps.get_mut(handle) {
             hashmap.first_chunk = None;
             hashmap.len = 0;
             hashmap.capacity = new_capacity;
@@ -377,7 +394,7 @@ pub struct HashMapIterator<'a> {
 
 impl<'a> HashMapIterator<'a> {
     fn new(arena: &'a HashMapArena, handle: HashMapHandle) -> Self {
-        let current_chunk = arena.hashmaps.get(handle.0).and_then(|hm| hm.first_chunk);
+        let current_chunk = arena.hashmaps.get(handle).and_then(|hm| hm.first_chunk);
 
         Self {
             arena,
@@ -581,7 +598,7 @@ mod tests {
         }
 
         // Verify capacity has increased
-        if let Some(hashmap) = arena.hashmaps.get(handle.0) {
+        if let Some(hashmap) = arena.hashmaps.get(handle) {
             assert!(hashmap.capacity > 4);
         }
     }

@@ -1,7 +1,7 @@
 use crate::{
     Value,
     chunk::Chunk,
-    memory::{BucketChunkHandle, FunctionHandle, StringHandle, UpvalueHandle},
+    memory::{FunctionHandle, StringHandle, UpvalueHandle},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,25 +58,6 @@ impl FunctionObject {
             arity,
             chunk: Chunk::new(),
             upvalue_count: 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct HashMapObject {
-    pub first_chunk: Option<BucketChunkHandle>,
-    pub len: usize,
-    pub capacity: usize,
-    pub is_marked: bool,
-}
-
-impl HashMapObject {
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            first_chunk: None,
-            len: 0,
-            capacity,
-            is_marked: false,
         }
     }
 }

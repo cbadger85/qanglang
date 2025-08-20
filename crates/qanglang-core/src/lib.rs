@@ -18,7 +18,7 @@ pub use compiler::{
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
 pub use memory::{
-    ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle, HashMapObject,
+    ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle,
     NativeFunctionHandle, ObjectHeap, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
 };
 pub use parser::Parser;

@@ -1,15 +1,15 @@
 use std::{collections::VecDeque, ops::Range};
 
-use crate::memory::Index;
 #[cfg(feature = "profiler")]
 use coz;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
+#[cfg(debug_assertions)]
+use crate::debug::disassemble_instruction;
 use crate::{
     NativeFunctionHandle, ObjectHeap, QangProgram, QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
-    debug::disassemble_instruction,
     debug_log,
     error::{Trace, ValueConversionError},
     memory::{ClosureHandle, ClosureObject, FunctionObject, StringHandle, UpvalueReference},
@@ -225,10 +225,6 @@ pub struct Vm {
 
 impl Vm {
     pub fn new(mut heap: ObjectHeap) -> Self {
-        println!("Value size: {:?}", std::mem::size_of::<Value>());
-        println!("Index size: {:?}", std::mem::size_of::<Index>());
-        println!("usize size: {:?}", std::mem::size_of::<usize>());
-        println!("f64 size: {:?}", std::mem::size_of::<f64>());
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
         let nil_type_handle = heap.intern_string_slice("NIL");

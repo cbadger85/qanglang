@@ -329,10 +329,10 @@ impl HashMapArena {
 
         // Collect all existing key-value pairs
         let mut pairs = Vec::new();
-        if let Some(hashmap) = self.hashmaps.get(handle.0) {
-            if let Some(first_chunk) = hashmap.first_chunk {
-                self.collect_all_pairs(first_chunk, &mut pairs);
-            }
+        if let Some(hashmap) = self.hashmaps.get(handle.0)
+            && let Some(first_chunk) = hashmap.first_chunk
+        {
+            self.collect_all_pairs(first_chunk, &mut pairs);
         }
 
         // Clear the hashmap and update capacity
@@ -363,7 +363,7 @@ impl HashMapArena {
         }
     }
 
-    pub fn iter(&self, handle: HashMapHandle) -> HashMapIterator {
+    pub fn iter(&self, handle: HashMapHandle) -> HashMapIterator<'_> {
         HashMapIterator::new(self, handle)
     }
 }

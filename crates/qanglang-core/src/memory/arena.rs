@@ -202,7 +202,7 @@ impl<T> core::ops::IndexMut<Index> for Arena<T> {
 impl<T> Arena<T> {
     /// Iterate over shared references to the elements in this arena.
     /// Yields pairs of `(Index, &T)` items.
-    pub fn iter(&self) -> Iter<T> {
+    pub fn iter(&self) -> Iter<'_, T> {
         Iter {
             len: self.len,
             inner: self.items.iter().enumerate(),
@@ -211,7 +211,7 @@ impl<T> Arena<T> {
 
     /// Iterate over exclusive references to the elements in this arena.
     /// Yields pairs of `(Index, &mut T)` items.
-    pub fn iter_mut(&mut self) -> IterMut<T> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         IterMut {
             len: self.len,
             inner: self.items.iter_mut().enumerate(),

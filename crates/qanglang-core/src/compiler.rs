@@ -101,16 +101,16 @@ impl Compiler {
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
         for i in (0..self.local_count).rev() {
-            if let Some(local) = self.locals.get(i) {
-                if *local.name == *handle {
-                    if local.depth.is_none() {
-                        return Err(QangSyntaxError::new(
-                            "Cannot read local variable during its initialization.".to_string(),
-                            span,
-                        ));
-                    }
-                    return Ok(Some(i));
+            if let Some(local) = self.locals.get(i)
+                && *local.name == *handle
+            {
+                if local.depth.is_none() {
+                    return Err(QangSyntaxError::new(
+                        "Cannot read local variable during its initialization.".to_string(),
+                        span,
+                    ));
                 }
+                return Ok(Some(i));
             }
         }
 
@@ -470,10 +470,10 @@ impl<'a> CompilerVisitor<'a> {
         if current.scope_depth == 0 {
             return;
         }
-        if current.local_count > 0 {
-            if let Some(local) = current.locals.get_mut(current.local_count - 1) {
-                local.depth = Some(current.scope_depth)
-            }
+        if current.local_count > 0
+            && let Some(local) = current.locals.get_mut(current.local_count - 1)
+        {
+            local.depth = Some(current.scope_depth)
         }
     }
 

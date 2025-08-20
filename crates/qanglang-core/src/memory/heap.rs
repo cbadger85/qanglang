@@ -15,6 +15,8 @@ pub type FunctionHandle = usize;
 
 pub type NativeFunctionHandle = usize;
 
+const GC_HEAP_GROW_FACTOR: u64 = 2;
+
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
     strings: Vec<String>,
@@ -24,6 +26,7 @@ pub struct ObjectHeap {
     string_interner: HashMap<String, StringHandle>,
     native_functions: Vec<NativeFunctionObject>,
     is_debug: bool,
+    bytes_until_gc: u64,
 }
 
 impl ObjectHeap {
@@ -40,6 +43,7 @@ impl ObjectHeap {
             upvalues: Arena::with_capacity(initial_capacity),
             native_functions: Vec::with_capacity(initial_capacity),
             is_debug: false,
+            bytes_until_gc: 1024 * 1024,
         }
     }
 
@@ -242,15 +246,36 @@ impl ObjectHeap {
     }
     #[cfg(not(debug_assertions))]
     pub fn should_collect_garbage(&mut self) -> bool {
-        // TODO use algorithm based on bytes allocated and next_gc amount
-        false
+        self.total_allocated_bytes() > self.bytes_until_gc
     }
 
     pub fn total_allocated_bytes(&self) -> u64 {
-        0
+        let string_bytes = self.strings.len()
+            * (std::mem::size_of::<String>() * 2 + std::mem::size_of::<StringHandle>());
+        let closure_bytes = self.closures.len() * std::mem::size_of::<ClosureObject>();
+        let upvalue_bytes = self.upvalues.len() * std::mem::size_of::<Upvalue>();
+        let function_bytes = self.functions.len() * std::mem::size_of::<FunctionObject>();
+        let native_function_bytes =
+            self.native_functions.len() * std::mem::size_of::<NativeFunctionObject>();
+
+        let total =
+            string_bytes + closure_bytes + upvalue_bytes + function_bytes + native_function_bytes;
+
+        total as u64
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
+        let total_bytes_before_gc = {
+            #[cfg(debug_assertions)]
+            {
+                self.total_allocated_bytes()
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                0
+            }
+        };
         self.trace_references(roots);
 
         let mut deleted_values: Vec<Index> = Vec::with_capacity(1024);
@@ -277,6 +302,19 @@ impl ObjectHeap {
 
         for index in deleted_values.drain(..) {
             self.closures.remove(index);
+        }
+
+        let new_allocated_bytes = self.total_allocated_bytes();
+
+        self.bytes_until_gc = new_allocated_bytes * GC_HEAP_GROW_FACTOR;
+
+        #[cfg(debug_assertions)]
+        {
+            println!(
+                "Collected {} bytes. Next collection at {} bytes.",
+                total_bytes_before_gc + new_allocated_bytes,
+                self.bytes_until_gc
+            );
         }
     }
 

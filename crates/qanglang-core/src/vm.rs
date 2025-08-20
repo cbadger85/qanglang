@@ -916,6 +916,12 @@ impl Vm {
 
     fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
+
+        #[cfg(debug_assertions)]
+        {
+            let total_before_gc = self.heap.total_allocated_bytes();
+        }
+
         let roots = self.gather_roots();
         self.heap.collect_garbage(roots);
         debug_log!(self.is_debug, "--gc end");

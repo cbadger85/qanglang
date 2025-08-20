@@ -17,7 +17,7 @@ fn test_globals() {
         Ok(program) => {
             disassemble_program(&heap);
             let vm = Vm::new(heap);
-            match vm.set_debug(false).interpret(program) {
+            match vm.set_gc_status(false).set_debug(false).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error.message)
@@ -43,7 +43,7 @@ fn test_runtime_error_with_source_span() {
     let mut heap = ObjectHeap::new();
 
     if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        match Vm::new(heap).interpret(program) {
+        match Vm::new(heap).set_gc_status(false).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
             }
@@ -72,7 +72,11 @@ fn test_pipe_operator() {
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
             // disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
+            match Vm::new(heap)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);
@@ -112,7 +116,7 @@ fn test_calling_functions_from_native() {
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
-            let mut vm = Vm::new(heap).set_debug(false);
+            let mut vm = Vm::new(heap).set_gc_status(false).set_debug(false);
             match vm.interpret(program) {
                 Ok(_) => {}
                 Err(error) => {
@@ -184,7 +188,11 @@ fn test_lambda_declaration() {
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
             disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
+            match Vm::new(heap)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);
@@ -222,7 +230,11 @@ fn test_lambda_expression() {
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
             disassemble_program(&heap);
-            match Vm::new(heap).set_debug(true).interpret(program) {
+            match Vm::new(heap)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);
@@ -251,7 +263,11 @@ fn test_immediately_invoked_functional_expressions() {
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
             disassemble_program(&heap);
-            match Vm::new(heap).set_debug(true).interpret(program) {
+            match Vm::new(heap)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);
@@ -312,7 +328,11 @@ fn test_closures() {
     match CompilerPipeline::new(source_map, &mut heap).run() {
         Ok(program) => {
             // disassemble_program(&heap);
-            match Vm::new(heap).set_debug(false).interpret(program) {
+            match Vm::new(heap)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
                 Ok(_) => (),
                 Err(error) => {
                     panic!("{}", error);
@@ -377,7 +397,11 @@ fn test_pipe_partial_application() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+        Ok(program) => match Vm::new(heap)
+            .set_gc_status(false)
+            .set_debug(false)
+            .interpret(program)
+        {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error);
@@ -421,7 +445,11 @@ fn test_pipe_chaining() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+        Ok(program) => match Vm::new(heap)
+            .set_gc_status(false)
+            .set_debug(false)
+            .interpret(program)
+        {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error);
@@ -447,7 +475,11 @@ fn test_native_function_with_return() {
     let mut heap: ObjectHeap = ObjectHeap::new();
 
     match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap).set_debug(false).interpret(program) {
+        Ok(program) => match Vm::new(heap)
+            .set_gc_status(false)
+            .set_debug(false)
+            .interpret(program)
+        {
             Ok(_) => (),
             Err(error) => {
                 panic!("{}", error);

@@ -121,7 +121,7 @@ macro_rules! peek {
 macro_rules! gc_allocate {
     // Closure allocation
     ($vm:expr, closure: $value:expr) => {{
-        if !$vm.heap.should_collect_garbage() {
+        if $vm.is_gc_enabled && !$vm.heap.should_collect_garbage() {
             $vm.collect_garbage();
         }
         $vm.heap.allocate_closure($value)
@@ -129,7 +129,7 @@ macro_rules! gc_allocate {
 
     // Value allocation
     ($vm:expr, value: $value:expr) => {{
-        if !$vm.heap.should_collect_garbage() {
+        if $vm.is_gc_enabled && !$vm.heap.should_collect_garbage() {
             $vm.collect_garbage();
         }
         $vm.heap.allocate_upvalue($value)
@@ -218,7 +218,8 @@ impl VmState {
 
 #[derive(Clone)]
 pub struct Vm {
-    is_debug: bool,
+    pub is_debug: bool,
+    pub is_gc_enabled: bool,
     state: VmState,
     heap: ObjectHeap,
 }
@@ -265,6 +266,7 @@ impl Vm {
 
         let vm = Self {
             is_debug: false,
+            is_gc_enabled: true,
             state,
             heap,
         };
@@ -284,6 +286,11 @@ impl Vm {
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
         self.is_debug = is_debug;
+        self
+    }
+
+    pub fn set_gc_status(mut self, is_enabled: bool) -> Self {
+        self.is_gc_enabled = is_enabled;
         self
     }
 
@@ -916,7 +923,7 @@ impl Vm {
         closure_roots
     }
 
-    fn collect_garbage(&mut self) {
+    pub fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
         let roots = self.gather_roots();
         self.heap.collect_garbage(roots);

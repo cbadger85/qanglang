@@ -312,30 +312,25 @@ impl ObjectHeap {
     }
 
     fn trace_references(&mut self, mut gray_list: VecDeque<Value>) {
-        while !gray_list.is_empty() {
-            let value = gray_list.pop_front().unwrap();
-
+        while let Some(value) = gray_list.pop_front() {
             match value {
                 Value::Closure(handle) => {
-                    debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
                     let closure = &mut self.closures[handle];
 
-                    if closure.is_marked {
-                        continue;
-                    }
+                    if !closure.is_marked {
+                        debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
+                        closure.is_marked = true;
 
-                    closure.is_marked = true;
+                        for i in 0..closure.upvalue_count {
+                            if let UpvalueReference::Closed(handle) = closure.upvalues[i] {
+                                let upvalue = &mut self.upvalues[handle];
 
-                    for i in 0..closure.upvalue_count {
-                        if let UpvalueReference::Closed(handle) = closure.upvalues[i] {
-                            debug_log!(self.is_debug, "Blackening upvalue: {:?}", handle);
-                            let upvalue = &mut self.upvalues[handle];
-                            if upvalue.is_marked {
-                                continue;
+                                if !upvalue.is_marked {
+                                    debug_log!(self.is_debug, "Blackening upvalue: {:?}", handle);
+                                    upvalue.is_marked = true;
+                                    gray_list.push_back(upvalue.value);
+                                }
                             }
-                            upvalue.is_marked = true;
-
-                            gray_list.push_back(upvalue.value);
                         }
                     }
                 }

@@ -158,11 +158,11 @@ pub fn disassemble_program(heap: &ObjectHeap) {
 
 #[macro_export]
 macro_rules! debug_log {
-    ($is_debug:expr, $message:expr) => {{
+    ($is_debug:expr, $($arg:tt)*) => {{
         #[cfg(debug_assertions)]
         {
             if $is_debug {
-                println!("{}", $message);
+                println!($($arg)*);
             }
         }
     }};

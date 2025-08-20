@@ -49,7 +49,6 @@ impl ObjectHeap {
     }
 
     pub fn intern_string_slice(&mut self, s: &str) -> StringHandle {
-        debug_log!(self.is_debug, "Allocating string...");
         if self.string_interner.contains_key(s) {
             self.string_interner[s]
         } else {
@@ -71,7 +70,6 @@ impl ObjectHeap {
     }
 
     pub fn intern_string(&mut self, s: String) -> StringHandle {
-        debug_log!(self.is_debug, "Allocating string...");
         if self.string_interner.contains_key(&s) {
             self.string_interner[&s]
         } else {
@@ -101,8 +99,9 @@ impl ObjectHeap {
     }
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
-        debug_log!(self.is_debug, "Allocating closure...");
-        self.closures.insert(closure)
+        let handle = self.closures.insert(closure);
+        debug_log!(self.is_debug, "Allocating closure: {:?}", handle);
+        handle
     }
 
     pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
@@ -114,7 +113,7 @@ impl ObjectHeap {
     }
 
     pub fn free_closure(&mut self, handle: ClosureHandle) {
-        debug_log!(self.is_debug, "Freeing function...");
+        debug_log!(self.is_debug, "Freeing closure: {:?}", handle);
         self.closures.remove(handle);
     }
 
@@ -128,11 +127,12 @@ impl ObjectHeap {
     }
 
     pub fn allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
-        debug_log!(self.is_debug, "Allocating upvalue...");
-        self.upvalues.insert(Upvalue {
+        let handle = self.upvalues.insert(Upvalue {
             value,
             is_marked: false,
-        })
+        });
+        debug_log!(self.is_debug, "Allocating upvalue: {:?}", handle);
+        handle
     }
 
     pub fn get_upvalue(&self, handle: UpvalueHandle) -> &Value {
@@ -144,17 +144,17 @@ impl ObjectHeap {
     }
 
     pub fn free_upvalue(&mut self, handle: UpvalueHandle) {
-        debug_log!(self.is_debug, "Freeing upvalue...");
+        debug_log!(self.is_debug, "Freeing upvalue: {:?}", handle);
         self.upvalues.remove(handle);
     }
 
     pub fn mark_upvalue(&mut self, handle: UpvalueHandle) {
+        debug_log!(self.is_debug, "Marking upvalue: {:?}", handle);
         let upvalue = &mut self.upvalues[handle];
         upvalue.is_marked = true;
     }
 
     pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
-        debug_log!(self.is_debug, "Allocating function...");
         if self.functions.len() == self.functions.capacity() {
             let new_capacity = if self.functions.capacity() == 0 {
                 64
@@ -180,7 +180,6 @@ impl ObjectHeap {
         &mut self,
         function: NativeFunctionObject,
     ) -> NativeFunctionHandle {
-        debug_log!(self.is_debug, "Allocating function...");
         if self.native_functions.len() == self.native_functions.capacity() {
             let new_capacity = if self.native_functions.capacity() == 0 {
                 64
@@ -234,6 +233,7 @@ impl ObjectHeap {
 
             match value {
                 Value::Closure(handle) => {
+                    debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
                     let closure = &mut self.closures[handle];
 
                     if closure.is_marked {
@@ -244,6 +244,7 @@ impl ObjectHeap {
 
                     for i in 0..closure.upvalue_count {
                         if let UpvalueReference::Closed(handle) = closure.upvalues[i] {
+                            debug_log!(self.is_debug, "Blackening upvalue: {:?}", handle);
                             let upvalue = &mut self.upvalues[handle];
                             if upvalue.is_marked {
                                 continue;

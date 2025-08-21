@@ -64,7 +64,7 @@ impl Default for BucketChunk {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct HashMapArena {
     hashmaps: Arena<HashMapObject>,
     chunks: Arena<BucketChunk>,

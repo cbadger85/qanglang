@@ -1,5 +1,5 @@
 use crate::{
-    Value,
+    HashMapHandle, Value,
     chunk::Chunk,
     memory::{FunctionHandle, StringHandle, UpvalueHandle},
 };
@@ -60,4 +60,11 @@ impl FunctionObject {
             upvalue_count: 0,
         }
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ClassObject {
+    pub name: StringHandle,
+    pub table: HashMapHandle,
+    pub is_marked: bool,
 }

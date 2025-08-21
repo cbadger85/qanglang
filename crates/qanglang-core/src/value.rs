@@ -1,5 +1,5 @@
 use crate::{
-    NativeFn, NativeFunctionHandle, ObjectHeap,
+    ClassHandle, NativeFn, NativeFunctionHandle, ObjectHeap,
     error::ValueConversionError,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
@@ -16,6 +16,7 @@ pub const BOOLEAN_TYPE_STRING: &str = "boolean";
 pub const NUMBER_TYPE_STRING: &str = "number";
 pub const STRING_TYPE_STRING: &str = "string";
 pub const FUNCTION_TYPE_STRING: &str = "function";
+pub const CLASS_TYPE_STRING: &str = "class";
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]
@@ -28,6 +29,7 @@ pub enum Value {
     Closure(ClosureHandle),
     NativeFunction(NativeFunctionHandle),
     FunctionDecl(FunctionHandle),
+    Class(ClassHandle),
 }
 
 impl Value {
@@ -58,6 +60,11 @@ impl Value {
                 let identifier = heap.strings.get_string(function.name_handle);
                 format!("<function>{}", identifier)
             }
+            Value::Class(handle) => {
+                let clazz = heap.get_class(*handle);
+                let identifier = heap.strings.get_string(clazz.name);
+                format!("<class>{}", identifier)
+            }
         }
     }
 
@@ -71,6 +78,7 @@ impl Value {
             Value::Closure(_) => FUNCTION_TYPE_STRING,
             Value::NativeFunction(_) => FUNCTION_TYPE_STRING,
             Value::FunctionDecl(_) => FUNCTION_TYPE_STRING,
+            Value::Class(_) => CLASS_TYPE_STRING,
         }
     }
 
@@ -91,6 +99,7 @@ impl Value {
             Value::Closure(handle) => handle.hash(&mut hasher),
             Value::NativeFunction(func) => func.hash(&mut hasher),
             Value::FunctionDecl(handle) => handle.hash(&mut hasher),
+            Value::Class(handle) => handle.hash(&mut hasher),
         }
         hasher.finish()
     }

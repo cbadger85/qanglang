@@ -6,8 +6,8 @@ use crate::{
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
     value::{
-        BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING,
-        STRING_TYPE_STRING,
+        BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING,
+        NUMBER_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
 
@@ -175,6 +175,8 @@ impl<'a> CompilerPipeline<'a> {
                 self.heap.strings.intern(STRING_TYPE_STRING);
                 self.heap.strings.intern("FUNCTION");
                 self.heap.strings.intern(FUNCTION_TYPE_STRING);
+                self.heap.strings.intern("CLASS");
+                self.heap.strings.intern(CLASS_TYPE_STRING);
                 Ok(QangProgram(self.heap.allocate_function(program)))
             }
             Err(error) => Err(CompilerError(

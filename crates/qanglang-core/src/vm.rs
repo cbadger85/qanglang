@@ -18,8 +18,8 @@ use crate::{
         qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
     },
     value::{
-        BOOLEAN_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING,
-        NativeFunctionObject, STRING_TYPE_STRING,
+        BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING,
+        NUMBER_TYPE_STRING, NativeFunctionObject, STRING_TYPE_STRING,
     },
 };
 
@@ -253,6 +253,9 @@ impl Vm {
             function_type_handle,
             Value::String(function_type_value_handle),
         );
+        let class_type_handle = heap.strings.intern("CLASS");
+        let class_type_value_handle = heap.strings.intern(CLASS_TYPE_STRING);
+        globals.insert(class_type_handle, Value::String(class_type_value_handle));
 
         let state = VmState {
             frame_count: 0,

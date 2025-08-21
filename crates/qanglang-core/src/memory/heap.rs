@@ -1,5 +1,7 @@
 use crate::UpvalueReference;
 use crate::memory::arena::{Arena, Index};
+use crate::memory::hashmap_arena::HashMapArena;
+use crate::memory::object::ClassObject;
 use crate::memory::string_interner::StringInterner;
 use crate::{
     ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
@@ -9,6 +11,8 @@ use std::collections::VecDeque;
 pub type ClosureHandle = Index;
 
 pub type UpvalueHandle = Index;
+
+pub type ClassHandle = Index;
 
 pub type FunctionHandle = u32;
 
@@ -23,6 +27,8 @@ pub struct ObjectHeap {
     upvalues: Arena<Upvalue>,
     pub strings: StringInterner,
     native_functions: Vec<NativeFunctionObject>,
+    classes: Arena<ClassObject>,
+    tables: HashMapArena,
     is_debug: bool,
     bytes_until_gc: u64,
 }
@@ -39,6 +45,8 @@ impl ObjectHeap {
             strings: StringInterner::new(),
             upvalues: Arena::with_capacity(initial_capacity),
             native_functions: Vec::with_capacity(initial_capacity),
+            tables: HashMapArena::with_capacity(initial_capacity),
+            classes: Arena::with_capacity(initial_capacity),
             is_debug: false,
             bytes_until_gc: 1024 * 1024,
         }
@@ -186,6 +194,42 @@ impl ObjectHeap {
 
     pub fn get_native_function(&self, handle: NativeFunctionHandle) -> &NativeFunctionObject {
         &self.native_functions[handle as usize]
+    }
+
+    pub fn allocate_class(&mut self, clazz: ClassObject) -> ClassHandle {
+        let handle = self.classes.insert(clazz);
+        debug_log!(
+            self.is_debug,
+            "Allocated {} byes for class: {:?}",
+            std::mem::size_of::<ClassObject>(),
+            handle
+        );
+        handle
+    }
+
+    pub fn get_class(&self, handle: ClassHandle) -> &ClassObject {
+        &self.classes[handle]
+    }
+
+    pub fn get_class_mut(&mut self, handle: ClassHandle) -> &mut ClassObject {
+        &mut self.classes[handle]
+    }
+
+    pub fn free_class(&mut self, handle: ClassHandle) {
+        debug_log!(self.is_debug, "Freeing class: {:?}", handle);
+        self.classes.remove(handle);
+        debug_log!(
+            self.is_debug,
+            "Freed {} byes for class: {:?}",
+            std::mem::size_of::<ClassObject>(),
+            handle
+        );
+    }
+
+    pub fn mark_class(&mut self, handle: ClassHandle) {
+        debug_log!(self.is_debug, "Marking class: {:?}", handle);
+        let clazz = &mut self.classes[handle];
+        clazz.is_marked = true;
     }
 
     #[cfg(debug_assertions)]

@@ -22,6 +22,12 @@ pub struct Index {
     generation: u32,
 }
 
+impl Index {
+    pub fn new(index: u32, generation: u32) -> Self {
+        Self { index, generation }
+    }
+}
+
 impl Default for Index {
     fn default() -> Self {
         Index {

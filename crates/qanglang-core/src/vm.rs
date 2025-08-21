@@ -392,37 +392,33 @@ impl Vm {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
 
-                            let str1 = allocator.strings.get_string(*handle1);
-
-                            let str2 = allocator.strings.get_string(*handle2);
-
-                            let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
-                            str1_str2.push_str(str1);
-                            str1_str2.push_str(str2);
-
-                            let result = allocator.strings.intern(&str1_str2);
+                            let result = allocator.strings.concat_strings(*handle1, *handle2);
                             Ok(Value::String(result))
                         }
-                        (Value::Number(_), _) => {
-                            Err(format!("Cannot add number to {}.", b.to_type_string())
-                                .as_str()
-                                .into())
-                        }
-                        (Value::String(_), _) => {
-                            Err(format!("Cannot add string to {}.", b.to_type_string())
-                                .as_str()
-                                .into())
-                        }
-                        (_, Value::Number(_)) => {
-                            Err(format!("Cannot add {} to number.", a.to_type_string())
-                                .as_str()
-                                .into())
-                        }
-                        (_, Value::String(_)) => {
-                            Err(format!("Cannot add {} to string.", a.to_type_string())
-                                .as_str()
-                                .into())
-                        }
+                        (Value::Number(_), _) => Err(format!(
+                            "Cannot add number to {}.",
+                            b.to_type_string(allocator)
+                        )
+                        .as_str()
+                        .into()),
+                        (Value::String(_), _) => Err(format!(
+                            "Cannot add string to {}.",
+                            b.to_type_string(allocator)
+                        )
+                        .as_str()
+                        .into()),
+                        (_, Value::Number(_)) => Err(format!(
+                            "Cannot add {} to number.",
+                            a.to_type_string(allocator)
+                        )
+                        .as_str()
+                        .into()),
+                        (_, Value::String(_)) => Err(format!(
+                            "Cannot add {} to string.",
+                            a.to_type_string(allocator)
+                        )
+                        .as_str()
+                        .into()),
                         _ => Err("Both operands must be a numbers or strings.".into()),
                     })?;
                 }

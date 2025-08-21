@@ -57,6 +57,23 @@ impl StringInterner {
         unsafe { str::from_utf8_unchecked(&self.storage[begin..end]) }
     }
 
+    pub fn concat_strings(&mut self, handle1: StringHandle, handle2: StringHandle) -> StringHandle {
+        let (str1_idx, str1_length) = self.offsets[handle1 as usize];
+        let (str2_idx, str2_length) = self.offsets[handle2 as usize];
+        let capacity = str1_length + str2_length;
+        let str1_begin = str1_idx as usize;
+        let str1_end = str1_begin + str1_length as usize;
+        let str2_begin = str2_idx as usize;
+        let str2_end = str2_begin + str2_length as usize;
+        let mut concat_string_bytes = Vec::with_capacity(capacity as usize);
+        concat_string_bytes.extend_from_slice(&self.storage[str1_begin..str1_end]);
+        concat_string_bytes.extend_from_slice(&self.storage[str2_begin..str2_end]);
+
+        let concat_string = unsafe { str::from_utf8_unchecked(&concat_string_bytes) };
+
+        self.intern(concat_string)
+    }
+
     pub fn chars(&self, handle: StringHandle) -> impl Iterator<Item = char> + '_ {
         self.get_string(handle).chars()
     }

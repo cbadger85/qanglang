@@ -228,27 +228,27 @@ impl Vm {
     pub fn new(mut heap: ObjectHeap) -> Self {
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
-        let nil_type_handle = heap.intern_string_slice("NIL");
-        let nil_type_value_handle = heap.intern_string_slice(NIL_TYPE_STRING);
+        let nil_type_handle = heap.strings.intern("NIL");
+        let nil_type_value_handle = heap.strings.intern(NIL_TYPE_STRING);
         globals.insert(nil_type_handle, Value::String(nil_type_value_handle));
 
-        let boolean_type_handle = heap.intern_string_slice("BOOLEAN");
-        let boolean_type_value_handle = heap.intern_string_slice(BOOLEAN_TYPE_STRING);
+        let boolean_type_handle = heap.strings.intern("BOOLEAN");
+        let boolean_type_value_handle = heap.strings.intern(BOOLEAN_TYPE_STRING);
         globals.insert(
             boolean_type_handle,
             Value::String(boolean_type_value_handle),
         );
 
-        let number_type_handle = heap.intern_string_slice("NUMBER");
-        let number_type_value_handle = heap.intern_string_slice(NUMBER_TYPE_STRING);
+        let number_type_handle = heap.strings.intern("NUMBER");
+        let number_type_value_handle = heap.strings.intern(NUMBER_TYPE_STRING);
         globals.insert(number_type_handle, Value::String(number_type_value_handle));
 
-        let string_type_handle = heap.intern_string_slice("STRING");
-        let string_type_value_handle = heap.intern_string_slice(STRING_TYPE_STRING);
+        let string_type_handle = heap.strings.intern("STRING");
+        let string_type_value_handle = heap.strings.intern(STRING_TYPE_STRING);
         globals.insert(string_type_handle, Value::String(string_type_value_handle));
 
-        let function_type_handle = heap.intern_string_slice("FUNCTION");
-        let function_type_value_handle = heap.intern_string_slice(FUNCTION_TYPE_STRING);
+        let function_type_handle = heap.strings.intern("FUNCTION");
+        let function_type_value_handle = heap.strings.intern(FUNCTION_TYPE_STRING);
         globals.insert(
             function_type_handle,
             Value::String(function_type_value_handle),
@@ -295,7 +295,7 @@ impl Vm {
     }
 
     pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
-        let identifier_handle = self.heap.intern_string_slice(name);
+        let identifier_handle = self.heap.strings.intern(name);
         let native_function = NativeFunctionObject {
             name_handle: identifier_handle,
             arity,
@@ -389,15 +389,15 @@ impl Vm {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
 
-                            let str1 = heap.get_string(*handle1);
+                            let str1 = heap.strings.get_string(*handle1);
 
-                            let str2 = heap.get_string(*handle2);
+                            let str2 = heap.strings.get_string(*handle2);
 
                             let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
                             str1_str2.push_str(str1);
                             str1_str2.push_str(str2);
 
-                            let result = heap.intern_string_slice(&str1_str2);
+                            let result = heap.strings.intern(&str1_str2);
                             Ok(Value::String(result))
                         }
                         (Value::Number(_), _) => {
@@ -537,7 +537,7 @@ impl Vm {
                     };
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
-                        let identifier_name = self.heap.get_string(identifier_handle);
+                        let identifier_name = self.heap.strings.get_string(identifier_handle);
                         QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name),
                             loc,
@@ -558,7 +558,7 @@ impl Vm {
                     };
 
                     if !self.state.globals.contains_key(&identifier_handle) {
-                        let identifier_name = self.heap.get_string(identifier_handle);
+                        let identifier_name = self.heap.strings.get_string(identifier_handle);
                         let loc = self.state.get_previous_loc();
                         return Err(QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name).to_string(),
@@ -954,7 +954,7 @@ impl Vm {
             let closure = self.heap.get_closure(frame.closure);
             let function = self.heap.get_function(closure.function);
 
-            let name = self.heap.get_string(function.name);
+            let name = self.heap.strings.get_string(function.name);
 
             let loc = if frame.ip > 0 {
                 function

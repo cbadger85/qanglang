@@ -163,7 +163,7 @@ fn extract_test_info(
 
     for (handle, value) in globals.iter() {
         // Get the identifier name for this global
-        let identifier = heap.get_string(*handle);
+        let identifier = heap.strings.get_string(*handle);
 
         match value {
             // Check if this is a test function (starts with "test_")
@@ -175,7 +175,7 @@ fn extract_test_info(
             // Check if this is the test description
             Value::String(string_handle) => {
                 if identifier == "test_description" {
-                    description = Some(heap.get_string(*string_handle).to_string());
+                    description = Some(heap.strings.get_string(*string_handle).to_string());
                 }
             }
             _ => {}

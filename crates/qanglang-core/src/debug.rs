@@ -135,7 +135,7 @@ pub fn disassemble_program(heap: &ObjectHeap) {
     for (index, function) in heap.iter_functions() {
         function_count += 1;
 
-        let function_name = heap.get_string(function.name);
+        let function_name = heap.strings.get_string(function.name);
 
         println!(
             "Function #{} (Object #{}) - {}:",

@@ -1,29 +1,27 @@
 use crate::UpvalueReference;
 use crate::memory::arena::{Arena, Index};
+use crate::memory::string_interner::StringInterner;
 use crate::{
     ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
 };
-use std::collections::{HashMap, VecDeque};
-
-pub type StringHandle = usize;
+use std::collections::VecDeque;
 
 pub type ClosureHandle = Index;
 
 pub type UpvalueHandle = Index;
 
-pub type FunctionHandle = usize;
+pub type FunctionHandle = u32;
 
-pub type NativeFunctionHandle = usize;
+pub type NativeFunctionHandle = u32;
 
 const GC_HEAP_GROW_FACTOR: u64 = 2;
 
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
-    strings: Vec<String>,
     functions: Vec<FunctionObject>,
     closures: Arena<ClosureObject>,
     upvalues: Arena<Upvalue>,
-    string_interner: HashMap<String, StringHandle>,
+    pub strings: StringInterner,
     native_functions: Vec<NativeFunctionObject>,
     is_debug: bool,
     bytes_until_gc: u64,
@@ -36,10 +34,9 @@ impl ObjectHeap {
 
     pub fn with_capacity(initial_capacity: usize) -> Self {
         Self {
-            string_interner: HashMap::new(),
             functions: Vec::with_capacity(initial_capacity),
             closures: Arena::with_capacity(initial_capacity),
-            strings: Vec::with_capacity(initial_capacity),
+            strings: StringInterner::new(),
             upvalues: Arena::with_capacity(initial_capacity),
             native_functions: Vec::with_capacity(initial_capacity),
             is_debug: false,
@@ -55,59 +52,6 @@ impl ObjectHeap {
     pub fn set_bytes_until_gc(mut self, bytes: u64) -> Self {
         self.bytes_until_gc = bytes;
         self
-    }
-
-    pub fn intern_string_slice(&mut self, s: &str) -> StringHandle {
-        if self.string_interner.contains_key(s) {
-            self.string_interner[s]
-        } else {
-            if self.strings.len() == self.strings.capacity() {
-                let new_capacity = if self.strings.capacity() == 0 {
-                    64
-                } else {
-                    self.strings.capacity() * 2
-                };
-                self.strings.reserve(new_capacity - self.strings.capacity());
-            }
-            self.strings.push(s.to_string());
-            let handle = self.strings.len() - 1;
-
-            self.string_interner.insert(s.to_string(), handle);
-
-            handle
-        }
-    }
-
-    pub fn intern_string(&mut self, s: String) -> StringHandle {
-        if self.string_interner.contains_key(&s) {
-            self.string_interner[&s]
-        } else {
-            if self.strings.len() == self.strings.capacity() {
-                let new_capacity = if self.strings.capacity() == 0 {
-                    64
-                } else {
-                    self.strings.capacity() * 2
-                };
-                self.strings.reserve(new_capacity - self.strings.capacity());
-            }
-            self.strings.push(s.clone());
-            let handle = self.strings.len() - 1;
-
-            self.string_interner.insert(s, handle);
-
-            debug_log!(
-                self.is_debug,
-                "Allocated {} bytes for string: {:?}",
-                std::mem::size_of::<String>() * 2 + std::mem::size_of::<StringHandle>(),
-                handle
-            );
-
-            handle
-        }
-    }
-
-    pub fn get_string(&self, handle: StringHandle) -> &str {
-        &self.strings[handle]
     }
 
     pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
@@ -203,11 +147,11 @@ impl ObjectHeap {
             handle
         );
 
-        handle
+        handle as u32
     }
 
     pub fn get_function(&self, handle: FunctionHandle) -> &FunctionObject {
-        &self.functions[handle]
+        &self.functions[handle as usize]
     }
 
     pub fn iter_functions(&self) -> impl Iterator<Item = (usize, &FunctionObject)> {
@@ -237,11 +181,11 @@ impl ObjectHeap {
             handle
         );
 
-        handle
+        handle as u32
     }
 
     pub fn get_native_function(&self, handle: NativeFunctionHandle) -> &NativeFunctionObject {
-        &self.native_functions[handle]
+        &self.native_functions[handle as usize]
     }
 
     #[cfg(debug_assertions)]
@@ -255,8 +199,7 @@ impl ObjectHeap {
     }
 
     pub fn total_allocated_bytes(&self) -> u64 {
-        let string_bytes = self.strings.len()
-            * (std::mem::size_of::<String>() * 2 + std::mem::size_of::<StringHandle>());
+        let string_bytes = self.strings.get_allocated_bytes();
         let closure_bytes = self.closures.len() * std::mem::size_of::<ClosureObject>();
         let upvalue_bytes = self.upvalues.len() * std::mem::size_of::<Upvalue>();
         let function_bytes = self.functions.len() * std::mem::size_of::<FunctionObject>();

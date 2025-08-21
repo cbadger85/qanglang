@@ -3,8 +3,6 @@ use crate::{
     error::ValueConversionError,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
-use rustc_hash::FxHasher;
-use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NativeFunctionObject {
@@ -41,23 +39,23 @@ impl Value {
         match self {
             Value::Nil => "nil".to_string(),
             Value::Number(number) => number.to_string(),
-            Value::String(handle) => heap.get_string(*handle).to_string(),
+            Value::String(handle) => heap.strings.get_string(*handle).to_string(),
             Value::True => "true".to_string(),
             Value::False => "false".to_string(),
             Value::FunctionDecl(function_handle) => {
                 let function = heap.get_function(*function_handle);
-                let identifier = heap.get_string(function.name);
+                let identifier = heap.strings.get_string(function.name);
                 format!("<function>{}", identifier)
             }
             Value::Closure(handle) => {
                 let closure = heap.get_closure(*handle);
                 let function = heap.get_function(closure.function);
-                let identifier = heap.get_string(function.name);
+                let identifier = heap.strings.get_string(function.name);
                 format!("<function>{}", identifier)
             }
             Value::NativeFunction(handle) => {
                 let function = heap.get_native_function(*handle);
-                let identifier = heap.get_string(function.name_handle);
+                let identifier = heap.strings.get_string(function.name_handle);
                 format!("<function>{}", identifier)
             }
         }
@@ -81,6 +79,8 @@ impl Value {
     }
 
     pub fn hash(&self) -> u64 {
+        use rustc_hash::FxHasher;
+        use std::hash::{Hash, Hasher};
         let mut hasher = FxHasher::default();
         match self {
             Value::Nil => 0u8.hash(&mut hasher),

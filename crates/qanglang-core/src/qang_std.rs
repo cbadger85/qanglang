@@ -82,7 +82,7 @@ pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Native
 pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
 
-    let handle = vm.heap_mut().intern_string_slice(value.to_type_string());
+    let handle = vm.heap_mut().strings.intern(value.to_type_string());
 
     Ok(Some(Value::String(handle)))
 }
@@ -107,7 +107,7 @@ pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     let value = args.first().copied().unwrap_or(Value::Nil);
 
     let value = value.to_display_string(vm.heap());
-    let value_handle = vm.heap_mut().intern_string_slice(&value);
+    let value_handle = vm.heap_mut().strings.intern(&value);
 
     Ok(Some(Value::String(value_handle)))
 }
@@ -119,8 +119,8 @@ pub fn qang_to_uppercase(
     let value = args.first().copied().unwrap_or(Value::Nil);
 
     if let Value::String(handle) = value {
-        let uppercase_string = vm.heap().get_string(handle).to_uppercase();
-        let uppercase_handle = vm.heap_mut().intern_string(uppercase_string);
+        let uppercase_string = &vm.heap().strings.get_string(handle).to_uppercase();
+        let uppercase_handle = vm.heap_mut().strings.intern(uppercase_string);
 
         Ok(Some(Value::String(uppercase_handle)))
     } else {
@@ -138,8 +138,8 @@ pub fn qang_to_lowercase(
     let value = args.first().copied().unwrap_or(Value::Nil);
 
     if let Value::String(handle) = value {
-        let lowercase_string = vm.heap().get_string(handle).to_lowercase();
-        let lowercase_handle = vm.heap_mut().intern_string(lowercase_string);
+        let lowercase_string = &vm.heap().strings.get_string(handle).to_lowercase();
+        let lowercase_handle = vm.heap_mut().strings.intern(lowercase_string);
 
         Ok(Some(Value::String(lowercase_handle)))
     } else {

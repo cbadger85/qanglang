@@ -271,16 +271,6 @@ impl<'a, T> Iterator for Iter<'a, T> {
             }
         }
     }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len, Some(self.len))
-    }
-}
-
-impl<'a, T> ExactSizeIterator for Iter<'a, T> {
-    fn len(&self) -> usize {
-        self.len
-    }
 }
 
 /// An iterator over exclusive references to elements in this arena.
@@ -322,12 +312,6 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.len, Some(self.len))
-    }
-}
-
-impl<'a, T> ExactSizeIterator for IterMut<'a, T> {
-    fn len(&self) -> usize {
-        self.len
     }
 }
 
@@ -586,42 +570,6 @@ mod tests {
         assert!(values.contains(&11));
         assert!(values.contains(&12));
         assert!(values.contains(&13));
-    }
-
-    #[test]
-    fn test_iter_size_hint() {
-        let mut arena = Arena::new();
-        arena.insert(1);
-        arena.insert(2);
-        arena.insert(3);
-
-        let iter = arena.iter();
-        assert_eq!(iter.size_hint(), (3, Some(3)));
-        assert_eq!(iter.len(), 3);
-    }
-
-    #[test]
-    fn test_iter_exact_size() {
-        let mut arena = Arena::new();
-        arena.insert(1);
-        arena.insert(2);
-
-        let iter = arena.iter();
-        assert_eq!(iter.len(), 2);
-
-        let iter_mut = arena.iter_mut();
-        assert_eq!(iter_mut.len(), 2);
-    }
-
-    #[test]
-    fn test_empty_iter() {
-        let arena: Arena<i32> = Arena::new();
-        let items: Vec<_> = arena.iter().collect();
-        assert!(items.is_empty());
-
-        let iter = arena.iter();
-        assert_eq!(iter.size_hint(), (0, Some(0)));
-        assert_eq!(iter.len(), 0);
     }
 
     #[test]

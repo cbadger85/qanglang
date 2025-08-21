@@ -49,51 +49,6 @@ impl StringInterner {
         }
     }
 
-    pub fn concat_strings(&mut self, handle1: StringHandle, handle2: StringHandle) -> StringHandle {
-        let offset1 = self.offsets[handle1 as usize];
-        let begin1 = offset1.0 as usize;
-        let end1 = begin1 + offset1.1 as usize;
-
-        let offset2 = self.offsets[handle2 as usize];
-        let begin2 = offset2.0 as usize;
-        let end2 = begin2 + offset2.1 as usize;
-
-        let bytes1_len = end1 - begin1;
-        let bytes2_len = end2 - begin2;
-        let total_len = bytes1_len + bytes2_len;
-
-        let mut concatenated = Vec::with_capacity(total_len);
-        concatenated.extend_from_slice(&self.storage[begin1..end1]);
-        concatenated.extend_from_slice(&self.storage[begin2..end2]);
-        let mut hasher = FxHasher::default();
-        concatenated.hash(&mut hasher);
-        let mut hash = hasher.finish();
-
-        loop {
-            match self.map.get(&hash) {
-                None => {
-                    let storage_index = self.storage.len() as u32;
-                    let offset_index = self.offsets.len() as u32;
-                    self.map.insert(hash, offset_index);
-                    self.storage.extend_from_slice(&concatenated);
-                    self.offsets.push((storage_index, total_len as u32));
-                    return offset_index;
-                }
-                Some(&index) => {
-                    let existing_offset = &self.offsets[index as usize];
-                    let existing_begin = existing_offset.0 as usize;
-                    let existing_end = existing_begin + existing_offset.1 as usize;
-                    let existing_bytes = &self.storage[existing_begin..existing_end];
-
-                    if existing_bytes == concatenated {
-                        return index;
-                    }
-                    hash = hash.wrapping_add(1);
-                }
-            }
-        }
-    }
-
     pub fn get_string(&self, handle: StringHandle) -> &str {
         let offset = &self.offsets[handle as usize];
         let begin = offset.0 as usize;
@@ -149,30 +104,6 @@ mod tests {
     }
 
     #[test]
-    fn test_concat_strings() {
-        let mut interner = StringInterner::new();
-
-        let hello = interner.intern("hello");
-        let world = interner.intern("world");
-        let concat1 = interner.concat_strings(hello, world);
-        let concat2 = interner.concat_strings(hello, world);
-
-        assert_eq!(concat1, concat2);
-        assert_eq!(interner.get_string(concat1), "helloworld");
-    }
-
-    #[test]
-    fn test_concat_empty_strings() {
-        let mut interner = StringInterner::new();
-
-        let empty = interner.intern("");
-        let hello = interner.intern("hello");
-        let concat = interner.concat_strings(empty, hello);
-
-        assert_eq!(interner.get_string(concat), "hello");
-    }
-
-    #[test]
     fn test_chars_iterator() {
         let mut interner = StringInterner::new();
 
@@ -210,22 +141,5 @@ mod tests {
         assert_eq!(handle2, handle3);
 
         assert_eq!(interner.offsets.len(), 1);
-    }
-
-    #[test]
-    fn test_concat_deduplication() {
-        let mut interner = StringInterner::new();
-
-        let hello = interner.intern("hello");
-        let world = interner.intern("world");
-
-        let concat1 = interner.concat_strings(hello, world);
-        let concat2 = interner.concat_strings(hello, world);
-
-        assert_eq!(concat1, concat2);
-        assert_eq!(interner.get_string(concat1), "helloworld");
-
-        let direct = interner.intern("helloworld");
-        assert_eq!(interner.get_string(direct), "helloworld");
     }
 }

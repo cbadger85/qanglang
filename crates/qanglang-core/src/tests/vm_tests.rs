@@ -35,6 +35,37 @@ fn test_globals() {
 }
 
 #[test]
+fn test_string_concat() {
+    let source = r#"
+        var pen = "pen";
+        var apple = "apple"; 
+        var pineapple = "pineapple"; 
+        assert_eq(pen + apple + pen + pineapple + apple + pen, "penapplepenpineappleapplepen");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut heap = ObjectHeap::new();
+
+    match CompilerPipeline::new(source_map, &mut heap).run() {
+        Ok(program) => {
+            let vm = Vm::new(heap);
+            match vm.set_gc_status(false).set_debug(false).interpret(program) {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error.message)
+                }
+            }
+        }
+        Err(error) => {
+            for error in error.all() {
+                eprintln!("{}", error);
+            }
+
+            panic!("Compiler errors.")
+        }
+    }
+}
+
+#[test]
 fn test_runtime_error_with_source_span() {
     let source = r#"
   -"hello";

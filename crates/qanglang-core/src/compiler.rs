@@ -2,7 +2,7 @@ use crate::{
     ErrorReporter, FunctionHandle, QangSyntaxError, SourceMap, Value,
     ast::{self, AstVisitor, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
-    memory::{FunctionObject, ObjectHeap, StringHandle},
+    memory::{FunctionObject, HeapAllocator, StringHandle},
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
     value::{
@@ -139,15 +139,15 @@ impl Compiler {
 
 pub struct CompilerPipeline<'a> {
     source_map: SourceMap,
-    heap: &'a mut ObjectHeap,
+    allocator: &'a mut HeapAllocator,
     error_message_format: ErrorMessageFormat,
 }
 
 impl<'a> CompilerPipeline<'a> {
-    pub fn new(source_map: SourceMap, heap: &'a mut ObjectHeap) -> Self {
+    pub fn new(source_map: SourceMap, allocator: &'a mut HeapAllocator) -> Self {
         Self {
             source_map,
-            heap,
+            allocator,
             error_message_format: ErrorMessageFormat::Minimal,
         }
     }
@@ -163,21 +163,21 @@ impl<'a> CompilerPipeline<'a> {
         let program = parser.parse();
         let errors = parser.into_reporter();
 
-        match CompilerVisitor::new(self.heap).compile(program, &self.source_map, errors) {
+        match CompilerVisitor::new(self.allocator).compile(program, &self.source_map, errors) {
             Ok(program) => {
-                self.heap.strings.intern("NIL");
-                self.heap.strings.intern(NIL_TYPE_STRING);
-                self.heap.strings.intern("BOOLEAN");
-                self.heap.strings.intern(BOOLEAN_TYPE_STRING);
-                self.heap.strings.intern("NUMBER");
-                self.heap.strings.intern(NUMBER_TYPE_STRING);
-                self.heap.strings.intern("STRING");
-                self.heap.strings.intern(STRING_TYPE_STRING);
-                self.heap.strings.intern("FUNCTION");
-                self.heap.strings.intern(FUNCTION_TYPE_STRING);
-                self.heap.strings.intern("CLASS");
-                self.heap.strings.intern(CLASS_TYPE_STRING);
-                Ok(QangProgram(self.heap.allocate_function(program)))
+                self.allocator.strings.intern("NIL");
+                self.allocator.strings.intern(NIL_TYPE_STRING);
+                self.allocator.strings.intern("BOOLEAN");
+                self.allocator.strings.intern(BOOLEAN_TYPE_STRING);
+                self.allocator.strings.intern("NUMBER");
+                self.allocator.strings.intern(NUMBER_TYPE_STRING);
+                self.allocator.strings.intern("STRING");
+                self.allocator.strings.intern(STRING_TYPE_STRING);
+                self.allocator.strings.intern("FUNCTION");
+                self.allocator.strings.intern(FUNCTION_TYPE_STRING);
+                self.allocator.strings.intern("CLASS");
+                self.allocator.strings.intern(CLASS_TYPE_STRING);
+                Ok(QangProgram(self.allocator.allocate_function(program)))
             }
             Err(error) => Err(CompilerError(
                 error
@@ -231,23 +231,23 @@ impl Default for CompilerKind {
 
 pub struct CompilerVisitor<'a> {
     source_map: &'a SourceMap,
-    heap: &'a mut ObjectHeap,
+    allocator: &'a mut HeapAllocator,
     compiler: Compiler,
 }
 
 impl<'a> CompilerVisitor<'a> {
-    pub fn new(heap: &'a mut ObjectHeap) -> Self {
-        let handle = heap.strings.intern("<script>");
+    pub fn new(allocator: &'a mut HeapAllocator) -> Self {
+        let handle = allocator.strings.intern("<script>");
 
         Self {
             source_map: &DEFALT_SOURCE_MAP,
-            heap,
+            allocator,
             compiler: Compiler::new(handle),
         }
     }
 
     fn reset(&mut self) {
-        let handle = self.heap.strings.intern("<script>");
+        let handle = self.allocator.strings.intern("<script>");
         self.source_map = &DEFALT_SOURCE_MAP;
         self.compiler = Compiler::new(handle);
     }
@@ -489,7 +489,7 @@ impl<'a> CompilerVisitor<'a> {
         if self.compiler.scope_depth > 0 {
             Ok(None)
         } else {
-            Ok(Some(self.heap.strings.intern(identifer)))
+            Ok(Some(self.allocator.strings.intern(identifer)))
         }
     }
 
@@ -505,7 +505,7 @@ impl<'a> CompilerVisitor<'a> {
             } else if let Some(index) = self.resolve_upvalue(handle, span)? {
                 (index as u8, OpCode::GetUpvalue, OpCode::SetUpvalue)
             } else {
-                let handle = self.heap.strings.intern(handle);
+                let handle = self.allocator.strings.intern(handle);
                 let index = self.make_constant(Value::String(handle), span)?;
                 (index, OpCode::GetGlobal, OpCode::SetGlobal)
             }
@@ -586,7 +586,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         string: &ast::StringLiteral,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let handle = self.heap.strings.intern(&string.value);
+        let handle = self.allocator.strings.intern(&string.value);
         self.emit_constant(Value::String(handle), string.span)
     }
 
@@ -935,7 +935,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.parse_variable(&func_decl.function.name.name, func_decl.function.span)?;
 
         let function_name_handle = function_identifier_handle
-            .unwrap_or_else(|| self.heap.strings.intern(&func_decl.function.name.name));
+            .unwrap_or_else(|| self.allocator.strings.intern(&func_decl.function.name.name));
 
         self.compiler
             .push(function_name_handle, func_decl.function.parameters.len());
@@ -979,7 +979,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let function = compiler.function;
         let upvalue_count = function.upvalue_count;
 
-        let function_handle = self.heap.allocate_function(function);
+        let function_handle = self.allocator.allocate_function(function);
         let constant_index = self.make_constant(
             Value::FunctionDecl(function_handle),
             func_decl.function.name.span,
@@ -1044,7 +1044,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         lambda_expr: &ast::LambdaExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let lambda_name_handle = self.heap.strings.intern("<anonymous>");
+        let lambda_name_handle = self.allocator.strings.intern("<anonymous>");
 
         self.compiler
             .push(lambda_name_handle, lambda_expr.parameters.len());
@@ -1099,7 +1099,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let function = compiler.function;
         let upvalue_count = function.upvalue_count;
 
-        let function_handle = self.heap.allocate_function(function);
+        let function_handle = self.allocator.allocate_function(function);
         let constant_index =
             self.make_constant(Value::FunctionDecl(function_handle), lambda_expr.span)?;
         self.emit_opcode_and_byte(OpCode::Closure, constant_index, lambda_expr.span);

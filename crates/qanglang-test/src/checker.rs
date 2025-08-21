@@ -1,6 +1,6 @@
 use std::fs;
 
-use qanglang_core::{CompilerPipeline, ErrorMessageFormat, ObjectHeap, SourceMap};
+use qanglang_core::{CompilerPipeline, ErrorMessageFormat, HeapAllocator, SourceMap};
 
 use crate::test_file::SourceFile;
 
@@ -57,10 +57,10 @@ pub fn check_single_file(source_file: SourceFile, error_format: ErrorMessageForm
     };
 
     let source_map = SourceMap::new(source);
-    let mut heap = ObjectHeap::new();
+    let mut allocator = HeapAllocator::new();
 
     // Try to compile the file
-    match CompilerPipeline::new(source_map, &mut heap)
+    match CompilerPipeline::new(source_map, &mut allocator)
         .error_message_format(error_format)
         .run()
     {

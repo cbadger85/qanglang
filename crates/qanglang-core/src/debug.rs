@@ -1,20 +1,20 @@
 use crate::{
-    ObjectHeap, Value,
+    HeapAllocator, Value,
     chunk::{Chunk, OpCode},
 };
 
 #[allow(dead_code)]
-pub fn disassemble_chunk(chunk: &Chunk, heap: &ObjectHeap, name: &str) {
+pub fn disassemble_chunk(chunk: &Chunk, allocator: &HeapAllocator, name: &str) {
     println!("== {} ==", name);
 
     let mut offset = 0;
 
     while offset < chunk.code.len() {
-        offset = disassemble_instruction(chunk, heap, offset);
+        offset = disassemble_instruction(chunk, allocator, offset);
     }
 }
 
-pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) -> usize {
+pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset: usize) -> usize {
     print!("{:04} ", offset);
 
     if offset > 0 && chunk.locs[offset].line == chunk.locs[offset - 1].line {
@@ -27,7 +27,7 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
     let opcode = OpCode::from(instruction);
 
     match opcode {
-        OpCode::Constant => constant_instruction("OP_CONSTANT", chunk, heap, offset),
+        OpCode::Constant => constant_instruction("OP_CONSTANT", chunk, allocator, offset),
         OpCode::Return => simple_instruction("OP_RETURN", offset),
         OpCode::Negate => simple_instruction("OP_NEGATE", offset),
         OpCode::Add => simple_instruction("OP_ADD", offset),
@@ -45,9 +45,9 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
         OpCode::LessEqual => simple_instruction("OP_LESS_EQUAL", offset),
         OpCode::Modulo => simple_instruction("OP_MODULO", offset),
         OpCode::Pop => simple_instruction("OP_POP", offset),
-        OpCode::DefineGlobal => constant_instruction("OP_DEFINE_GLOBAL", chunk, heap, offset),
-        OpCode::GetGlobal => constant_instruction("OP_GET_GLOBAL", chunk, heap, offset),
-        OpCode::SetGlobal => constant_instruction("OP_SET_GLOBAL", chunk, heap, offset),
+        OpCode::DefineGlobal => constant_instruction("OP_DEFINE_GLOBAL", chunk, allocator, offset),
+        OpCode::GetGlobal => constant_instruction("OP_GET_GLOBAL", chunk, allocator, offset),
+        OpCode::SetGlobal => constant_instruction("OP_SET_GLOBAL", chunk, allocator, offset),
         OpCode::GetLocal => byte_instruction("OP_GET_LOCAL", chunk, offset),
         OpCode::SetLocal => byte_instruction("OP_SET_LOCAL", chunk, offset),
         OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
@@ -63,9 +63,9 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
 
             print!("{:<16} {:4} '", "OP_CLOSURE", constant);
             let value = chunk.constants[constant as usize];
-            println!("{}'", value.to_display_string(heap));
+            println!("{}'", value.to_display_string(allocator));
             let function_obj = match value {
-                Value::FunctionDecl(handle) => Some(heap.get_function(handle)),
+                Value::FunctionDecl(handle) => Some(allocator.get_function(handle)),
                 _ => None,
             };
 
@@ -92,7 +92,12 @@ pub fn disassemble_instruction(chunk: &Chunk, heap: &ObjectHeap, offset: usize) 
     }
 }
 
-fn constant_instruction(name: &str, chunk: &Chunk, heap: &ObjectHeap, offset: usize) -> usize {
+fn constant_instruction(
+    name: &str,
+    chunk: &Chunk,
+    allocator: &HeapAllocator,
+    offset: usize,
+) -> usize {
     let constant = chunk.code[offset + 1] as usize;
     print!("{:<16} {:4} '", name, constant);
 
@@ -101,7 +106,7 @@ fn constant_instruction(name: &str, chunk: &Chunk, heap: &ObjectHeap, offset: us
         .get(constant)
         .copied()
         .unwrap_or_default()
-        .print(heap);
+        .print(allocator);
 
     println!("'");
     offset + 2
@@ -126,23 +131,23 @@ fn jump_instruction(name: &str, sign: i32, chunk: &Chunk, offset: usize) -> usiz
 }
 
 #[allow(dead_code)]
-pub fn disassemble_program(heap: &ObjectHeap) {
+pub fn disassemble_program(allocator: &HeapAllocator) {
     println!("=== PROGRAM DISASSEMBLY ===");
     println!();
 
     let mut function_count = 0;
 
-    for (index, function) in heap.iter_functions() {
+    for (index, function) in allocator.iter_functions() {
         function_count += 1;
 
-        let function_name = heap.strings.get_string(function.name);
+        let function_name = allocator.strings.get_string(function.name);
 
         println!(
             "Function #{} (Object #{}) - {}:",
             function_count, index, function_name
         );
         println!("  Arity: {}", function.arity);
-        disassemble_chunk(&function.chunk, heap, function_name);
+        disassemble_chunk(&function.chunk, allocator, function_name);
         println!();
     }
 

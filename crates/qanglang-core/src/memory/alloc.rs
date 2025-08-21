@@ -21,7 +21,7 @@ pub type NativeFunctionHandle = u32;
 const GC_HEAP_GROW_FACTOR: usize = 2;
 
 #[derive(Debug, Default, Clone)]
-pub struct ObjectHeap {
+pub struct HeapAllocator {
     functions: Vec<FunctionObject>,
     closures: Arena<ClosureObject>,
     upvalues: Arena<Upvalue>,
@@ -33,7 +33,7 @@ pub struct ObjectHeap {
     bytes_until_gc: usize,
 }
 
-impl ObjectHeap {
+impl HeapAllocator {
     pub fn new() -> Self {
         Self::with_capacity(64)
     }
@@ -254,15 +254,15 @@ impl ObjectHeap {
         let native_function_bytes =
             self.native_functions.len() * std::mem::size_of::<NativeFunctionObject>();
         let class_bytes = self.classes.len() & std::mem::size_of::<ClassObject>();
+        let table_bytes = self.tables.get_allocated_bytes();
 
-        let total = string_bytes
+        string_bytes
             + closure_bytes
             + upvalue_bytes
             + function_bytes
             + native_function_bytes
-            + class_bytes;
-
-        total
+            + class_bytes
+            + table_bytes
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -339,6 +339,10 @@ impl ObjectHeap {
                     let clazz = &mut self.classes[handle];
                     if !clazz.is_marked {
                         clazz.is_marked = true;
+                        for (key, value) in self.tables.iter(handle) {
+                            gray_list.push_back(key);
+                            gray_list.push_back(value);
+                        }
                     }
                 }
                 _ => (),

@@ -7,7 +7,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
 use crate::{
-    NativeFunctionHandle, ObjectHeap, QangProgram, QangRuntimeError, Value,
+    HeapAllocator, NativeFunctionHandle, QangProgram, QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
@@ -121,18 +121,18 @@ macro_rules! peek {
 macro_rules! gc_allocate {
     // Closure allocation
     ($vm:expr, closure: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.heap.should_collect_garbage() {
+        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
             $vm.collect_garbage();
         }
-        $vm.heap.allocate_closure($value)
+        $vm.allocator.allocate_closure($value)
     }};
 
     // Value allocation
     ($vm:expr, value: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.heap.should_collect_garbage() {
+        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
             $vm.collect_garbage();
         }
-        $vm.heap.allocate_upvalue($value)
+        $vm.allocator.allocate_upvalue($value)
     }};
 }
 
@@ -221,40 +221,40 @@ pub struct Vm {
     pub is_debug: bool,
     pub is_gc_enabled: bool,
     state: VmState,
-    heap: ObjectHeap,
+    allocator: HeapAllocator,
 }
 
 impl Vm {
-    pub fn new(mut heap: ObjectHeap) -> Self {
+    pub fn new(mut allocator: HeapAllocator) -> Self {
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
-        let nil_type_handle = heap.strings.intern("NIL");
-        let nil_type_value_handle = heap.strings.intern(NIL_TYPE_STRING);
+        let nil_type_handle = allocator.strings.intern("NIL");
+        let nil_type_value_handle = allocator.strings.intern(NIL_TYPE_STRING);
         globals.insert(nil_type_handle, Value::String(nil_type_value_handle));
 
-        let boolean_type_handle = heap.strings.intern("BOOLEAN");
-        let boolean_type_value_handle = heap.strings.intern(BOOLEAN_TYPE_STRING);
+        let boolean_type_handle = allocator.strings.intern("BOOLEAN");
+        let boolean_type_value_handle = allocator.strings.intern(BOOLEAN_TYPE_STRING);
         globals.insert(
             boolean_type_handle,
             Value::String(boolean_type_value_handle),
         );
 
-        let number_type_handle = heap.strings.intern("NUMBER");
-        let number_type_value_handle = heap.strings.intern(NUMBER_TYPE_STRING);
+        let number_type_handle = allocator.strings.intern("NUMBER");
+        let number_type_value_handle = allocator.strings.intern(NUMBER_TYPE_STRING);
         globals.insert(number_type_handle, Value::String(number_type_value_handle));
 
-        let string_type_handle = heap.strings.intern("STRING");
-        let string_type_value_handle = heap.strings.intern(STRING_TYPE_STRING);
+        let string_type_handle = allocator.strings.intern("STRING");
+        let string_type_value_handle = allocator.strings.intern(STRING_TYPE_STRING);
         globals.insert(string_type_handle, Value::String(string_type_value_handle));
 
-        let function_type_handle = heap.strings.intern("FUNCTION");
-        let function_type_value_handle = heap.strings.intern(FUNCTION_TYPE_STRING);
+        let function_type_handle = allocator.strings.intern("FUNCTION");
+        let function_type_value_handle = allocator.strings.intern(FUNCTION_TYPE_STRING);
         globals.insert(
             function_type_handle,
             Value::String(function_type_value_handle),
         );
-        let class_type_handle = heap.strings.intern("CLASS");
-        let class_type_value_handle = heap.strings.intern(CLASS_TYPE_STRING);
+        let class_type_handle = allocator.strings.intern("CLASS");
+        let class_type_value_handle = allocator.strings.intern(CLASS_TYPE_STRING);
         globals.insert(class_type_handle, Value::String(class_type_value_handle));
 
         let state = VmState {
@@ -271,7 +271,7 @@ impl Vm {
             is_debug: false,
             is_gc_enabled: true,
             state,
-            heap,
+            allocator,
         };
 
         vm.add_native_function("assert", 2, qang_assert)
@@ -298,13 +298,13 @@ impl Vm {
     }
 
     pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
-        let identifier_handle = self.heap.strings.intern(name);
+        let identifier_handle = self.allocator.strings.intern(name);
         let native_function = NativeFunctionObject {
             name_handle: identifier_handle,
             arity,
             function,
         };
-        let handle = self.heap.allocate_native_function(native_function);
+        let handle = self.allocator.allocate_native_function(native_function);
 
         self.state
             .globals
@@ -315,10 +315,10 @@ impl Vm {
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
         let function_handle = program.into_handle();
-        let upvalue_count = self.heap.get_function(function_handle).upvalue_count;
+        let upvalue_count = self.allocator.get_function(function_handle).upvalue_count;
 
         let handle = self
-            .heap
+            .allocator
             .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
         self.call(handle, 0)?;
 
@@ -384,7 +384,7 @@ impl Vm {
                     push_value!(self, Value::Nil)?;
                 }
                 OpCode::Add => {
-                    self.binary_operation(|a, b, heap| match (&a, &b) {
+                    self.binary_operation(|a, b, allocator| match (&a, &b) {
                         (Value::Number(num1), Value::Number(num2)) => {
                             Ok(Value::Number(num1 + num2))
                         }
@@ -392,15 +392,15 @@ impl Vm {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
 
-                            let str1 = heap.strings.get_string(*handle1);
+                            let str1 = allocator.strings.get_string(*handle1);
 
-                            let str2 = heap.strings.get_string(*handle2);
+                            let str2 = allocator.strings.get_string(*handle2);
 
                             let mut str1_str2 = String::with_capacity(str1.len() + str2.len());
                             str1_str2.push_str(str1);
                             str1_str2.push_str(str2);
 
-                            let result = heap.strings.intern(&str1_str2);
+                            let result = allocator.strings.intern(&str1_str2);
                             Ok(Value::String(result))
                         }
                         (Value::Number(_), _) => {
@@ -426,7 +426,7 @@ impl Vm {
                         _ => Err("Both operands must be a numbers or strings.".into()),
                     })?;
                 }
-                OpCode::Subtract => self.binary_operation(|a, b, _heap| {
+                OpCode::Subtract => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -436,7 +436,7 @@ impl Vm {
 
                     Ok((a - b).into())
                 })?,
-                OpCode::Multiply => self.binary_operation(|a, b, _heap| {
+                OpCode::Multiply => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -446,7 +446,7 @@ impl Vm {
 
                     Ok((a * b).into())
                 })?,
-                OpCode::Divide => self.binary_operation(|a, b, _heap| {
+                OpCode::Divide => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -463,7 +463,7 @@ impl Vm {
 
                     Ok((a / b).into())
                 })?,
-                OpCode::Modulo => self.binary_operation(|a, b, _heap| {
+                OpCode::Modulo => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -473,8 +473,8 @@ impl Vm {
 
                     Ok((a % b).into())
                 })?,
-                OpCode::Equal => self.binary_operation(|a, b, _heap| Ok((a == b).into()))?,
-                OpCode::Greater => self.binary_operation(|a, b, _heap| {
+                OpCode::Equal => self.binary_operation(|a, b, _allocator| Ok((a == b).into()))?,
+                OpCode::Greater => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -483,7 +483,7 @@ impl Vm {
                     })?;
                     Ok((a > b).into())
                 })?,
-                OpCode::GreaterEqual => self.binary_operation(|a, b, _heap| {
+                OpCode::GreaterEqual => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -492,7 +492,7 @@ impl Vm {
                     })?;
                     Ok((a >= b).into())
                 })?,
-                OpCode::Less => self.binary_operation(|a, b, _heap| {
+                OpCode::Less => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -501,7 +501,7 @@ impl Vm {
                     })?;
                     Ok((a < b).into())
                 })?,
-                OpCode::LessEqual => self.binary_operation(|a, b, _heap| {
+                OpCode::LessEqual => self.binary_operation(|a, b, _allocator| {
                     let a: f64 = a.try_into().map_err(|_| {
                         BinaryOperationError::new("Both operands must be a number.")
                     })?;
@@ -540,7 +540,7 @@ impl Vm {
                     };
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
-                        let identifier_name = self.heap.strings.get_string(identifier_handle);
+                        let identifier_name = self.allocator.strings.get_string(identifier_handle);
                         QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name),
                             loc,
@@ -561,7 +561,7 @@ impl Vm {
                     };
 
                     if !self.state.globals.contains_key(&identifier_handle) {
-                        let identifier_name = self.heap.strings.get_string(identifier_handle);
+                        let identifier_name = self.allocator.strings.get_string(identifier_handle);
                         let loc = self.state.get_previous_loc();
                         return Err(QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name).to_string(),
@@ -624,11 +624,11 @@ impl Vm {
                             ));
                         }
                     };
-                    let upvalue_count = self.heap.get_function(handle).upvalue_count;
+                    let upvalue_count = self.allocator.get_function(handle).upvalue_count;
                     let closure_handle =
                         gc_allocate!(self, closure: ClosureObject::new(handle, upvalue_count));
 
-                    for i in 0..self.heap.get_closure(closure_handle).upvalue_count {
+                    for i in 0..self.allocator.get_closure(closure_handle).upvalue_count {
                         let is_local = self.state.read_byte() != 0;
                         let index = self.state.read_byte() as usize;
 
@@ -640,10 +640,11 @@ impl Vm {
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {
                             let current_closure = self
-                                .heap
+                                .allocator
                                 .get_closure(self.state.frames[self.state.frame_count - 1].closure);
                             let current_upvalue = current_closure.upvalues[index];
-                            self.heap.get_closure_mut(closure_handle).upvalues[i] = current_upvalue;
+                            self.allocator.get_closure_mut(closure_handle).upvalues[i] =
+                                current_upvalue;
                         }
                     }
                     push_value!(self, Value::Closure(closure_handle))?;
@@ -651,7 +652,7 @@ impl Vm {
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
                     let current_closure = self
-                        .heap
+                        .allocator
                         .get_closure(self.state.frames[self.state.frame_count - 1].closure);
                     let upvalue = current_closure.upvalues[slot];
 
@@ -661,7 +662,7 @@ impl Vm {
                             push_value!(self, value)?;
                         }
                         UpvalueReference::Closed(value_handle) => {
-                            let value = *self.heap.get_upvalue(value_handle);
+                            let value = *self.allocator.get_upvalue(value_handle);
                             push_value!(self, value)?;
                         }
                     }
@@ -672,13 +673,13 @@ impl Vm {
                     let current_closure_handle =
                         self.state.frames[self.state.frame_count - 1].closure;
 
-                    let upvalue = self.heap.get_closure(current_closure_handle).upvalues[slot];
+                    let upvalue = self.allocator.get_closure(current_closure_handle).upvalues[slot];
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
                             self.state.stack[stack_slot] = value;
                         }
                         UpvalueReference::Closed(value_handle) => {
-                            *self.heap.get_upvalue_mut(value_handle) = value;
+                            *self.allocator.get_upvalue_mut(value_handle) = value;
                         }
                     }
                 }
@@ -704,8 +705,8 @@ impl Vm {
 
                     // Restore the previous function pointer
                     let previous_frame = &self.state.frames[self.state.frame_count - 1];
-                    let previous_closure = self.heap.get_closure(previous_frame.closure);
-                    let previous_function = self.heap.get_function(previous_closure.function);
+                    let previous_closure = self.allocator.get_closure(previous_frame.closure);
+                    let previous_function = self.allocator.get_function(previous_closure.function);
                     self.state.current_function_ptr = previous_function as *const FunctionObject;
 
                     self.state.stack_top = value_slot + 1;
@@ -731,7 +732,7 @@ impl Vm {
 
                 // Update all closures that reference this stack slot
                 for (closure_handle, upvalue_index) in closures_to_update.iter() {
-                    self.heap.get_closure_mut(*closure_handle).upvalues[*upvalue_index] =
+                    self.allocator.get_closure_mut(*closure_handle).upvalues[*upvalue_index] =
                         UpvalueReference::Closed(value_handle);
                 }
             }
@@ -749,14 +750,14 @@ impl Vm {
             if *open_slot == stack_slot {
                 // Add this closure to the list for this stack slot
                 closures.push((closure_handle, upvalue_index));
-                self.heap.get_closure_mut(closure_handle).upvalues[upvalue_index] =
+                self.allocator.get_closure_mut(closure_handle).upvalues[upvalue_index] =
                     UpvalueReference::Open(stack_slot);
                 return;
             }
         }
 
         // Create a new open upvalue
-        self.heap.get_closure_mut(closure_handle).upvalues[upvalue_index] =
+        self.allocator.get_closure_mut(closure_handle).upvalues[upvalue_index] =
             UpvalueReference::Open(stack_slot);
         self.state
             .open_upvalues
@@ -765,7 +766,7 @@ impl Vm {
 
     fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
     where
-        F: FnOnce(Value, Value, &mut ObjectHeap) -> Result<Value, BinaryOperationError>,
+        F: FnOnce(Value, Value, &mut HeapAllocator) -> Result<Value, BinaryOperationError>,
     {
         #[cfg(feature = "profiler")]
         coz::scope!("binary_operation");
@@ -773,7 +774,7 @@ impl Vm {
         let b = pop_value!(self);
         let a = pop_value!(self);
 
-        let value = op(a, b, &mut self.heap)
+        let value = op(a, b, &mut self.allocator)
             .map_err(|e: BinaryOperationError| e.into_qang_error(self.state.get_previous_loc()))?;
 
         push_value!(self, value)?;
@@ -785,7 +786,7 @@ impl Vm {
             Value::Closure(handle) => self.call(handle, arg_count),
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             _ => {
-                let value_str = value.to_display_string(&self.heap);
+                let value_str = value.to_display_string(&self.allocator);
                 Err(QangRuntimeError::new(
                     format!("Identifier '{}' not callable.", value_str).to_string(),
                     self.state.get_previous_loc(),
@@ -802,8 +803,8 @@ impl Vm {
         coz::progress!("before_call");
 
         // Get closure and function, cache function pointer for fast access during execution
-        let closure = self.heap.get_closure(closure_handle);
-        let function = self.heap.get_function(closure.function);
+        let closure = self.allocator.get_closure(closure_handle);
+        let function = self.allocator.get_function(closure.function);
 
         let final_arg_count = {
             if arg_count < function.arity {
@@ -862,10 +863,7 @@ impl Vm {
 
         self.call(handle, args.len())?;
 
-        let result = match self.run() {
-            Ok(return_value) => Ok(return_value),
-            Err(error) => Err(error),
-        };
+        let result = self.run();
 
         self.state.stack_top = saved_stack_top;
         self.state.frame_count = saved_frame_count;
@@ -879,7 +877,7 @@ impl Vm {
         handle: NativeFunctionHandle,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let function = self.heap.get_native_function(handle);
+        let function = self.allocator.get_native_function(handle);
         let mut args = vec![Value::Nil; function.arity];
 
         for i in (0..arg_count).rev() {
@@ -929,16 +927,16 @@ impl Vm {
     pub fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
         let roots = self.gather_roots();
-        self.heap.collect_garbage(roots);
+        self.allocator.collect_garbage(roots);
         debug_log!(self.is_debug, "--gc end");
     }
 
-    pub fn heap(&self) -> &ObjectHeap {
-        &self.heap
+    pub fn allocator(&self) -> &HeapAllocator {
+        &self.allocator
     }
 
-    pub fn heap_mut(&mut self) -> &mut ObjectHeap {
-        &mut self.heap
+    pub fn allocator_mut(&mut self) -> &mut HeapAllocator {
+        &mut self.allocator
     }
 
     pub fn globals(&self) -> &FxHashMap<StringHandle, Value> {
@@ -954,10 +952,10 @@ impl Vm {
 
         for frame_idx in frame_id_range {
             let frame = &self.state.frames[frame_idx];
-            let closure = self.heap.get_closure(frame.closure);
-            let function = self.heap.get_function(closure.function);
+            let closure = self.allocator.get_closure(frame.closure);
+            let function = self.allocator.get_function(closure.function);
 
-            let name = self.heap.strings.get_string(function.name);
+            let name = self.allocator.strings.get_string(function.name);
 
             let loc = if frame.ip > 0 {
                 function
@@ -981,7 +979,7 @@ impl Vm {
         print!("          ");
         for i in 0..self.state.stack_top {
             if let Some(value) = self.state.stack.get(i) {
-                value.print(&self.heap);
+                value.print(&self.allocator);
                 print!(" ");
             }
         }
@@ -989,7 +987,7 @@ impl Vm {
 
         disassemble_instruction(
             &self.state.get_current_function().chunk,
-            &self.heap,
+            &self.allocator,
             self.state.frames[self.state.frame_count - 1].ip,
         );
     }

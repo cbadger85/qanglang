@@ -1,11 +1,11 @@
-use qanglang_core::{CompilerPipeline, ObjectHeap, SourceMap, Vm};
+use qanglang_core::{CompilerPipeline, HeapAllocator, SourceMap, Vm};
 use std::io::{self, Write};
 
 pub fn run_repl(debug: bool) {
     println!("QangLang REPL - Type 'exit' to quit");
 
-    let heap = ObjectHeap::new();
-    let mut vm = Vm::new(heap).set_debug(debug);
+    let allocator = HeapAllocator::new();
+    let mut vm = Vm::new(allocator).set_debug(debug);
 
     loop {
         print!("> ");
@@ -33,7 +33,7 @@ pub fn run_repl(debug: bool) {
 pub fn execute_repl_line(source: &str, vm: &mut Vm) {
     let source_map = SourceMap::new(source.to_string());
 
-    let program = match CompilerPipeline::new(source_map, vm.heap_mut()).run() {
+    let program = match CompilerPipeline::new(source_map, vm.allocator_mut()).run() {
         Ok(program) => program,
         Err(errors) => {
             for error in errors.all() {

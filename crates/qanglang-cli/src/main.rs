@@ -1,7 +1,7 @@
 mod repl;
 
 use qanglang_core::{
-    CompilerPipeline, ErrorMessageFormat, ObjectHeap, SourceMap, Vm, disassemble_program,
+    CompilerPipeline, ErrorMessageFormat, HeapAllocator, SourceMap, Vm, disassemble_program,
 };
 use qanglang_ls::run_language_server;
 use repl::run_repl;
@@ -173,7 +173,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
     };
 
     let source_map = SourceMap::new(source.to_string());
-    let mut heap = ObjectHeap::new();
+    let mut allocator = HeapAllocator::new();
 
     let format = match error_format.to_lowercase().as_str() {
         "minimal" => ErrorMessageFormat::Minimal,
@@ -188,13 +188,13 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         }
     };
 
-    let program = match CompilerPipeline::new(source_map, &mut heap)
+    let program = match CompilerPipeline::new(source_map, &mut allocator)
         .error_message_format(format)
         .run()
     {
         Ok(program) => {
             if heap_dump {
-                disassemble_program(&heap);
+                disassemble_program(&allocator);
             }
             program
         }
@@ -206,7 +206,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         }
     };
 
-    match Vm::new(heap).set_debug(debug_mode).interpret(program) {
+    match Vm::new(allocator).set_debug(debug_mode).interpret(program) {
         Ok(_) => (),
         Err(error) => {
             eprintln!("Runtime error: {}", error.message);

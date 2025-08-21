@@ -1,5 +1,6 @@
 use crate::{
-    CompilerPipeline, ObjectHeap, SourceMap, Value, Vm, disassemble_program, memory::ClosureHandle,
+    CompilerPipeline, HeapAllocator, SourceMap, Value, Vm, disassemble_program,
+    memory::ClosureHandle,
 };
 
 #[test]
@@ -11,12 +12,12 @@ fn test_globals() {
         println(two);
   "#;
     let source_map = SourceMap::new(source.to_string());
-    let mut heap = ObjectHeap::new();
+    let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&heap);
-            let vm = Vm::new(heap);
+            disassemble_program(&allocator);
+            let vm = Vm::new(allocator);
             match vm.set_gc_status(false).set_debug(false).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
@@ -43,11 +44,11 @@ fn test_string_concat() {
         assert_eq(pen + apple + pen + pineapple + apple + pen, "penapplepenpineappleapplepen");
   "#;
     let source_map = SourceMap::new(source.to_string());
-    let mut heap = ObjectHeap::new();
+    let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            let vm = Vm::new(heap);
+            let vm = Vm::new(allocator);
             match vm.set_gc_status(false).set_debug(false).interpret(program) {
                 Ok(_) => (),
                 Err(error) => {
@@ -71,10 +72,10 @@ fn test_runtime_error_with_source_span() {
   -"hello";
   "#;
     let source_map = SourceMap::new(source.to_string());
-    let mut heap = ObjectHeap::new();
+    let mut allocator = HeapAllocator::new();
 
-    if let Ok(program) = CompilerPipeline::new(source_map, &mut heap).run() {
-        match Vm::new(heap).set_gc_status(false).interpret(program) {
+    if let Ok(program) = CompilerPipeline::new(source_map, &mut allocator).run() {
+        match Vm::new(allocator).set_gc_status(false).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
             }
@@ -98,12 +99,12 @@ fn test_pipe_operator() {
         // println((12 |> to_string) + " is a number");
   "#;
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            // disassemble_program(&heap);
-            match Vm::new(heap)
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
                 .interpret(program)
@@ -129,10 +130,10 @@ fn test_calling_functions_from_native() {
         fn identity(x) { return x; }
     "#;
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
     fn find_function_handle(identifier: &str, vm: &mut Vm) -> ClosureHandle {
-        let function_identifier_handle = vm.heap_mut().strings.intern(identifier.into());
+        let function_identifier_handle = vm.allocator_mut().strings.intern(identifier.into());
         let (_, value) = vm
             .globals()
             .iter()
@@ -145,9 +146,9 @@ fn test_calling_functions_from_native() {
         }
     }
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            let mut vm = Vm::new(heap).set_gc_status(false).set_debug(false);
+            let mut vm = Vm::new(allocator).set_gc_status(false).set_debug(false);
             match vm.interpret(program) {
                 Ok(_) => {}
                 Err(error) => {
@@ -168,11 +169,11 @@ fn test_calling_functions_from_native() {
                 _ => panic!("Unexpected type conversion."),
             }
 
-            let foo = vm.heap_mut().strings.intern("foo".into());
+            let foo = vm.allocator_mut().strings.intern("foo".into());
 
             match vm.call_function(function_handle, vec![Value::String(foo)]) {
                 Ok(Value::String(handle)) => {
-                    let string = vm.heap().strings.get_string(handle);
+                    let string = vm.allocator().strings.get_string(handle);
                     assert_eq!("foo".to_string(), string.to_string());
                 }
                 Err(error) => {
@@ -214,12 +215,12 @@ fn test_lambda_declaration() {
         assert_eq(lambda_two(), "hello world");
   "#;
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap)
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
                 .interpret(program)
@@ -256,12 +257,12 @@ fn test_lambda_expression() {
         assert_eq(z(), "hello world");
   "#;
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap)
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(true)
                 .interpret(program)
@@ -289,12 +290,12 @@ fn test_immediately_invoked_functional_expressions() {
 "#;
 
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&heap);
-            match Vm::new(heap)
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(true)
                 .interpret(program)
@@ -354,12 +355,12 @@ fn test_closures() {
 "#;
 
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            // disassemble_program(&heap);
-            match Vm::new(heap)
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
                 .interpret(program)
@@ -425,10 +426,10 @@ fn test_pipe_partial_application() {
 "#;
 
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap)
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => match Vm::new(allocator)
             .set_gc_status(false)
             .set_debug(false)
             .interpret(program)
@@ -473,10 +474,10 @@ fn test_pipe_chaining() {
 "#;
 
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap)
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => match Vm::new(allocator)
             .set_gc_status(false)
             .set_debug(false)
             .interpret(program)
@@ -503,10 +504,10 @@ fn test_native_function_with_return() {
 "#;
 
     let source_map = SourceMap::new(source.to_string());
-    let mut heap: ObjectHeap = ObjectHeap::new();
+    let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut heap).run() {
-        Ok(program) => match Vm::new(heap)
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => match Vm::new(allocator)
             .set_gc_status(false)
             .set_debug(false)
             .interpret(program)

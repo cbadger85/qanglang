@@ -1,7 +1,7 @@
 use std::fs;
 
 use qanglang_core::{
-    ClosureHandle, CompilerPipeline, ObjectHeap, SourceMap, StringHandle, Value, Vm,
+    ClosureHandle, CompilerPipeline, HeapAllocator, SourceMap, StringHandle, Value, Vm,
 };
 use rustc_hash::FxHashMap;
 
@@ -105,10 +105,10 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     };
 
     let source_map = SourceMap::new(source);
-    let mut heap = ObjectHeap::new();
+    let mut allocator = HeapAllocator::new();
 
     // Compile the test file
-    let program = match CompilerPipeline::new(source_map, &mut heap).run() {
+    let program = match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => program,
         Err(errors) => {
             let error_messages: Vec<String> = errors
@@ -123,7 +123,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     };
 
     // Create VM and run the initial script
-    let mut vm = Vm::new(heap);
+    let mut vm = Vm::new(allocator);
 
     if let Some(builder) = vm_builder {
         builder(&mut vm);
@@ -135,7 +135,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     }
 
     // Extract test information
-    let (description, test_functions) = extract_test_info(vm.globals(), vm.heap());
+    let (description, test_functions) = extract_test_info(vm.globals(), vm.allocator());
 
     // Run each test function
     let mut test_results = Vec::new();
@@ -156,14 +156,14 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
 /// Extracts test description and test functions from the VM globals
 fn extract_test_info(
     globals: &FxHashMap<StringHandle, Value>,
-    heap: &ObjectHeap,
+    allocator: &HeapAllocator,
 ) -> (Option<String>, Vec<(String, ClosureHandle)>) {
     let mut description = None;
     let mut test_functions = Vec::new();
 
     for (handle, value) in globals.iter() {
         // Get the identifier name for this global
-        let identifier = heap.strings.get_string(*handle);
+        let identifier = allocator.strings.get_string(*handle);
 
         match value {
             // Check if this is a test function (starts with "test_")
@@ -175,7 +175,7 @@ fn extract_test_info(
             // Check if this is the test description
             Value::String(string_handle) => {
                 if identifier == "test_description" {
-                    description = Some(heap.strings.get_string(*string_handle).to_string());
+                    description = Some(allocator.strings.get_string(*string_handle).to_string());
                 }
             }
             _ => {}

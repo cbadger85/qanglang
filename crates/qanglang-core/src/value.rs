@@ -1,5 +1,5 @@
 use crate::{
-    ClassHandle, NativeFn, NativeFunctionHandle, ObjectHeap,
+    ClassHandle, HeapAllocator, NativeFn, NativeFunctionHandle,
     error::ValueConversionError,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
@@ -33,36 +33,36 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn print(&self, heap: &ObjectHeap) {
-        print!("{}", self.to_display_string(heap));
+    pub fn print(&self, allocator: &HeapAllocator) {
+        print!("{}", self.to_display_string(allocator));
     }
 
-    pub fn to_display_string(&self, heap: &ObjectHeap) -> String {
+    pub fn to_display_string(&self, allocator: &HeapAllocator) -> String {
         match self {
             Value::Nil => "nil".to_string(),
             Value::Number(number) => number.to_string(),
-            Value::String(handle) => heap.strings.get_string(*handle).to_string(),
+            Value::String(handle) => allocator.strings.get_string(*handle).to_string(),
             Value::True => "true".to_string(),
             Value::False => "false".to_string(),
             Value::FunctionDecl(function_handle) => {
-                let function = heap.get_function(*function_handle);
-                let identifier = heap.strings.get_string(function.name);
+                let function = allocator.get_function(*function_handle);
+                let identifier = allocator.strings.get_string(function.name);
                 format!("<function>{}", identifier)
             }
             Value::Closure(handle) => {
-                let closure = heap.get_closure(*handle);
-                let function = heap.get_function(closure.function);
-                let identifier = heap.strings.get_string(function.name);
+                let closure = allocator.get_closure(*handle);
+                let function = allocator.get_function(closure.function);
+                let identifier = allocator.strings.get_string(function.name);
                 format!("<function>{}", identifier)
             }
             Value::NativeFunction(handle) => {
-                let function = heap.get_native_function(*handle);
-                let identifier = heap.strings.get_string(function.name_handle);
+                let function = allocator.get_native_function(*handle);
+                let identifier = allocator.strings.get_string(function.name_handle);
                 format!("<function>{}", identifier)
             }
             Value::Class(handle) => {
-                let clazz = heap.get_class(*handle);
-                let identifier = heap.strings.get_string(clazz.name);
+                let clazz = allocator.get_class(*handle);
+                let identifier = allocator.strings.get_string(clazz.name);
                 format!("<class>{}", identifier)
             }
         }

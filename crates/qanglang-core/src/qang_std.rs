@@ -11,7 +11,7 @@ pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
 
     let message = args
         .get(1)
-        .map(|v| v.to_display_string(vm.heap()))
+        .map(|v| v.to_display_string(vm.allocator()))
         .unwrap_or_else(|| "Assertion failed.".to_string());
 
     Err(NativeFunctionError(message))
@@ -28,7 +28,7 @@ pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     if a != b {
         let message = args
             .get(2)
-            .map(|v| v.to_display_string(vm.heap()))
+            .map(|v| v.to_display_string(vm.allocator()))
             .unwrap_or_else(|| "Assertion failed.".to_string());
 
         Err(NativeFunctionError(message))
@@ -56,7 +56,7 @@ pub fn qang_assert_throws(
         Ok(_) => {
             let message = args
                 .get(1)
-                .map(|v| v.to_display_string(vm.heap()))
+                .map(|v| v.to_display_string(vm.allocator()))
                 .unwrap_or_else(|| "Expected function to throw, but did not.".to_string());
 
             Err(NativeFunctionError::new(&message))
@@ -67,14 +67,14 @@ pub fn qang_assert_throws(
 
 pub fn qang_print(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
-    let value = value.to_display_string(vm.heap());
+    let value = value.to_display_string(vm.allocator());
     print!("{}", value);
     Ok(None)
 }
 
 pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
-    let value = value.to_display_string(vm.heap());
+    let value = value.to_display_string(vm.allocator());
     println!("{}", value);
     Ok(None)
 }
@@ -82,7 +82,7 @@ pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Native
 pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
 
-    let handle = vm.heap_mut().strings.intern(value.to_type_string());
+    let handle = vm.allocator_mut().strings.intern(value.to_type_string());
 
     Ok(Some(Value::String(handle)))
 }
@@ -106,8 +106,8 @@ pub fn qang_system_time(
 pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied().unwrap_or(Value::Nil);
 
-    let value = value.to_display_string(vm.heap());
-    let value_handle = vm.heap_mut().strings.intern(&value);
+    let value = value.to_display_string(vm.allocator());
+    let value_handle = vm.allocator_mut().strings.intern(&value);
 
     Ok(Some(Value::String(value_handle)))
 }
@@ -119,8 +119,8 @@ pub fn qang_to_uppercase(
     let value = args.first().copied().unwrap_or(Value::Nil);
 
     if let Value::String(handle) = value {
-        let uppercase_string = &vm.heap().strings.get_string(handle).to_uppercase();
-        let uppercase_handle = vm.heap_mut().strings.intern(uppercase_string);
+        let uppercase_string = &vm.allocator().strings.get_string(handle).to_uppercase();
+        let uppercase_handle = vm.allocator_mut().strings.intern(uppercase_string);
 
         Ok(Some(Value::String(uppercase_handle)))
     } else {
@@ -138,8 +138,8 @@ pub fn qang_to_lowercase(
     let value = args.first().copied().unwrap_or(Value::Nil);
 
     if let Value::String(handle) = value {
-        let lowercase_string = &vm.heap().strings.get_string(handle).to_lowercase();
-        let lowercase_handle = vm.heap_mut().strings.intern(lowercase_string);
+        let lowercase_string = &vm.allocator().strings.get_string(handle).to_lowercase();
+        let lowercase_handle = vm.allocator_mut().strings.intern(lowercase_string);
 
         Ok(Some(Value::String(lowercase_handle)))
     } else {

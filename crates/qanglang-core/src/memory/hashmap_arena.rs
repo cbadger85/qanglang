@@ -383,6 +383,12 @@ impl HashMapArena {
     pub fn iter(&self, handle: HashMapHandle) -> HashMapIterator<'_> {
         HashMapIterator::new(self, handle)
     }
+
+    pub fn get_allocated_bytes(&self) -> usize {
+        let hashmap_bytes = self.hashmaps.len() * std::mem::size_of::<HashMapObject>();
+        let chunk_bytes = self.chunks.len() * std::mem::size_of::<BucketChunk>();
+        hashmap_bytes + chunk_bytes
+    }
 }
 
 pub struct HashMapIterator<'a> {

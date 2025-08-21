@@ -54,7 +54,7 @@ impl StringInterner {
         let begin = offset.0 as usize;
         let end = begin + offset.1 as usize;
 
-        str::from_utf8(&self.storage[begin..end]).unwrap()
+        unsafe { str::from_utf8_unchecked(&self.storage[begin..end]) }
     }
 
     pub fn chars(&self, handle: StringHandle) -> impl Iterator<Item = char> + '_ {

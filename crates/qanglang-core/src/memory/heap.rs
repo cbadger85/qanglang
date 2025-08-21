@@ -1,4 +1,3 @@
-use crate::UpvalueReference;
 use crate::memory::arena::{Arena, Index};
 use crate::memory::hashmap_arena::HashMapArena;
 use crate::memory::object::ClassObject;
@@ -6,6 +5,7 @@ use crate::memory::string_interner::StringInterner;
 use crate::{
     ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
 };
+use crate::{StringHandle, UpvalueReference};
 use std::collections::VecDeque;
 
 pub type ClosureHandle = Index;
@@ -18,7 +18,7 @@ pub type FunctionHandle = u32;
 
 pub type NativeFunctionHandle = u32;
 
-const GC_HEAP_GROW_FACTOR: u64 = 2;
+const GC_HEAP_GROW_FACTOR: usize = 2;
 
 #[derive(Debug, Default, Clone)]
 pub struct ObjectHeap {
@@ -30,7 +30,7 @@ pub struct ObjectHeap {
     classes: Arena<ClassObject>,
     tables: HashMapArena,
     is_debug: bool,
-    bytes_until_gc: u64,
+    bytes_until_gc: usize,
 }
 
 impl ObjectHeap {
@@ -57,7 +57,7 @@ impl ObjectHeap {
         self
     }
 
-    pub fn set_bytes_until_gc(mut self, bytes: u64) -> Self {
+    pub fn set_bytes_until_gc(mut self, bytes: usize) -> Self {
         self.bytes_until_gc = bytes;
         self
     }
@@ -196,8 +196,12 @@ impl ObjectHeap {
         &self.native_functions[handle as usize]
     }
 
-    pub fn allocate_class(&mut self, clazz: ClassObject) -> ClassHandle {
-        let handle = self.classes.insert(clazz);
+    pub fn allocate_class(&mut self, name: StringHandle) -> ClassHandle {
+        let handle = self.classes.insert(ClassObject {
+            name,
+            table: self.tables.new_hashmap(),
+            is_marked: false,
+        });
         debug_log!(
             self.is_debug,
             "Allocated {} byes for class: {:?}",
@@ -242,18 +246,23 @@ impl ObjectHeap {
         self.total_allocated_bytes() > self.bytes_until_gc
     }
 
-    pub fn total_allocated_bytes(&self) -> u64 {
+    pub fn total_allocated_bytes(&self) -> usize {
         let string_bytes = self.strings.get_allocated_bytes();
         let closure_bytes = self.closures.len() * std::mem::size_of::<ClosureObject>();
         let upvalue_bytes = self.upvalues.len() * std::mem::size_of::<Upvalue>();
         let function_bytes = self.functions.len() * std::mem::size_of::<FunctionObject>();
         let native_function_bytes =
             self.native_functions.len() * std::mem::size_of::<NativeFunctionObject>();
+        let class_bytes = self.classes.len() & std::mem::size_of::<ClassObject>();
 
-        let total =
-            string_bytes + closure_bytes + upvalue_bytes + function_bytes + native_function_bytes;
+        let total = string_bytes
+            + closure_bytes
+            + upvalue_bytes
+            + function_bytes
+            + native_function_bytes
+            + class_bytes;
 
-        total as u64
+        total
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -324,6 +333,12 @@ impl ObjectHeap {
                                 }
                             }
                         }
+                    }
+                }
+                Value::Class(handle) => {
+                    let clazz = &mut self.classes[handle];
+                    if !clazz.is_marked {
+                        clazz.is_marked = true;
                     }
                 }
                 _ => (),

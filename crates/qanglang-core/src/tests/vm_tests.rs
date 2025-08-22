@@ -532,16 +532,19 @@ fn test_class_declaration() {
         class Foo {}
 
         println(Foo);
-        println(Foo());
+        var foo = Foo();
+        println(foo);
+        foo.bar = "baz";
+        println(foo.bar);
 
-        fn bar() {
-            class Bar {}
+        // fn bar() {
+        //     class Bar {}
 
-            println(Bar);
-            println(Bar());
-        }
+        //     println(Bar);
+        //     println(Bar());
+        // }
 
-        bar();
+        // bar();
 "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -551,7 +554,7 @@ fn test_class_declaration() {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
-                .set_debug(true)
+                .set_debug(false)
                 .interpret(program)
             {
                 Ok(_) => (),

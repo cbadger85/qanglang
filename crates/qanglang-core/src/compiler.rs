@@ -673,20 +673,33 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         assignment: &ast::AssignmentExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(&assignment.value, errors)?;
-
         match &assignment.target {
             ast::AssignmentTarget::Identifier(identifier) => {
+                self.visit_expression(&assignment.value, errors)?;
                 self.handle_variable(&identifier.name, identifier.span, true)?;
             }
-            _ => {
-                return Err(QangSyntaxError::new(
-                    "Invalid expression.".to_string(),
-                    assignment.target.span(),
-                ));
+            ast::AssignmentTarget::Property(property) => {
+                self.visit_expression(&property.object, errors)?;
+                self.visit_expression(&assignment.value, errors)?;
+                let identifier_handle = self.allocator.strings.intern(&property.property.name);
+                let byte =
+                    self.make_constant(Value::String(identifier_handle), property.property.span)?;
+                self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
             }
         }
 
+        Ok(())
+    }
+
+    fn visit_property_access(
+        &mut self,
+        property: &ast::PropertyAccess,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&property.object, errors)?;
+        let identifier_handle = self.allocator.strings.intern(&property.property.name);
+        let byte = self.make_constant(Value::String(identifier_handle), property.property.span)?;
+        self.emit_opcode_and_byte(OpCode::GetProperty, byte, property.span);
         Ok(())
     }
 
@@ -1142,6 +1155,13 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 // Emit the call instruction
                 self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
 
+                Ok(())
+            }
+            ast::CallOperation::Property(identifier) => {
+                self.visit_expression(call.callee.as_ref(), errors)?;
+                let identifier_handle = self.allocator.strings.intern(&identifier.name);
+                let byte = self.make_constant(Value::String(identifier_handle), identifier.span)?;
+                self.emit_opcode_and_byte(OpCode::GetProperty, byte, call.span);
                 Ok(())
             }
             _ => Err(QangSyntaxError::new(

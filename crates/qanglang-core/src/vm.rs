@@ -656,6 +656,57 @@ impl Vm {
                     let class_handle = gc_allocate!(self, class:  identifier_handle);
                     push_value!(self, Value::Class(class_handle))?
                 }
+                OpCode::SetProperty => {
+                    let instance = peek!(self, 1);
+                    if let Value::Instance(instance_handle) = instance {
+                        let instance = self.allocator.get_instance(instance_handle);
+                        let constant = self.state.read_constant();
+                        if !matches!(constant, Value::String(_)) {
+                            return Err(QangRuntimeError::new(
+                                "Expected property name as string".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+
+                        self.allocator
+                            .set_instance_field(instance.table, constant, peek!(self, 0));
+                        let value = pop_value!(self); // value to assign
+                        pop_value!(self); // instance
+                        push_value!(self, value)?; // push assigned value to top of stack
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            format!("Cannot access properties on {}.", instance.to_type_string()),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
+                }
+                OpCode::GetProperty => {
+                    let instance = peek!(self, 0);
+                    if let Value::Instance(instance_handle) = instance {
+                        let instance = self.allocator.get_instance(instance_handle);
+                        let constant = self.state.read_constant();
+                        if !matches!(constant, Value::String(_)) {
+                            return Err(QangRuntimeError::new(
+                                "Expected property name as string".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                        let value = self
+                            .allocator
+                            .get_instance_field(instance.table, constant)
+                            .unwrap_or(Value::Nil);
+                        pop_value!(self);
+                        push_value!(self, value)?;
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            format!(
+                                "Cannot access properties from {}.",
+                                instance.to_type_string()
+                            ),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
+                }
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;

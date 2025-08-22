@@ -263,6 +263,14 @@ impl HeapAllocator {
         &mut self.instances[handle]
     }
 
+    pub fn get_instance_field(&self, handle: InstanceHandle, key: Value) -> Option<Value> {
+        self.tables.get(handle, &key)
+    }
+
+    pub fn set_instance_field(&mut self, handle: InstanceHandle, key: Value, value: Value) {
+        self.tables.insert(handle, key, value);
+    }
+
     pub fn free_instance(&mut self, handle: InstanceHandle) {
         debug_log!(self.is_debug, "Freeing instance: {:?}", handle);
         self.instances.remove(handle);

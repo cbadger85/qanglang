@@ -90,6 +90,8 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::GetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
         OpCode::SetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
         OpCode::Class => constant_instruction("OP_CLASS", chunk, allocator, offset),
+        OpCode::GetProperty => constant_instruction("OP_GET_PROPERTY", chunk, allocator, offset),
+        OpCode::SetProperty => constant_instruction("OP_SET_PROPERTY", chunk, allocator, offset),
     }
 }
 

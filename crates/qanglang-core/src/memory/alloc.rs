@@ -1,6 +1,6 @@
 use crate::memory::arena::{Arena, Index};
 use crate::memory::hashmap_arena::HashMapArena;
-use crate::memory::object::ClassObject;
+use crate::memory::object::{ClassObject, InstanceObject};
 use crate::memory::string_interner::StringInterner;
 use crate::{
     ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
@@ -13,6 +13,8 @@ pub type ClosureHandle = Index;
 pub type UpvalueHandle = Index;
 
 pub type ClassHandle = Index;
+
+pub type InstanceHandle = Index;
 
 pub type FunctionHandle = u32;
 
@@ -28,6 +30,7 @@ pub struct HeapAllocator {
     pub strings: StringInterner,
     native_functions: Vec<NativeFunctionObject>,
     classes: Arena<ClassObject>,
+    instances: Arena<InstanceObject>,
     tables: HashMapArena,
     is_debug: bool,
     bytes_until_gc: usize,
@@ -47,6 +50,7 @@ impl HeapAllocator {
             native_functions: Vec::with_capacity(initial_capacity),
             tables: HashMapArena::with_capacity(initial_capacity),
             classes: Arena::with_capacity(initial_capacity),
+            instances: Arena::with_capacity(initial_capacity),
             is_debug: false,
             bytes_until_gc: 1024 * 1024,
         }
@@ -236,6 +240,46 @@ impl HeapAllocator {
         clazz.is_marked = true;
     }
 
+    pub fn allocate_instance(&mut self, clazz: ClassHandle) -> InstanceHandle {
+        let handle = self.instances.insert(InstanceObject {
+            clazz,
+            table: self.tables.new_hashmap(),
+            is_marked: false,
+        });
+        debug_log!(
+            self.is_debug,
+            "Allocated {} byes for instance: {:?}",
+            std::mem::size_of::<InstanceObject>(),
+            handle
+        );
+        handle
+    }
+
+    pub fn get_instance(&self, handle: InstanceHandle) -> &InstanceObject {
+        &self.instances[handle]
+    }
+
+    pub fn get_instance_mut(&mut self, handle: InstanceHandle) -> &mut InstanceObject {
+        &mut self.instances[handle]
+    }
+
+    pub fn free_instance(&mut self, handle: InstanceHandle) {
+        debug_log!(self.is_debug, "Freeing instance: {:?}", handle);
+        self.instances.remove(handle);
+        debug_log!(
+            self.is_debug,
+            "Freed {} byes for instance: {:?}",
+            std::mem::size_of::<InstanceObject>(),
+            handle
+        );
+    }
+
+    pub fn mark_instance(&mut self, handle: InstanceHandle) {
+        debug_log!(self.is_debug, "Marking instance: {:?}", handle);
+        let instance = &mut self.instances[handle];
+        instance.is_marked = true;
+    }
+
     #[cfg(debug_assertions)]
     pub fn should_collect_garbage(&mut self) -> bool {
         self.closures.len() < self.closures.capacity()
@@ -339,7 +383,18 @@ impl HeapAllocator {
                     let clazz = &mut self.classes[handle];
                     if !clazz.is_marked {
                         clazz.is_marked = true;
-                        for (key, value) in self.tables.iter(handle) {
+                        for (key, value) in self.tables.iter(clazz.table) {
+                            gray_list.push_back(key);
+                            gray_list.push_back(value);
+                        }
+                    }
+                }
+                Value::Instance(handle) => {
+                    let instance = &mut self.instances[handle];
+                    if !instance.is_marked {
+                        instance.is_marked = true;
+                        gray_list.push_back(Value::Class(instance.clazz));
+                        for (key, value) in self.tables.iter(instance.table) {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }

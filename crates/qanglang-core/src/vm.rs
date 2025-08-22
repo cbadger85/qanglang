@@ -19,7 +19,7 @@ use crate::{
     },
     value::{
         BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING,
-        NUMBER_TYPE_STRING, NativeFunctionObject, STRING_TYPE_STRING,
+        NUMBER_TYPE_STRING, NativeFunctionObject, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
 
@@ -258,6 +258,9 @@ impl Vm {
         let class_type_handle = allocator.strings.intern("CLASS");
         let class_type_value_handle = allocator.strings.intern(CLASS_TYPE_STRING);
         globals.insert(class_type_handle, Value::String(class_type_value_handle));
+        let object_type_handle = allocator.strings.intern("OBJECT");
+        let object_type_value_handle = allocator.strings.intern(OBJECT_TYPE_STRING);
+        globals.insert(object_type_handle, Value::String(object_type_value_handle));
 
         let state = VmState {
             frame_count: 0,
@@ -397,30 +400,26 @@ impl Vm {
                                 allocator.strings.concat_strings(*handle1, *handle2),
                             ))
                         }
-                        (Value::Number(_), _) => Err(format!(
-                            "Cannot add number to {}.",
-                            b.to_type_string(allocator)
-                        )
-                        .as_str()
-                        .into()),
-                        (Value::String(_), _) => Err(format!(
-                            "Cannot add string to {}.",
-                            b.to_type_string(allocator)
-                        )
-                        .as_str()
-                        .into()),
-                        (_, Value::Number(_)) => Err(format!(
-                            "Cannot add {} to number.",
-                            a.to_type_string(allocator)
-                        )
-                        .as_str()
-                        .into()),
-                        (_, Value::String(_)) => Err(format!(
-                            "Cannot add {} to string.",
-                            a.to_type_string(allocator)
-                        )
-                        .as_str()
-                        .into()),
+                        (Value::Number(_), _) => {
+                            Err(format!("Cannot add number to {}.", b.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        (Value::String(_), _) => {
+                            Err(format!("Cannot add string to {}.", b.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        (_, Value::Number(_)) => {
+                            Err(format!("Cannot add {} to number.", a.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        (_, Value::String(_)) => {
+                            Err(format!("Cannot add {} to string.", a.to_type_string())
+                                .as_str()
+                                .into())
+                        }
                         _ => Err("Both operands must be a numbers or strings.".into()),
                     })?;
                 }

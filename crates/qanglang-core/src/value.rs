@@ -1,5 +1,5 @@
 use crate::{
-    ClassHandle, HeapAllocator, NativeFn, NativeFunctionHandle,
+    ClassHandle, HeapAllocator, InstanceHandle, NativeFn, NativeFunctionHandle,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
 
@@ -16,6 +16,7 @@ pub const NUMBER_TYPE_STRING: &str = "number";
 pub const STRING_TYPE_STRING: &str = "string";
 pub const FUNCTION_TYPE_STRING: &str = "function";
 pub const CLASS_TYPE_STRING: &str = "class";
+pub const OBJECT_TYPE_STRING: &str = "object";
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]
@@ -29,6 +30,7 @@ pub enum Value {
     NativeFunction(NativeFunctionHandle),
     FunctionDecl(FunctionHandle),
     Class(ClassHandle),
+    Instance(InstanceHandle),
 }
 
 impl Value {
@@ -65,10 +67,16 @@ impl Value {
                 let identifier = allocator.strings.get_string(clazz.name);
                 format!("{}<class>", identifier)
             }
+            Value::Instance(handle) => {
+                let instance = allocator.get_instance(*handle);
+                let clazz = allocator.get_class(instance.clazz);
+                let identifier = allocator.strings.get_string(clazz.name);
+                format!("instanceof {}", identifier)
+            }
         }
     }
 
-    pub fn to_type_string(&self, _allocator: &HeapAllocator) -> &str {
+    pub const fn to_type_string(&self) -> &'static str {
         match self {
             Value::Nil => NIL_TYPE_STRING,
             Value::True => BOOLEAN_TYPE_STRING,
@@ -79,6 +87,7 @@ impl Value {
             Value::NativeFunction(_) => FUNCTION_TYPE_STRING,
             Value::FunctionDecl(_) => FUNCTION_TYPE_STRING,
             Value::Class(_) => CLASS_TYPE_STRING,
+            Value::Instance(_) => OBJECT_TYPE_STRING,
         }
     }
 

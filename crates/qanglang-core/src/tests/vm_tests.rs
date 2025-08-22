@@ -532,6 +532,14 @@ fn test_class_declaration() {
         class Foo {}
 
         println(Foo);
+
+        fn bar() {
+            class Bar {}
+
+            println(Bar);
+        }
+
+        bar();
 "#;
 
     let source_map = SourceMap::new(source.to_string());

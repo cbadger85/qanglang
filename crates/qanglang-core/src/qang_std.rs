@@ -82,7 +82,7 @@ pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Native
 pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     // TODO delete this function later when the `is` operator is implemented.
     let value = args.first().copied().unwrap_or(Value::Nil);
-    let value_string = value.to_type_string(vm.allocator());
+    let value_string = value.to_type_string();
     let handle = vm.allocator_mut().strings.intern(value_string);
 
     Ok(Some(Value::String(handle)))
@@ -127,7 +127,7 @@ pub fn qang_to_uppercase(
     } else {
         Err(NativeFunctionError(format!(
             "Expected string but recieved {}.",
-            value.to_type_string(vm.allocator())
+            value.to_type_string()
         )))
     }
 }
@@ -146,7 +146,7 @@ pub fn qang_to_lowercase(
     } else {
         Err(NativeFunctionError(format!(
             "Expected string but recieved {}.",
-            value.to_type_string(vm.allocator())
+            value.to_type_string()
         )))
     }
 }

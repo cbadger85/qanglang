@@ -1217,9 +1217,14 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
     fn visit_class_declaration(
         &mut self,
-        _class_decl: &ast::ClassDecl,
+        class_decl: &ast::ClassDecl,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
+        let handle = self.allocator.strings.intern(&class_decl.name.name);
+        self.declare_variable(&class_decl.name.name, class_decl.name.span)?;
+        let byte = self.make_constant(Value::String(handle), class_decl.name.span)?;
+        self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
+        self.define_variable(Some(handle), class_decl.name.span)?;
         Ok(())
     }
 }

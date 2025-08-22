@@ -128,6 +128,14 @@ macro_rules! gc_allocate {
         }
         $vm.allocator.allocate_upvalue($value)
     }};
+
+    // Class allocation
+    ($vm:expr, class: $value:expr) => {{
+        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
+            $vm.collect_garbage();
+        }
+        $vm.allocator.allocate_class($value)
+    }};
 }
 
 #[derive(Debug, Clone, Default)]
@@ -633,6 +641,20 @@ impl Vm {
                 OpCode::CloseUpvalue => {
                     self.close_upvalue(self.state.stack_top - 1);
                     pop_value!(self);
+                }
+                OpCode::Class => {
+                    let constant = self.state.read_constant();
+                    let identifier_handle = match constant {
+                        Value::String(handle) => handle,
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Expected identifier.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    };
+                    let class_handle = gc_allocate!(self, class:  identifier_handle);
+                    push_value!(self, Value::Class(class_handle))?
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);

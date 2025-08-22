@@ -525,3 +525,34 @@ fn test_native_function_with_return() {
         }
     }
 }
+
+#[test]
+fn test_class_declaration() {
+    let source = r#"
+        class Foo {}
+
+        println(Foo);
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => match Vm::new(allocator)
+            .set_gc_status(false)
+            .set_debug(false)
+            .interpret(program)
+        {
+            Ok(_) => (),
+            Err(error) => {
+                panic!("{}", error);
+            }
+        },
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

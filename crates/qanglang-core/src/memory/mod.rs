@@ -10,5 +10,5 @@ pub use alloc::{
 };
 pub use arena::{Arena, Index};
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
-pub use object::{ClosureObject, FunctionObject, Upvalue, UpvalueReference};
+pub use object::{ClassObject, ClosureObject, FunctionObject, Upvalue, UpvalueReference};
 pub use string_interner::StringHandle;

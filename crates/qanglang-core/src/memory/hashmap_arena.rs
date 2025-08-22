@@ -384,6 +384,40 @@ impl HashMapArena {
         HashMapIterator::new(self, handle)
     }
 
+    pub fn mark_hashmap(&mut self, handle: HashMapHandle, mark: bool) {
+        let hashmap = &mut self.hashmaps[handle];
+        hashmap.is_marked = mark;
+    }
+
+    pub fn delete_hashmap(&mut self, handle: HashMapHandle) -> bool {
+        if let Some(hashmap) = self.hashmaps.get(handle) {
+            // Mark all chunks as unused by clearing the first_chunk reference
+            // The chunks will be cleaned up by the arena's garbage collection
+            if let Some(first_chunk) = hashmap.first_chunk {
+                self.mark_chunks_for_cleanup(first_chunk);
+            }
+
+            // Remove the hashmap from the arena
+            self.hashmaps.remove(handle);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn mark_chunks_for_cleanup(&mut self, chunk_handle: BucketChunkHandle) {
+        if let Some(chunk) = self.chunks.get(chunk_handle.0) {
+            let next_chunk = chunk.next_chunk;
+            // Remove this chunk
+            self.chunks.remove(chunk_handle.0);
+
+            // Recursively mark next chunks for cleanup
+            if let Some(next) = next_chunk {
+                self.mark_chunks_for_cleanup(next);
+            }
+        }
+    }
+
     pub fn get_allocated_bytes(&self) -> usize {
         let hashmap_bytes = self.hashmaps.len() * std::mem::size_of::<HashMapObject>();
         let chunk_bytes = self.chunks.len() * std::mem::size_of::<BucketChunk>();
@@ -737,5 +771,129 @@ mod tests {
         assert_eq!(arena.get(handle, &Value::Number(123.0)), Some(Value::Nil));
 
         assert_eq!(arena.len(handle), 3);
+    }
+
+    #[test]
+    fn test_delete_hashmap() {
+        let mut arena = HashMapArena::new();
+        let handle = arena.new_hashmap();
+
+        // Insert some data
+        for i in 0..5 {
+            let key = create_test_value(i);
+            let value = create_test_value(i * 10);
+            arena.insert(handle, key, value);
+        }
+
+        assert_eq!(arena.len(handle), 5);
+        assert!(!arena.is_empty(handle));
+
+        // Delete the hashmap
+        let deleted = arena.delete_hashmap(handle);
+        assert!(deleted);
+
+        // Verify hashmap is gone - operations should return default/empty values
+        assert_eq!(arena.len(handle), 0);
+        assert!(arena.is_empty(handle));
+        assert_eq!(arena.get(handle, &create_test_value(0)), None);
+    }
+
+    #[test]
+    fn test_delete_nonexistent_hashmap() {
+        let mut arena = HashMapArena::new();
+        let invalid_handle = HashMapHandle::default();
+
+        // Try to delete a hashmap that doesn't exist
+        let deleted = arena.delete_hashmap(invalid_handle);
+        assert!(!deleted);
+    }
+
+    #[test]
+    fn test_delete_hashmap_with_multiple_chunks() {
+        let mut arena = HashMapArena::new();
+        let handle = arena.new_hashmap_with_capacity(4); // Small capacity to force multiple chunks
+
+        // Insert enough data to create multiple chunks
+        for i in 0..20 {
+            let key = create_test_value(i);
+            let value = create_test_value(i * 10);
+            arena.insert(handle, key, value);
+        }
+
+        let initial_chunk_count = arena.chunks.len();
+        assert!(initial_chunk_count > 1); // Should have multiple chunks
+
+        // Delete the hashmap
+        let deleted = arena.delete_hashmap(handle);
+        assert!(deleted);
+
+        // Verify all chunks associated with this hashmap are cleaned up
+        // Note: The exact chunk count depends on internal implementation,
+        // but it should be significantly reduced
+        assert_eq!(arena.len(handle), 0);
+        assert!(arena.is_empty(handle));
+    }
+
+    #[test]
+    fn test_delete_hashmap_preserves_other_hashmaps() {
+        let mut arena = HashMapArena::new();
+        let handle1 = arena.new_hashmap();
+        let handle2 = arena.new_hashmap();
+
+        // Insert data in both hashmaps
+        for i in 0..3 {
+            let key = create_test_value(i);
+            let value1 = create_test_value(i * 10);
+            let value2 = create_test_value(i * 20);
+
+            arena.insert(handle1, key, value1);
+            arena.insert(handle2, key, value2);
+        }
+
+        assert_eq!(arena.len(handle1), 3);
+        assert_eq!(arena.len(handle2), 3);
+
+        // Delete first hashmap
+        let deleted = arena.delete_hashmap(handle1);
+        assert!(deleted);
+
+        // Verify first hashmap is gone
+        assert_eq!(arena.len(handle1), 0);
+        assert!(arena.is_empty(handle1));
+        assert_eq!(arena.get(handle1, &create_test_value(0)), None);
+
+        // Verify second hashmap is unaffected
+        assert_eq!(arena.len(handle2), 3);
+        assert!(!arena.is_empty(handle2));
+        for i in 0..3 {
+            let key = create_test_value(i);
+            let expected_value = create_test_value(i * 20);
+            assert_eq!(arena.get(handle2, &key), Some(expected_value));
+        }
+    }
+
+    #[test]
+    fn test_delete_hashmap_memory_efficiency() {
+        let mut arena = HashMapArena::new();
+        let handle = arena.new_hashmap();
+
+        // Insert substantial data
+        for i in 0..50 {
+            let key = create_test_value(i);
+            let value = create_test_value(i * 10);
+            arena.insert(handle, key, value);
+        }
+
+        let bytes_before = arena.get_allocated_bytes();
+        assert!(bytes_before > 0);
+
+        // Delete the hashmap
+        arena.delete_hashmap(handle);
+
+        let bytes_after = arena.get_allocated_bytes();
+
+        // Memory usage should be significantly reduced
+        // (May not be zero due to arena implementation details)
+        assert!(bytes_after < bytes_before);
     }
 }

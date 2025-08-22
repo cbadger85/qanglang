@@ -421,6 +421,7 @@ impl HeapAllocator {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
+                        self.tables.mark_hashmap(clazz.table, true);
                     }
                 }
                 Value::Instance(handle) => {
@@ -432,6 +433,7 @@ impl HeapAllocator {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
+                        self.tables.mark_hashmap(instance.table, true);
                     }
                 }
                 _ => (),

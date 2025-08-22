@@ -11,7 +11,7 @@ use crate::{
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
-    error::{Trace, ValueConversionError},
+    error::Trace,
     memory::{ClosureHandle, ClosureObject, FunctionObject, StringHandle, UpvalueReference},
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
@@ -58,12 +58,6 @@ impl BinaryOperationError {
 impl From<&'_ str> for BinaryOperationError {
     fn from(value: &'_ str) -> Self {
         BinaryOperationError::new(value)
-    }
-}
-
-impl From<ValueConversionError> for BinaryOperationError {
-    fn from(value: ValueConversionError) -> Self {
-        BinaryOperationError(value.into_message())
     }
 }
 
@@ -391,9 +385,9 @@ impl Vm {
                         (Value::String(handle1), Value::String(handle2)) => {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
-
-                            let result = allocator.strings.concat_strings(*handle1, *handle2);
-                            Ok(Value::String(result))
+                            Ok(Value::String(
+                                allocator.strings.concat_strings(*handle1, *handle2),
+                            ))
                         }
                         (Value::Number(_), _) => Err(format!(
                             "Cannot add number to {}.",
@@ -422,89 +416,46 @@ impl Vm {
                         _ => Err("Both operands must be a numbers or strings.".into()),
                     })?;
                 }
-                OpCode::Subtract => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-
-                    Ok((a - b).into())
+                OpCode::Subtract => self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 - num2).into()),
+                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
-                OpCode::Multiply => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-
-                    Ok((a * b).into())
+                OpCode::Multiply => self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 * num2).into()),
+                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
-                OpCode::Divide => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b
-                        .try_into()
-                        .map_err(|_| BinaryOperationError::new("Both operands must be a number."))
-                        .and_then(|num| {
-                            if num == 0.0 {
-                                Err("Cannot divide by zero.".into())
-                            } else {
-                                Ok(num)
-                            }
-                        })?;
-
-                    Ok((a / b).into())
+                OpCode::Divide => self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                    (Value::Number(num1), Value::Number(num2)) => {
+                        if num2 == &0.0 {
+                            Err(BinaryOperationError::new("Cannot divide by zero."))
+                        } else {
+                            Ok((num1 / num2).into())
+                        }
+                    }
+                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
-                OpCode::Modulo => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-
-                    Ok((a % b).into())
+                OpCode::Modulo => self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 % num2).into()),
+                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
                 OpCode::Equal => self.binary_operation(|a, b, _allocator| Ok((a == b).into()))?,
-                OpCode::Greater => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    Ok((a > b).into())
+                OpCode::Greater => self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 > num2).into()),
+                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
-                OpCode::GreaterEqual => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    Ok((a >= b).into())
+                OpCode::GreaterEqual => {
+                    self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                        (Value::Number(num1), Value::Number(num2)) => Ok((num1 >= num2).into()),
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    })?
+                }
+                OpCode::Less => self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 < num2).into()),
+                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
-                OpCode::Less => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    Ok((a < b).into())
-                })?,
-                OpCode::LessEqual => self.binary_operation(|a, b, _allocator| {
-                    let a: f64 = a.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    let b: f64 = b.try_into().map_err(|_| {
-                        BinaryOperationError::new("Both operands must be a number.")
-                    })?;
-                    Ok((a <= b).into())
+                OpCode::LessEqual => self.binary_operation(|a, b, _allocator| match (&a, &b) {
+                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 <= num2).into()),
+                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
                 OpCode::Pop => {
                     pop_value!(self);

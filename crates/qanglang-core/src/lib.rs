@@ -16,10 +16,10 @@ pub use compiler::{
     CompilerError, CompilerPipeline, CompilerVisitor, ErrorMessageFormat, QangProgram,
 };
 pub use debug::{disassemble_chunk, disassemble_program};
-pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace, ValueConversionError};
+pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace};
 pub use memory::{
     ClassHandle, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle,
-    NativeFunctionHandle, HeapAllocator, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
+    HeapAllocator, NativeFunctionHandle, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
 };
 pub use parser::Parser;
 pub use source::SourceMap;

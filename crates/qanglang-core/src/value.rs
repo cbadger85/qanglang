@@ -1,6 +1,5 @@
 use crate::{
     ClassHandle, HeapAllocator, NativeFn, NativeFunctionHandle,
-    error::ValueConversionError,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
 
@@ -114,29 +113,6 @@ impl From<f64> for Value {
 impl From<u64> for Value {
     fn from(num: u64) -> Self {
         Value::Number(num as f64)
-    }
-}
-
-impl TryFrom<Value> for f64 {
-    type Error = ValueConversionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Number(number) => Ok(number),
-            _ => Err(ValueConversionError::new("Expected number.")),
-        }
-    }
-}
-
-impl TryFrom<Value> for bool {
-    type Error = ValueConversionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::True => Ok(true),
-            Value::False => Ok(false),
-            _ => Err(ValueConversionError::new("Expected boolean.")),
-        }
     }
 }
 

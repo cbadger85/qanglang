@@ -109,27 +109,6 @@ impl std::fmt::Display for QangRuntimeError {
 
 impl std::error::Error for QangRuntimeError {}
 
-#[derive(Debug, Clone)]
-pub struct ValueConversionError(String);
-
-impl ValueConversionError {
-    pub fn new(message: &str) -> Self {
-        Self(message.to_string())
-    }
-
-    pub fn message(&self) -> &str {
-        &self.0
-    }
-
-    pub fn into_message(self) -> String {
-        self.0
-    }
-
-    pub fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
-        QangRuntimeError::new(self.0, loc)
-    }
-}
-
 /// Handles error reporting and pretty printing for the QangLang compiler.
 #[derive(Debug, Clone, Default)]
 pub struct ErrorReporter {

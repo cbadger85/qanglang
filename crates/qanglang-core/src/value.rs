@@ -107,7 +107,8 @@ impl Value {
             Value::NativeFunction(handle) => handle.hash(&mut hasher),
             Value::FunctionDecl(handle) => handle.hash(&mut hasher),
             Value::Class(handle) => handle.hash(&mut hasher),
-            _ => (),
+            Value::Instance(handle) => handle.hash(&mut hasher),
+            Value::Nil | Value::True | Value::False => (),
         }
         hasher.finish()
     }

@@ -305,8 +305,8 @@ impl HeapAllocator {
         let function_bytes = self.functions.len() * std::mem::size_of::<FunctionObject>();
         let native_function_bytes =
             self.native_functions.len() * std::mem::size_of::<NativeFunctionObject>();
-        let class_bytes = self.classes.len() & std::mem::size_of::<ClassObject>();
-        let instance_bytes = self.instances.len() & std::mem::size_of::<InstanceObject>();
+        let class_bytes = self.classes.len() * std::mem::size_of::<ClassObject>();
+        let instance_bytes = self.instances.len() * std::mem::size_of::<InstanceObject>();
         let table_bytes = self.tables.get_allocated_bytes();
 
         string_bytes
@@ -440,7 +440,6 @@ impl HeapAllocator {
                         }
                         self.tables.mark_hashmap(instance.table);
                         debug_log!(self.is_debug, "Blackening table: {:?}", instance.table);
-                        gray_list.push_back(Value::Class(instance.clazz));
                     }
                 }
                 _ => (),

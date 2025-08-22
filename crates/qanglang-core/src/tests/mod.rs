@@ -1,3 +1,4 @@
+pub mod alloc_tests;
 pub mod parse_declarations;
 pub mod parse_expressions;
 pub mod parse_statements;

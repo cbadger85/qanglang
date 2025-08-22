@@ -179,7 +179,7 @@ impl VmState {
     }
 
     fn read_byte(&mut self) -> u8 {
-        let frame = &mut self.frames[self.frame_count - 1];
+        let frame = unsafe { self.frames.get_unchecked_mut(self.frame_count - 1) };
         debug_assert!(
             !self.current_function_ptr.is_null(),
             "Function pointer is null"
@@ -187,7 +187,7 @@ impl VmState {
 
         let code = unsafe { &(*self.current_function_ptr).chunk.code };
         debug_assert!(frame.ip < code.len(), "IP out of bounds");
-        let byte = code[frame.ip];
+        let byte = unsafe { *code.get_unchecked(frame.ip) };
         frame.ip += 1;
         byte
     }

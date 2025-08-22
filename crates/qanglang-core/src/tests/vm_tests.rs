@@ -534,14 +534,14 @@ fn test_class_declaration() {
         println(Foo);
         println(Foo());
 
-        // fn bar() {
-        //     class Bar {}
+        fn bar() {
+            class Bar {}
 
-        //     println(Bar);
-        //     println(Bar());
-        // }
+            println(Bar);
+            println(Bar());
+        }
 
-        // bar();
+        bar();
 "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -549,10 +549,9 @@ fn test_class_declaration() {
 
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
-                .set_debug(false)
+                .set_debug(true)
                 .interpret(program)
             {
                 Ok(_) => (),

@@ -1,4 +1,4 @@
-// TODO add script filename to source map. default to <script> otherwise.
+// TODO add script filename to source map. default to (script) otherwise.
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
     source: Vec<char>,

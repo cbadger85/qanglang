@@ -264,7 +264,7 @@ impl Vm {
 
         let state = VmState {
             frame_count: 0,
-            stack_top: 1,
+            stack_top: 0,
             stack: vec![Value::Nil; STACK_MAX],
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals,
@@ -325,6 +325,7 @@ impl Vm {
         let handle = self
             .allocator
             .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
+        push_value!(self, Value::Closure(handle))?;
         self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]
@@ -756,7 +757,7 @@ impl Vm {
             Value::Class(handle) => {
                 let _clazz = self.allocator.get_class(handle);
                 let insance_handle = self.allocator.allocate_instance(handle);
-                self.state.stack[self.state.stack_top + arg_count - 1] =
+                self.state.stack[self.state.stack_top - arg_count - 1] =
                     Value::Instance(insance_handle);
                 Ok(())
             }

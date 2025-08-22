@@ -239,7 +239,7 @@ pub struct CompilerVisitor<'a> {
 
 impl<'a> CompilerVisitor<'a> {
     pub fn new(allocator: &'a mut HeapAllocator) -> Self {
-        let handle = allocator.strings.intern("<script>");
+        let handle = allocator.strings.intern("(script)");
 
         Self {
             source_map: &DEFALT_SOURCE_MAP,
@@ -249,7 +249,7 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn reset(&mut self) {
-        let handle = self.allocator.strings.intern("<script>");
+        let handle = self.allocator.strings.intern("(script)");
         self.source_map = &DEFALT_SOURCE_MAP;
         self.compiler = Compiler::new(handle);
     }

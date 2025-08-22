@@ -398,7 +398,6 @@ impl<'a> CompilerVisitor<'a> {
 
         current.local_count -= instructions.len();
 
-        // Emit the instructions in the order they were collected
         for instruction in instructions {
             self.emit_opcode(instruction, span);
         }
@@ -680,10 +679,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             }
             ast::AssignmentTarget::Property(property) => {
                 self.visit_expression(&property.object, errors)?;
-                self.visit_expression(&assignment.value, errors)?;
                 let identifier_handle = self.allocator.strings.intern(&property.property.name);
                 let byte =
                     self.make_constant(Value::String(identifier_handle), property.property.span)?;
+                self.visit_expression(&assignment.value, errors)?;
                 self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
             }
         }
@@ -1144,15 +1143,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     ));
                 }
 
-                // Visit the callee expression (can be identifier, lambda, or any expression)
                 self.visit_expression(call.callee.as_ref(), errors)?;
 
-                // Visit all arguments
                 for arg in args {
                     self.visit_expression(arg, errors)?;
                 }
 
-                // Emit the call instruction
                 self.emit_opcode_and_byte(OpCode::Call, args.len() as u8, call.span);
 
                 Ok(())

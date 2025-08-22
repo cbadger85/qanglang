@@ -530,21 +530,28 @@ fn test_native_function_with_return() {
 fn test_class_declaration() {
     let source = r#"
         class Foo {}
+        class Bar {}
 
         println(Foo);
         var foo = Foo();
         println(foo);
         foo.bar = "baz";
         println(foo.bar);
+        foo.bar = Bar();
+        foo.bar.baz = "baz";
+        println(foo.bar.baz);
+        var temp = foo.bar.baz;
+        println("does this work? " + temp);
+        foo.bar.baz;
 
-        // fn bar() {
-        //     class Bar {}
+        fn bar() {
+            class Bar {}
 
-        //     println(Bar);
-        //     println(Bar());
-        // }
+            println(Bar);
+            println(Bar());
+        }
 
-        // bar();
+        bar();
 "#;
 
     let source_map = SourceMap::new(source.to_string());

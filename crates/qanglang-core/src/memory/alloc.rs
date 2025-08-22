@@ -376,6 +376,8 @@ impl HeapAllocator {
             self.instances.remove(index);
         }
 
+        self.tables.collect_garbage();
+
         let new_allocated_bytes = self.total_allocated_bytes();
 
         self.bytes_until_gc = new_allocated_bytes * GC_HEAP_GROW_FACTOR;
@@ -416,24 +418,29 @@ impl HeapAllocator {
                 Value::Class(handle) => {
                     let clazz = &mut self.classes[handle];
                     if !clazz.is_marked {
+                        debug_log!(self.is_debug, "Blackening class: {:?}", handle);
                         clazz.is_marked = true;
                         for (key, value) in self.tables.iter(clazz.table) {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
-                        self.tables.mark_hashmap(clazz.table, true);
+                        self.tables.mark_hashmap(clazz.table);
+                        debug_log!(self.is_debug, "Blackening table: {:?}", clazz.table);
                     }
                 }
                 Value::Instance(handle) => {
                     let instance = &mut self.instances[handle];
                     if !instance.is_marked {
+                        debug_log!(self.is_debug, "Blackening instance: {:?}", handle);
                         instance.is_marked = true;
                         gray_list.push_back(Value::Class(instance.clazz));
                         for (key, value) in self.tables.iter(instance.table) {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
-                        self.tables.mark_hashmap(instance.table, true);
+                        self.tables.mark_hashmap(instance.table);
+                        debug_log!(self.is_debug, "Blackening table: {:?}", instance.table);
+                        gray_list.push_back(Value::Class(instance.clazz));
                     }
                 }
                 _ => (),

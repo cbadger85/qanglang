@@ -384,9 +384,28 @@ impl HashMapArena {
         HashMapIterator::new(self, handle)
     }
 
-    pub fn mark_hashmap(&mut self, handle: HashMapHandle, mark: bool) {
-        let hashmap = &mut self.hashmaps[handle];
-        hashmap.is_marked = mark;
+    pub fn mark_hashmap(&mut self, handle: HashMapHandle) {
+        if let Some(hashmap) = self.hashmaps.get_mut(handle) {
+            hashmap.is_marked = true;
+        }
+    }
+
+    pub fn collect_garbage(&mut self) {
+        let mut deleted_hashmaps = Vec::new();
+
+        // Find unmarked hashmaps
+        for (handle, hashmap) in self.hashmaps.iter_mut() {
+            if hashmap.is_marked {
+                hashmap.is_marked = false; // Reset mark for next GC cycle
+            } else {
+                deleted_hashmaps.push(handle);
+            }
+        }
+
+        // Delete unmarked hashmaps and their associated chunks
+        for handle in deleted_hashmaps {
+            self.delete_hashmap(handle);
+        }
     }
 
     pub fn delete_hashmap(&mut self, handle: HashMapHandle) -> bool {
@@ -895,5 +914,79 @@ mod tests {
         // Memory usage should be significantly reduced
         // (May not be zero due to arena implementation details)
         assert!(bytes_after < bytes_before);
+    }
+
+    #[test]
+    fn test_garbage_collection() {
+        let mut arena = HashMapArena::new();
+
+        // Create several hashmaps
+        let handle1 = arena.new_hashmap();
+        let handle2 = arena.new_hashmap();
+        let handle3 = arena.new_hashmap();
+
+        // Insert data in all hashmaps
+        for i in 0..5 {
+            let key = create_test_value(i);
+            let value = create_test_value(i * 10);
+            arena.insert(handle1, key, value);
+            arena.insert(handle2, key, value);
+            arena.insert(handle3, key, value);
+        }
+
+        assert_eq!(arena.len(handle1), 5);
+        assert_eq!(arena.len(handle2), 5);
+        assert_eq!(arena.len(handle3), 5);
+
+        // Mark only handle1 and handle2 as reachable
+        arena.mark_hashmap(handle1);
+        arena.mark_hashmap(handle2);
+        // handle3 remains unmarked
+
+        // Run garbage collection
+        arena.collect_garbage();
+
+        // Verify handle1 and handle2 still exist and work
+        assert_eq!(arena.len(handle1), 5);
+        assert_eq!(arena.len(handle2), 5);
+        assert_eq!(
+            arena.get(handle1, &create_test_value(0)),
+            Some(create_test_value(0))
+        );
+        assert_eq!(
+            arena.get(handle2, &create_test_value(0)),
+            Some(create_test_value(0))
+        );
+
+        // Verify handle3 was garbage collected
+        assert_eq!(arena.len(handle3), 0);
+        assert!(arena.is_empty(handle3));
+        assert_eq!(arena.get(handle3, &create_test_value(0)), None);
+    }
+
+    #[test]
+    fn test_garbage_collection_resets_marks() {
+        let mut arena = HashMapArena::new();
+        let handle = arena.new_hashmap();
+
+        // Insert some data
+        arena.insert(handle, create_test_value(1), create_test_value(10));
+
+        // Mark the hashmap
+        arena.mark_hashmap(handle);
+
+        // Verify it's marked (internal state check)
+        if let Some(hashmap) = arena.hashmaps.get(handle) {
+            assert!(hashmap.is_marked);
+        }
+
+        // Run garbage collection
+        arena.collect_garbage();
+
+        // Verify the hashmap still exists but mark is reset
+        assert_eq!(arena.len(handle), 1);
+        if let Some(hashmap) = arena.hashmaps.get(handle) {
+            assert!(!hashmap.is_marked); // Mark should be reset
+        }
     }
 }

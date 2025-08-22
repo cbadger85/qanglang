@@ -38,7 +38,7 @@ pub struct HeapAllocator {
 
 impl HeapAllocator {
     pub fn new() -> Self {
-        Self::with_capacity(64)
+        Self::with_capacity(1024)
     }
 
     pub fn with_capacity(initial_capacity: usize) -> Self {
@@ -298,6 +298,7 @@ impl HeapAllocator {
         let native_function_bytes =
             self.native_functions.len() * std::mem::size_of::<NativeFunctionObject>();
         let class_bytes = self.classes.len() & std::mem::size_of::<ClassObject>();
+        let instance_bytes = self.instances.len() & std::mem::size_of::<InstanceObject>();
         let table_bytes = self.tables.get_allocated_bytes();
 
         string_bytes
@@ -307,6 +308,7 @@ impl HeapAllocator {
             + native_function_bytes
             + class_bytes
             + table_bytes
+            + instance_bytes
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -340,6 +342,30 @@ impl HeapAllocator {
 
         for index in deleted_values.drain(..) {
             self.closures.remove(index);
+        }
+
+        for (index, clazz) in self.classes.iter_mut() {
+            if clazz.is_marked {
+                clazz.is_marked = false;
+            } else {
+                deleted_values.push(index);
+            }
+        }
+
+        for index in deleted_values.drain(..) {
+            self.classes.remove(index);
+        }
+
+        for (index, instance) in self.instances.iter_mut() {
+            if instance.is_marked {
+                instance.is_marked = false;
+            } else {
+                deleted_values.push(index);
+            }
+        }
+
+        for index in deleted_values.drain(..) {
+            self.instances.remove(index);
         }
 
         let new_allocated_bytes = self.total_allocated_bytes();

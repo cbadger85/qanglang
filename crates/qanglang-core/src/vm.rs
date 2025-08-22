@@ -753,6 +753,13 @@ impl Vm {
         match value {
             Value::Closure(handle) => self.call(handle, arg_count),
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
+            Value::Class(handle) => {
+                let _clazz = self.allocator.get_class(handle);
+                let insance_handle = self.allocator.allocate_instance(handle);
+                self.state.stack[self.state.stack_top + arg_count - 1] =
+                    Value::Instance(insance_handle);
+                Ok(())
+            }
             _ => {
                 let value_str = value.to_display_string(&self.allocator);
                 Err(QangRuntimeError::new(

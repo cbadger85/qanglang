@@ -600,10 +600,9 @@ fn test_class_declaration_with_methods() {
 
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
-                .set_debug(true)
+                .set_debug(false)
                 .interpret(program)
             {
                 Ok(_) => (),

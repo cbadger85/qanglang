@@ -770,19 +770,16 @@ impl Vm {
     }
 
     fn define_method(&mut self, name: StringHandle) -> RuntimeResult<()> {
-        println!("DEFINE METHOD {:?}", name);
-        println!("PEEK 0 {:?}", peek!(self, 0));
-        println!("PEEK 1 {:?}", peek!(self, 1));
         if let Value::Closure(method) = peek!(self, 0) {
             if let Value::Class(clazz_handle) = peek!(self, 1) {
-                println!("CLASS HANDLE {:?}", clazz_handle);
                 let clazz = self.allocator.get_class(clazz_handle);
                 self.allocator.set_class_method(
                     clazz.table,
                     Value::String(name),
                     Value::Closure(method),
                 );
-                pop_value!(self);
+                pop_value!(self);  // pop method
+                pop_value!(self);  // pop class
             }
         }
 
@@ -790,11 +787,6 @@ impl Vm {
     }
 
     fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
-        println!("BIND METHOD {:?}", method_name);
-        let v = self.allocator.get_class_method(clazz_handle, method_name);
-
-        println!("RECIEVER {:?}", v);
-        println!("CLASS HANDLE {:?}", clazz_handle);
         let clazz = self.allocator.get_class(clazz_handle);
         if let Some(Value::Closure(closure)) =
             self.allocator.get_class_method(clazz.table, method_name)

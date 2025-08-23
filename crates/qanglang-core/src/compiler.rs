@@ -577,8 +577,11 @@ impl<'a> CompilerVisitor<'a> {
         func_expr: &ast::FunctionExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangSyntaxError> {
-        let function_identifier_handle =
-            self.parse_variable(&func_expr.name.name, func_expr.span)?;
+        let function_identifier_handle = if matches!(kind, CompilerKind::Function) {
+            self.parse_variable(&func_expr.name.name, func_expr.span)?
+        } else {
+            None
+        };
 
         let function_name_handle = function_identifier_handle
             .unwrap_or_else(|| self.allocator.strings.intern(&func_expr.name.name));
@@ -636,7 +639,9 @@ impl<'a> CompilerVisitor<'a> {
             self.emit_byte(upvalue.index, func_expr.name.span);
         }
 
-        self.define_variable(function_identifier_handle, func_expr.name.span)?;
+        if matches!(kind, CompilerKind::Function) {
+            self.define_variable(function_identifier_handle, func_expr.name.span)?;
+        }
         Ok(())
     }
 }
@@ -1250,8 +1255,8 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.define_variable(Some(handle), class_decl.name.span)?;
 
         for member in &class_decl.members {
-            self.visit_class_member(member, errors)?;
             self.handle_variable(&class_decl.name.name, member.span(), false)?;
+            self.visit_class_member(member, errors)?;
         }
         Ok(())
     }
@@ -1266,7 +1271,8 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 let handle_identifier = self.allocator.strings.intern(&function.name.name);
                 let constant =
                     self.make_constant(Value::String(handle_identifier), function.name.span)?;
-                self.handle_function(CompilerKind::Function, &function, errors)?;
+
+                self.handle_function(CompilerKind::Method, &function, errors)?;
 
                 self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
 

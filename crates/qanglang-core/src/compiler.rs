@@ -1194,6 +1194,28 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     ));
                 }
 
+                if let ast::Expr::Call(property_call) = call.callee.as_ref() {
+                    if let ast::CallOperation::Property(method_name) =
+                        property_call.operation.as_ref()
+                    {
+                        self.visit_expression(&property_call.callee, errors)?;
+
+                        let method_handle = self.allocator.strings.intern(&method_name.name);
+                        let method_constant =
+                            self.make_constant(Value::String(method_handle), method_name.span)?;
+
+                        for arg in args {
+                            self.visit_expression(arg, errors)?;
+                        }
+
+                        self.emit_opcode_and_byte(OpCode::Invoke, method_constant, call.span);
+                        self.emit_byte(args.len() as u8, call.span);
+
+                        return Ok(());
+                    }
+                }
+
+                // Regular function call
                 self.visit_expression(call.callee.as_ref(), errors)?;
 
                 for arg in args {

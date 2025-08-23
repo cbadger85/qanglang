@@ -114,6 +114,20 @@ macro_rules! peek {
     };
 }
 
+macro_rules! read_string {
+    ($vm:expr) => {
+        match $vm.state.read_constant() {
+            Value::String(handle) => handle,
+            _ => {
+                return Err(QangRuntimeError::new(
+                    "Expected identifier.".to_string(),
+                    $vm.state.get_previous_loc(),
+                ));
+            }
+        }
+    };
+}
+
 macro_rules! gc_allocate {
     // Closure allocation
     ($vm:expr, closure: $value:expr) => {{
@@ -738,6 +752,11 @@ impl Vm {
                     };
                     self.define_method(identifier_handle)?;
                 }
+                OpCode::Invoke => {
+                    let method_handle = read_string!(self);
+                    let arg_count = self.state.read_byte();
+                    self.invoke(method_handle, arg_count as usize)?;
+                }
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
@@ -907,6 +926,31 @@ impl Vm {
         }
     }
 
+    fn invoke(&mut self, method_handle: StringHandle, arg_count: usize) -> RuntimeResult<()> {
+        let receiver = peek!(self, arg_count);
+        if let Value::Instance(instance_handle) = receiver {
+            let instance = self.allocator.get_instance(instance_handle);
+
+            if let Some(value) = self
+                .allocator
+                .get_instance_field(instance.table, Value::String(method_handle))
+            {
+                self.state.stack[self.state.stack_top - arg_count - 1] = value;
+                return self.call_value(value, arg_count);
+            }
+
+            self.invoke_from_class(instance.clazz, method_handle, arg_count)
+        } else {
+            Err(QangRuntimeError::new(
+                format!(
+                    "Cannot invoke {}, only instances have methods",
+                    receiver.to_type_string()
+                ),
+                self.state.get_previous_loc(),
+            ))
+        }
+    }
+
     fn call(&mut self, closure_handle: ClosureHandle, arg_count: usize) -> RuntimeResult<()> {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
@@ -1012,6 +1056,26 @@ impl Vm {
         push_value!(self, value)?;
 
         Ok(())
+    }
+
+    fn invoke_from_class(
+        &mut self,
+        clazz_handle: ClassHandle,
+        method_handle: StringHandle,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
+        let clazz = self.allocator.get_class(clazz_handle);
+        if let Some(Value::Closure(method)) = self
+            .allocator
+            .get_class_method(clazz.table, Value::String(method_handle))
+        {
+            self.call(method, arg_count)
+        } else {
+            Err(QangRuntimeError::new(
+                "".to_string(),
+                self.state.get_previous_loc(),
+            ))
+        }
     }
 
     pub fn gather_roots(&mut self) -> VecDeque<Value> {

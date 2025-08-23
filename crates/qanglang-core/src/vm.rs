@@ -19,8 +19,9 @@ use crate::{
         qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
     },
     value::{
-        BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING,
-        NUMBER_TYPE_STRING, NativeFunctionObject, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
+        NIL_TYPE_STRING, NUMBER_TYPE_STRING, NativeFunctionObject, OBJECT_TYPE_STRING,
+        STRING_TYPE_STRING,
     },
 };
 
@@ -875,10 +876,17 @@ impl Vm {
             Value::Closure(handle) => self.call(handle, arg_count),
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             Value::Class(handle) => {
-                let _clazz = self.allocator.get_class(handle);
+                let constructor_handle = self.allocator.strings.intern(CLASS_INITIALIZER_STRING);
+                let clazz_table = self.allocator.get_class(handle).table;
                 let insance_handle = gc_allocate!(self, instance: handle);
                 self.state.stack[self.state.stack_top - arg_count - 1] =
                     Value::Instance(insance_handle);
+                if let Some(Value::Closure(constructor)) = self
+                    .allocator
+                    .get_class_method(clazz_table, Value::String(constructor_handle))
+                {
+                    self.call(constructor, arg_count)?;
+                }
                 Ok(())
             }
             Value::BoundMethod(handle) => {
@@ -938,7 +946,6 @@ impl Vm {
 
         let value_slot = self.state.stack_top - final_arg_count - 1;
         let call_frame = &mut self.state.frames[self.state.frame_count - 1];
-
 
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;

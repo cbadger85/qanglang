@@ -6,8 +6,8 @@ use crate::{
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
     value::{
-        BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING,
-        NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
+        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
 
@@ -234,6 +234,7 @@ enum CompilerKind {
     Script,
     Function,
     Method,
+    Initializer,
 }
 
 impl Default for CompilerKind {
@@ -372,7 +373,11 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn emit_return(&mut self, span: SourceSpan) {
-        self.emit_opcode(OpCode::Nil, span);
+        if matches!(self.compiler.kind, CompilerKind::Initializer) {
+            self.emit_opcode_and_byte(OpCode::GetLocal, 0, span);
+        } else {
+            self.emit_opcode(OpCode::Nil, span);
+        }
         self.emit_opcode(OpCode::Return, span);
     }
 
@@ -622,7 +627,6 @@ impl<'a> CompilerVisitor<'a> {
 
         for parameter in &func_expr.parameters {
             let handle = self.parse_variable(&parameter.name, parameter.span)?;
-            
 
             self.define_variable(handle, parameter.span)?;
         }
@@ -700,9 +704,18 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         this_expr: &ast::ThisExpr,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        // In methods, 'this' is always local variable at slot 0
-        self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.span);
-        Ok(())
+        if matches!(
+            self.compiler.kind,
+            CompilerKind::Method | CompilerKind::Initializer
+        ) {
+            self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.span);
+            Ok(())
+        } else {
+            Err(QangSyntaxError::new(
+                "Cannot use 'this' outside of a class.".to_string(),
+                this_expr.span,
+            ))
+        }
     }
 
     fn visit_comparison_expression(
@@ -1056,6 +1069,13 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ));
         }
 
+        if matches!(self.compiler.kind, CompilerKind::Initializer) {
+            return Err(QangSyntaxError::new(
+                "Cannot return from an initializer.".to_string(),
+                return_stmt.span,
+            ));
+        }
+
         if let Some(value) = &return_stmt.value {
             self.visit_expression(value, errors)?;
         } else {
@@ -1289,11 +1309,16 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         match &member {
             ast::ClassMember::Method(function) => {
+                let compiler_kind = if function.name.name == CLASS_INITIALIZER_STRING.into() {
+                    CompilerKind::Initializer
+                } else {
+                    CompilerKind::Method
+                };
                 let handle_identifier = self.allocator.strings.intern(&function.name.name);
                 let constant =
                     self.make_constant(Value::String(handle_identifier), function.name.span)?;
 
-                self.handle_function(CompilerKind::Method, &function, errors)?;
+                self.handle_function(compiler_kind, &function, errors)?;
 
                 self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
 

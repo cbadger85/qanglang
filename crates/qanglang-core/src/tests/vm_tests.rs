@@ -583,6 +583,9 @@ fn test_class_declaration() {
 fn test_class_declaration_with_methods() {
     let source = r#"
         class Foo {
+            init() {
+                this.foo = "bar";
+            }
         
             get_one() {
                 return 1;
@@ -595,6 +598,7 @@ fn test_class_declaration_with_methods() {
         }
 
         assert_eq(Foo().sum_one_with(2), 3);
+        assert_eq(Foo().foo, "bar");
 "#;
 
     let source_map = SourceMap::new(source.to_string());

@@ -622,6 +622,7 @@ impl<'a> CompilerVisitor<'a> {
 
         for parameter in &func_expr.parameters {
             let handle = self.parse_variable(&parameter.name, parameter.span)?;
+            
 
             self.define_variable(handle, parameter.span)?;
         }
@@ -691,6 +692,16 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.emit_opcode(OpCode::Nil, nil.span);
+        Ok(())
+    }
+
+    fn visit_this_expression(
+        &mut self,
+        this_expr: &ast::ThisExpr,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        // In methods, 'this' is always local variable at slot 0
+        self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.span);
         Ok(())
     }
 

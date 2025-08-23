@@ -584,19 +584,17 @@ fn test_class_declaration_with_methods() {
     let source = r#"
         class Foo {
         
-            get_bar() {
-                return "bar";
+            get_one() {
+                return 1;
             }
 
-            print_bar() {
-                println(this.get_bar());
+            sum_one_with(num) {
+                return num + this.get_one();
             }
         
         }
 
-        var foo = Foo();
-
-        foo.print_bar();
+        assert_eq(Foo().sum_one_with(2), 3);
 "#;
 
     let source_map = SourceMap::new(source.to_string());

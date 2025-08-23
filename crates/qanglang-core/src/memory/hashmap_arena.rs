@@ -390,6 +390,52 @@ impl HashMapArena {
         }
     }
 
+    pub fn copy_into(&mut self, source_handle: HashMapHandle, destination_handle: HashMapHandle) {
+        if source_handle == destination_handle {
+            return;
+        }
+
+        let source_first_chunk = match self.hashmaps.get(source_handle) {
+            Some(hashmap) => hashmap.first_chunk,
+            None => return,
+        };
+
+        if self.hashmaps.get(destination_handle).is_none() {
+            return;
+        }
+
+        if let Some(first_chunk) = source_first_chunk {
+            self.copy_all_pairs_from_chunk(first_chunk, destination_handle);
+        }
+    }
+
+    fn copy_all_pairs_from_chunk(
+        &mut self,
+        chunk_handle: BucketChunkHandle,
+        destination_handle: HashMapHandle,
+    ) {
+        let chunk_data = if let Some(chunk) = self.chunks.get(chunk_handle.0) {
+            let mut pairs = Vec::new();
+            for bucket in &chunk.buckets {
+                if let BucketKind::Occupied { key, value } = bucket.kind {
+                    pairs.push((key, value));
+                }
+            }
+            let next_chunk = chunk.next_chunk;
+            (pairs, next_chunk)
+        } else {
+            return;
+        };
+
+        for (key, value) in chunk_data.0 {
+            self.insert(destination_handle, key, value);
+        }
+
+        if let Some(next_chunk) = chunk_data.1 {
+            self.copy_all_pairs_from_chunk(next_chunk, destination_handle);
+        }
+    }
+
     pub fn collect_garbage(&mut self) {
         let mut deleted_hashmaps = Vec::new();
 
@@ -988,5 +1034,155 @@ mod tests {
         if let Some(hashmap) = arena.hashmaps.get(handle) {
             assert!(!hashmap.is_marked); // Mark should be reset
         }
+    }
+
+    #[test]
+    fn test_copy_into() {
+        let mut arena = HashMapArena::new();
+        let source_handle = arena.new_hashmap();
+        let dest_handle = arena.new_hashmap();
+
+        // Insert data into source hashmap
+        for i in 0..5 {
+            let key = create_test_value(i);
+            let value = create_test_value(i * 10);
+            arena.insert(source_handle, key, value);
+        }
+
+        // Insert some existing data into destination (should be overwritten)
+        arena.insert(dest_handle, create_test_value(0), create_test_value(999));
+        arena.insert(dest_handle, create_test_value(10), create_test_value(100));
+
+        assert_eq!(arena.len(source_handle), 5);
+        assert_eq!(arena.len(dest_handle), 2);
+
+        // Copy source into destination
+        arena.copy_into(source_handle, dest_handle);
+
+        // Verify destination contains all source data
+        assert_eq!(arena.len(dest_handle), 6); // 5 from source + 1 unique from dest
+
+        // Check source data was copied
+        for i in 0..5 {
+            let key = create_test_value(i);
+            let expected_value = create_test_value(i * 10);
+            assert_eq!(arena.get(dest_handle, &key), Some(expected_value));
+        }
+
+        // Check existing key was overwritten
+        assert_eq!(
+            arena.get(dest_handle, &create_test_value(0)),
+            Some(create_test_value(0))
+        );
+
+        // Check unique destination data is preserved
+        assert_eq!(
+            arena.get(dest_handle, &create_test_value(10)),
+            Some(create_test_value(100))
+        );
+
+        // Verify source hashmap is unchanged
+        assert_eq!(arena.len(source_handle), 5);
+        for i in 0..5 {
+            let key = create_test_value(i);
+            let expected_value = create_test_value(i * 10);
+            assert_eq!(arena.get(source_handle, &key), Some(expected_value));
+        }
+    }
+
+    #[test]
+    fn test_copy_into_empty_source() {
+        let mut arena = HashMapArena::new();
+        let source_handle = arena.new_hashmap();
+        let dest_handle = arena.new_hashmap();
+
+        // Insert data only into destination
+        arena.insert(dest_handle, create_test_value(1), create_test_value(10));
+
+        assert_eq!(arena.len(source_handle), 0);
+        assert_eq!(arena.len(dest_handle), 1);
+
+        // Copy empty source into destination
+        arena.copy_into(source_handle, dest_handle);
+
+        // Destination should be unchanged
+        assert_eq!(arena.len(dest_handle), 1);
+        assert_eq!(
+            arena.get(dest_handle, &create_test_value(1)),
+            Some(create_test_value(10))
+        );
+    }
+
+    #[test]
+    fn test_copy_into_empty_destination() {
+        let mut arena = HashMapArena::new();
+        let source_handle = arena.new_hashmap();
+        let dest_handle = arena.new_hashmap();
+
+        // Insert data only into source
+        for i in 0..3 {
+            let key = create_test_value(i);
+            let value = create_test_value(i * 10);
+            arena.insert(source_handle, key, value);
+        }
+
+        assert_eq!(arena.len(source_handle), 3);
+        assert_eq!(arena.len(dest_handle), 0);
+
+        // Copy source into empty destination
+        arena.copy_into(source_handle, dest_handle);
+
+        // Destination should now contain all source data
+        assert_eq!(arena.len(dest_handle), 3);
+        for i in 0..3 {
+            let key = create_test_value(i);
+            let expected_value = create_test_value(i * 10);
+            assert_eq!(arena.get(dest_handle, &key), Some(expected_value));
+        }
+    }
+
+    #[test]
+    fn test_copy_into_same_handle() {
+        let mut arena = HashMapArena::new();
+        let handle = arena.new_hashmap();
+
+        // Insert some data
+        for i in 0..3 {
+            let key = create_test_value(i);
+            let value = create_test_value(i * 10);
+            arena.insert(handle, key, value);
+        }
+
+        let original_len = arena.len(handle);
+
+        // Copy into itself (should be no-op)
+        arena.copy_into(handle, handle);
+
+        // Should be unchanged
+        assert_eq!(arena.len(handle), original_len);
+        for i in 0..3 {
+            let key = create_test_value(i);
+            let expected_value = create_test_value(i * 10);
+            assert_eq!(arena.get(handle, &key), Some(expected_value));
+        }
+    }
+
+    #[test]
+    fn test_copy_into_invalid_handles() {
+        let mut arena = HashMapArena::new();
+        let valid_handle = arena.new_hashmap();
+        let invalid_handle = HashMapHandle::default();
+
+        // Insert data into valid handle
+        arena.insert(valid_handle, create_test_value(1), create_test_value(10));
+
+        // Copy from invalid source - should do nothing
+        arena.copy_into(invalid_handle, valid_handle);
+        assert_eq!(arena.len(valid_handle), 1);
+
+        // Copy to invalid destination - should do nothing
+        arena.copy_into(valid_handle, invalid_handle);
+        assert_eq!(arena.len(valid_handle), 1);
+        assert_eq!(arena.len(invalid_handle), 0);
     }
 }

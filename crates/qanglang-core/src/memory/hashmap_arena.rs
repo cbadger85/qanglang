@@ -345,7 +345,9 @@ impl HashMapArena {
         let new_capacity = old_capacity * 2;
 
         // Collect all existing key-value pairs
-        let mut pairs = Vec::new();
+        // Pre-allocate with current length since we know exactly how many pairs we have
+        let current_len = self.hashmaps.get(handle).map(|hm| hm.len).unwrap_or(0);
+        let mut pairs = Vec::with_capacity(current_len);
         if let Some(hashmap) = self.hashmaps.get(handle)
             && let Some(first_chunk) = hashmap.first_chunk
         {
@@ -415,7 +417,8 @@ impl HashMapArena {
         destination_handle: HashMapHandle,
     ) {
         let chunk_data = if let Some(chunk) = self.chunks.get(chunk_handle.0) {
-            let mut pairs = Vec::new();
+            // Pre-allocate Vec with CHUNK_SIZE capacity since that's the maximum number of pairs we can have
+            let mut pairs = Vec::with_capacity(CHUNK_SIZE);
             for bucket in &chunk.buckets {
                 if let BucketKind::Occupied { key, value } = bucket.kind {
                     pairs.push((key, value));
@@ -437,7 +440,10 @@ impl HashMapArena {
     }
 
     pub fn collect_garbage(&mut self) {
-        let mut deleted_hashmaps = Vec::new();
+        // Pre-allocate with a reasonable capacity - in typical GC scenarios,
+        // most objects survive, so we estimate 25% deletion rate
+        let estimated_deletions = (self.hashmaps.len() / 4).max(8);
+        let mut deleted_hashmaps = Vec::with_capacity(estimated_deletions);
 
         // Find unmarked hashmaps
         for (handle, hashmap) in self.hashmaps.iter_mut() {

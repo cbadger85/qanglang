@@ -72,21 +72,19 @@ type UpvalueIndex = usize;
 type OpenUpvalueEntry = (StackSlot, Vec<(ClosureHandle, UpvalueIndex)>);
 
 macro_rules! push_value {
-    ($vm:expr, $value:expr) => {
+    ($vm:expr, $value:expr) => {{
         if $vm.state.stack_top >= STACK_MAX {
-            Err(QangRuntimeError::new(
+            return Err(QangRuntimeError::new(
                 format!(
                     "Stack overflow: maximum stack size of {} exceeded",
                     STACK_MAX
                 ),
                 $vm.state.get_current_loc(),
-            ))
-        } else {
-            $vm.state.stack[$vm.state.stack_top] = $value;
-            $vm.state.stack_top += 1;
-            Ok(())
+            ));
         }
-    };
+        $vm.state.stack[$vm.state.stack_top] = $value;
+        $vm.state.stack_top += 1;
+    }};
 }
 
 macro_rules! pop_value {
@@ -357,7 +355,7 @@ impl Vm {
         let handle = self
             .allocator
             .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
-        push_value!(self, Value::Closure(handle))?;
+        push_value!(self, Value::Closure(handle));
         self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]
@@ -390,7 +388,7 @@ impl Vm {
             match opcode {
                 OpCode::Constant => {
                     let constant = self.state.read_constant();
-                    push_value!(self, constant)?;
+                    push_value!(self, constant);
                 }
                 OpCode::Negate => {
                     if let Value::Number(number) = peek_value!(self, 0) {
@@ -413,13 +411,13 @@ impl Vm {
                     }
                 }
                 OpCode::True => {
-                    push_value!(self, Value::True)?;
+                    push_value!(self, Value::True);
                 }
                 OpCode::False => {
-                    push_value!(self, Value::False)?;
+                    push_value!(self, Value::False);
                 }
                 OpCode::Nil => {
-                    push_value!(self, Value::Nil)?;
+                    push_value!(self, Value::Nil);
                 }
                 OpCode::Add => {
                     self.binary_operation(|a, b, allocator| match (&a, &b) {
@@ -515,7 +513,7 @@ impl Vm {
                             loc,
                         )
                     })?;
-                    push_value!(self, value)?;
+                    push_value!(self, value);
                 }
                 OpCode::SetGlobal => {
                     let identifier_handle = read_string!(self);
@@ -542,7 +540,7 @@ impl Vm {
                     );
 
                     let value = self.state.stack[absolute_slot];
-                    push_value!(self, value)?;
+                    push_value!(self, value);
                 }
                 OpCode::SetLocal => {
                     let slot = self.state.read_byte();
@@ -603,7 +601,7 @@ impl Vm {
                                 current_upvalue;
                         }
                     }
-                    push_value!(self, Value::Closure(closure_handle))?;
+                    push_value!(self, Value::Closure(closure_handle));
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
@@ -615,11 +613,11 @@ impl Vm {
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
                             let value = self.state.stack[stack_slot];
-                            push_value!(self, value)?;
+                            push_value!(self, value);
                         }
                         UpvalueReference::Closed(value_handle) => {
                             let value = *self.allocator.get_upvalue(value_handle);
-                            push_value!(self, value)?;
+                            push_value!(self, value);
                         }
                     }
                 }
@@ -646,7 +644,7 @@ impl Vm {
                 OpCode::Class => {
                     let identifier_handle = read_string!(self);
                     let class_handle = gc_allocate!(self, class:  identifier_handle);
-                    push_value!(self, Value::Class(class_handle))?
+                    push_value!(self, Value::Class(class_handle))
                 }
                 OpCode::SetProperty => {
                     let instance = peek_value!(self, 1);
@@ -667,7 +665,7 @@ impl Vm {
                         );
                         let value = pop_value!(self); // value to assign
                         pop_value!(self); // instance
-                        push_value!(self, value)?; // push assigned value to top of stack
+                        push_value!(self, value); // push assigned value to top of stack
                     } else {
                         return Err(QangRuntimeError::new(
                             format!("Cannot access properties on {}.", instance.to_type_string()),
@@ -692,7 +690,7 @@ impl Vm {
                             self.allocator.get_instance_field(instance.table, constant)
                         {
                             pop_value!(self);
-                            push_value!(self, value)?;
+                            push_value!(self, value);
                         } else {
                             self.bind_method(instance.clazz, constant)?;
                         }
@@ -770,7 +768,7 @@ impl Vm {
             let bound = MethodObject::new(receiver, closure);
             let handle = gc_allocate!(self, method: bound);
             pop_value!(self);
-            push_value!(self, Value::BoundMethod(handle))?;
+            push_value!(self, Value::BoundMethod(handle));
             Ok(())
         } else {
             Err(QangRuntimeError::new(
@@ -844,7 +842,7 @@ impl Vm {
         let value = op(a, b, &mut self.allocator)
             .map_err(|e: BinaryOperationError| e.into_qang_error(self.state.get_previous_loc()))?;
 
-        push_value!(self, value)?;
+        push_value!(self, value);
         Ok(())
     }
 
@@ -924,7 +922,7 @@ impl Vm {
             if arg_count < function.arity {
                 let arity = function.arity;
                 for _ in arg_count..arity {
-                    push_value!(self, Value::Nil)?;
+                    push_value!(self, Value::Nil);
                 }
                 arity
             } else {
@@ -969,10 +967,10 @@ impl Vm {
         let saved_frame_count = self.state.frame_count;
         let saved_function_ptr = self.state.current_function_ptr;
 
-        push_value!(self, Value::Closure(handle))?;
+        push_value!(self, Value::Closure(handle));
 
         for value in &args {
-            push_value!(self, *value)?;
+            push_value!(self, *value);
         }
 
         self.call(handle, args.len())?;
@@ -1011,7 +1009,7 @@ impl Vm {
             })?
             .unwrap_or_default();
 
-        push_value!(self, value)?;
+        push_value!(self, value);
 
         Ok(())
     }

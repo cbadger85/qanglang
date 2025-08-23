@@ -1,6 +1,6 @@
 use crate::memory::arena::{Arena, Index};
 use crate::memory::hashmap_arena::HashMapArena;
-use crate::memory::object::{ClassObject, InstanceObject};
+use crate::memory::object::{ClassObject, InstanceObject, MethodObject};
 use crate::memory::string_interner::StringInterner;
 use crate::{
     ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
@@ -15,6 +15,8 @@ pub type UpvalueHandle = Index;
 pub type ClassHandle = Index;
 
 pub type InstanceHandle = Index;
+
+pub type MethodHandle = Index;
 
 pub type FunctionHandle = u32;
 
@@ -31,6 +33,7 @@ pub struct HeapAllocator {
     native_functions: Vec<NativeFunctionObject>,
     classes: Arena<ClassObject>,
     instances: Arena<InstanceObject>,
+    methods: Arena<MethodObject>,
     tables: HashMapArena,
     is_debug: bool,
     bytes_until_gc: usize,
@@ -50,6 +53,7 @@ impl HeapAllocator {
             native_functions: Vec::with_capacity(initial_capacity),
             tables: HashMapArena::with_capacity(initial_capacity),
             classes: Arena::with_capacity(initial_capacity),
+            methods: Arena::with_capacity(initial_capacity),
             instances: Arena::with_capacity(initial_capacity),
             is_debug: false,
             bytes_until_gc: 1024 * 1024,
@@ -95,11 +99,6 @@ impl HeapAllocator {
         );
     }
 
-    pub fn mark_closure(&mut self, handle: ClosureHandle) {
-        let closure = &mut self.closures[handle];
-        closure.is_marked = true;
-    }
-
     pub fn allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
         let handle = self.upvalues.insert(Upvalue {
             value,
@@ -131,12 +130,6 @@ impl HeapAllocator {
             std::mem::size_of::<Upvalue>(),
             handle
         );
-    }
-
-    pub fn mark_upvalue(&mut self, handle: UpvalueHandle) {
-        debug_log!(self.is_debug, "Marking upvalue: {:?}", handle);
-        let upvalue = &mut self.upvalues[handle];
-        upvalue.is_marked = true;
     }
 
     pub fn allocate_function(&mut self, function: FunctionObject) -> FunctionHandle {
@@ -234,10 +227,12 @@ impl HeapAllocator {
         );
     }
 
-    pub fn mark_class(&mut self, handle: ClassHandle) {
-        debug_log!(self.is_debug, "Marking class: {:?}", handle);
-        let clazz = &mut self.classes[handle];
-        clazz.is_marked = true;
+    pub fn get_class_method(&self, handle: ClassHandle, key: Value) -> Option<Value> {
+        self.tables.get(handle, &key)
+    }
+
+    pub fn set_class_method(&mut self, handle: ClassHandle, key: Value, value: Value) {
+        self.tables.insert(handle, key, value);
     }
 
     pub fn allocate_instance(&mut self, clazz: ClassHandle) -> InstanceHandle {
@@ -282,10 +277,34 @@ impl HeapAllocator {
         );
     }
 
-    pub fn mark_instance(&mut self, handle: InstanceHandle) {
-        debug_log!(self.is_debug, "Marking instance: {:?}", handle);
-        let instance = &mut self.instances[handle];
-        instance.is_marked = true;
+    pub fn allocate_bound_method(&mut self, method: MethodObject) -> MethodHandle {
+        let handle = self.methods.insert(method);
+        debug_log!(
+            self.is_debug,
+            "Allocated {} byes for method: {:?}",
+            std::mem::size_of::<MethodObject>(),
+            handle
+        );
+        handle
+    }
+
+    pub fn get_bound_method(&self, handle: MethodHandle) -> &MethodObject {
+        &self.methods[handle]
+    }
+
+    pub fn get_bound_method_mut(&mut self, handle: MethodHandle) -> &mut MethodObject {
+        &mut self.methods[handle]
+    }
+
+    pub fn free_bound_method(&mut self, handle: MethodHandle) {
+        debug_log!(self.is_debug, "Freeing method: {:?}", handle);
+        self.upvalues.remove(handle);
+        debug_log!(
+            self.is_debug,
+            "Freed {} byes for method: {:?}",
+            std::mem::size_of::<MethodObject>(),
+            handle
+        );
     }
 
     #[cfg(debug_assertions)]
@@ -308,6 +327,7 @@ impl HeapAllocator {
         let class_bytes = self.classes.len() * std::mem::size_of::<ClassObject>();
         let instance_bytes = self.instances.len() * std::mem::size_of::<InstanceObject>();
         let table_bytes = self.tables.get_allocated_bytes();
+        let method_bytes = self.methods.len() * std::mem::size_of::<MethodObject>();
 
         string_bytes
             + closure_bytes
@@ -317,6 +337,7 @@ impl HeapAllocator {
             + class_bytes
             + table_bytes
             + instance_bytes
+            + method_bytes
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -378,6 +399,18 @@ impl HeapAllocator {
 
         self.tables.collect_garbage();
 
+        for (index, method) in self.methods.iter_mut() {
+            if method.is_marked {
+                method.is_marked = false;
+            } else {
+                deleted_values.push(index);
+            }
+        }
+
+        for index in deleted_values.drain(..) {
+            self.methods.remove(index);
+        }
+
         let new_allocated_bytes = self.total_allocated_bytes();
 
         self.bytes_until_gc = new_allocated_bytes * GC_HEAP_GROW_FACTOR;
@@ -399,16 +432,18 @@ impl HeapAllocator {
                     let closure = &mut self.closures[handle];
 
                     if !closure.is_marked {
-                        debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
+                        debug_log!(self.is_debug, "Marking closure: {:?}", handle);
                         closure.is_marked = true;
+                        debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
 
                         for i in 0..closure.upvalue_count {
                             if let UpvalueReference::Closed(handle) = closure.upvalues[i] {
                                 let upvalue = &mut self.upvalues[handle];
 
                                 if !upvalue.is_marked {
-                                    debug_log!(self.is_debug, "Blackening upvalue: {:?}", handle);
+                                    debug_log!(self.is_debug, "Marking upvalue: {:?}", handle);
                                     upvalue.is_marked = true;
+                                    debug_log!(self.is_debug, "Blackening upvalue: {:?}", handle);
                                     gray_list.push_back(upvalue.value);
                                 }
                             }
@@ -418,28 +453,44 @@ impl HeapAllocator {
                 Value::Class(handle) => {
                     let clazz = &mut self.classes[handle];
                     if !clazz.is_marked {
-                        debug_log!(self.is_debug, "Blackening class: {:?}", handle);
+                        debug_log!(self.is_debug, "Marking class: {:?}", handle);
                         clazz.is_marked = true;
+                        debug_log!(self.is_debug, "Blackening class: {:?}", handle);
+                        debug_log!(self.is_debug, "Marking table: {:?}", clazz.table);
+                        self.tables.mark_hashmap(clazz.table);
+                        debug_log!(self.is_debug, "Blackening table: {:?}", clazz.table);
                         for (key, value) in self.tables.iter(clazz.table) {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
-                        self.tables.mark_hashmap(clazz.table);
                         debug_log!(self.is_debug, "Blackening table: {:?}", clazz.table);
                     }
                 }
                 Value::Instance(handle) => {
                     let instance = &mut self.instances[handle];
                     if !instance.is_marked {
-                        debug_log!(self.is_debug, "Blackening instance: {:?}", handle);
+                        debug_log!(self.is_debug, "Marking instance: {:?}", handle);
                         instance.is_marked = true;
+                        debug_log!(self.is_debug, "Blackening instance: {:?}", handle);
+                        debug_log!(self.is_debug, "Marking table: {:?}", instance.table);
+                        self.tables.mark_hashmap(instance.table);
+                        debug_log!(self.is_debug, "Blackening table: {:?}", instance.table);
                         gray_list.push_back(Value::Class(instance.clazz));
                         for (key, value) in self.tables.iter(instance.table) {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
-                        self.tables.mark_hashmap(instance.table);
-                        debug_log!(self.is_debug, "Blackening table: {:?}", instance.table);
+                    }
+                }
+                Value::BoundMethod(handle) => {
+                    let method_binding = &mut self.methods[handle];
+
+                    if !method_binding.is_marked {
+                        debug_log!(self.is_debug, "Marking method: {:?}", handle);
+                        method_binding.is_marked = true;
+                        debug_log!(self.is_debug, "Blackening method: {:?}", handle);
+                        gray_list.push_back(method_binding.reciever);
+                        gray_list.push_back(Value::Closure(method_binding.closure));
                     }
                 }
                 _ => (),

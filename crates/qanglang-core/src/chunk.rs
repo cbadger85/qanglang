@@ -38,6 +38,7 @@ pub enum OpCode {
     Class,
     GetProperty,
     SetProperty,
+    Method,
 }
 
 impl From<u8> for OpCode {
@@ -77,6 +78,7 @@ impl From<u8> for OpCode {
             31 => OpCode::Class,
             32 => OpCode::GetProperty,
             33 => OpCode::SetProperty,
+            34 => OpCode::Method,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

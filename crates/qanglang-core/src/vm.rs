@@ -7,7 +7,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
 use crate::{
-    HeapAllocator, NativeFunctionHandle, QangProgram, QangRuntimeError, Value,
+    ClassHandle, HeapAllocator, MethodObject, NativeFunctionHandle, QangProgram, QangRuntimeError,
+    Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
@@ -135,6 +136,22 @@ macro_rules! gc_allocate {
             $vm.collect_garbage();
         }
         $vm.allocator.allocate_class($value)
+    }};
+
+    // Instance allocation
+    ($vm:expr, instance: $value:expr) => {{
+        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
+            $vm.collect_garbage();
+        }
+        $vm.allocator.allocate_instance($value)
+    }};
+
+    // Method allocation
+    ($vm:expr, method: $value:expr) => {{
+        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
+            $vm.collect_garbage();
+        }
+        $vm.allocator.allocate_bound_method($value)
     }};
 }
 
@@ -691,12 +708,15 @@ impl Vm {
                                 self.state.get_previous_loc(),
                             ));
                         }
-                        let value = self
-                            .allocator
-                            .get_instance_field(instance.table, constant)
-                            .unwrap_or(Value::Nil);
-                        pop_value!(self);
-                        push_value!(self, value)?;
+
+                        if let Some(value) =
+                            self.allocator.get_instance_field(instance.table, constant)
+                        {
+                            pop_value!(self);
+                            push_value!(self, value)?;
+                        } else {
+                            self.bind_method(instance.clazz, constant)?;
+                        }
                     } else {
                         return Err(QangRuntimeError::new(
                             format!(
@@ -706,6 +726,19 @@ impl Vm {
                             self.state.get_previous_loc(),
                         ));
                     }
+                }
+                OpCode::Method => {
+                    let constant = self.state.read_constant();
+                    let identifier_handle = match constant {
+                        Value::String(handle) => handle,
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Expected identifier.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    };
+                    self.define_method(identifier_handle)?;
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
@@ -733,6 +766,52 @@ impl Vm {
                     self.state.stack[value_slot] = result;
                 }
             };
+        }
+    }
+
+    fn define_method(&mut self, name: StringHandle) -> RuntimeResult<()> {
+        println!("DEFINE METHOD {:?}", name);
+        println!("PEEK 0 {:?}", peek!(self, 0));
+        println!("PEEK 1 {:?}", peek!(self, 1));
+        if let Value::Closure(method) = peek!(self, 0) {
+            if let Value::Class(clazz_handle) = peek!(self, 1) {
+                println!("CLASS HANDLE {:?}", clazz_handle);
+                let clazz = self.allocator.get_class(clazz_handle);
+                self.allocator.set_class_method(
+                    clazz.table,
+                    Value::String(name),
+                    Value::Closure(method),
+                );
+                pop_value!(self);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
+        println!("BIND METHOD {:?}", method_name);
+        let v = self.allocator.get_class_method(clazz_handle, method_name);
+
+        println!("RECIEVER {:?}", v);
+        println!("CLASS HANDLE {:?}", clazz_handle);
+        let clazz = self.allocator.get_class(clazz_handle);
+        if let Some(Value::Closure(closure)) =
+            self.allocator.get_class_method(clazz.table, method_name)
+        {
+            let bound = MethodObject::new(peek!(self, 0), closure);
+            let handle = gc_allocate!(self, method: bound);
+            pop_value!(self);
+            push_value!(self, Value::BoundMethod(handle))?;
+            Ok(())
+        } else {
+            Err(QangRuntimeError::new(
+                format!(
+                    "Undefined property '{}'",
+                    method_name.to_display_string(&self.allocator)
+                ),
+                self.state.get_previous_loc(),
+            ))
         }
     }
 
@@ -807,10 +886,14 @@ impl Vm {
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             Value::Class(handle) => {
                 let _clazz = self.allocator.get_class(handle);
-                let insance_handle = self.allocator.allocate_instance(handle);
+                let insance_handle = gc_allocate!(self, instance: handle);
                 self.state.stack[self.state.stack_top - arg_count - 1] =
                     Value::Instance(insance_handle);
                 Ok(())
+            }
+            Value::BoundMethod(handle) => {
+                let bound_method = self.allocator.get_bound_method(handle);
+                self.call(bound_method.closure, arg_count)
             }
             _ => {
                 let value_str = value.to_display_string(&self.allocator);

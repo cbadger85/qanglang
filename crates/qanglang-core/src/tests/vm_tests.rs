@@ -578,3 +578,45 @@ fn test_class_declaration() {
         }
     }
 }
+
+#[test]
+fn test_class_declaration_with_methods() {
+    let source = r#"
+        class Foo {
+        
+            get_bar() {
+                return "bar";
+            }
+        
+        }
+
+        var foo = Foo();
+
+        println(foo.get_bar());
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

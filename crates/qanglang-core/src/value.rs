@@ -1,5 +1,5 @@
 use crate::{
-    ClassHandle, HeapAllocator, InstanceHandle, NativeFn, NativeFunctionHandle,
+    ClassHandle, HeapAllocator, InstanceHandle, MethodHandle, NativeFn, NativeFunctionHandle,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
 
@@ -31,6 +31,7 @@ pub enum Value {
     FunctionDecl(FunctionHandle),
     Class(ClassHandle),
     Instance(InstanceHandle),
+    BoundMethod(MethodHandle),
 }
 
 impl Value {
@@ -73,6 +74,14 @@ impl Value {
                 let identifier = allocator.strings.get_string(clazz.name);
                 format!("instanceof {}", identifier)
             }
+            Value::BoundMethod(handle) => {
+                let method_binding = allocator.get_bound_method(*handle);
+                format!(
+                    "{}.{}",
+                    method_binding.reciever.to_display_string(allocator),
+                    Value::Closure(method_binding.closure).to_display_string(allocator)
+                )
+            }
         }
     }
 
@@ -88,6 +97,7 @@ impl Value {
             Value::FunctionDecl(_) => FUNCTION_TYPE_STRING,
             Value::Class(_) => CLASS_TYPE_STRING,
             Value::Instance(_) => OBJECT_TYPE_STRING,
+            Value::BoundMethod(_) => FUNCTION_TYPE_STRING,
         }
     }
 
@@ -108,6 +118,7 @@ impl Value {
             Value::FunctionDecl(handle) => handle.hash(&mut hasher),
             Value::Class(handle) => handle.hash(&mut hasher),
             Value::Instance(handle) => handle.hash(&mut hasher),
+            Value::BoundMethod(handle) => handle.hash(&mut hasher),
             Value::Nil | Value::True | Value::False => (),
         }
         hasher.finish()

@@ -67,11 +67,11 @@ impl Compiler {
         }
     }
 
-    fn push(&mut self, handle: StringHandle, arity: usize) -> &mut Self {
+    fn push(&mut self, handle: StringHandle, arity: usize, kind: CompilerKind) -> &mut Self {
         let previous = std::mem::replace(
             self,
             Self {
-                kind: CompilerKind::Function,
+                kind,
                 function: FunctionObject::new(handle, arity),
                 locals: Vec::with_capacity(u8::MAX as usize),
                 local_count: 0,
@@ -223,6 +223,7 @@ pub const STACK_MAX: usize = FRAME_MAX * 256;
 enum CompilerKind {
     Script,
     Function,
+    Method,
 }
 
 impl Default for CompilerKind {
@@ -568,6 +569,75 @@ impl<'a> CompilerVisitor<'a> {
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
         self.compiler.resolve_local_variable(handle, span)
+    }
+
+    fn handle_function(
+        &mut self,
+        kind: CompilerKind,
+        func_expr: &ast::FunctionExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), QangSyntaxError> {
+        let function_identifier_handle =
+            self.parse_variable(&func_expr.name.name, func_expr.span)?;
+
+        let function_name_handle = function_identifier_handle
+            .unwrap_or_else(|| self.allocator.strings.intern(&func_expr.name.name));
+
+        self.compiler
+            .push(function_name_handle, func_expr.parameters.len(), kind);
+        self.begin_scope();
+
+        let parameter_span = SourceSpan::combine(
+            func_expr
+                .parameters
+                .first()
+                .map(|p| p.span)
+                .unwrap_or(func_expr.span),
+            func_expr
+                .parameters
+                .last()
+                .map(|p| p.span)
+                .unwrap_or(func_expr.span),
+        );
+
+        if func_expr.parameters.len() > 255 {
+            return Err(QangSyntaxError::new(
+                "Cannot have more than 255 parameters.".to_string(),
+                parameter_span,
+            ));
+        }
+
+        for parameter in &func_expr.parameters {
+            let handle = self.parse_variable(&parameter.name, parameter.span)?;
+
+            self.define_variable(handle, parameter.span)?;
+        }
+
+        self.visit_block_statement(&func_expr.body, errors)?;
+        self.emit_return(func_expr.span);
+
+        let compiler = self
+            .compiler
+            .pop()
+            .expect("Unexpected end of artifact stack.");
+        let function = compiler.function;
+        let upvalue_count = function.upvalue_count;
+
+        let function_handle = self.allocator.allocate_function(function);
+        let constant_index =
+            self.make_constant(Value::FunctionDecl(function_handle), func_expr.name.span)?;
+        self.emit_opcode_and_byte(OpCode::Closure, constant_index, func_expr.name.span);
+
+        for i in 0..upvalue_count {
+            let upvalue = compiler.upvalues[i];
+            let is_local_byte = if upvalue.is_local { 1 } else { 0 };
+
+            self.emit_byte(is_local_byte, func_expr.name.span);
+            self.emit_byte(upvalue.index, func_expr.name.span);
+        }
+
+        self.define_variable(function_identifier_handle, func_expr.name.span)?;
+        Ok(())
     }
 }
 
@@ -945,75 +1015,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         func_decl: &ast::FunctionDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let function_identifier_handle =
-            self.parse_variable(&func_decl.function.name.name, func_decl.function.span)?;
-
-        let function_name_handle = function_identifier_handle
-            .unwrap_or_else(|| self.allocator.strings.intern(&func_decl.function.name.name));
-
-        self.compiler
-            .push(function_name_handle, func_decl.function.parameters.len());
-        self.begin_scope();
-
-        let parameter_span = SourceSpan::combine(
-            func_decl
-                .function
-                .parameters
-                .first()
-                .map(|p| p.span)
-                .unwrap_or(func_decl.span),
-            func_decl
-                .function
-                .parameters
-                .last()
-                .map(|p| p.span)
-                .unwrap_or(func_decl.span),
-        );
-
-        if func_decl.function.parameters.len() > 255 {
-            return Err(QangSyntaxError::new(
-                "Cannot have more than 255 parameters.".to_string(),
-                parameter_span,
-            ));
-        }
-
-        for parameter in &func_decl.function.parameters {
-            let handle = self.parse_variable(&parameter.name, parameter.span)?;
-
-            self.define_variable(handle, parameter.span)?;
-        }
-
-        self.visit_block_statement(&func_decl.function.body, errors)?;
-        self.emit_return(func_decl.span);
-
-        let compiler = self
-            .compiler
-            .pop()
-            .expect("Unexpected end of artifact stack.");
-        let function = compiler.function;
-        let upvalue_count = function.upvalue_count;
-
-        let function_handle = self.allocator.allocate_function(function);
-        let constant_index = self.make_constant(
-            Value::FunctionDecl(function_handle),
-            func_decl.function.name.span,
-        )?;
-        self.emit_opcode_and_byte(
-            OpCode::Closure,
-            constant_index,
-            func_decl.function.name.span,
-        );
-
-        for i in 0..upvalue_count {
-            let upvalue = compiler.upvalues[i];
-            let is_local_byte = if upvalue.is_local { 1 } else { 0 };
-
-            self.emit_byte(is_local_byte, func_decl.function.name.span);
-            self.emit_byte(upvalue.index, func_decl.function.name.span);
-        }
-
-        self.define_variable(function_identifier_handle, func_decl.function.name.span)?;
-        Ok(())
+        self.handle_function(CompilerKind::Function, &func_decl.function, errors)
     }
 
     fn visit_return_statement(
@@ -1060,8 +1062,11 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         let lambda_name_handle = self.allocator.strings.intern("<anonymous>");
 
-        self.compiler
-            .push(lambda_name_handle, lambda_expr.parameters.len());
+        self.compiler.push(
+            lambda_name_handle,
+            lambda_expr.parameters.len(),
+            CompilerKind::Function,
+        );
         self.begin_scope();
 
         let parameter_span = SourceSpan::combine(
@@ -1236,13 +1241,38 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     fn visit_class_declaration(
         &mut self,
         class_decl: &ast::ClassDecl,
-        _errors: &mut ErrorReporter,
+        errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         let handle = self.allocator.strings.intern(&class_decl.name.name);
         self.declare_variable(&class_decl.name.name, class_decl.name.span)?;
         let byte = self.make_constant(Value::String(handle), class_decl.name.span)?;
         self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
         self.define_variable(Some(handle), class_decl.name.span)?;
+
+        for member in &class_decl.members {
+            self.visit_class_member(member, errors)?;
+            self.handle_variable(&class_decl.name.name, member.span(), false)?;
+        }
         Ok(())
+    }
+
+    fn visit_class_member(
+        &mut self,
+        member: &ast::ClassMember,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        match &member {
+            ast::ClassMember::Method(function) => {
+                let handle_identifier = self.allocator.strings.intern(&function.name.name);
+                let constant =
+                    self.make_constant(Value::String(handle_identifier), function.name.span)?;
+                self.handle_function(CompilerKind::Function, &function, errors)?;
+
+                self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
+
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }

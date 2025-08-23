@@ -1,5 +1,5 @@
 use crate::{
-    ClassHandle, HashMapHandle, Value,
+    ClassHandle, ClosureHandle, HashMapHandle, Value,
     chunk::Chunk,
     memory::{FunctionHandle, StringHandle, UpvalueHandle},
 };
@@ -74,4 +74,21 @@ pub struct InstanceObject {
     pub clazz: ClassHandle,
     pub table: HashMapHandle,
     pub is_marked: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MethodObject {
+    pub reciever: Value,
+    pub closure: ClosureHandle,
+    pub is_marked: bool,
+}
+
+impl MethodObject {
+    pub fn new(reciever: Value, closure: ClosureHandle) -> Self {
+        Self {
+            reciever,
+            closure,
+            is_marked: false,
+        }
+    }
 }

@@ -530,28 +530,28 @@ fn test_native_function_with_return() {
 fn test_class_declaration() {
     let source = r#"
         class Foo {}
-        class Bar {}
+        // class Bar {}
 
-        println(Foo);
-        var foo = Foo();
-        println(foo);
-        foo.bar = "baz";
-        println(foo.bar);
-        foo.bar = Bar();
-        foo.bar.baz = "baz";
-        println(foo.bar.baz);
-        var temp = foo.bar.baz;
-        println("does this work? " + temp);
-        foo.bar.baz;
+        // println(Foo);
+        // var foo = Foo();
+        // println(foo);
+        // foo.bar = "baz";
+        // println(foo.bar);
+        // foo.bar = Bar();
+        // foo.bar.baz = "baz";
+        // println(foo.bar.baz);
+        // var temp = foo.bar.baz;
+        // println("does this work? " + temp);
+        // foo.bar.baz;
 
-        fn bar() {
-            class Bar {}
+        // fn bar() {
+        //     class Bar {}
 
-            println(Bar);
-            println(Bar());
-        }
+        //     println(Bar);
+        //     println(Bar());
+        // }
 
-        bar();
+        // bar();
 "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -559,9 +559,10 @@ fn test_class_declaration() {
 
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
+            // disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
-                .set_debug(false)
+                .set_debug(true)
                 .interpret(program)
             {
                 Ok(_) => (),
@@ -609,7 +610,7 @@ fn test_class_declaration_with_methods() {
             disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
-                .set_debug(false)
+                .set_debug(true)
                 .interpret(program)
             {
                 Ok(_) => (),

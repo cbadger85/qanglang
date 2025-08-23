@@ -718,6 +718,15 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         }
     }
 
+    fn visit_super_expression(
+        &mut self,
+        _super_expr: &ast::SuperExpr,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        todo!();
+        Ok(())
+    }
+
     fn visit_comparison_expression(
         &mut self,
         comparison: &ast::ComparisonExpr,
@@ -1311,11 +1320,11 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         class_decl: &ast::ClassDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let handle = self.allocator.strings.intern(&class_decl.name.name);
         self.declare_variable(&class_decl.name.name, class_decl.name.span)?;
-        let byte = self.make_constant(Value::String(handle), class_decl.name.span)?;
+        let class_handle = self.allocator.strings.intern(&class_decl.name.name);
+        let byte = self.make_constant(Value::String(class_handle), class_decl.name.span)?;
         self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
-        self.define_variable(Some(handle), class_decl.name.span)?;
+        self.define_variable(Some(class_handle), class_decl.name.span)?;
 
         if let Some(superclass) = &class_decl.superclass {
             self.handle_variable(&class_decl.name.name, class_decl.name.span, false)?;
@@ -1327,40 +1336,43 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 ));
             }
 
+            self.begin_scope();
+            let zuper = "super";
+            let super_handle = self.allocator.strings.intern(zuper);
+            self.add_local(zuper, class_decl.span)?;
+            self.define_variable(Some(super_handle), class_decl.name.span)?;
+
             self.handle_variable(&superclass.name, superclass.span, false)?;
             self.emit_opcode(OpCode::Inherit, superclass.span);
         }
 
         for member in &class_decl.members {
             self.handle_variable(&class_decl.name.name, member.span(), false)?;
-            self.visit_class_member(member, errors)?;
-        }
-        Ok(())
-    }
 
-    fn visit_class_member(
-        &mut self,
-        member: &ast::ClassMember,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        match &member {
-            ast::ClassMember::Method(function) => {
-                let compiler_kind = if function.name.name == CLASS_INITIALIZER_STRING.into() {
-                    CompilerKind::Initializer
-                } else {
-                    CompilerKind::Method
-                };
-                let handle_identifier = self.allocator.strings.intern(&function.name.name);
-                let constant =
-                    self.make_constant(Value::String(handle_identifier), function.name.span)?;
+            match &member {
+                ast::ClassMember::Method(function) => {
+                    let compiler_kind = if function.name.name == CLASS_INITIALIZER_STRING.into() {
+                        CompilerKind::Initializer
+                    } else {
+                        CompilerKind::Method
+                    };
+                    let handle_identifier = self.allocator.strings.intern(&function.name.name);
+                    let constant =
+                        self.make_constant(Value::String(handle_identifier), function.name.span)?;
 
-                self.handle_function(compiler_kind, &function, errors)?;
+                    self.handle_function(compiler_kind, &function, errors)?;
 
-                self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
-
-                Ok(())
+                    self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
+                }
+                _ => (),
             }
-            _ => Ok(()),
         }
+
+        // self.emit_opcode(OpCode::Pop, class_decl.span);
+        if class_decl.superclass.is_some() {
+            self.end_scope(class_decl.span);
+        }
+
+        Ok(())
     }
 }

@@ -587,12 +587,16 @@ fn test_class_declaration_with_methods() {
             get_bar() {
                 return "bar";
             }
+
+            print_bar() {
+                println(this.get_bar());
+            }
         
         }
 
         var foo = Foo();
 
-        println(foo.get_bar());
+        foo.print_bar();
 "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -600,6 +604,7 @@ fn test_class_declaration_with_methods() {
 
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
+            // disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)

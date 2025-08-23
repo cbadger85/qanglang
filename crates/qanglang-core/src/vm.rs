@@ -545,8 +545,8 @@ impl Vm {
                 }
                 OpCode::GetLocal => {
                     let slot = self.state.read_byte();
-                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot
-                        + slot as usize;
+                    let absolute_slot =
+                        self.state.frames[self.state.frame_count - 1].value_slot + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
                         "Local slot {} out of bounds",
@@ -559,8 +559,8 @@ impl Vm {
                 OpCode::SetLocal => {
                     let slot = self.state.read_byte();
                     let value = peek!(self, 0);
-                    let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot
-                        + slot as usize;
+                    let absolute_slot =
+                        self.state.frames[self.state.frame_count - 1].value_slot + slot as usize;
 
                     self.state.stack[absolute_slot] = value;
                 }
@@ -603,9 +603,8 @@ impl Vm {
                         let index = self.state.read_byte() as usize;
 
                         if is_local {
-                            let stack_slot = self.state.frames[self.state.frame_count - 1]
-                                .value_slot
-                                + index;
+                            let stack_slot =
+                                self.state.frames[self.state.frame_count - 1].value_slot + index;
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {
                             let current_closure = self
@@ -696,6 +695,7 @@ impl Vm {
                 }
                 OpCode::GetProperty => {
                     let instance = peek!(self, 0);
+
                     if let Value::Instance(instance_handle) = instance {
                         let instance = self.allocator.get_instance(instance_handle);
                         let constant = self.state.read_constant();
@@ -775,8 +775,8 @@ impl Vm {
                     Value::String(name),
                     Value::Closure(method),
                 );
-                pop_value!(self);  // pop method
-                pop_value!(self);  // pop class
+                pop_value!(self); // pop method
+                pop_value!(self); // pop class
             }
         }
 
@@ -788,7 +788,8 @@ impl Vm {
         if let Some(Value::Closure(closure)) =
             self.allocator.get_class_method(clazz.table, method_name)
         {
-            let bound = MethodObject::new(peek!(self, 0), closure);
+            let receiver = peek!(self, 0);
+            let bound = MethodObject::new(receiver, closure);
             let handle = gc_allocate!(self, method: bound);
             pop_value!(self);
             push_value!(self, Value::BoundMethod(handle))?;
@@ -882,6 +883,10 @@ impl Vm {
             }
             Value::BoundMethod(handle) => {
                 let bound_method = self.allocator.get_bound_method(handle);
+
+                // Replace the method function with the receiver in the stack
+                // so that when the method is called, 'this' (slot 0) contains the receiver
+                self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.reciever;
                 self.call(bound_method.closure, arg_count)
             }
             _ => {
@@ -933,6 +938,7 @@ impl Vm {
 
         let value_slot = self.state.stack_top - final_arg_count - 1;
         let call_frame = &mut self.state.frames[self.state.frame_count - 1];
+
 
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;

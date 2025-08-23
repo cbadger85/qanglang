@@ -71,7 +71,13 @@ impl Compiler {
 
     fn push(&mut self, handle: StringHandle, arity: usize, kind: CompilerKind) -> &mut Self {
         let mut locals = Vec::with_capacity(u8::MAX as usize);
-        locals.push(Local::new("".into()));
+        if matches!(kind, CompilerKind::Method) {
+            let mut this_local = Local::new("this".into());
+            this_local.depth = Some(0); // Initialize 'this' as available immediately
+            locals.push(this_local);
+        } else {
+            locals.push(Local::new("".into()));
+        }
         let previous = std::mem::replace(
             self,
             Self {

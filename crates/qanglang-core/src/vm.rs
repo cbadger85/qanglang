@@ -546,7 +546,6 @@ impl Vm {
                 OpCode::GetLocal => {
                     let slot = self.state.read_byte();
                     let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot
-                        + 1
                         + slot as usize;
                     debug_assert!(
                         absolute_slot < STACK_MAX,
@@ -561,7 +560,6 @@ impl Vm {
                     let slot = self.state.read_byte();
                     let value = peek!(self, 0);
                     let absolute_slot = self.state.frames[self.state.frame_count - 1].value_slot
-                        + 1
                         + slot as usize;
 
                     self.state.stack[absolute_slot] = value;
@@ -607,7 +605,6 @@ impl Vm {
                         if is_local {
                             let stack_slot = self.state.frames[self.state.frame_count - 1]
                                 .value_slot
-                                + 1
                                 + index;
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {

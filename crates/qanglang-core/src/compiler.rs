@@ -56,11 +56,13 @@ struct Compiler {
 
 impl Compiler {
     fn new(handle: StringHandle) -> Self {
+        let mut locals = Vec::with_capacity(u8::MAX as usize);
+        locals.push(Local::new("".into()));
         Self {
             kind: CompilerKind::Script,
             function: FunctionObject::new(handle, 0),
-            locals: Vec::with_capacity(u8::MAX as usize),
-            local_count: 0,
+            locals,
+            local_count: 1,
             scope_depth: 0,
             upvalues: Vec::with_capacity(u8::MAX as usize),
             enclosing: None,
@@ -68,13 +70,15 @@ impl Compiler {
     }
 
     fn push(&mut self, handle: StringHandle, arity: usize, kind: CompilerKind) -> &mut Self {
+        let mut locals = Vec::with_capacity(u8::MAX as usize);
+        locals.push(Local::new("".into()));
         let previous = std::mem::replace(
             self,
             Self {
                 kind,
                 function: FunctionObject::new(handle, arity),
-                locals: Vec::with_capacity(u8::MAX as usize),
-                local_count: 0,
+                locals,
+                local_count: 1,
                 scope_depth: 0,
                 upvalues: Vec::with_capacity(u8::MAX as usize),
                 enclosing: None,

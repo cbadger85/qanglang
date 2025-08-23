@@ -665,3 +665,43 @@ fn test_classing_fields_that_reference_functions() {
         }
     }
 }
+
+#[test]
+fn test_class_inheritance() {
+    let source = r#"
+        class A {
+            a() {
+                return 42;
+            }
+        }
+
+        class B : A {}
+        var value = B().a();
+        assert_eq(value, 42, "Expected '42', recieved " + (value |> to_string));
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

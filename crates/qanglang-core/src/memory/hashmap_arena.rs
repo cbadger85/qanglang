@@ -417,31 +417,34 @@ impl HashMapArena {
         destination_handle: HashMapHandle,
     ) {
         let chunk_data = if let Some(chunk) = self.chunks.get(chunk_handle.0) {
-            // Pre-allocate Vec with CHUNK_SIZE capacity since that's the maximum number of pairs we can have
-            let mut pairs = Vec::with_capacity(CHUNK_SIZE);
+            // Use fixed-size array to avoid heap allocation entirely
+            let mut pairs: [(Value, Value); CHUNK_SIZE] = [(Value::Nil, Value::Nil); CHUNK_SIZE];
+            let mut count = 0;
+
             for bucket in &chunk.buckets {
                 if let BucketKind::Occupied { key, value } = bucket.kind {
-                    pairs.push((key, value));
+                    pairs[count] = (key, value);
+                    count += 1;
                 }
             }
             let next_chunk = chunk.next_chunk;
-            (pairs, next_chunk)
+            (pairs, count, next_chunk)
         } else {
             return;
         };
 
-        for (key, value) in chunk_data.0 {
+        // Only iterate over the occupied slots
+        for i in 0..chunk_data.1 {
+            let (key, value) = chunk_data.0[i];
             self.insert(destination_handle, key, value);
         }
 
-        if let Some(next_chunk) = chunk_data.1 {
+        if let Some(next_chunk) = chunk_data.2 {
             self.copy_all_pairs_from_chunk(next_chunk, destination_handle);
         }
     }
 
     pub fn collect_garbage(&mut self) {
-        // Pre-allocate with a reasonable capacity - in typical GC scenarios,
-        // most objects survive, so we estimate 25% deletion rate
         let estimated_deletions = (self.hashmaps.len() / 4).max(8);
         let mut deleted_hashmaps = Vec::with_capacity(estimated_deletions);
 
@@ -454,7 +457,6 @@ impl HashMapArena {
             }
         }
 
-        // Delete unmarked hashmaps and their associated chunks
         for handle in deleted_hashmaps {
             self.delete_hashmap(handle);
         }
@@ -462,13 +464,10 @@ impl HashMapArena {
 
     pub fn delete_hashmap(&mut self, handle: HashMapHandle) -> bool {
         if let Some(hashmap) = self.hashmaps.get(handle) {
-            // Mark all chunks as unused by clearing the first_chunk reference
-            // The chunks will be cleaned up by the arena's garbage collection
             if let Some(first_chunk) = hashmap.first_chunk {
                 self.mark_chunks_for_cleanup(first_chunk);
             }
 
-            // Remove the hashmap from the arena
             self.hashmaps.remove(handle);
             true
         } else {
@@ -479,10 +478,8 @@ impl HashMapArena {
     fn mark_chunks_for_cleanup(&mut self, chunk_handle: BucketChunkHandle) {
         if let Some(chunk) = self.chunks.get(chunk_handle.0) {
             let next_chunk = chunk.next_chunk;
-            // Remove this chunk
             self.chunks.remove(chunk_handle.0);
 
-            // Recursively mark next chunks for cleanup
             if let Some(next) = next_chunk {
                 self.mark_chunks_for_cleanup(next);
             }

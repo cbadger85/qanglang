@@ -34,7 +34,7 @@ pub struct HeapAllocator {
     classes: Arena<ClassObject>,
     instances: Arena<InstanceObject>,
     methods: Arena<MethodObject>,
-    tables: HashMapArena,
+    pub tables: HashMapArena,
     is_debug: bool,
     bytes_until_gc: usize,
 }
@@ -345,9 +345,13 @@ impl HeapAllocator {
         let total_bytes_before_gc = self.total_allocated_bytes();
 
         self.trace_references(roots);
-
-        let mut deleted_values: Vec<Index> =
-            Vec::with_capacity(self.closures.len() + self.upvalues.len());
+        let total_elements = self.classes.len()
+            + self.closures.len()
+            + self.upvalues.len()
+            + self.instances.len()
+            + self.methods.len();
+        let estimated_deletions = (total_elements / 4).max(8);
+        let mut deleted_values: Vec<Index> = Vec::with_capacity(estimated_deletions);
 
         for (index, upvalue) in self.upvalues.iter_mut() {
             if upvalue.is_marked {

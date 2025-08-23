@@ -716,7 +716,34 @@ impl Vm {
                     self.invoke(method_handle, arg_count as usize)?;
                 }
                 OpCode::Inherit => {
-                    todo!();
+                    let superclass = peek_value!(self, 0);
+                    let subclass = peek_value!(self, 1);
+
+                    println!("superclass: {:?}, subclass: {:?}", superclass, subclass);
+
+                    match (superclass, subclass) {
+                        (Value::Class(superclass), Value::Class(subclass)) => {
+                            let superclass_table = self.allocator.get_class(superclass).table;
+                            let subclass_table = self.allocator.get_class(subclass).table;
+                            self.allocator
+                                .tables
+                                .copy_into(superclass_table, subclass_table);
+                            pop_value!(self);
+                            Ok(())
+                        }
+                        (Value::Class(_), _) => Err(QangRuntimeError::new(
+                            "Invalid subclass.".to_string(),
+                            self.state.get_previous_loc(),
+                        )),
+                        (_, Value::Class(_)) => Err(QangRuntimeError::new(
+                            "Super class must be a class.".to_string(),
+                            self.state.get_previous_loc(),
+                        )),
+                        _ => Err(QangRuntimeError::new(
+                            "Invalid class declaration.".to_string(),
+                            self.state.get_previous_loc(),
+                        )),
+                    }?
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
@@ -1033,7 +1060,11 @@ impl Vm {
             self.call(method, arg_count)
         } else {
             Err(QangRuntimeError::new(
-                "".to_string(),
+                format!(
+                    "{} does not exist on class {}.",
+                    Value::String(method_handle).to_display_string(&self.allocator),
+                    Value::Class(clazz_handle).to_display_string(&self.allocator),
+                ),
                 self.state.get_previous_loc(),
             ))
         }

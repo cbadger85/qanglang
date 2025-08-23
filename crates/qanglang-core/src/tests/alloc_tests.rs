@@ -263,7 +263,7 @@ mod tests {
         // Test that we can access the closure and its upvalues
         let retrieved_closure = allocator.get_closure(closure_handle);
         assert_eq!(retrieved_closure.upvalue_count, 1);
-        assert_eq!(retrieved_closure.upvalues.len(), 256); // Fixed size array
+        assert_eq!(retrieved_closure.upvalues.len(), 64); // Fixed size array
 
         if let UpvalueReference::Closed(handle) = retrieved_closure.upvalues[0] {
             let upvalue_value = allocator.get_upvalue(handle);

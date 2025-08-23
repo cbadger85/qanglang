@@ -8,7 +8,7 @@ use crate::{
 pub struct ClosureObject {
     pub function: FunctionHandle,
     pub upvalue_count: usize,
-    pub upvalues: [UpvalueReference; 256],
+    pub upvalues: [UpvalueReference; 64],
     pub is_marked: bool,
 }
 

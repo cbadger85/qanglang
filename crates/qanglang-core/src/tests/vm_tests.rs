@@ -638,7 +638,7 @@ fn test_classing_fields_that_reference_functions() {
 
         var oops = Oops();
         assert_eq(oops.field(), 3);
-"#;
+    "#;
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();

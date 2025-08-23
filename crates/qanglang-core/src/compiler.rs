@@ -562,9 +562,9 @@ impl<'a> CompilerVisitor<'a> {
             }
         }
 
-        if upvalue_count == u8::MAX as usize {
+        if upvalue_count == 64 {
             return Err(QangSyntaxError::new(
-                "Too many closure variables in function.".to_string(),
+                "Can only close over up to 64 variables.".to_string(),
                 span,
             ));
         }

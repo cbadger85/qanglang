@@ -78,7 +78,6 @@ impl Compiler {
         kind: CompilerKind,
         has_superclass: bool,
     ) -> &mut Self {
-        let has_superclass = self.has_superclass || has_superclass;
         let mut locals = Vec::with_capacity(u8::MAX as usize);
         if matches!(kind, CompilerKind::Method) {
             let mut this_local = Local::new("this".into());

@@ -100,7 +100,7 @@ macro_rules! pop_value {
     }};
 }
 
-macro_rules! peek {
+macro_rules! peek_value {
     ($vm:expr, $distance:expr) => {
         if $vm.state.stack_top > $distance {
             $vm.state
@@ -393,7 +393,7 @@ impl Vm {
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
-                    if let Value::Number(number) = peek!(self, 0) {
+                    if let Value::Number(number) = peek_value!(self, 0) {
                         if let Some(stack_value) =
                             self.state.stack.get_mut(self.state.stack_top - 1)
                         {
@@ -407,7 +407,7 @@ impl Vm {
                     }
                 }
                 OpCode::Not => {
-                    let value = peek!(self, 0);
+                    let value = peek_value!(self, 0);
                     if let Some(stack_value) = self.state.stack.get_mut(self.state.stack_top - 1) {
                         *stack_value = (!value.is_truthy()).into();
                     }
@@ -501,30 +501,12 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
-                    let constant = self.state.read_constant();
-                    let identifier_handle = match constant {
-                        Value::String(handle) => handle,
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                "Expected identifier.".to_string(),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    };
+                    let identifier_handle = read_string!(self);
                     let value = pop_value!(self);
                     self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
-                    let constant = self.state.read_constant();
-                    let identifier_handle = match constant {
-                        Value::String(handle) => handle,
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                "Expected identifier.".to_string(),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    };
+                    let identifier_handle = read_string!(self);
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
                         let identifier_name = self.allocator.strings.get_string(identifier_handle);
@@ -536,16 +518,7 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
-                    let constant = self.state.read_constant();
-                    let identifier_handle = match constant {
-                        Value::String(handle) => handle,
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                "Expected identifier.".to_string(),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    };
+                    let identifier_handle = read_string!(self);
 
                     if !self.state.globals.contains_key(&identifier_handle) {
                         let identifier_name = self.allocator.strings.get_string(identifier_handle);
@@ -555,7 +528,7 @@ impl Vm {
                             loc,
                         ));
                     }
-                    let value = peek!(self, 0);
+                    let value = peek_value!(self, 0);
                     self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetLocal => {
@@ -573,7 +546,7 @@ impl Vm {
                 }
                 OpCode::SetLocal => {
                     let slot = self.state.read_byte();
-                    let value = peek!(self, 0);
+                    let value = peek_value!(self, 0);
                     let absolute_slot =
                         self.state.frames[self.state.frame_count - 1].value_slot + slot as usize;
 
@@ -581,7 +554,7 @@ impl Vm {
                 }
                 OpCode::JumpIfFalse => {
                     let offset = self.state.read_short();
-                    if !peek!(self, 0).is_truthy() {
+                    if !peek_value!(self, 0).is_truthy() {
                         self.state.frames[self.state.frame_count - 1].ip += offset;
                     }
                 }
@@ -595,7 +568,7 @@ impl Vm {
                 }
                 OpCode::Call => {
                     let arg_count = self.state.read_byte() as usize;
-                    let function_value = peek!(self, arg_count);
+                    let function_value = peek_value!(self, arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
                 OpCode::Closure => {
@@ -652,7 +625,7 @@ impl Vm {
                 }
                 OpCode::SetUpvalue => {
                     let slot = self.state.read_byte() as usize;
-                    let value = peek!(self, 0);
+                    let value = peek_value!(self, 0);
                     let current_closure_handle =
                         self.state.frames[self.state.frame_count - 1].closure;
 
@@ -671,21 +644,12 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::Class => {
-                    let constant = self.state.read_constant();
-                    let identifier_handle = match constant {
-                        Value::String(handle) => handle,
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                "Expected identifier.".to_string(),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    };
+                    let identifier_handle = read_string!(self);
                     let class_handle = gc_allocate!(self, class:  identifier_handle);
                     push_value!(self, Value::Class(class_handle))?
                 }
                 OpCode::SetProperty => {
-                    let instance = peek!(self, 1);
+                    let instance = peek_value!(self, 1);
                     if let Value::Instance(instance_handle) = instance {
                         let instance = self.allocator.get_instance(instance_handle);
                         let constant = self.state.read_constant();
@@ -696,8 +660,11 @@ impl Vm {
                             ));
                         }
 
-                        self.allocator
-                            .set_instance_field(instance.table, constant, peek!(self, 0));
+                        self.allocator.set_instance_field(
+                            instance.table,
+                            constant,
+                            peek_value!(self, 0),
+                        );
                         let value = pop_value!(self); // value to assign
                         pop_value!(self); // instance
                         push_value!(self, value)?; // push assigned value to top of stack
@@ -709,7 +676,7 @@ impl Vm {
                     }
                 }
                 OpCode::GetProperty => {
-                    let instance = peek!(self, 0);
+                    let instance = peek_value!(self, 0);
 
                     if let Value::Instance(instance_handle) = instance {
                         let instance = self.allocator.get_instance(instance_handle);
@@ -740,16 +707,7 @@ impl Vm {
                     }
                 }
                 OpCode::Method => {
-                    let constant = self.state.read_constant();
-                    let identifier_handle = match constant {
-                        Value::String(handle) => handle,
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                "Expected identifier.".to_string(),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    };
+                    let identifier_handle = read_string!(self);
                     self.define_method(identifier_handle)?;
                 }
                 OpCode::Invoke => {
@@ -787,8 +745,8 @@ impl Vm {
     }
 
     fn define_method(&mut self, name: StringHandle) -> RuntimeResult<()> {
-        if let Value::Closure(method) = peek!(self, 0) {
-            if let Value::Class(clazz_handle) = peek!(self, 1) {
+        if let Value::Closure(method) = peek_value!(self, 0) {
+            if let Value::Class(clazz_handle) = peek_value!(self, 1) {
                 let clazz = self.allocator.get_class(clazz_handle);
                 self.allocator.set_class_method(
                     clazz.table,
@@ -808,7 +766,7 @@ impl Vm {
         if let Some(Value::Closure(closure)) =
             self.allocator.get_class_method(clazz.table, method_name)
         {
-            let receiver = peek!(self, 0);
+            let receiver = peek_value!(self, 0);
             let bound = MethodObject::new(receiver, closure);
             let handle = gc_allocate!(self, method: bound);
             pop_value!(self);
@@ -927,7 +885,7 @@ impl Vm {
     }
 
     fn invoke(&mut self, method_handle: StringHandle, arg_count: usize) -> RuntimeResult<()> {
-        let receiver = peek!(self, arg_count);
+        let receiver = peek_value!(self, arg_count);
         if let Value::Instance(instance_handle) = receiver {
             let instance = self.allocator.get_instance(instance_handle);
 

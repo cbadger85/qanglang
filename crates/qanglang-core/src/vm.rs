@@ -784,7 +784,6 @@ impl Vm {
                     Value::Closure(method),
                 );
                 pop_value!(self); // pop method
-                pop_value!(self); // pop class
             }
         }
 

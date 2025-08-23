@@ -52,6 +52,7 @@ struct Compiler {
     scope_depth: usize,
     upvalues: Vec<Upvalue>,
     enclosing: Option<Box<Compiler>>,
+    has_superclass: bool,
 }
 
 impl Compiler {
@@ -66,10 +67,18 @@ impl Compiler {
             scope_depth: 0,
             upvalues: Vec::with_capacity(u8::MAX as usize),
             enclosing: None,
+            has_superclass: false,
         }
     }
 
-    fn push(&mut self, handle: StringHandle, arity: usize, kind: CompilerKind) -> &mut Self {
+    fn push(
+        &mut self,
+        handle: StringHandle,
+        arity: usize,
+        kind: CompilerKind,
+        has_superclass: bool,
+    ) -> &mut Self {
+        let has_superclass = self.has_superclass || has_superclass;
         let mut locals = Vec::with_capacity(u8::MAX as usize);
         if matches!(kind, CompilerKind::Method) {
             let mut this_local = Local::new("this".into());
@@ -88,6 +97,7 @@ impl Compiler {
                 scope_depth: 0,
                 upvalues: Vec::with_capacity(u8::MAX as usize),
                 enclosing: None,
+                has_superclass,
             },
         );
 
@@ -590,6 +600,7 @@ impl<'a> CompilerVisitor<'a> {
         &mut self,
         kind: CompilerKind,
         func_expr: &ast::FunctionExpr,
+        has_superclass: bool,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangSyntaxError> {
         let function_identifier_handle = if matches!(kind, CompilerKind::Function) {
@@ -601,8 +612,12 @@ impl<'a> CompilerVisitor<'a> {
         let function_name_handle = function_identifier_handle
             .unwrap_or_else(|| self.allocator.strings.intern(&func_expr.name.name));
 
-        self.compiler
-            .push(function_name_handle, func_expr.parameters.len(), kind);
+        self.compiler.push(
+            function_name_handle,
+            func_expr.parameters.len(),
+            kind,
+            has_superclass,
+        );
         self.begin_scope();
 
         let parameter_span = SourceSpan::combine(
@@ -1063,7 +1078,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         func_decl: &ast::FunctionDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.handle_function(CompilerKind::Function, &func_decl.function, errors)
+        self.handle_function(CompilerKind::Function, &func_decl.function, false, errors)
     }
 
     fn visit_return_statement(
@@ -1121,6 +1136,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             lambda_name_handle,
             lambda_expr.parameters.len(),
             CompilerKind::Function,
+            false,
         );
         self.begin_scope();
 
@@ -1326,6 +1342,9 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
         self.define_variable(Some(class_handle), class_decl.name.span)?;
 
+        // Put the class back on the stack for method definitions
+        self.handle_variable(&class_decl.name.name, class_decl.name.span, false)?;
+
         if let Some(superclass) = &class_decl.superclass {
             self.handle_variable(&class_decl.name.name, class_decl.name.span, false)?;
 
@@ -1347,8 +1366,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         }
 
         for member in &class_decl.members {
-            self.handle_variable(&class_decl.name.name, member.span(), false)?;
-
             match &member {
                 ast::ClassMember::Method(function) => {
                     let compiler_kind = if function.name.name == CLASS_INITIALIZER_STRING.into() {
@@ -1360,7 +1377,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     let constant =
                         self.make_constant(Value::String(handle_identifier), function.name.span)?;
 
-                    self.handle_function(compiler_kind, &function, errors)?;
+                    self.handle_function(
+                        compiler_kind,
+                        &function,
+                        class_decl.superclass.is_some(),
+                        errors,
+                    )?;
 
                     self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
                 }
@@ -1368,7 +1390,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             }
         }
 
-        // self.emit_opcode(OpCode::Pop, class_decl.span);
+        self.emit_opcode(OpCode::Pop, class_decl.span);
         if class_decl.superclass.is_some() {
             self.end_scope(class_decl.span);
         }

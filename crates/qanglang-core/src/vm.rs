@@ -187,6 +187,18 @@ pub struct VmState {
 }
 
 impl VmState {
+    fn new(globals: FxHashMap<StringHandle, Value>) -> Self {
+        Self {
+            frame_count: 0,
+            stack_top: 0,
+            stack: vec![Value::Nil; STACK_MAX],
+            frames: std::array::from_fn(|_| CallFrame::default()),
+            globals,
+            open_upvalues: Vec::with_capacity(8),
+            current_function_ptr: std::ptr::null(),
+        }
+    }
+
     fn get_current_function(&self) -> &FunctionObject {
         debug_assert!(
             !self.current_function_ptr.is_null(),
@@ -292,20 +304,10 @@ impl Vm {
         let object_type_value_handle = allocator.strings.intern(OBJECT_TYPE_STRING);
         globals.insert(object_type_handle, Value::String(object_type_value_handle));
 
-        let state = VmState {
-            frame_count: 0,
-            stack_top: 0,
-            stack: vec![Value::Nil; STACK_MAX],
-            frames: std::array::from_fn(|_| CallFrame::default()),
-            globals,
-            open_upvalues: Vec::with_capacity(8),
-            current_function_ptr: std::ptr::null(),
-        };
-
         let vm = Self {
             is_debug: false,
             is_gc_enabled: true,
-            state,
+            state: VmState::new(globals),
             allocator,
         };
 
@@ -712,6 +714,9 @@ impl Vm {
                     let method_handle = read_string!(self);
                     let arg_count = self.state.read_byte();
                     self.invoke(method_handle, arg_count as usize)?;
+                }
+                OpCode::Inherit => {
+                    todo!();
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);

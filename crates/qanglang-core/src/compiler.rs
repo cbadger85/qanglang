@@ -1317,6 +1317,20 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
         self.define_variable(Some(handle), class_decl.name.span)?;
 
+        if let Some(superclass) = &class_decl.superclass {
+            self.handle_variable(&class_decl.name.name, class_decl.name.span, false)?;
+
+            if class_decl.name.name == superclass.name {
+                return Err(QangSyntaxError::new(
+                    "A class cannot inherit from itself.".to_string(),
+                    superclass.span,
+                ));
+            }
+
+            self.handle_variable(&superclass.name, superclass.span, false)?;
+            self.emit_opcode(OpCode::Inherit, superclass.span);
+        }
+
         for member in &class_decl.members {
             self.handle_variable(&class_decl.name.name, member.span(), false)?;
             self.visit_class_member(member, errors)?;

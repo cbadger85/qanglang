@@ -719,7 +719,6 @@ impl Vm {
                     let superclass = peek_value!(self, 0);
                     let subclass = peek_value!(self, 1);
 
-                    println!("superclass: {:?}, subclass: {:?}", superclass, subclass);
 
                     match (superclass, subclass) {
                         (Value::Class(superclass), Value::Class(subclass)) => {

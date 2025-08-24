@@ -79,7 +79,7 @@ impl Compiler {
         has_superclass: bool,
     ) -> &mut Self {
         let mut locals = Vec::with_capacity(u8::MAX as usize);
-        if matches!(kind, CompilerKind::Method) {
+        if matches!(kind, CompilerKind::Method | CompilerKind::Initializer) {
             let mut this_local = Local::new("this".into());
             this_local.depth = Some(0); // Initialize 'this' as available immediately
             locals.push(this_local);
@@ -1449,6 +1449,9 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.define_variable(Some(super_handle), class_decl.name.span)?;
 
             self.handle_variable(&superclass.name, superclass.span, false)?;
+
+            self.handle_variable(zuper, class_decl.span, true)?;
+
             self.emit_opcode(OpCode::Inherit, superclass.span);
         }
 

@@ -7,8 +7,9 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
 use crate::{
-    BoundMethodObject, ClassHandle, HashMapHandle, HeapAllocator, NativeFn, NativeFunctionError,
-    NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError, Value,
+    BoundIntrinsicObject, BoundMethodObject, ClassHandle, HashMapHandle, HeapAllocator, NativeFn,
+    NativeFunctionError, NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError,
+    Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
@@ -148,6 +149,14 @@ macro_rules! gc_allocate {
         }
         $vm.allocator.allocate_bound_method($value)
     }};
+
+    // Intrinsic method allocation
+    ($vm:expr, intrinsic: $value:expr) => {{
+        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
+            $vm.collect_garbage();
+        }
+        $vm.allocator.allocate_bound_intrinsic($value)
+    }};
 }
 
 #[derive(Debug, Clone, Default)]
@@ -164,7 +173,7 @@ pub struct VmState {
     stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
     globals: FxHashMap<StringHandle, Value>,
-    intrinsics: FxHashMap<StringHandle, IntrinsicMethod>,
+    intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
 }
@@ -172,7 +181,7 @@ pub struct VmState {
 impl VmState {
     fn new(
         globals: FxHashMap<StringHandle, Value>,
-        intrinsics: FxHashMap<StringHandle, IntrinsicMethod>,
+        intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
     ) -> Self {
         Self {
             frame_count: 0,
@@ -294,20 +303,18 @@ impl Vm {
         let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
         let to_uppercase_handle = allocator.strings.intern("to_uppercase");
         intrinsics.insert(
-            to_uppercase_handle,
+            IntrinsicKind::String(to_uppercase_handle),
             IntrinsicMethod {
                 function: qang_string_to_uppercase,
                 arity: 0,
-                kind: IntrinsicKind::String,
             },
         );
         let to_lowercase_handle = allocator.strings.intern("to_lowercase");
         intrinsics.insert(
-            to_lowercase_handle,
+            IntrinsicKind::String(to_lowercase_handle),
             IntrinsicMethod {
                 function: qang_string_to_lowercase,
                 arity: 0,
-                kind: IntrinsicKind::String,
             },
         );
 
@@ -683,34 +690,45 @@ impl Vm {
                     }
                 }
                 OpCode::GetProperty => {
-                    let instance = peek_value!(self, 0);
+                    let value = peek_value!(self, 0);
 
-                    if let Value::Instance(instance_handle) = instance {
-                        let instance = self.allocator.get_instance(instance_handle);
-                        let constant = self.state.read_constant();
-                        if !matches!(constant, Value::String(_)) {
+                    match value {
+                        Value::Instance(instance_handle) => {
+                            let instance = self.allocator.get_instance(instance_handle);
+                            let constant = self.state.read_constant();
+                            if !matches!(constant, Value::String(_)) {
+                                return Err(QangRuntimeError::new(
+                                    "Expected property name as string".to_string(),
+                                    self.state.get_previous_loc(),
+                                ));
+                            }
+
+                            if let Some(value) =
+                                self.allocator.get_instance_field(instance.table, constant)
+                            {
+                                pop_value!(self);
+                                push_value!(self, value);
+                            } else {
+                                self.bind_method(instance.clazz, constant)?;
+                            }
+                        }
+                        Value::String(_) => {
+                            let identifer = read_string!(self);
+                            self.bind_intrinsic_method(
+                                identifer,
+                                IntrinsicKind::String(identifer),
+                                value,
+                            )?;
+                        }
+                        _ => {
                             return Err(QangRuntimeError::new(
-                                "Expected property name as string".to_string(),
+                                format!(
+                                    "Cannot access properties from {}.",
+                                    value.to_type_string()
+                                ),
                                 self.state.get_previous_loc(),
                             ));
                         }
-
-                        if let Some(value) =
-                            self.allocator.get_instance_field(instance.table, constant)
-                        {
-                            pop_value!(self);
-                            push_value!(self, value);
-                        } else {
-                            self.bind_method(instance.clazz, constant)?;
-                        }
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            format!(
-                                "Cannot access properties from {}.",
-                                instance.to_type_string()
-                            ),
-                            self.state.get_previous_loc(),
-                        ));
                     }
                 }
                 OpCode::Method => {
@@ -886,6 +904,25 @@ impl Vm {
         }
     }
 
+    fn bind_intrinsic_method(
+        &mut self,
+        method_name: StringHandle,
+        kind: IntrinsicKind,
+        receiver: Value,
+    ) -> RuntimeResult<()> {
+        let intrinsic = *self.state.intrinsics.get(&kind).ok_or_else(|| {
+            QangRuntimeError::new(
+                "invalid method call.".to_string(),
+                self.state.get_previous_loc(),
+            )
+        })?;
+        let bound = BoundIntrinsicObject::new(receiver, intrinsic, method_name);
+        let handle = gc_allocate!(self, intrinsic: bound);
+        pop_value!(self);
+        push_value!(self, Value::BoundMethod(handle));
+        Ok(())
+    }
+
     fn bind_super_method(
         &mut self,
         method_table_handle: HashMapHandle,
@@ -1005,6 +1042,14 @@ impl Vm {
                 self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.receiver;
                 self.call(bound_method.closure, arg_count)
             }
+            Value::BoundIntrinsic(handle) => {
+                let bound_intrinsic = self.allocator.get_bound_intrinsic(handle);
+                self.call_intrinsic_method(
+                    bound_intrinsic.receiver,
+                    bound_intrinsic.method,
+                    arg_count,
+                )
+            }
             _ => {
                 let value_str = value.to_display_string(&self.allocator);
                 Err(QangRuntimeError::new(
@@ -1017,26 +1062,41 @@ impl Vm {
 
     fn invoke(&mut self, method_handle: StringHandle, arg_count: usize) -> RuntimeResult<()> {
         let receiver = peek_value!(self, arg_count);
-        if let Value::Instance(instance_handle) = receiver {
-            let instance = self.allocator.get_instance(instance_handle);
 
-            if let Some(value) = self
-                .allocator
-                .get_instance_field(instance.table, Value::String(method_handle))
-            {
-                self.state.stack[self.state.stack_top - arg_count - 1] = value;
-                return self.call_value(value, arg_count);
+        match receiver {
+            Value::Instance(instance_handle) => {
+                let instance = self.allocator.get_instance(instance_handle);
+
+                if let Some(value) = self
+                    .allocator
+                    .get_instance_field(instance.table, Value::String(method_handle))
+                {
+                    self.state.stack[self.state.stack_top - arg_count - 1] = value;
+                    return self.call_value(value, arg_count);
+                }
+
+                self.invoke_from_class(instance.clazz, method_handle, arg_count)
             }
-
-            self.invoke_from_class(instance.clazz, method_handle, arg_count)
-        } else {
-            Err(QangRuntimeError::new(
+            Value::String(_) => {
+                let intrinsic = *self
+                    .state
+                    .intrinsics
+                    .get(&IntrinsicKind::String(method_handle))
+                    .ok_or_else(|| {
+                        QangRuntimeError::new(
+                            "invalid method call.".to_string(),
+                            self.state.get_previous_loc(),
+                        )
+                    })?;
+                self.call_intrinsic_method(receiver, intrinsic, arg_count)
+            }
+            _ => Err(QangRuntimeError::new(
                 format!(
                     "Cannot invoke {}, only instances have methods",
                     receiver.to_type_string()
                 ),
                 self.state.get_previous_loc(),
-            ))
+            )),
         }
     }
 
@@ -1136,6 +1196,36 @@ impl Vm {
         pop_value!(self); // pop function off the stack now that it has been called.
 
         let value = (function.function)(args.as_slice(), self)
+            .map_err(|e: NativeFunctionError| {
+                let loc = self.state.get_previous_loc();
+                e.into_qang_error(loc)
+            })?
+            .unwrap_or_default();
+
+        push_value!(self, value);
+
+        Ok(())
+    }
+
+    fn call_intrinsic_method(
+        &mut self,
+        receiver: Value,
+        method: IntrinsicMethod,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
+        let mut args = vec![Value::Nil; method.arity];
+
+        for i in (0..arg_count).rev() {
+            if i < method.arity {
+                args[i] = pop_value!(self);
+            } else {
+                pop_value!(self); // discard values that are passed in but not needed by the function.
+            }
+        }
+
+        pop_value!(self); // pop function off the stack now that it has been called.
+
+        let value = (method.function)(receiver, args.as_slice(), self)
             .map_err(|e: NativeFunctionError| {
                 let loc = self.state.get_previous_loc();
                 e.into_qang_error(loc)

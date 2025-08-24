@@ -106,17 +106,25 @@ pub struct NativeFunctionObject {
 pub type IntrinsicFn =
     fn(receiver: Value, args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum IntrinsicKind {
-    String,
-    Number,
+    String(StringHandle),
+    Number(StringHandle),
+}
+
+impl IntrinsicKind {
+    pub fn string_handle(&self) -> StringHandle {
+        match self {
+            Self::String(handle) => *handle,
+            Self::Number(handle) => *handle,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct IntrinsicMethod {
     pub function: IntrinsicFn,
     pub arity: usize,
-    pub kind: IntrinsicKind,
 }
 
 #[derive(Debug, Clone)]
@@ -125,4 +133,15 @@ pub struct BoundIntrinsicObject {
     pub method: IntrinsicMethod,
     pub name_handle: StringHandle,
     pub is_marked: bool,
+}
+
+impl BoundIntrinsicObject {
+    pub fn new(receiver: Value, method: IntrinsicMethod, name_handle: StringHandle) -> Self {
+        Self {
+            receiver,
+            method,
+            name_handle,
+            is_marked: false,
+        }
+    }
 }

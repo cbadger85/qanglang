@@ -825,3 +825,40 @@ fn test_field_declarations_with_inheritance() {
         }
     }
 }
+
+#[test]
+fn test_intrinsic_methods() {
+    let source = r#"
+        var loud = "loud".to_uppercase();
+
+        assert_eq(loud, "LOUD", "Expected loud to be 'LOUD'.");
+        
+        var loud_to_uppercase = "loud".to_uppercase;
+        assert_eq(loud_to_uppercase(), "LOUD", "Expected loud to be 'LOUD'.");
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

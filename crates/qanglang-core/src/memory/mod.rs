@@ -1,6 +1,6 @@
 mod alloc;
 mod arena;
-#[allow(dead_code)]
+mod array_arena;
 mod hashmap_arena;
 mod object;
 mod string_interner;

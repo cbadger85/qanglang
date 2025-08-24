@@ -44,6 +44,25 @@ impl std::fmt::Display for QangSyntaxError {
 
 impl std::error::Error for QangSyntaxError {}
 
+#[derive(Debug, Clone)]
+pub struct NativeFunctionError(pub String);
+
+impl NativeFunctionError {
+    pub fn new(message: &str) -> Self {
+        Self(message.to_string())
+    }
+
+    pub fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
+        QangRuntimeError::new(self.0, loc)
+    }
+}
+
+impl From<&'static str> for NativeFunctionError {
+    fn from(value: &'static str) -> Self {
+        NativeFunctionError::new(value)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Trace {
     callee: String,

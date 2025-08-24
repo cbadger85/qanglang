@@ -7,8 +7,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
 use crate::{
-    ClassHandle, HashMapHandle, HeapAllocator, MethodObject, NativeFunctionHandle, QangProgram,
-    QangRuntimeError, Value,
+    ClassHandle, HashMapHandle, HeapAllocator, MethodObject, NativeFn, NativeFunctionError,
+    NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
@@ -20,29 +20,9 @@ use crate::{
     },
     value::{
         BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-        NIL_TYPE_STRING, NUMBER_TYPE_STRING, NativeFunctionObject, OBJECT_TYPE_STRING,
-        STRING_TYPE_STRING,
+        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
-
-#[derive(Debug, Clone)]
-pub struct NativeFunctionError(pub String);
-
-impl NativeFunctionError {
-    pub fn new(message: &str) -> Self {
-        Self(message.to_string())
-    }
-
-    fn into_qang_error(self, loc: SourceLocation) -> QangRuntimeError {
-        QangRuntimeError::new(self.0, loc)
-    }
-}
-
-impl From<&'static str> for NativeFunctionError {
-    fn from(value: &'static str) -> Self {
-        NativeFunctionError::new(value)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct BinaryOperationError(pub String);
@@ -64,8 +44,6 @@ impl From<&'_ str> for BinaryOperationError {
 }
 
 pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
-
-pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
 type StackSlot = usize;
 type UpvalueIndex = usize;

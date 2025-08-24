@@ -1,10 +1,8 @@
 use crate::memory::arena::{Arena, Index};
 use crate::memory::hashmap_arena::HashMapArena;
-use crate::memory::object::{ClassObject, InstanceObject, MethodObject};
+use crate::memory::object::{ClassObject, InstanceObject, MethodObject, NativeFunctionObject};
 use crate::memory::string_interner::StringInterner;
-use crate::{
-    ClosureObject, FunctionObject, Upvalue, Value, debug_log, value::NativeFunctionObject,
-};
+use crate::{ClosureObject, FunctionObject, Upvalue, Value, debug_log};
 use crate::{StringHandle, UpvalueReference};
 use std::collections::VecDeque;
 

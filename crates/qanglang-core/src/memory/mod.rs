@@ -12,7 +12,7 @@ pub use alloc::{
 pub use arena::{Arena, Index};
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
 pub use object::{
-    ClassObject, ClosureObject, FunctionObject, InstanceObject, MethodObject, Upvalue,
-    UpvalueReference,
+    ClassObject, ClosureObject, FunctionObject, InstanceObject, IntrinsicFn, MethodObject,
+    NativeFn, NativeFunctionObject, Upvalue, UpvalueReference,
 };
 pub use string_interner::StringHandle;

@@ -1,14 +1,7 @@
 use crate::{
-    ClassHandle, HeapAllocator, InstanceHandle, MethodHandle, NativeFn, NativeFunctionHandle,
+    ClassHandle, HeapAllocator, InstanceHandle, MethodHandle, NativeFunctionHandle,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
-
-#[derive(Debug, Clone, Copy)]
-pub struct NativeFunctionObject {
-    pub function: NativeFn,
-    pub arity: usize,
-    pub name_handle: StringHandle,
-}
 
 // keywords
 pub const NIL_TYPE_STRING: &str = "nil";

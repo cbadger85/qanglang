@@ -1,5 +1,5 @@
 use crate::{
-    ClassHandle, ClosureHandle, HashMapHandle, Value,
+    ClassHandle, ClosureHandle, HashMapHandle, NativeFunctionError, Value, Vm,
     chunk::Chunk,
     memory::{FunctionHandle, StringHandle, UpvalueHandle},
 };
@@ -93,3 +93,15 @@ impl MethodObject {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct NativeFunctionObject {
+    pub function: NativeFn,
+    pub arity: usize,
+    pub name_handle: StringHandle,
+}
+
+pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
+
+pub type IntrinsicFn =
+    fn(receiver: Value, args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;

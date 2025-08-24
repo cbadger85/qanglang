@@ -16,17 +16,18 @@ pub use compiler::{
     CompilerError, CompilerPipeline, CompilerVisitor, ErrorMessageFormat, QangProgram,
 };
 pub use debug::{disassemble_chunk, disassemble_program};
-pub use error::{ErrorReporter, QangRuntimeError, QangSyntaxError, Trace};
+pub use error::{ErrorReporter, NativeFunctionError, QangRuntimeError, QangSyntaxError, Trace};
 pub use memory::{
     ClassHandle, ClassObject, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject,
     HashMapHandle, HeapAllocator, InstanceHandle, InstanceObject, MethodHandle, MethodObject,
-    NativeFunctionHandle, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
+    NativeFn, NativeFunctionHandle, NativeFunctionObject, StringHandle, Upvalue, UpvalueHandle,
+    UpvalueReference,
 };
 pub use parser::Parser;
 pub use source::SourceMap;
 pub use tokenizer::{Token, TokenType, Tokenizer};
 pub use value::Value;
-pub use vm::{NativeFn, NativeFunctionError, Vm};
+pub use vm::Vm;
 
 #[cfg(test)]
 pub mod tests;

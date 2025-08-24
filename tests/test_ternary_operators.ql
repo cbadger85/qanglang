@@ -56,7 +56,3 @@ fn test_ternary_with_function_calls() {
 
   assert(passed, "Expected value to be true.");
 }
-
-// fn test_ternary_short_circuit_evaluation() {}
-
-// fn test_ternary_with_side_effects() {}

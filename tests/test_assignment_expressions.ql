@@ -28,12 +28,21 @@ fn test_chained_assignments() {
   assert_eq(test_var_2, "test", "Expected test_var_2 to be 'test'.");
 }
 
-fn test_assignment_return_value() {}
+fn test_assignment_return_value() {
+  var a = 1;
 
-fn test_assignment_in_expression_context() {}
+  fn foo() {
+    return a = 1 + 1;
+  }
 
-fn test_assignment_precedence() {}
+  assert_eq(foo(), 2);
+  assert_eq(a, 2);
+}
 
-fn test_assignment_to_function_call_result() {}
+fn test_assignment_in_expression_context() {
+  var a;
+  var b = a = 1;
 
-fn test_assignment_error_cases() {}
+  assert_eq(a, 1);
+  assert_eq(b, 1);
+}

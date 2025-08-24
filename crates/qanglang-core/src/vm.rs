@@ -831,16 +831,16 @@ impl Vm {
     }
 
     fn define_method(&mut self, name: StringHandle) -> RuntimeResult<()> {
-        if let Value::Closure(method) = peek_value!(self, 0) {
-            if let Value::Class(clazz_handle) = peek_value!(self, 1) {
-                let clazz = self.allocator.get_class(clazz_handle);
-                self.allocator.set_class_method(
-                    clazz.method_table,
-                    Value::String(name),
-                    Value::Closure(method),
-                );
-                pop_value!(self);
-            }
+        if let Value::Closure(method) = peek_value!(self, 0)
+            && let Value::Class(clazz_handle) = peek_value!(self, 1)
+        {
+            let clazz = self.allocator.get_class(clazz_handle);
+            self.allocator.set_class_method(
+                clazz.method_table,
+                Value::String(name),
+                Value::Closure(method),
+            );
+            pop_value!(self);
         }
 
         Ok(())

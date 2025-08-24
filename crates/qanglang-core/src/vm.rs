@@ -759,6 +759,7 @@ impl Vm {
                     let method_handle = read_string!(self);
                     let superclass = pop_value!(self);
 
+                    // TODO check for value in superclass table before binding method.
                     if let Value::Class(superclass_handle) = superclass {
                         if self.bind_super_method(superclass_handle, method_handle)? {
                             // Method found and bound
@@ -1146,6 +1147,7 @@ impl Vm {
         {
             self.call(method, arg_count)
         } else {
+            // TODO if method is `init` and it does not exist, do nothing.
             Err(QangRuntimeError::new(
                 format!(
                     "{} does not exist on class {}.",

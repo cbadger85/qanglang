@@ -84,7 +84,7 @@
         },
         {
           "name": "support.function.builtin",
-          "match": "\\b(print|println|assert|assert_eq|assert_throws|typeof|system_time|to_string|to_uppercase|to_lowercase)\\b"
+          "match": "\\b(print|println|assert|assert_eq|assert_throws|typeof|system_time|to_string)\\b"
         }
       ]
     },

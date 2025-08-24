@@ -82,7 +82,7 @@ impl Value {
                 let intrinsic_binding = allocator.get_bound_intrinsic(*handle);
                 format!(
                     "{}.{}",
-                    intrinsic_binding.receiver.to_display_string(allocator),
+                    intrinsic_binding.receiver.to_type_string(),
                     Value::String(intrinsic_binding.name_handle).to_display_string(allocator)
                 )
             }

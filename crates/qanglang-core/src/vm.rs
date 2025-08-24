@@ -20,8 +20,8 @@ use crate::{
     },
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
-        qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_lowercase,
-        qang_to_string, qang_to_uppercase, qang_typeof,
+        qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_string,
+        qang_typeof,
     },
     value::{
         BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -333,8 +333,6 @@ impl Vm {
             .add_native_function("system_time", 0, qang_system_time)
             .add_native_function("typeof", 1, qang_typeof)
             .add_native_function("to_string", 1, qang_to_string)
-            .add_native_function("to_uppercase", 1, qang_to_uppercase)
-            .add_native_function("to_lowercase", 1, qang_to_lowercase)
             .add_native_function("hash", 1, qang_hash)
     }
 

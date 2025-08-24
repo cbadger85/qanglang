@@ -113,44 +113,6 @@ pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     Ok(Some(Value::String(value_handle)))
 }
 
-pub fn qang_to_uppercase(
-    args: &[Value],
-    vm: &mut Vm,
-) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or(Value::Nil);
-
-    if let Value::String(handle) = value {
-        let uppercase_string = &vm.allocator().strings.get_string(handle).to_uppercase();
-        let uppercase_handle = vm.allocator_mut().strings.intern(uppercase_string);
-
-        Ok(Some(Value::String(uppercase_handle)))
-    } else {
-        Err(NativeFunctionError(format!(
-            "Expected string but recieved {}.",
-            value.to_type_string()
-        )))
-    }
-}
-
-pub fn qang_to_lowercase(
-    args: &[Value],
-    vm: &mut Vm,
-) -> Result<Option<Value>, NativeFunctionError> {
-    let value = args.first().copied().unwrap_or(Value::Nil);
-
-    if let Value::String(handle) = value {
-        let lowercase_string = &vm.allocator().strings.get_string(handle).to_lowercase();
-        let lowercase_handle = vm.allocator_mut().strings.intern(lowercase_string);
-
-        Ok(Some(Value::String(lowercase_handle)))
-    } else {
-        Err(NativeFunctionError(format!(
-            "Expected string but recieved {}.",
-            value.to_type_string()
-        )))
-    }
-}
-
 pub fn qang_string_to_uppercase(
     receiver: Value,
     _args: &[Value],

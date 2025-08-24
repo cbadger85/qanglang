@@ -7,11 +7,11 @@ fn test_to_string() {
 }
 
 fn test_to_uppercase() {
-  var foo = "not so loud." |> to_uppercase;
+  var foo = "not so loud.".to_uppercase();
   assert_eq(foo, "NOT SO LOUD.", "Expected foo to be 'NOT SO LOUD.' not " + foo |> to_string);
 }
 
 fn test_to_lowercase() {
-  var foo = "SHHHH." |> to_lowercase;
+  var foo = "SHHHH.".to_lowercase();
   assert_eq(foo, "shhhh.", "Expected foo to be 'shhhh.' not " + foo |> to_string);
 }

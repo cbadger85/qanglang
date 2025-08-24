@@ -835,6 +835,7 @@ fn test_intrinsic_methods() {
         
         var loud_to_uppercase = "loud".to_uppercase;
         assert_eq(loud_to_uppercase(), "LOUD", "Expected loud to be 'LOUD'.");
+        println(loud_to_uppercase);
     "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -842,7 +843,7 @@ fn test_intrinsic_methods() {
 
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&allocator);
+            // disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)

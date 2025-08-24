@@ -750,6 +750,10 @@ fn test_field_declarations() {
 
         assert_eq(Foo().foo, 4);
         assert_eq(Foo().bar, nil);
+        
+        class Bar : Foo {}
+        assert_eq(Bar().foo, 4);
+        assert_eq(Bar().bar, nil);
     "#;
 
     let source_map = SourceMap::new(source.to_string());

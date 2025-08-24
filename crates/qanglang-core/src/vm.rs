@@ -677,7 +677,6 @@ impl Vm {
                 }
                 OpCode::GetProperty => {
                     let instance = peek_value!(self, 0);
-                    println!("instance value: {:?}", instance);
 
                     if let Value::Instance(instance_handle) = instance {
                         let instance = self.allocator.get_instance(instance_handle);
@@ -727,12 +726,18 @@ impl Vm {
 
                     match (superclass, subclass) {
                         (Value::Class(superclass), Value::Class(subclass)) => {
-                            let superclass_table =
-                                self.allocator.get_class(superclass).method_table;
-                            let subclass_table = self.allocator.get_class(subclass).method_table;
+                            let superclass = self.allocator.get_class(superclass);
+                            let subclass = self.allocator.get_class(subclass);
+                            let subclass_value_table = subclass.value_table;
+                            let superclass_value_table = superclass.value_table;
+                            let superclass_method_table = superclass.method_table;
+                            let subclass_method_table = subclass.method_table;
                             self.allocator
                                 .tables
-                                .copy_into(superclass_table, subclass_table);
+                                .copy_into(superclass_method_table, subclass_method_table);
+                            self.allocator
+                                .tables
+                                .copy_into(superclass_value_table, subclass_value_table);
                             pop_value!(self);
                             Ok(())
                         }
@@ -833,7 +838,6 @@ impl Vm {
     }
 
     fn init_field(&mut self, field_name: StringHandle, value: Value) -> RuntimeResult<()> {
-        println!("field_name: {}, value: {:?}", field_name, value);
         if let Value::Class(clazz_handle) = peek_value!(self, 0) {
             let clazz = self.allocator.get_class(clazz_handle);
             self.allocator

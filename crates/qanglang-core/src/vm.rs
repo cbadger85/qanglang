@@ -790,18 +790,11 @@ impl Vm {
                             Value::String(property_handle),
                         ) {
                             self.state.stack[self.state.stack_top - 1] = field_value; // replace 'this' with the value of the field.
-                        } else if self
+                        } else if !self
                             .bind_super_method(superclass_obj.method_table, property_handle)?
                         {
-                            // Method found and bound
-                        } else {
-                            return Err(QangRuntimeError::new(
-                                format!(
-                                    "Undefined property '{}'.",
-                                    self.allocator.strings.get_string(property_handle)
-                                ),
-                                self.state.get_previous_loc(),
-                            ));
+                            pop_value!(self); // Pop 'this'
+                            push_value!(self, Value::Nil);
                         }
                     } else {
                         return Err(QangRuntimeError::new(
@@ -890,16 +883,11 @@ impl Vm {
             let handle = gc_allocate!(self, method: bound);
             pop_value!(self);
             push_value!(self, Value::BoundMethod(handle));
-            Ok(())
         } else {
-            Err(QangRuntimeError::new(
-                format!(
-                    "Undefined property '{}'",
-                    method_name.to_display_string(&self.allocator)
-                ),
-                self.state.get_previous_loc(),
-            ))
+            pop_value!(self);
+            push_value!(self, Value::Nil);
         }
+        Ok(())
     }
 
     fn bind_intrinsic_method(

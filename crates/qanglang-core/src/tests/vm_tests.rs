@@ -1081,3 +1081,50 @@ fn test_continue_error_cases_inside_nested_function() {
         }
     }
 }
+
+#[test]
+fn test_null_methods() {
+    let source = r#"
+        class Foo {}
+
+        var foo = Foo().foo;
+        assert_eq(foo, nil);
+        
+        class Bar : Foo {}
+        var bar = Bar().foo;
+        assert_eq(bar, nil);
+        
+        class Baz : Foo {
+            baz() {
+                return super.foo;
+                }
+            }
+        var baz = Baz().baz();
+        assert_eq(baz, nil);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

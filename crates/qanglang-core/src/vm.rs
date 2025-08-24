@@ -7,8 +7,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
 use crate::{
-    ClassHandle, HeapAllocator, MethodObject, NativeFunctionHandle, QangProgram, QangRuntimeError,
-    Value,
+    ClassHandle, HashMapHandle, HeapAllocator, MethodObject, NativeFunctionHandle, QangProgram,
+    QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
@@ -756,18 +756,26 @@ impl Vm {
                     }?
                 }
                 OpCode::GetSuper => {
-                    let method_handle = read_string!(self);
+                    let property_handle = read_string!(self);
                     let superclass = pop_value!(self);
 
-                    // TODO check for value in superclass table before binding method.
                     if let Value::Class(superclass_handle) = superclass {
-                        if self.bind_super_method(superclass_handle, method_handle)? {
+                        let superclass_obj = self.allocator.get_class(superclass_handle);
+
+                        if let Some(field_value) = self.allocator.get_class_method(
+                            superclass_obj.value_table,
+                            Value::String(property_handle),
+                        ) {
+                            self.state.stack[self.state.stack_top - 1] = field_value; // replace 'this' with the value of the field.
+                        } else if self
+                            .bind_super_method(superclass_obj.method_table, property_handle)?
+                        {
                             // Method found and bound
                         } else {
                             return Err(QangRuntimeError::new(
                                 format!(
                                     "Undefined property '{}'.",
-                                    self.allocator.strings.get_string(method_handle)
+                                    self.allocator.strings.get_string(property_handle)
                                 ),
                                 self.state.get_previous_loc(),
                             ));
@@ -873,14 +881,12 @@ impl Vm {
 
     fn bind_super_method(
         &mut self,
-        superclass_handle: ClassHandle,
+        method_table_handle: HashMapHandle,
         method_name: StringHandle,
     ) -> RuntimeResult<bool> {
-        let superclass = self.allocator.get_class(superclass_handle);
-
         if let Some(Value::Closure(closure)) = self
             .allocator
-            .get_class_method(superclass.method_table, Value::String(method_name))
+            .get_class_method(method_table_handle, Value::String(method_name))
         {
             let receiver = peek_value!(self, 0);
             let bound = MethodObject::new(receiver, closure);
@@ -1147,15 +1153,26 @@ impl Vm {
         {
             self.call(method, arg_count)
         } else {
-            // TODO if method is `init` and it does not exist, do nothing.
-            Err(QangRuntimeError::new(
-                format!(
-                    "{} does not exist on class {}.",
-                    Value::String(method_handle).to_display_string(&self.allocator),
-                    Value::Class(clazz_handle).to_display_string(&self.allocator),
-                ),
-                self.state.get_previous_loc(),
-            ))
+            // If method is `init` and it does not exist, do nothing (return nil)
+            let method_name = self.allocator.strings.get_string(method_handle);
+            if method_name == CLASS_INITIALIZER_STRING {
+                // Pop arguments but leave receiver on stack
+                for _ in 0..arg_count {
+                    pop_value!(self);
+                }
+                // Push nil as return value
+                push_value!(self, Value::Nil);
+                Ok(())
+            } else {
+                Err(QangRuntimeError::new(
+                    format!(
+                        "{} does not exist on class {}.",
+                        Value::String(method_handle).to_display_string(&self.allocator),
+                        Value::Class(clazz_handle).to_display_string(&self.allocator),
+                    ),
+                    self.state.get_previous_loc(),
+                ))
+            }
         }
     }
 

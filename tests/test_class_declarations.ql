@@ -15,6 +15,22 @@ fn test_empty_class_declaration() {
   );
 }
 
+fn test_init_with_args() {
+    class TestClass {
+      value;
+
+      init(value) {
+        this.value = value;
+      }
+    }
+
+  assert_eq(
+    TestClass(42).value, 
+    42, 
+    "Expected 42 but received " + (TestClass().value |> to_string)
+  );
+}
+
 fn test_class_with_field_declarations() {
     class TestClass {
       test_field;
@@ -158,14 +174,38 @@ fn test_class_super_keyword() {
     other_field;
 
     init() {
-      super.init();
-      this.other_field = super.other_field;
+      this.other_field = super.test_field;
     }
   }  
 
   assert_eq(TestClass().test_field, OtherClass().other_field, "Expected fields to be equal.");
 }
 
-fn test_class_super_method_calls() {}
+fn test_calling_init_on_super_without_init() {
+  class TestClass { }
 
-fn test_nested_class_declarations() {}
+  class OtherClass : TestClass {
+
+    init() {
+      super.init();
+    }
+  }  
+
+  var test = OtherClass();
+}
+
+fn test_class_super_method_calls() {
+  class TestClass {
+    test_method() {
+      return 42;
+    }
+  }
+
+  class OtherClass : TestClass {
+    test_method() {
+      return super.test_method() - 42;
+    }
+  }  
+
+  assert_eq(OtherClass().test_method(), 0, "Expected 0.");
+}

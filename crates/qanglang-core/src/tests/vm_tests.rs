@@ -745,7 +745,6 @@ fn test_field_declarations() {
         class Foo {
             foo = 4;
             bar;
-            // baz = this.foo; <- does not work yet.
         }
 
         assert_eq(Foo().foo, 4);
@@ -754,6 +753,51 @@ fn test_field_declarations() {
         class Bar : Foo {}
         assert_eq(Bar().foo, 4);
         assert_eq(Bar().bar, nil);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_field_declarations_with_inheritance() {
+    let source = r#"
+        class TestClass {
+            test_field = 42;
+        }
+
+        class OtherClass : TestClass {
+            other_field;
+
+            init() {
+            super.init();
+            this.other_field = super.test_field;
+            }
+        }  
+
+        assert_eq(TestClass().test_field, OtherClass().other_field, "Expected fields to be equal.");
     "#;
 
     let source_map = SourceMap::new(source.to_string());

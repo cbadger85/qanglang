@@ -726,7 +726,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             Ok(())
         } else {
             Err(QangSyntaxError::new(
-                "Cannot use 'this' outside of a class.".to_string(),
+                "Cannot use 'this' outside of a class method.".to_string(),
                 this_expr.span,
             ))
         }
@@ -1455,8 +1455,8 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.emit_opcode(OpCode::Inherit, superclass.span);
         }
 
-        let previous_kind = self.compiler.kind;
-        self.compiler.kind = CompilerKind::Initializer;
+        // let previous_kind = self.compiler.kind;
+        // self.compiler.kind = CompilerKind::Initializer;
         for member in &class_decl.members {
             match &member {
                 ast::ClassMember::Method(function) => {
@@ -1490,7 +1490,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 }
             }
         }
-        self.compiler.kind = previous_kind;
+        // self.compiler.kind = previous_kind;
 
         self.emit_opcode(OpCode::Pop, class_decl.span);
         if class_decl.superclass.is_some() {

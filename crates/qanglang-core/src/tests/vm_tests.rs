@@ -920,9 +920,16 @@ fn test_break_continue_error_cases() {
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
-            let error_messages: Vec<String> = errors.all().iter().map(|e| e.message.clone()).collect();
-            let has_break_error = error_messages.iter().any(|msg| msg.contains("'break' can only be used inside loops"));
-            assert!(has_break_error, "Expected break error message, got: {:?}", error_messages);
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_break_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'break' can only be used inside loops"));
+            assert!(
+                has_break_error,
+                "Expected break error message, got: {:?}",
+                error_messages
+            );
         }
     }
 
@@ -937,9 +944,140 @@ fn test_break_continue_error_cases() {
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
-            let error_messages: Vec<String> = errors.all().iter().map(|e| e.message.clone()).collect();
-            let has_continue_error = error_messages.iter().any(|msg| msg.contains("'continue' can only be used inside loops"));
-            assert!(has_continue_error, "Expected continue error message, got: {:?}", error_messages);
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_continue_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'continue' can only be used inside loops"));
+            assert!(
+                has_continue_error,
+                "Expected continue error message, got: {:?}",
+                error_messages
+            );
+        }
+    }
+}
+
+#[test]
+fn test_break_error_cases_inside_nested_function() {
+    // Test break outside of loop
+    let source_break: &'static str = r#"
+        var continue_loop = true;
+        while (continue_loop) {
+            
+            var lambda = () -> {
+                break; // this should be a syntax error.
+            };
+            continue_loop = false;
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_break.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(_) => panic!("Expected compiler error for break outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_break_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'break' can only be used inside loops"));
+            assert!(
+                has_break_error,
+                "Expected break error message, got: {:?}",
+                error_messages
+            );
+        }
+    }
+
+    // Test continue outside of loop
+    let source_continue = r#"
+        for (var i = 0; i < 1; i = i + 1) {
+            var lambda = () -> {
+                break; // this should be a syntax error.
+            };
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_continue.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(_) => panic!("Expected compiler error for continue outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_continue_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'break' can only be used inside loops"));
+            assert!(
+                has_continue_error,
+                "Expected continue error message, got: {:?}",
+                error_messages
+            );
+        }
+    }
+}
+
+#[test]
+fn test_continue_error_cases_inside_nested_function() {
+    // Test break outside of loop
+    let source_break: &'static str = r#"
+        var continue_loop = true;
+        while (continue_loop) {
+            
+            var lambda = () -> {
+                continue; // this should be a syntax error.
+            };
+            continue_loop = false;
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_break.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(_) => panic!("Expected compiler error for break outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_break_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'continue' can only be used inside loops"));
+            assert!(
+                has_break_error,
+                "Expected break error message, got: {:?}",
+                error_messages
+            );
+        }
+    }
+
+    // Test continue outside of loop
+    let source_continue = r#"
+        for (var i = 0; i < 1; i = i + 1) {
+            var lambda = () -> {
+                continue; // this should be a syntax error.
+            };
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_continue.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(_) => panic!("Expected compiler error for continue outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_continue_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'continue' can only be used inside loops"));
+            assert!(
+                has_continue_error,
+                "Expected continue error message, got: {:?}",
+                error_messages
+            );
         }
     }
 }

@@ -1050,41 +1050,49 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         // Push new loop context
         self.compiler.loop_contexts.push(LoopContext::default());
-        
+
         let loop_start = self.current_chunk_mut().code.len();
         self.visit_expression(&while_stmt.condition, errors)?;
 
         let exit_jump = self.emit_jump(OpCode::JumpIfFalse, while_stmt.body.span());
         self.emit_opcode(OpCode::Pop, while_stmt.body.span());
         self.visit_statement(&while_stmt.body, errors)?;
-        
+
         // Pop loop context and handle continue jumps before emitting the main loop
-        let loop_context = self.compiler.loop_contexts.pop().expect("Loop context should exist");
-        
-        // Emit continue jumps as Loop instructions going back to loop_start  
+        let loop_context = self
+            .compiler
+            .loop_contexts
+            .pop()
+            .expect("Loop context should exist");
+
+        // Emit continue jumps as Loop instructions going back to loop_start
         for continue_position in loop_context.continue_jumps {
             // Calculate offset from the continue position back to loop_start
             let jump_distance = continue_position - loop_start + 3; // +3 for the Loop instruction size
-            
+
             if jump_distance > u16::MAX as usize {
                 return Err(QangSyntaxError::new(
                     "Continue jump too large.".to_string(),
                     while_stmt.span,
                 ));
             }
-            
+
             // Insert Loop instruction at the continue position
             let chunk = self.current_chunk_mut();
             chunk.code.insert(continue_position, OpCode::Loop as u8);
-            chunk.code.insert(continue_position + 1, ((jump_distance >> 8) & 0xff) as u8);
-            chunk.code.insert(continue_position + 2, (jump_distance & 0xff) as u8);
+            chunk
+                .code
+                .insert(continue_position + 1, ((jump_distance >> 8) & 0xff) as u8);
+            chunk
+                .code
+                .insert(continue_position + 2, (jump_distance & 0xff) as u8);
         }
-        
+
         self.emit_loop(loop_start, while_stmt.body.span())?;
 
         self.patch_jump(exit_jump, while_stmt.body.span())?;
         self.emit_opcode(OpCode::Pop, while_stmt.span);
-        
+
         // Patch break jumps to exit the loop
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, while_stmt.span)?;
@@ -1099,7 +1107,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.begin_scope();
-        
+
         // Push new loop context
         self.compiler.loop_contexts.push(LoopContext::default());
 
@@ -1117,7 +1125,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
         let mut loop_start = self.current_chunk_mut().code.len();
         let mut exit_jump: Option<usize> = None;
-        let mut increment_start: Option<usize> = None;
+        let increment_start: Option<usize>;
 
         if let Some(condition) = &for_stmt.condition {
             let condition_jump = self.emit_jump(OpCode::Jump, condition.span());
@@ -1150,8 +1158,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         }
 
         // Pop loop context and patch continue/break jumps
-        let loop_context = self.compiler.loop_contexts.pop().expect("Loop context should exist");
-        
+        let loop_context = self
+            .compiler
+            .loop_contexts
+            .pop()
+            .expect("Loop context should exist");
+
         // Patch continue jumps to jump to increment (or loop start if no increment)
         let continue_target = increment_start.unwrap_or(loop_start);
         for continue_jump in loop_context.continue_jumps {

@@ -1032,9 +1032,29 @@ mod expression_parser {
                     span,
                 })))
             }
-            tokenizer::TokenType::Super => Ok(ast::Expr::Primary(ast::PrimaryExpr::Super(
-                ast::SuperExpr { span },
-            ))),
+            tokenizer::TokenType::Super => {
+                if !parser.match_token(tokenizer::TokenType::Dot) {
+                    return Err(crate::QangSyntaxError::new(
+                        "Expect '.' after 'super'.".to_string(),
+                        span,
+                    ));
+                }
+
+                parser.consume(
+                    tokenizer::TokenType::Identifier,
+                    "Expect method name after 'super.'.",
+                )?;
+
+                let method_name = parser.get_identifier()?;
+                let method_span = ast::SourceSpan::combine(span, method_name.span);
+
+                Ok(ast::Expr::Primary(ast::PrimaryExpr::Super(
+                    ast::SuperExpr::Method(ast::SuperMethod {
+                        method: method_name,
+                        span: method_span,
+                    }),
+                )))
+            }
             _ => Err(crate::QangSyntaxError::new(
                 "Unknown literal.".to_string(),
                 span,

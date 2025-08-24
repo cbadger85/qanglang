@@ -615,6 +615,7 @@ fn test_classing_fields_that_reference_functions() {
         class Oops {
             init() {
                 this.field = () -> 3;
+                this.other_field = 2;
             }
         }
 
@@ -657,9 +658,59 @@ fn test_class_inheritance() {
             }
         }
 
-        class B : A {}
+        class B : A {
+            b() {
+                return super.a();
+            }
+        }
         var value = B().a();
         assert_eq(value, 42, "Expected '42', recieved " + (value |> to_string));
+        var value_2 = B().b();
+        assert_eq(value_2, 42, "Expected '42', recieved " + (value |> to_string));
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_class_inheritance_with_constructors() {
+    let source = r#"
+        class Foo {
+            init() {
+                this.a = 12;
+            }
+        }
+
+        class Bar : Foo {
+            init() {
+                super.init();
+            }
+        }
+
+        assert_eq(Bar().a, 12);
     "#;
 
     let source_map = SourceMap::new(source.to_string());

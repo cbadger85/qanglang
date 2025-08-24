@@ -745,6 +745,43 @@ impl Vm {
                         )),
                     }?
                 }
+                OpCode::GetSuper => {
+                    let method_handle = read_string!(self);
+                    let superclass = pop_value!(self);
+
+                    if let Value::Class(superclass_handle) = superclass {
+                        if self.bind_super_method(superclass_handle, method_handle)? {
+                            // Method found and bound
+                        } else {
+                            return Err(QangRuntimeError::new(
+                                format!(
+                                    "Undefined property '{}'.",
+                                    self.allocator.strings.get_string(method_handle)
+                                ),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            "Super class must be a class.".to_string(),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
+                }
+                OpCode::SuperInvoke => {
+                    let method_handle = read_string!(self);
+                    let arg_count = self.state.read_byte() as usize;
+                    let superclass = pop_value!(self);
+
+                    if let Value::Class(superclass_handle) = superclass {
+                        self.invoke_from_class(superclass_handle, method_handle, arg_count)?;
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            "Super class must be a class.".to_string(),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
+                }
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
@@ -809,6 +846,28 @@ impl Vm {
                 ),
                 self.state.get_previous_loc(),
             ))
+        }
+    }
+
+    fn bind_super_method(
+        &mut self,
+        superclass_handle: ClassHandle,
+        method_name: StringHandle,
+    ) -> RuntimeResult<bool> {
+        let superclass = self.allocator.get_class(superclass_handle);
+
+        if let Some(Value::Closure(closure)) = self
+            .allocator
+            .get_class_method(superclass.table, Value::String(method_name))
+        {
+            let receiver = peek_value!(self, 0);
+            let bound = MethodObject::new(receiver, closure);
+            let handle = gc_allocate!(self, method: bound);
+            pop_value!(self); // Pop 'this'
+            push_value!(self, Value::BoundMethod(handle));
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 

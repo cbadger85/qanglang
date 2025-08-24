@@ -734,11 +734,50 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
     fn visit_super_expression(
         &mut self,
-        _super_expr: &ast::SuperExpr,
+        super_expr: &ast::SuperExpr,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        todo!();
-        Ok(())
+        match super_expr {
+            ast::SuperExpr::Bare(bare) => Err(QangSyntaxError::new(
+                "Expect '.' after 'super'.".to_string(),
+                bare.span,
+            )),
+            ast::SuperExpr::Method(super_method) => {
+                // Check if we're in a class with a superclass
+                if !self.compiler.has_superclass {
+                    return Err(QangSyntaxError::new(
+                        "Can't use 'super' in a class with no superclass.".to_string(),
+                        super_method.span,
+                    ));
+                }
+
+                // Check if we're in a method
+                if !matches!(
+                    self.compiler.kind,
+                    CompilerKind::Method | CompilerKind::Initializer
+                ) {
+                    return Err(QangSyntaxError::new(
+                        "Can't use 'super' outside of a class method.".to_string(),
+                        super_method.span,
+                    ));
+                }
+
+                // Load 'this' onto the stack
+                self.handle_variable("this", super_method.span, false)?;
+
+                // Load the superclass from the 'super' variable
+                self.handle_variable("super", super_method.span, false)?;
+
+                // Emit the super method access instruction
+                let method_handle = self.allocator.strings.intern(&super_method.method.name);
+                let constant_index =
+                    self.make_constant(Value::String(method_handle), super_method.method.span)?;
+
+                self.emit_opcode_and_byte(OpCode::GetSuper, constant_index, super_method.span);
+
+                Ok(())
+            }
+        }
     }
 
     fn visit_comparison_expression(
@@ -1218,6 +1257,55 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     ));
                 }
 
+                // Check if this is a super method call
+                if let ast::Expr::Primary(ast::PrimaryExpr::Super(ast::SuperExpr::Method(
+                    super_method,
+                ))) = call.callee.as_ref()
+                {
+                    // Handle super method invocation with SuperInvoke opcode
+
+                    // Check if we're in a class with a superclass
+                    if !self.compiler.has_superclass {
+                        return Err(QangSyntaxError::new(
+                            "Can't use 'super' in a class with no superclass.".to_string(),
+                            super_method.span,
+                        ));
+                    }
+
+                    // Check if we're in a method
+                    if !matches!(
+                        self.compiler.kind,
+                        CompilerKind::Method | CompilerKind::Initializer
+                    ) {
+                        return Err(QangSyntaxError::new(
+                            "Can't use 'super' outside of a class method.".to_string(),
+                            super_method.span,
+                        ));
+                    }
+
+                    // Load 'this' onto the stack first
+                    self.handle_variable("this", super_method.span, false)?;
+
+                    // Compile all arguments
+                    for arg in args {
+                        self.visit_expression(arg, errors)?;
+                    }
+
+                    // Load the superclass
+                    self.handle_variable("super", super_method.span, false)?;
+
+                    // Emit super invoke instruction
+                    let method_handle = self.allocator.strings.intern(&super_method.method.name);
+                    let method_constant =
+                        self.make_constant(Value::String(method_handle), super_method.method.span)?;
+
+                    self.emit_opcode_and_byte(OpCode::SuperInvoke, method_constant, call.span);
+                    self.emit_byte(args.len() as u8, call.span);
+
+                    return Ok(());
+                }
+
+                // Handle regular method invocation optimization
                 if let ast::Expr::Call(property_call) = call.callee.as_ref() {
                     if let ast::CallOperation::Property(method_name) =
                         property_call.operation.as_ref()

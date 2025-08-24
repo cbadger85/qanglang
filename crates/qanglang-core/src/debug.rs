@@ -95,6 +95,8 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::Method => constant_instruction("OP_METHOD", chunk, allocator, offset),
         OpCode::Invoke => invoke_instruction("OP_INVOKE", chunk, allocator, offset),
         OpCode::Inherit => simple_instruction("OP_INHERIT", offset),
+        OpCode::GetSuper => constant_instruction("OP_SUPER_INVOKE", chunk, allocator, offset),
+        OpCode::SuperInvoke => invoke_instruction("OP_SUPER_INVOKE", chunk, allocator, offset),
     }
 }
 

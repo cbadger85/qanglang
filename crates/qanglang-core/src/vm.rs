@@ -13,10 +13,14 @@ use crate::{
     compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
     error::Trace,
-    memory::{ClosureHandle, ClosureObject, FunctionObject, StringHandle, UpvalueReference},
+    memory::{
+        ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, StringHandle,
+        UpvalueReference,
+    },
     qang_std::{
         qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
-        qang_system_time, qang_to_lowercase, qang_to_string, qang_to_uppercase, qang_typeof,
+        qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_lowercase,
+        qang_to_string, qang_to_uppercase, qang_typeof,
     },
     value::{
         BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -160,18 +164,23 @@ pub struct VmState {
     stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
     globals: FxHashMap<StringHandle, Value>,
+    intrinsics: FxHashMap<StringHandle, IntrinsicMethod>,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
 }
 
 impl VmState {
-    fn new(globals: FxHashMap<StringHandle, Value>) -> Self {
+    fn new(
+        globals: FxHashMap<StringHandle, Value>,
+        intrinsics: FxHashMap<StringHandle, IntrinsicMethod>,
+    ) -> Self {
         Self {
             frame_count: 0,
             stack_top: 0,
             stack: vec![Value::Nil; STACK_MAX],
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals,
+            intrinsics,
             open_upvalues: Vec::with_capacity(8),
             current_function_ptr: std::ptr::null(),
         }
@@ -282,10 +291,30 @@ impl Vm {
         let object_type_value_handle = allocator.strings.intern(OBJECT_TYPE_STRING);
         globals.insert(object_type_handle, Value::String(object_type_value_handle));
 
+        let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
+        let to_uppercase_handle = allocator.strings.intern("to_uppercase");
+        intrinsics.insert(
+            to_uppercase_handle,
+            IntrinsicMethod {
+                function: qang_string_to_uppercase,
+                arity: 0,
+                kind: IntrinsicKind::String,
+            },
+        );
+        let to_lowercase_handle = allocator.strings.intern("to_lowercase");
+        intrinsics.insert(
+            to_lowercase_handle,
+            IntrinsicMethod {
+                function: qang_string_to_lowercase,
+                arity: 0,
+                kind: IntrinsicKind::String,
+            },
+        );
+
         let vm = Self {
             is_debug: false,
             is_gc_enabled: true,
-            state: VmState::new(globals),
+            state: VmState::new(globals, intrinsics),
             allocator,
         };
 

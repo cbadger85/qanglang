@@ -20,7 +20,7 @@ pub use error::{ErrorReporter, NativeFunctionError, QangRuntimeError, QangSyntax
 pub use memory::{
     BoundIntrinsicHandle, BoundIntrinsicObject, BoundMethodHandle, BoundMethodObject, ClassHandle,
     ClassObject, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle,
-    HeapAllocator, InstanceHandle, InstanceObject, NativeFn, NativeFunctionHandle,
+    HeapAllocator, InstanceHandle, InstanceObject, IntrinsicFn, NativeFn, NativeFunctionHandle,
     NativeFunctionObject, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
 };
 pub use parser::Parser;

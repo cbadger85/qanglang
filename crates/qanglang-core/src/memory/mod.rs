@@ -13,7 +13,7 @@ pub use arena::{Arena, Index};
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
 pub use object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,
-    InstanceObject, IntrinsicFn, IntrinsicMethod, NativeFn, NativeFunctionObject, Upvalue,
-    UpvalueReference,
+    InstanceObject, IntrinsicFn, IntrinsicKind, IntrinsicMethod, NativeFn, NativeFunctionObject,
+    Upvalue, UpvalueReference,
 };
 pub use string_interner::StringHandle;

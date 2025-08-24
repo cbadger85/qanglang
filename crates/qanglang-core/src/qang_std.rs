@@ -151,6 +151,42 @@ pub fn qang_to_lowercase(
     }
 }
 
+pub fn qang_string_to_uppercase(
+    receiver: Value,
+    _args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Value::String(handle) = receiver {
+        let uppercase_string = &vm.allocator().strings.get_string(handle).to_uppercase();
+        let uppercase_handle = vm.allocator_mut().strings.intern(uppercase_string);
+
+        Ok(Some(Value::String(uppercase_handle)))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_string_to_lowercase(
+    receiver: Value,
+    _args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Value::String(handle) = receiver {
+        let lowercase_string = &vm.allocator().strings.get_string(handle).to_lowercase();
+        let lowercase_handle = vm.allocator_mut().strings.intern(lowercase_string);
+
+        Ok(Some(Value::String(lowercase_handle)))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
 pub fn qang_hash(args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied();
 

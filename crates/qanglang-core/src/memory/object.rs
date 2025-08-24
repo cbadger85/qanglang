@@ -107,9 +107,16 @@ pub type IntrinsicFn =
     fn(receiver: Value, args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
 #[derive(Debug, Clone, Copy)]
+pub enum IntrinsicKind {
+    String,
+    Number,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct IntrinsicMethod {
     pub function: IntrinsicFn,
     pub arity: usize,
+    pub kind: IntrinsicKind,
 }
 
 #[derive(Debug, Clone)]

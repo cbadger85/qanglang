@@ -65,7 +65,8 @@ impl FunctionObject {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ClassObject {
     pub name: StringHandle,
-    pub table: HashMapHandle,
+    pub method_table: HashMapHandle,
+    pub value_table: HashMapHandle,
     pub is_marked: bool,
 }
 

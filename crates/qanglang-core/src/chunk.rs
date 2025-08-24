@@ -43,6 +43,7 @@ pub enum OpCode {
     Inherit,
     GetSuper,
     SuperInvoke,
+    InitField,
 }
 
 impl From<u8> for OpCode {
@@ -87,6 +88,7 @@ impl From<u8> for OpCode {
             36 => OpCode::Inherit,
             37 => OpCode::GetSuper,
             38 => OpCode::SuperInvoke,
+            39 => OpCode::InitField,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

@@ -1,6 +1,6 @@
 use crate::{
     ErrorReporter, FunctionHandle, QangSyntaxError, SourceMap, Value,
-    ast::{self, AstVisitor, SourceSpan},
+    ast::{self, AstVisitor, NilLiteral, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
     memory::{FunctionObject, HeapAllocator, StringHandle},
     parser::Parser,
@@ -1455,6 +1455,8 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.emit_opcode(OpCode::Inherit, superclass.span);
         }
 
+        let previous_kind = self.compiler.kind;
+        self.compiler.kind = CompilerKind::Initializer;
         for member in &class_decl.members {
             match &member {
                 ast::ClassMember::Method(function) => {
@@ -1476,9 +1478,19 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
                     self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
                 }
-                _ => (),
+                ast::ClassMember::Field(field) => {
+                    let default =
+                        ast::Expr::Primary(ast::PrimaryExpr::Nil(NilLiteral { span: field.span }));
+                    let initializer = field.initializer.as_ref().unwrap_or(&default);
+                    self.visit_expression(&initializer, errors)?;
+                    let handle_identifier = self.allocator.strings.intern(&field.name.name);
+                    let field_name =
+                        self.make_constant(Value::String(handle_identifier), field.name.span)?;
+                    self.emit_opcode_and_byte(OpCode::InitField, field_name, field.name.span);
+                }
             }
         }
+        self.compiler.kind = previous_kind;
 
         self.emit_opcode(OpCode::Pop, class_decl.span);
         if class_decl.superclass.is_some() {

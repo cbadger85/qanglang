@@ -738,3 +738,42 @@ fn test_class_inheritance_with_constructors() {
         }
     }
 }
+
+#[test]
+fn test_field_declarations() {
+    let source = r#"
+        class Foo {
+            foo = 4;
+            bar;
+            // baz = this.foo; <- does not work yet.
+        }
+
+        assert_eq(Foo().foo, 4);
+        assert_eq(Foo().bar, nil);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

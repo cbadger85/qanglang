@@ -196,7 +196,8 @@ impl HeapAllocator {
     pub fn allocate_class(&mut self, name: StringHandle) -> ClassHandle {
         let handle = self.classes.insert(ClassObject {
             name,
-            table: self.tables.new_hashmap(),
+            method_table: self.tables.new_hashmap(),
+            value_table: self.tables.new_hashmap(),
             is_marked: false,
         });
         debug_log!(
@@ -460,14 +461,46 @@ impl HeapAllocator {
                         debug_log!(self.is_debug, "Marking class: {:?}", handle);
                         clazz.is_marked = true;
                         debug_log!(self.is_debug, "Blackening class: {:?}", handle);
-                        debug_log!(self.is_debug, "Marking table: {:?}", clazz.table);
-                        self.tables.mark_hashmap(clazz.table);
-                        debug_log!(self.is_debug, "Blackening table: {:?}", clazz.table);
-                        for (key, value) in self.tables.iter(clazz.table) {
+                        debug_log!(
+                            self.is_debug,
+                            "Marking method table: {:?}",
+                            clazz.method_table
+                        );
+                        self.tables.mark_hashmap(clazz.method_table);
+                        debug_log!(
+                            self.is_debug,
+                            "Blackening method table: {:?}",
+                            clazz.method_table
+                        );
+                        for (key, value) in self.tables.iter(clazz.method_table) {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
-                        debug_log!(self.is_debug, "Blackening table: {:?}", clazz.table);
+                        debug_log!(
+                            self.is_debug,
+                            "Blackening method table: {:?}",
+                            clazz.method_table
+                        );
+                        debug_log!(
+                            self.is_debug,
+                            "Marking value table: {:?}",
+                            clazz.method_table
+                        );
+                        self.tables.mark_hashmap(clazz.value_table);
+                        debug_log!(
+                            self.is_debug,
+                            "Blackening value table: {:?}",
+                            clazz.value_table
+                        );
+                        for (key, value) in self.tables.iter(clazz.value_table) {
+                            gray_list.push_back(key);
+                            gray_list.push_back(value);
+                        }
+                        debug_log!(
+                            self.is_debug,
+                            "Blackening value table: {:?}",
+                            clazz.value_table
+                        );
                     }
                 }
                 Value::Instance(handle) => {

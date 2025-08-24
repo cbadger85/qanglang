@@ -677,6 +677,7 @@ impl Vm {
                 }
                 OpCode::GetProperty => {
                     let instance = peek_value!(self, 0);
+                    println!("instance value: {:?}", instance);
 
                     if let Value::Instance(instance_handle) = instance {
                         let instance = self.allocator.get_instance(instance_handle);
@@ -710,6 +711,11 @@ impl Vm {
                     let identifier_handle = read_string!(self);
                     self.define_method(identifier_handle)?;
                 }
+                OpCode::InitField => {
+                    let identifier_handle = read_string!(self);
+                    let value = pop_value!(self);
+                    self.init_field(identifier_handle, value)?;
+                }
                 OpCode::Invoke => {
                     let method_handle = read_string!(self);
                     let arg_count = self.state.read_byte();
@@ -719,11 +725,11 @@ impl Vm {
                     let superclass = peek_value!(self, 0);
                     let subclass = peek_value!(self, 1);
 
-
                     match (superclass, subclass) {
                         (Value::Class(superclass), Value::Class(subclass)) => {
-                            let superclass_table = self.allocator.get_class(superclass).table;
-                            let subclass_table = self.allocator.get_class(subclass).table;
+                            let superclass_table =
+                                self.allocator.get_class(superclass).method_table;
+                            let subclass_table = self.allocator.get_class(subclass).method_table;
                             self.allocator
                                 .tables
                                 .copy_into(superclass_table, subclass_table);
@@ -815,12 +821,23 @@ impl Vm {
             if let Value::Class(clazz_handle) = peek_value!(self, 1) {
                 let clazz = self.allocator.get_class(clazz_handle);
                 self.allocator.set_class_method(
-                    clazz.table,
+                    clazz.method_table,
                     Value::String(name),
                     Value::Closure(method),
                 );
-                pop_value!(self); // pop method
+                pop_value!(self);
             }
+        }
+
+        Ok(())
+    }
+
+    fn init_field(&mut self, field_name: StringHandle, value: Value) -> RuntimeResult<()> {
+        println!("field_name: {}, value: {:?}", field_name, value);
+        if let Value::Class(clazz_handle) = peek_value!(self, 0) {
+            let clazz = self.allocator.get_class(clazz_handle);
+            self.allocator
+                .set_class_method(clazz.value_table, Value::String(field_name), value);
         }
 
         Ok(())
@@ -828,8 +845,9 @@ impl Vm {
 
     fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
         let clazz = self.allocator.get_class(clazz_handle);
-        if let Some(Value::Closure(closure)) =
-            self.allocator.get_class_method(clazz.table, method_name)
+        if let Some(Value::Closure(closure)) = self
+            .allocator
+            .get_class_method(clazz.method_table, method_name)
         {
             let receiver = peek_value!(self, 0);
             let bound = MethodObject::new(receiver, closure);
@@ -857,7 +875,7 @@ impl Vm {
 
         if let Some(Value::Closure(closure)) = self
             .allocator
-            .get_class_method(superclass.table, Value::String(method_name))
+            .get_class_method(superclass.method_table, Value::String(method_name))
         {
             let receiver = peek_value!(self, 0);
             let bound = MethodObject::new(receiver, closure);
@@ -941,13 +959,21 @@ impl Vm {
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             Value::Class(handle) => {
                 let constructor_handle = self.allocator.strings.intern(CLASS_INITIALIZER_STRING);
-                let clazz_table = self.allocator.get_class(handle).table;
+                let clazz = self.allocator.get_class(handle);
+                let clazz_method_table = clazz.method_table;
+                let value_method_table = clazz.value_table;
                 let insance_handle = gc_allocate!(self, instance: handle);
                 self.state.stack[self.state.stack_top - arg_count - 1] =
                     Value::Instance(insance_handle);
+                let instance_table = self.allocator.get_instance(insance_handle).table;
+
+                self.allocator
+                    .tables
+                    .copy_into(value_method_table, instance_table);
+
                 if let Some(Value::Closure(constructor)) = self
                     .allocator
-                    .get_class_method(clazz_table, Value::String(constructor_handle))
+                    .get_class_method(clazz_method_table, Value::String(constructor_handle))
                 {
                     self.call(constructor, arg_count)?;
                 }
@@ -1112,7 +1138,7 @@ impl Vm {
         let clazz = self.allocator.get_class(clazz_handle);
         if let Some(Value::Closure(method)) = self
             .allocator
-            .get_class_method(clazz.table, Value::String(method_handle))
+            .get_class_method(clazz.method_table, Value::String(method_handle))
         {
             self.call(method, arg_count)
         } else {

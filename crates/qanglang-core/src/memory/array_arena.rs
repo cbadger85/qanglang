@@ -179,28 +179,7 @@ impl ArrayArena {
                 self.chunks[chunk_handle].used -= 1;
             }
 
-            let should_free_chunk = self.chunks[chunk_handle].used == 0 && chunk_index > 0;
-            let next_chunk = self.chunks[chunk_handle].next_chunk;
-
-            // If this chunk is now empty and it's not the first chunk, free it
-            if should_free_chunk {
-                // Find the previous chunk and unlink this one
-                let mut prev_chunk = self.heads[handle].first_chunk;
-                for _ in 0..(chunk_index - 1) {
-                    if let Some(prev_handle) = prev_chunk {
-                        prev_chunk = self.chunks[prev_handle].next_chunk;
-                    }
-                }
-
-                if let Some(prev_handle) = prev_chunk {
-                    self.chunks[prev_handle].next_chunk = next_chunk;
-                }
-
-                // Free the chunk
-                let _ = self.chunks.remove(chunk_handle);
-                self.heads[handle].chunks_count -= 1;
-            }
-
+            // Keep empty chunks attached for reuse - no longer freeing them
             self.heads[handle].length -= 1;
             value
         } else {

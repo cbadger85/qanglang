@@ -919,7 +919,7 @@ impl Vm {
         let bound = BoundIntrinsicObject::new(receiver, intrinsic, method_name);
         let handle = gc_allocate!(self, intrinsic: bound);
         pop_value!(self);
-        push_value!(self, Value::BoundMethod(handle));
+        push_value!(self, Value::BoundIntrinsic(handle));
         Ok(())
     }
 

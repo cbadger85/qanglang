@@ -1550,27 +1550,15 @@ fn test_this_and_super() {
 
                     // Right side: super.getValue() (method call)
                     if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                        // The callee should be super.getValue
-                        if let ast::Expr::Call(method_access) = call_expr.callee.as_ref() {
-                            // The callee should be 'super'
-                            if let ast::Expr::Primary(ast::PrimaryExpr::Super(_)) =
-                                method_access.callee.as_ref()
-                            {
-                                // Expected super
+                        // The callee should be a super method access
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Super(super_expr)) = call_expr.callee.as_ref() {
+                            if let ast::SuperExpr::Method(super_method) = super_expr {
+                                assert_eq!(super_method.method.name.as_ref(), "getValue");
                             } else {
-                                panic!("Expected 'super' expression");
-                            }
-
-                            // The operation should be property access to 'getValue'
-                            if let ast::CallOperation::Property(method_id) =
-                                method_access.operation.as_ref()
-                            {
-                                assert_eq!(method_id.name.as_ref(), "getValue");
-                            } else {
-                                panic!("Expected property access to 'getValue'");
+                                panic!("Expected super method access");
                             }
                         } else {
-                            panic!("Expected call expression for method access");
+                            panic!("Expected super expression");
                         }
 
                         // The operation should be function call with no arguments
@@ -2686,10 +2674,11 @@ fn test_lambda_as_immediately_invoked_expression() {
         // The initializer should be a call expression: (() -> nil)()
         if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
             // The callee should be a lambda expression: () -> nil
-            if let ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda)) = call_expr.callee.as_ref() {
+            if let ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda)) = call_expr.callee.as_ref()
+            {
                 // Lambda should have no parameters
                 assert_eq!(lambda.parameters.len(), 0);
-                
+
                 // Lambda body should be an expression: nil
                 if let ast::LambdaBody::Expr(body_expr) = lambda.body.as_ref() {
                     if let ast::Expr::Primary(ast::PrimaryExpr::Nil(_)) = body_expr.as_ref() {
@@ -2738,35 +2727,40 @@ fn test_lambda_as_immediately_invoked_expression_with_args() {
         // The initializer should be a call expression: ((x) -> x * 2)(5)
         if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
             // The callee should be a lambda expression: (x) -> x * 2
-            if let ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda)) = call_expr.callee.as_ref() {
-                    // Lambda should have one parameter 'x'
-                    assert_eq!(lambda.parameters.len(), 1);
-                    assert_eq!(lambda.parameters[0].name.as_ref(), "x");
-                    
-                    // Lambda body should be an expression: x * 2
-                    if let ast::LambdaBody::Expr(body_expr) = lambda.body.as_ref() {
-                        if let ast::Expr::Factor(factor_expr) = body_expr.as_ref() {
-                            assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
-                            
-                            // Left side should be identifier 'x'
-                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(x_id)) = factor_expr.left.as_ref() {
-                                assert_eq!(x_id.name.as_ref(), "x");
-                            } else {
-                                panic!("Expected identifier 'x' in lambda body");
-                            }
-                            
-                            // Right side should be number literal 2
-                            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = factor_expr.right.as_ref() {
-                                assert_eq!(num_lit.value, 2.0);
-                            } else {
-                                panic!("Expected number literal '2' in lambda body");
-                            }
+            if let ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda)) = call_expr.callee.as_ref()
+            {
+                // Lambda should have one parameter 'x'
+                assert_eq!(lambda.parameters.len(), 1);
+                assert_eq!(lambda.parameters[0].name.as_ref(), "x");
+
+                // Lambda body should be an expression: x * 2
+                if let ast::LambdaBody::Expr(body_expr) = lambda.body.as_ref() {
+                    if let ast::Expr::Factor(factor_expr) = body_expr.as_ref() {
+                        assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
+
+                        // Left side should be identifier 'x'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(x_id)) =
+                            factor_expr.left.as_ref()
+                        {
+                            assert_eq!(x_id.name.as_ref(), "x");
                         } else {
-                            panic!("Expected factor expression 'x * 2' in lambda body");
+                            panic!("Expected identifier 'x' in lambda body");
+                        }
+
+                        // Right side should be number literal 2
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
+                            factor_expr.right.as_ref()
+                        {
+                            assert_eq!(num_lit.value, 2.0);
+                        } else {
+                            panic!("Expected number literal '2' in lambda body");
                         }
                     } else {
-                        panic!("Expected lambda body to be an expression, not a block");
+                        panic!("Expected factor expression 'x * 2' in lambda body");
                     }
+                } else {
+                    panic!("Expected lambda body to be an expression, not a block");
+                }
             } else {
                 panic!("Expected lambda expression as callee");
             }
@@ -2774,7 +2768,7 @@ fn test_lambda_as_immediately_invoked_expression_with_args() {
             // The call operation should be a function call with one argument (5)
             if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
                 assert_eq!(args.len(), 1);
-                
+
                 if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = &args[0] {
                     assert_eq!(num_lit.value, 5.0);
                 } else {

@@ -16,7 +16,7 @@ pub const BOOLEAN_TYPE_STRING: &str = "boolean";
 pub const NUMBER_TYPE_STRING: &str = "number";
 pub const STRING_TYPE_STRING: &str = "string";
 pub const FUNCTION_TYPE_STRING: &str = "function";
-pub const CLASS_TYPE_STRING: &str = "class_constructor";
+pub const CLASS_TYPE_STRING: &str = "class";
 pub const OBJECT_TYPE_STRING: &str = "object";
 pub const CLASS_INITIALIZER_STRING: &str = "init";
 

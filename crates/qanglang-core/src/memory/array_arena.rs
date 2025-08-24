@@ -325,16 +325,13 @@ impl ArrayArena {
         let len2 = self.heads[handle2].length;
         let total_length = len1 + len2;
 
-        // Create new array with combined length
         let new_handle = self.create_array(total_length);
 
-        // Copy elements from first array
         for i in 0..len1 {
             let value = self.get(handle1, i);
             self.insert(new_handle, i, value);
         }
 
-        // Copy elements from second array
         for i in 0..len2 {
             let value = self.get(handle2, i);
             self.insert(new_handle, len1 + i, value);
@@ -346,7 +343,6 @@ impl ArrayArena {
     pub fn slice(&mut self, handle: ArrayHandle, begin: usize, end: usize) -> ArrayHandle {
         let source_length = self.heads[handle].length;
 
-        // Clamp bounds to valid range
         let start = begin.min(source_length);
         let finish = end.min(source_length).max(start);
         let slice_length = finish - start;
@@ -355,16 +351,101 @@ impl ArrayArena {
             return self.create_array(0);
         }
 
-        // Create new array with slice length
         let new_handle = self.create_array(slice_length);
 
-        // Copy elements from source array
         for i in 0..slice_length {
             let value = self.get(handle, start + i);
             self.insert(new_handle, i, value);
         }
 
         new_handle
+    }
+
+    pub fn iter(&self, handle: ArrayHandle) -> ArrayIterator<'_> {
+        ArrayIterator {
+            arena: self,
+            handle,
+            current_index: 0,
+        }
+    }
+
+    pub fn mark_array(&mut self, handle: ArrayHandle) {
+        self.heads[handle].is_marked = true;
+
+        let mut current_chunk = self.heads[handle].first_chunk;
+
+        while let Some(chunk_handle) = current_chunk {
+            self.chunks[chunk_handle].is_marked = true;
+            current_chunk = self.chunks[chunk_handle].next_chunk;
+        }
+    }
+
+    pub fn collect_garbage(&mut self) {
+        let estimated_deletions = (self.chunks.len() / 4).max(8);
+        let mut handles_to_remove = Vec::with_capacity(estimated_deletions);
+
+        for (handle, head) in self.heads.iter_mut() {
+            if head.is_marked {
+                head.is_marked = false;
+            } else {
+                handles_to_remove.push(handle);
+            }
+        }
+
+        for handle in handles_to_remove.drain(..) {
+            let _ = self.heads.remove(handle);
+        }
+
+        for (handle, chunk) in self.chunks.iter_mut() {
+            if chunk.is_marked {
+                chunk.is_marked = false;
+            } else {
+                handles_to_remove.push(handle);
+            }
+        }
+
+        for handle in handles_to_remove.drain(..) {
+            let _ = self.chunks.remove(handle);
+        }
+    }
+
+    pub fn total_bytes_allocated(&self) -> usize {
+        std::mem::size_of::<ArrayHeader>() * self.heads.len()
+            + std::mem::size_of::<ArrayChunk>() * self.chunks.len()
+    }
+}
+
+pub struct ArrayIterator<'a> {
+    arena: &'a ArrayArena,
+    handle: ArrayHandle,
+    current_index: usize,
+}
+
+impl<'a> Iterator for ArrayIterator<'a> {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let length = self.arena.length(self.handle);
+
+        if self.current_index >= length {
+            return None;
+        }
+
+        let value = self.arena.get(self.handle, self.current_index);
+        self.current_index += 1;
+
+        // Skip Nil values (empty slots)
+        if matches!(value, Value::Nil) {
+            self.next()
+        } else {
+            Some(value)
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let length = self.arena.length(self.handle);
+        let remaining = length.saturating_sub(self.current_index);
+        (0, Some(remaining)) // Lower bound is 0 because we might have Nil values
     }
 }
 
@@ -575,5 +656,265 @@ mod tests {
 
         let slice3 = arena.slice(handle, 3, 2); // Start > end
         assert_eq!(arena.length(slice3), 0);
+    }
+
+    #[test]
+    fn test_iterator_empty_array() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        let mut iter = arena.iter(handle);
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_iterator_basic() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(3);
+
+        arena.insert(handle, 0, Value::Number(1.0));
+        arena.insert(handle, 1, Value::Number(2.0));
+        arena.insert(handle, 2, Value::Number(3.0));
+
+        let values: Vec<Value> = arena.iter(handle).collect();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0], Value::Number(1.0));
+        assert_eq!(values[1], Value::Number(2.0));
+        assert_eq!(values[2], Value::Number(3.0));
+    }
+
+    #[test]
+    fn test_iterator_with_empty_slots() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(5);
+
+        // Only fill some slots
+        arena.insert(handle, 0, Value::Number(1.0));
+        arena.insert(handle, 2, Value::Number(3.0));
+        arena.insert(handle, 4, Value::Number(5.0));
+
+        let values: Vec<Value> = arena.iter(handle).collect();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0], Value::Number(1.0));
+        assert_eq!(values[1], Value::Number(3.0));
+        assert_eq!(values[2], Value::Number(5.0));
+    }
+
+    #[test]
+    fn test_iterator_cross_chunks() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push values across multiple chunks
+        for i in 0..50 {
+            arena.push(handle, Value::Number(i as f64));
+        }
+
+        let values: Vec<Value> = arena.iter(handle).collect();
+        assert_eq!(values.len(), 50);
+
+        for (i, value) in values.iter().enumerate() {
+            assert_eq!(*value, Value::Number(i as f64));
+        }
+    }
+
+    #[test]
+    fn test_iterator_for_loop() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        for i in 0..10 {
+            arena.push(handle, Value::Number(i as f64));
+        }
+
+        let mut expected = 0.0;
+        for value in arena.iter(handle) {
+            assert_eq!(value, Value::Number(expected));
+            expected += 1.0;
+        }
+
+        assert_eq!(expected, 10.0);
+    }
+
+    #[test]
+    fn test_iterator_size_hint() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(5);
+
+        arena.insert(handle, 0, Value::Number(1.0));
+        arena.insert(handle, 1, Value::Number(2.0));
+        arena.insert(handle, 4, Value::Number(5.0));
+
+        let iter = arena.iter(handle);
+        let (lower, upper) = iter.size_hint();
+
+        assert_eq!(lower, 0); // Could have all Nil values
+        assert_eq!(upper, Some(5)); // At most 5 elements
+    }
+
+    #[test]
+    fn test_iterator_after_operations() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push, pop, and push again
+        arena.push(handle, Value::Number(1.0));
+        arena.push(handle, Value::Number(2.0));
+        arena.push(handle, Value::Number(3.0));
+
+        arena.pop(handle);
+        arena.push(handle, Value::Number(4.0));
+
+        let values: Vec<Value> = arena.iter(handle).collect();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0], Value::Number(1.0));
+        assert_eq!(values[1], Value::Number(2.0));
+        assert_eq!(values[2], Value::Number(4.0));
+    }
+
+    #[test]
+    fn test_mark_array() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push values across multiple chunks
+        for i in 0..40 {
+            arena.push(handle, Value::Number(i as f64));
+        }
+
+        // Initially nothing should be marked
+        assert!(!arena.heads[handle].is_marked);
+
+        // Mark the array
+        arena.mark_array(handle);
+
+        // Array header should be marked
+        assert!(arena.heads[handle].is_marked);
+
+        // All chunks should be marked
+        let mut current_chunk = arena.heads[handle].first_chunk;
+        while let Some(chunk_handle) = current_chunk {
+            assert!(arena.chunks[chunk_handle].is_marked);
+            current_chunk = arena.chunks[chunk_handle].next_chunk;
+        }
+    }
+
+    #[test]
+    fn test_collect_garbage_marked_arrays() {
+        let mut arena = ArrayArena::new();
+        let handle1 = arena.create_array(5);
+        let handle2 = arena.create_array(3);
+
+        // Fill arrays
+        for i in 0..5 {
+            arena.insert(handle1, i, Value::Number(i as f64));
+        }
+        for i in 0..3 {
+            arena.insert(handle2, i, Value::Number((i + 10) as f64));
+        }
+
+        // Mark only the first array
+        arena.mark_array(handle1);
+
+        // Collect garbage
+        arena.collect_garbage();
+
+        // First array should still exist and be accessible
+        assert_eq!(arena.length(handle1), 5);
+        assert_eq!(arena.get(handle1, 0), Value::Number(0.0));
+
+        // Array should be unmarked after GC
+        assert!(!arena.heads[handle1].is_marked);
+
+        // Second array should be gone (this will panic if accessed, but we won't access it)
+        // We can't easily test this without exposing Arena internals
+    }
+
+    #[test]
+    fn test_collect_garbage_unmarked_arrays() {
+        let mut arena = ArrayArena::new();
+        let handle1 = arena.create_array(3);
+        let handle2 = arena.create_array(3);
+
+        // Fill arrays
+        arena.insert(handle1, 0, Value::Number(1.0));
+        arena.insert(handle2, 0, Value::Number(2.0));
+
+        // Don't mark anything - simulate no roots
+        arena.collect_garbage();
+
+        // Both arrays should be collected (we can't easily test this without Arena internals)
+        // The main thing is that collect_garbage doesn't panic
+    }
+
+    #[test]
+    fn test_mark_and_sweep_cycle() {
+        let mut arena = ArrayArena::new();
+        let handle1 = arena.create_array(0);
+        let handle2 = arena.create_array(0);
+
+        // Create arrays with multiple chunks
+        for i in 0..35 {
+            arena.push(handle1, Value::Number(i as f64));
+            arena.push(handle2, Value::Number((i + 100) as f64));
+        }
+
+        // Mark only handle1
+        arena.mark_array(handle1);
+
+        // Verify marking worked
+        assert!(arena.heads[handle1].is_marked);
+        assert!(!arena.heads[handle2].is_marked);
+
+        // First GC cycle
+        arena.collect_garbage();
+
+        // handle1 should be unmarked now but still exist
+        assert!(!arena.heads[handle1].is_marked);
+        assert_eq!(arena.length(handle1), 35);
+
+        // Mark handle1 again for next cycle
+        arena.mark_array(handle1);
+
+        // Second GC cycle
+        arena.collect_garbage();
+
+        // Should still be accessible
+        assert_eq!(arena.get(handle1, 0), Value::Number(0.0));
+        assert_eq!(arena.get(handle1, 34), Value::Number(34.0));
+    }
+
+    #[test]
+    fn test_gc_with_empty_arena() {
+        let mut arena = ArrayArena::new();
+
+        // Should not panic on empty arena
+        arena.collect_garbage();
+    }
+
+    #[test]
+    fn test_gc_preserves_chunks_of_marked_arrays() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Create array spanning multiple chunks
+        for i in 0..50 {
+            arena.push(handle, Value::Number(i as f64));
+        }
+
+        // Mark the array
+        arena.mark_array(handle);
+
+        // Collect garbage
+        arena.collect_garbage();
+
+        // All data should still be accessible
+        for i in 0..50 {
+            assert_eq!(arena.get(handle, i), Value::Number(i as f64));
+        }
+
+        // Iterator should still work
+        let values: Vec<Value> = arena.iter(handle).collect();
+        assert_eq!(values.len(), 50);
     }
 }

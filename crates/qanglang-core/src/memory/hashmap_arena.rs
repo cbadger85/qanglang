@@ -495,7 +495,6 @@ impl HashMapArena {
 
 pub struct HashMapIterator<'a> {
     arena: &'a HashMapArena,
-    handle: HashMapHandle,
     current_chunk: Option<BucketChunkHandle>,
     current_bucket_idx: usize,
 }
@@ -506,7 +505,6 @@ impl<'a> HashMapIterator<'a> {
 
         Self {
             arena,
-            handle,
             current_chunk,
             current_bucket_idx: 0,
         }

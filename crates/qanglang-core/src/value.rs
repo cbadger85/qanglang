@@ -1,5 +1,5 @@
 use crate::{
-    ClassHandle, HeapAllocator, InstanceHandle, MethodHandle, NativeFunctionHandle,
+    BoundMethodHandle, ClassHandle, HeapAllocator, InstanceHandle, NativeFunctionHandle,
     memory::{ClosureHandle, FunctionHandle, StringHandle},
 };
 
@@ -26,7 +26,8 @@ pub enum Value {
     FunctionDecl(FunctionHandle),
     Class(ClassHandle),
     Instance(InstanceHandle),
-    BoundMethod(MethodHandle),
+    BoundMethod(BoundMethodHandle),
+    BoundIntrinsic(BoundMethodHandle),
 }
 
 impl Value {
@@ -73,8 +74,16 @@ impl Value {
                 let method_binding = allocator.get_bound_method(*handle);
                 format!(
                     "{}.{}",
-                    method_binding.reciever.to_display_string(allocator),
+                    method_binding.receiver.to_display_string(allocator),
                     Value::Closure(method_binding.closure).to_display_string(allocator)
+                )
+            }
+            Value::BoundIntrinsic(handle) => {
+                let intrinsic_binding = allocator.get_bound_intrinsic(*handle);
+                format!(
+                    "{}.{}",
+                    intrinsic_binding.receiver.to_display_string(allocator),
+                    Value::String(intrinsic_binding.name_handle).to_display_string(allocator)
                 )
             }
         }
@@ -93,6 +102,7 @@ impl Value {
             Value::Class(_) => CLASS_TYPE_STRING,
             Value::Instance(_) => OBJECT_TYPE_STRING,
             Value::BoundMethod(_) => FUNCTION_TYPE_STRING,
+            Value::BoundIntrinsic(_) => FUNCTION_TYPE_STRING,
         }
     }
 
@@ -114,6 +124,7 @@ impl Value {
             Value::Class(handle) => handle.hash(&mut hasher),
             Value::Instance(handle) => handle.hash(&mut hasher),
             Value::BoundMethod(handle) => handle.hash(&mut hasher),
+            Value::BoundIntrinsic(handle) => handle.hash(&mut hasher),
             Value::Nil | Value::True | Value::False => (),
         }
         hasher.finish()

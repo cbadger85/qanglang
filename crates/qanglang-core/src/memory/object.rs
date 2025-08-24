@@ -78,30 +78,44 @@ pub struct InstanceObject {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct MethodObject {
-    pub reciever: Value,
+pub struct BoundMethodObject {
+    pub receiver: Value,
     pub closure: ClosureHandle,
     pub is_marked: bool,
 }
 
-impl MethodObject {
-    pub fn new(reciever: Value, closure: ClosureHandle) -> Self {
+impl BoundMethodObject {
+    pub fn new(receiver: Value, closure: ClosureHandle) -> Self {
         Self {
-            reciever,
+            receiver,
             closure,
             is_marked: false,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
+
+#[derive(Debug, Clone)]
 pub struct NativeFunctionObject {
     pub function: NativeFn,
     pub arity: usize,
     pub name_handle: StringHandle,
 }
 
-pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
-
 pub type IntrinsicFn =
     fn(receiver: Value, args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
+
+#[derive(Debug, Clone, Copy)]
+pub struct IntrinsicMethod {
+    pub function: IntrinsicFn,
+    pub arity: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct BoundIntrinsicObject {
+    pub receiver: Value,
+    pub method: IntrinsicMethod,
+    pub name_handle: StringHandle,
+    pub is_marked: bool,
+}

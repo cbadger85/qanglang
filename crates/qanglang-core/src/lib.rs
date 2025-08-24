@@ -18,10 +18,10 @@ pub use compiler::{
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, NativeFunctionError, QangRuntimeError, QangSyntaxError, Trace};
 pub use memory::{
-    ClassHandle, ClassObject, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject,
-    HashMapHandle, HeapAllocator, InstanceHandle, InstanceObject, MethodHandle, MethodObject,
-    NativeFn, NativeFunctionHandle, NativeFunctionObject, StringHandle, Upvalue, UpvalueHandle,
-    UpvalueReference,
+    BoundIntrinsicHandle, BoundIntrinsicObject, BoundMethodHandle, BoundMethodObject, ClassHandle,
+    ClassObject, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle,
+    HeapAllocator, InstanceHandle, InstanceObject, NativeFn, NativeFunctionHandle,
+    NativeFunctionObject, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
 };
 pub use parser::Parser;
 pub use source::SourceMap;

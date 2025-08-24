@@ -6,13 +6,14 @@ mod object;
 mod string_interner;
 
 pub use alloc::{
-    ClassHandle, ClosureHandle, FunctionHandle, HeapAllocator, InstanceHandle, MethodHandle,
-    NativeFunctionHandle, UpvalueHandle,
+    BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, ClosureHandle, FunctionHandle,
+    HeapAllocator, InstanceHandle, NativeFunctionHandle, UpvalueHandle,
 };
 pub use arena::{Arena, Index};
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
 pub use object::{
-    ClassObject, ClosureObject, FunctionObject, InstanceObject, IntrinsicFn, MethodObject,
-    NativeFn, NativeFunctionObject, Upvalue, UpvalueReference,
+    BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,
+    InstanceObject, IntrinsicFn, IntrinsicMethod, NativeFn, NativeFunctionObject, Upvalue,
+    UpvalueReference,
 };
 pub use string_interner::StringHandle;

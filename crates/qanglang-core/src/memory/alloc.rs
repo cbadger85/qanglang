@@ -1,6 +1,8 @@
 use crate::memory::arena::{Arena, Index};
 use crate::memory::hashmap_arena::HashMapArena;
-use crate::memory::object::{ClassObject, InstanceObject, MethodObject, NativeFunctionObject};
+use crate::memory::object::{
+    BoundIntrinsicObject, BoundMethodObject, ClassObject, InstanceObject, NativeFunctionObject,
+};
 use crate::memory::string_interner::StringInterner;
 use crate::{ClosureObject, FunctionObject, Upvalue, Value, debug_log};
 use crate::{StringHandle, UpvalueReference};
@@ -14,7 +16,9 @@ pub type ClassHandle = Index;
 
 pub type InstanceHandle = Index;
 
-pub type MethodHandle = Index;
+pub type BoundMethodHandle = Index;
+
+pub type BoundIntrinsicHandle = Index;
 
 pub type FunctionHandle = u32;
 
@@ -31,7 +35,8 @@ pub struct HeapAllocator {
     native_functions: Vec<NativeFunctionObject>,
     classes: Arena<ClassObject>,
     instances: Arena<InstanceObject>,
-    methods: Arena<MethodObject>,
+    bound_methods: Arena<BoundMethodObject>,
+    bound_intrinsics: Arena<BoundIntrinsicObject>,
     pub tables: HashMapArena,
     is_debug: bool,
     bytes_until_gc: usize,
@@ -51,7 +56,8 @@ impl HeapAllocator {
             native_functions: Vec::with_capacity(initial_capacity),
             tables: HashMapArena::with_capacity(initial_capacity),
             classes: Arena::with_capacity(initial_capacity),
-            methods: Arena::with_capacity(initial_capacity),
+            bound_methods: Arena::with_capacity(initial_capacity),
+            bound_intrinsics: Arena::with_capacity(initial_capacity),
             instances: Arena::with_capacity(initial_capacity),
             is_debug: false,
             bytes_until_gc: 1024 * 1024,
@@ -276,32 +282,68 @@ impl HeapAllocator {
         );
     }
 
-    pub fn allocate_bound_method(&mut self, method: MethodObject) -> MethodHandle {
-        let handle = self.methods.insert(method);
+    pub fn allocate_bound_method(&mut self, method: BoundMethodObject) -> BoundMethodHandle {
+        let handle = self.bound_methods.insert(method);
         debug_log!(
             self.is_debug,
             "Allocated {} byes for method: {:?}",
-            std::mem::size_of::<MethodObject>(),
+            std::mem::size_of::<BoundMethodObject>(),
             handle
         );
         handle
     }
 
-    pub fn get_bound_method(&self, handle: MethodHandle) -> &MethodObject {
-        &self.methods[handle]
+    pub fn get_bound_method(&self, handle: BoundMethodHandle) -> &BoundMethodObject {
+        &self.bound_methods[handle]
     }
 
-    pub fn get_bound_method_mut(&mut self, handle: MethodHandle) -> &mut MethodObject {
-        &mut self.methods[handle]
+    pub fn get_bound_method_mut(&mut self, handle: BoundMethodHandle) -> &mut BoundMethodObject {
+        &mut self.bound_methods[handle]
     }
 
-    pub fn free_bound_method(&mut self, handle: MethodHandle) {
+    pub fn free_bound_method(&mut self, handle: BoundMethodHandle) {
         debug_log!(self.is_debug, "Freeing method: {:?}", handle);
         self.upvalues.remove(handle);
         debug_log!(
             self.is_debug,
             "Freed {} byes for method: {:?}",
-            std::mem::size_of::<MethodObject>(),
+            std::mem::size_of::<BoundMethodObject>(),
+            handle
+        );
+    }
+
+    pub fn allocate_bound_intrinsic(
+        &mut self,
+        method: BoundIntrinsicObject,
+    ) -> BoundIntrinsicHandle {
+        let handle = self.bound_intrinsics.insert(method);
+        debug_log!(
+            self.is_debug,
+            "Allocated {} byes for intrinsic method: {:?}",
+            std::mem::size_of::<BoundIntrinsicObject>(),
+            handle
+        );
+        handle
+    }
+
+    pub fn get_bound_intrinsic(&self, handle: BoundIntrinsicHandle) -> &BoundIntrinsicObject {
+        &self.bound_intrinsics[handle]
+    }
+
+    pub fn get_bound_intrinsic_mut(
+        &mut self,
+        handle: BoundIntrinsicHandle,
+    ) -> &mut BoundIntrinsicObject {
+        &mut self.bound_intrinsics[handle]
+    }
+
+    pub fn free_bound_intrinsic(&mut self, handle: BoundIntrinsicHandle) {
+        debug_log!(self.is_debug, "Freeing intrinsic method: {:?}", handle);
+        self.upvalues.remove(handle);
+        debug_log!(
+            self.is_debug,
+            "Freed {} byes for intrinsic method: {:?}",
+            std::mem::size_of::<BoundIntrinsicObject>(),
             handle
         );
     }
@@ -326,7 +368,9 @@ impl HeapAllocator {
         let class_bytes = self.classes.len() * std::mem::size_of::<ClassObject>();
         let instance_bytes = self.instances.len() * std::mem::size_of::<InstanceObject>();
         let table_bytes = self.tables.get_allocated_bytes();
-        let method_bytes = self.methods.len() * std::mem::size_of::<MethodObject>();
+        let method_bytes = self.bound_methods.len() * std::mem::size_of::<BoundMethodObject>();
+        let intrinsic_bytes =
+            self.bound_intrinsics.len() * std::mem::size_of::<BoundIntrinsicObject>();
 
         string_bytes
             + closure_bytes
@@ -337,6 +381,7 @@ impl HeapAllocator {
             + table_bytes
             + instance_bytes
             + method_bytes
+            + intrinsic_bytes
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -348,7 +393,7 @@ impl HeapAllocator {
             + self.closures.len()
             + self.upvalues.len()
             + self.instances.len()
-            + self.methods.len();
+            + self.bound_methods.len();
         let estimated_deletions = (total_elements / 4).max(8);
         let mut deleted_values: Vec<Index> = Vec::with_capacity(estimated_deletions);
 
@@ -402,7 +447,7 @@ impl HeapAllocator {
 
         self.tables.collect_garbage();
 
-        for (index, method) in self.methods.iter_mut() {
+        for (index, method) in self.bound_methods.iter_mut() {
             if method.is_marked {
                 method.is_marked = false;
             } else {
@@ -411,7 +456,19 @@ impl HeapAllocator {
         }
 
         for index in deleted_values.drain(..) {
-            self.methods.remove(index);
+            self.bound_methods.remove(index);
+        }
+
+        for (index, method) in self.bound_intrinsics.iter_mut() {
+            if method.is_marked {
+                method.is_marked = false;
+            } else {
+                deleted_values.push(index);
+            }
+        }
+
+        for index in deleted_values.drain(..) {
+            self.bound_intrinsics.remove(index);
         }
 
         let new_allocated_bytes = self.total_allocated_bytes();
@@ -518,14 +575,24 @@ impl HeapAllocator {
                     }
                 }
                 Value::BoundMethod(handle) => {
-                    let method_binding = &mut self.methods[handle];
+                    let method_binding = &mut self.bound_methods[handle];
 
                     if !method_binding.is_marked {
                         debug_log!(self.is_debug, "Marking method: {:?}", handle);
                         method_binding.is_marked = true;
                         debug_log!(self.is_debug, "Blackening method: {:?}", handle);
-                        gray_list.push_back(method_binding.reciever);
+                        gray_list.push_back(method_binding.receiver);
                         gray_list.push_back(Value::Closure(method_binding.closure));
+                    }
+                }
+                Value::BoundIntrinsic(handle) => {
+                    let intrinsic_binding = &mut self.bound_intrinsics[handle];
+
+                    if !intrinsic_binding.is_marked {
+                        debug_log!(self.is_debug, "Marking intrinsic method: {:?}", handle);
+                        intrinsic_binding.is_marked = true;
+                        debug_log!(self.is_debug, "Blackening intrinsic method: {:?}", handle);
+                        gray_list.push_back(intrinsic_binding.receiver);
                     }
                 }
                 _ => (),

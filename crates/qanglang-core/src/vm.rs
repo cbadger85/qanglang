@@ -7,7 +7,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
 use crate::{
-    ClassHandle, HashMapHandle, HeapAllocator, MethodObject, NativeFn, NativeFunctionError,
+    BoundMethodObject, ClassHandle, HashMapHandle, HeapAllocator, NativeFn, NativeFunctionError,
     NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError, Value,
     chunk::{OpCode, SourceLocation},
     compiler::{FRAME_MAX, STACK_MAX},
@@ -841,7 +841,7 @@ impl Vm {
             .get_class_method(clazz.method_table, method_name)
         {
             let receiver = peek_value!(self, 0);
-            let bound = MethodObject::new(receiver, closure);
+            let bound = BoundMethodObject::new(receiver, closure);
             let handle = gc_allocate!(self, method: bound);
             pop_value!(self);
             push_value!(self, Value::BoundMethod(handle));
@@ -867,7 +867,7 @@ impl Vm {
             .get_class_method(method_table_handle, Value::String(method_name))
         {
             let receiver = peek_value!(self, 0);
-            let bound = MethodObject::new(receiver, closure);
+            let bound = BoundMethodObject::new(receiver, closure);
             let handle = gc_allocate!(self, method: bound);
             pop_value!(self); // Pop 'this'
             push_value!(self, Value::BoundMethod(handle));
@@ -973,7 +973,7 @@ impl Vm {
 
                 // Replace the method function with the receiver in the stack
                 // so that when the method is called, 'this' (slot 0) contains the receiver
-                self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.reciever;
+                self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.receiver;
                 self.call(bound_method.closure, arg_count)
             }
             _ => {

@@ -2794,7 +2794,7 @@ fn test_index_assignment() {
         "#;
     let source_map = SourceMap::new(source_code.to_string());
 
-    let (program, errors) = parse_source(&source_map);
+    let (_program, errors) = parse_source(&source_map);
 
     assert_no_parse_errors(&errors);
 }

@@ -860,8 +860,8 @@ impl Vm {
                     }
                 }
                 OpCode::SetArrayIndex => {
-                    let index = pop_value!(self);
                     let value = pop_value!(self);
+                    let index = pop_value!(self);
                     match (index, peek_value!(self, 0)) {
                         (Value::Number(index), Value::Array(handle)) => {
                             let is_within_bounds =

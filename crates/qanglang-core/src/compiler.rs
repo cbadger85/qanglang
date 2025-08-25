@@ -868,6 +868,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 self.visit_expression(&assignment.value, errors)?;
                 self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
             }
+            ast::AssignmentTarget::Index(index) => {
+                self.visit_expression(&index.object, errors)?;
+                self.visit_expression(&index.index, errors)?;
+                self.visit_expression(&assignment.value, errors)?;
+                self.emit_opcode(OpCode::SetArrayIndex, index.span);
+            }
         }
 
         Ok(())

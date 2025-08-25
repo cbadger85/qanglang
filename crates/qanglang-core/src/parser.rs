@@ -787,19 +787,32 @@ impl<'a> Parser<'a> {
                     }))
                 }
                 ast::Expr::Call(call_expr) => {
-                    if let ast::CallOperation::Property(property) = call_expr.operation.as_ref() {
-                        let property_access = ast::PropertyAccess {
-                            object: call_expr.callee,
-                            property: property.clone(),
-                            span: call_expr.span,
-                        };
-                        Ok(ast::Expr::Assignment(ast::AssignmentExpr {
-                            target: ast::AssignmentTarget::Property(property_access),
-                            value,
-                            span,
-                        }))
-                    } else {
-                        Err(QangSyntaxError::new(
+                    match call_expr.operation.as_ref() {
+                        ast::CallOperation::Property(property) => {
+                            let property_access = ast::PropertyAccess {
+                                object: call_expr.callee,
+                                property: property.clone(),
+                                span: call_expr.span,
+                            };
+                            Ok(ast::Expr::Assignment(ast::AssignmentExpr {
+                                target: ast::AssignmentTarget::Property(property_access),
+                                value,
+                                span,
+                            }))
+                        }
+                        ast::CallOperation::Index(index_expr) => {
+                            let index_access = ast::IndexAccess {
+                                object: call_expr.callee,
+                                index: Box::new(index_expr.clone()),
+                                span: call_expr.span,
+                            };
+                            Ok(ast::Expr::Assignment(ast::AssignmentExpr {
+                                target: ast::AssignmentTarget::Index(index_access),
+                                value,
+                                span,
+                            }))
+                        }
+                        _ => Err(QangSyntaxError::new(
                             "Invalid assignment target".to_string(),
                             span,
                         ))

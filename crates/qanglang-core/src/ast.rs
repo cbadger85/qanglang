@@ -326,6 +326,7 @@ pub struct AssignmentExpr {
 pub enum AssignmentTarget {
     Identifier(Identifier),
     Property(PropertyAccess),
+    Index(IndexAccess),
 }
 
 impl AssignmentTarget {
@@ -333,6 +334,7 @@ impl AssignmentTarget {
         match self {
             AssignmentTarget::Identifier(id) => id.span,
             AssignmentTarget::Property(prop) => prop.span,
+            AssignmentTarget::Index(index) => index.span,
         }
     }
 }
@@ -342,6 +344,14 @@ impl AssignmentTarget {
 pub struct PropertyAccess {
     pub object: Box<Expr>,
     pub property: Identifier,
+    pub span: SourceSpan,
+}
+
+/// Index access for assignment: call [ expression ]
+#[derive(Debug, Clone, PartialEq)]
+pub struct IndexAccess {
+    pub object: Box<Expr>,
+    pub index: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -986,6 +996,7 @@ pub trait AstVisitor {
         match target {
             AssignmentTarget::Identifier(identifier) => self.visit_identifier(identifier, errors),
             AssignmentTarget::Property(property) => self.visit_property_access(property, errors),
+            AssignmentTarget::Index(index) => self.visit_index_access(index, errors),
         }
     }
 
@@ -996,6 +1007,15 @@ pub trait AstVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_expression(&property.object, errors)?;
         self.visit_identifier(&property.property, errors)
+    }
+
+    fn visit_index_access(
+        &mut self,
+        index: &IndexAccess,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&index.object, errors)?;
+        self.visit_expression(&index.index, errors)
     }
 
     fn visit_pipe_expression(

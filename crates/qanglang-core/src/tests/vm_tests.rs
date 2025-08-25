@@ -1142,6 +1142,9 @@ fn test_arrays() {
         println(test_array_2[0]);
         println(test_array_2[1]);
         println(test_array_2[2]);
+
+        test_array_2[2] = false;
+        println(test_array_2[2]);
     "#;
 
     let source_map = SourceMap::new(source.to_string());

@@ -156,6 +156,12 @@ impl From<u64> for Value {
     }
 }
 
+impl From<usize> for Value {
+    fn from(num: usize) -> Self {
+        Value::Number(num as f64)
+    }
+}
+
 impl From<bool> for Value {
     fn from(value: bool) -> Self {
         if value { Value::True } else { Value::False }

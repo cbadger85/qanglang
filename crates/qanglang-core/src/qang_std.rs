@@ -1,4 +1,4 @@
-use crate::{NativeFunctionError, Value, Vm};
+use crate::{NativeFunctionError, QangRuntimeError, QangSyntaxError, Value, Vm};
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args
@@ -144,6 +144,116 @@ pub fn qang_string_to_lowercase(
     } else {
         Err(NativeFunctionError(format!(
             "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_array_length(
+    receiver: Value,
+    _args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Value::Array(handle) = receiver {
+        let length = vm.allocator().arrays.length(handle);
+        Ok(Some(length.into()))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_array_push(
+    receiver: Value,
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Value::Array(handle) = receiver {
+        let element = args.first().copied().unwrap_or_default();
+        vm.allocator_mut().arrays.push(handle, element);
+        Ok(None)
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_array_pop(
+    receiver: Value,
+    _args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Value::Array(handle) = receiver {
+        let element = vm.allocator_mut().arrays.pop(handle);
+        if element.is_none() {
+            return Err(NativeFunctionError::new("Array is empty."));
+        }
+        Ok(element)
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_array_reverse(
+    receiver: Value,
+    _args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Value::Array(handle) = receiver {
+        vm.allocator_mut().arrays.reverse(handle);
+        Ok(None)
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_array_slice(
+    receiver: Value,
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    // TODO handle conversion of f64 to usize more gracefully.
+    if let Value::Array(handle) = receiver {
+        let begin = args
+            .first()
+            .copied()
+            .ok_or_else(|| NativeFunctionError::new("Expected a number but found nil."))?;
+        let end = args.get(1).copied();
+
+        match (begin, end) {
+            (Value::Number(begin), Some(Value::Number(end))) => {
+                let slice = Value::Array(vm.allocator_mut().arrays.slice(
+                    handle,
+                    begin as usize,
+                    Some(end as usize),
+                ));
+                Ok(Some(slice))
+            }
+            (Value::Number(begin), None) => {
+                let slice = Value::Array(vm.allocator_mut().arrays.slice(
+                    handle,
+                    begin as usize,
+                    None,
+                ));
+                Ok(Some(slice))
+            }
+            _ => Err(NativeFunctionError::new(
+                "Expectd both values to be a number.",
+            )),
+        }
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
             receiver.to_type_string()
         )))
     }

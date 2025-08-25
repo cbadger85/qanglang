@@ -119,6 +119,7 @@ impl ArrayArena {
         }
     }
 
+    // TODO allow negative numbers to get element from end.
     pub fn get(&self, handle: ArrayHandle, index: usize) -> Value {
         let header = &self.heads[handle];
 
@@ -149,11 +150,11 @@ impl ArrayArena {
         }
     }
 
-    pub fn pop(&mut self, handle: ArrayHandle) -> Value {
+    pub fn pop(&mut self, handle: ArrayHandle) -> Option<Value> {
         let length = self.heads[handle].length;
 
         if length == 0 {
-            return Value::Nil;
+            return None;
         }
 
         let last_index = length - 1;
@@ -166,7 +167,7 @@ impl ArrayArena {
             if let Some(chunk_handle) = current_chunk {
                 current_chunk = self.chunks[chunk_handle].next_chunk;
             } else {
-                return Value::Nil;
+                return None;
             }
         }
 
@@ -182,9 +183,9 @@ impl ArrayArena {
 
             // Keep empty chunks attached for reuse - no longer freeing them
             self.heads[handle].length -= 1;
-            value
+            Some(value)
         } else {
-            Value::Nil
+            None
         }
     }
 
@@ -320,11 +321,11 @@ impl ArrayArena {
         new_handle
     }
 
-    pub fn slice(&mut self, handle: ArrayHandle, begin: usize, end: usize) -> ArrayHandle {
+    pub fn slice(&mut self, handle: ArrayHandle, begin: usize, end: Option<usize>) -> ArrayHandle {
         let source_length = self.heads[handle].length;
 
         let start = begin.min(source_length);
-        let finish = end.min(source_length).max(start);
+        let finish = end.unwrap_or(source_length).min(source_length).max(start);
         let slice_length = finish - start;
 
         if slice_length == 0 {
@@ -506,15 +507,15 @@ mod tests {
         assert_eq!(arena.get(handle, 2), Value::Number(3.0));
 
         // Pop values
-        assert_eq!(arena.pop(handle), Value::Number(3.0));
-        assert_eq!(arena.pop(handle), Value::Number(2.0));
+        assert_eq!(arena.pop(handle), Some(Value::Number(3.0)));
+        assert_eq!(arena.pop(handle), Some(Value::Number(2.0)));
         assert_eq!(arena.length(handle), 1);
 
-        assert_eq!(arena.pop(handle), Value::Number(1.0));
+        assert_eq!(arena.pop(handle), Some(Value::Number(1.0)));
         assert_eq!(arena.length(handle), 0);
 
         // Pop from empty array
-        assert_eq!(arena.pop(handle), Value::Nil);
+        assert_eq!(arena.pop(handle), None);
     }
 
     #[test]
@@ -536,7 +537,7 @@ mod tests {
 
         // Pop from multiple chunks
         for i in (0..50).rev() {
-            assert_eq!(arena.pop(handle), Value::Number(i as f64));
+            assert_eq!(arena.pop(handle), Some(Value::Number(i as f64)));
         }
 
         assert_eq!(arena.length(handle), 0);
@@ -613,7 +614,7 @@ mod tests {
             arena.insert(handle, i, Value::Number(i as f64));
         }
 
-        let slice_handle = arena.slice(handle, 2, 7);
+        let slice_handle = arena.slice(handle, 2, Some(7));
 
         assert_eq!(arena.length(slice_handle), 5);
         for i in 0..5 {
@@ -631,15 +632,45 @@ mod tests {
         }
 
         // Test various boundary conditions
-        let slice1 = arena.slice(handle, 10, 20); // Beyond bounds
+        let slice1 = arena.slice(handle, 10, Some(20)); // Beyond bounds
         assert_eq!(arena.length(slice1), 0);
 
-        let slice2 = arena.slice(handle, 2, 10); // End beyond bounds
+        let slice2 = arena.slice(handle, 2, Some(10)); // End beyond bounds
         assert_eq!(arena.length(slice2), 3);
         assert_eq!(arena.get(slice2, 0), Value::Number(2.0));
 
-        let slice3 = arena.slice(handle, 3, 2); // Start > end
+        let slice3 = arena.slice(handle, 3, Some(2)); // Start > end
         assert_eq!(arena.length(slice3), 0);
+    }
+
+    #[test]
+    fn test_slice_with_optional_end() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(8);
+
+        // Fill array
+        for i in 0..8 {
+            arena.insert(handle, i, Value::Number(i as f64));
+        }
+
+        // Test slice from index 3 to end
+        let slice_handle = arena.slice(handle, 3, None);
+
+        assert_eq!(arena.length(slice_handle), 5);
+        for i in 0..5 {
+            assert_eq!(arena.get(slice_handle, i), Value::Number((i + 3) as f64));
+        }
+
+        // Test slice from index 0 to end (full copy)
+        let full_slice = arena.slice(handle, 0, None);
+        assert_eq!(arena.length(full_slice), 8);
+        for i in 0..8 {
+            assert_eq!(arena.get(full_slice, i), Value::Number(i as f64));
+        }
+
+        // Test slice from beyond bounds to end
+        let empty_slice = arena.slice(handle, 10, None);
+        assert_eq!(arena.length(empty_slice), 0);
     }
 
     #[test]

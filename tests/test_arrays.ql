@@ -1,4 +1,4 @@
-var test_description = "Testing array literals and indexing.";
+var test_description = "Testing arrays and their intrinsic methods.";
 
 fn test_empty_array_literal() {
   var arr = [];
@@ -102,11 +102,15 @@ fn test_array_slice() {
   assert_eq(arr_slice4[0], 2);
 }
 
-// fn test_array_slice_as_shallow_copy() {
-//   var arr = [1, 2, 3,];
-//   var arr_slice = arr.slice();
-//   println(arr_slice);
-// }
+fn test_array_slice_as_shallow_copy() {
+  var inner = [3,];
+  var arr = [1, 2, inner,];
+  var arr_slice = arr.slice();
+  assert(arr != arr_slice);
+  assert_eq(arr_slice[0], arr[0]);
+  assert_eq(arr_slice[1], arr[1]);
+  assert_eq(arr_slice[2], arr[2]);
+}
 
 fn test_array_get() {
   var arr = [1, 2, 3];

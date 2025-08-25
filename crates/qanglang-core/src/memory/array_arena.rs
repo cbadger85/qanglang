@@ -124,11 +124,7 @@ impl ArrayArena {
         let length = header.length as isize;
 
         // Handle negative indices (from the end)
-        let actual_index = if index < 0 {
-            length + index
-        } else {
-            index
-        };
+        let actual_index = if index < 0 { length + index } else { index };
 
         // Check bounds - negative index too large or positive index out of bounds
         if actual_index < 0 || actual_index >= length {
@@ -362,6 +358,18 @@ impl ArrayArena {
 
         for i in 0..slice_length {
             let value = self.get(handle, (start + i) as isize);
+            self.insert(new_handle, i, value);
+        }
+
+        new_handle
+    }
+
+    pub fn shallow_copy(&mut self, handle: ArrayHandle) -> ArrayHandle {
+        let source_length = self.heads[handle].length;
+        let new_handle = self.create_array(source_length);
+
+        for i in 0..source_length {
+            let value = self.get(handle, i as isize);
             self.insert(new_handle, i, value);
         }
 
@@ -1103,5 +1111,101 @@ mod tests {
 
         let slice3 = arena.slice(handle, 0, Some(-1));
         assert_eq!(arena.length(slice3), 0);
+    }
+
+    #[test]
+    fn test_shallow_clone() {
+        let mut arena = ArrayArena::new();
+        let original = arena.create_array(5);
+
+        // Fill original array with values [0, 1, 2, 3, 4]
+        for i in 0..5 {
+            arena.insert(original, i, Value::Number(i as f64));
+        }
+
+        // Create a shallow clone
+        let cloned = arena.shallow_copy(original);
+
+        // Verify the clone has the same length
+        assert_eq!(arena.length(cloned), 5);
+
+        // Verify all values are copied correctly
+        for i in 0..5 {
+            assert_eq!(arena.get(cloned, i), Value::Number(i as f64));
+            assert_eq!(arena.get(original, i), arena.get(cloned, i));
+        }
+
+        // Verify they are separate arrays - modifying original doesn't affect clone
+        arena.insert(original, 2, Value::Number(99.0));
+        assert_eq!(arena.get(original, 2), Value::Number(99.0));
+        assert_eq!(arena.get(cloned, 2), Value::Number(2.0));
+
+        // Verify they are separate arrays - modifying clone doesn't affect original
+        arena.insert(cloned, 1, Value::Number(88.0));
+        assert_eq!(arena.get(cloned, 1), Value::Number(88.0));
+        assert_eq!(arena.get(original, 1), Value::Number(1.0));
+    }
+
+    #[test]
+    fn test_shallow_clone_empty_array() {
+        let mut arena = ArrayArena::new();
+        let original = arena.create_array(0);
+
+        let cloned = arena.shallow_copy(original);
+
+        assert_eq!(arena.length(cloned), 0);
+        assert_eq!(arena.get(cloned, 0), Value::Nil);
+    }
+
+    #[test]
+    fn test_shallow_clone_large_array() {
+        let mut arena = ArrayArena::new();
+        let original = arena.create_array(0);
+
+        // Push values across multiple chunks
+        for i in 0..100 {
+            arena.push(original, Value::Number(i as f64));
+        }
+
+        let cloned = arena.shallow_copy(original);
+
+        assert_eq!(arena.length(cloned), 100);
+
+        // Verify all values are copied correctly
+        for i in 0..100 {
+            assert_eq!(arena.get(cloned, i), Value::Number(i as f64));
+        }
+
+        // Verify they are independent
+        arena.push(original, Value::Number(999.0));
+        assert_eq!(arena.length(original), 101);
+        assert_eq!(arena.length(cloned), 100);
+        assert_eq!(arena.get(original, 100), Value::Number(999.0));
+        assert_eq!(arena.get(cloned, 100), Value::Nil);
+    }
+
+    #[test]
+    fn test_shallow_clone_with_empty_slots() {
+        let mut arena = ArrayArena::new();
+        let original = arena.create_array(5);
+
+        // Fill only some slots
+        arena.insert(original, 0, Value::Number(1.0));
+        arena.insert(original, 2, Value::Number(3.0));
+        arena.insert(original, 4, Value::Number(5.0));
+
+        let cloned = arena.shallow_copy(original);
+
+        assert_eq!(arena.length(cloned), 5);
+        assert_eq!(arena.get(cloned, 0), Value::Number(1.0));
+        assert_eq!(arena.get(cloned, 1), Value::Nil);
+        assert_eq!(arena.get(cloned, 2), Value::Number(3.0));
+        assert_eq!(arena.get(cloned, 3), Value::Nil);
+        assert_eq!(arena.get(cloned, 4), Value::Number(5.0));
+
+        // Verify independence
+        arena.insert(original, 1, Value::Number(2.0));
+        assert_eq!(arena.get(original, 1), Value::Number(2.0));
+        assert_eq!(arena.get(cloned, 1), Value::Nil);
     }
 }

@@ -253,12 +253,11 @@ pub fn qang_array_slice(
                 });
                 Ok(Some(slice))
             }
-            // (Value::Nil, Value::Nil) => {
-            //     let slice = vm.with_gc_check(|alloc| {
-            //         Value::Array(alloc.arrays.c)
-            //     });
-            //     Ok(Some(slice))
-            // }
+            (Value::Nil, Value::Nil) => {
+                let clone =
+                    vm.with_gc_check(|alloc| Value::Array(alloc.arrays.shallow_copy(handle)));
+                Ok(Some(clone))
+            }
             _ => Err(NativeFunctionError::new(
                 "Expected both values to be a number.",
             )),

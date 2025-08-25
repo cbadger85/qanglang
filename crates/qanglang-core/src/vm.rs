@@ -19,10 +19,10 @@ use crate::{
         UpvalueReference,
     },
     qang_std::{
-        qang_array_length, qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice,
-        qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
-        qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_string,
-        qang_typeof,
+        qang_array_concat, qang_array_get, qang_array_length, qang_array_pop, qang_array_push,
+        qang_array_reverse, qang_array_slice, qang_assert, qang_assert_eq, qang_assert_throws,
+        qang_hash, qang_print, qang_println, qang_string_to_lowercase, qang_string_to_uppercase,
+        qang_system_time, qang_to_string, qang_typeof,
     },
     value::{
         ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING,
@@ -319,6 +319,22 @@ impl Vm {
                 arity: 2,
             },
         );
+        let array_get_handle = alloc.strings.intern("get");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_get_handle),
+            IntrinsicMethod {
+                function: qang_array_get,
+                arity: 1,
+            },
+        );
+        let array_concat_handle = alloc.strings.intern("concat");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_concat_handle),
+            IntrinsicMethod {
+                function: qang_array_concat,
+                arity: 1,
+            },
+        );
 
         let vm = Self {
             is_debug: false,
@@ -447,6 +463,9 @@ impl Vm {
                                 alloc.strings.concat_strings(*handle1, *handle2),
                             ))
                         }
+                        (Value::Array(handle1), Value::Array(handle2)) => {
+                            Ok(Value::Array(alloc.arrays.concat(*handle1, *handle2)))
+                        }
                         (Value::Number(_), _) => {
                             Err(format!("Cannot add number to {}.", b.to_type_string())
                                 .as_str()
@@ -454,6 +473,11 @@ impl Vm {
                         }
                         (Value::String(_), _) => {
                             Err(format!("Cannot add string to {}.", b.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        (Value::Array(_), _) => {
+                            Err(format!("Cannot add an array to {}.", b.to_type_string())
                                 .as_str()
                                 .into())
                         }
@@ -467,7 +491,12 @@ impl Vm {
                                 .as_str()
                                 .into())
                         }
-                        _ => Err("Both operands must be a numbers or strings.".into()),
+                        (_, Value::Array(_)) => {
+                            Err(format!("Cannot add {} to an array.", a.to_type_string())
+                                .as_str()
+                                .into())
+                        }
+                        _ => Err("Both operands must be a numbers, strings or arrays.".into()),
                     })?;
                 }
                 OpCode::Subtract => self.binary_operation(|a, b, _allocator| match (&a, &b) {

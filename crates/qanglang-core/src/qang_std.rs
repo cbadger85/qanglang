@@ -233,14 +233,11 @@ pub fn qang_array_slice(
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Value::Array(handle) = receiver {
-        let begin = args
-            .first()
-            .copied()
-            .ok_or_else(|| NativeFunctionError::new("Expected a number but found nil."))?;
-        let end = args.get(1).copied();
+        let begin = args.first().copied().unwrap_or(Value::Nil);
+        let end = args.get(1).copied().unwrap_or(Value::Nil);
 
         match (begin, end) {
-            (Value::Number(begin), Some(Value::Number(end))) => {
+            (Value::Number(begin), Value::Number(end)) => {
                 let slice = vm.with_gc_check(|alloc| {
                     Value::Array(
                         alloc
@@ -250,12 +247,18 @@ pub fn qang_array_slice(
                 });
                 Ok(Some(slice))
             }
-            (Value::Number(begin), Some(Value::Nil)) | (Value::Number(begin), None) => {
+            (Value::Number(begin), Value::Nil) => {
                 let slice = vm.with_gc_check(|alloc| {
                     Value::Array(alloc.arrays.slice(handle, begin as isize, None))
                 });
                 Ok(Some(slice))
             }
+            // (Value::Nil, Value::Nil) => {
+            //     let slice = vm.with_gc_check(|alloc| {
+            //         Value::Array(alloc.arrays.c)
+            //     });
+            //     Ok(Some(slice))
+            // }
             _ => Err(NativeFunctionError::new(
                 "Expected both values to be a number.",
             )),
@@ -265,6 +268,44 @@ pub fn qang_array_slice(
             "Expected array but recieved {}.",
             receiver.to_type_string()
         )))
+    }
+}
+
+pub fn qang_array_get(
+    receiver: Value,
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    match (receiver, args.get(0)) {
+        (Value::Array(handle), Some(Value::Number(index))) => {
+            Ok(Some(vm.alloc.arrays.get(handle, index.trunc() as isize)))
+        }
+        (Value::Array(_), _) => Err(NativeFunctionError::new(
+            "An array can only be indexed by a number.",
+        )),
+        _ => Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        ))),
+    }
+}
+
+pub fn qang_array_concat(
+    receiver: Value,
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    match (receiver, args.get(0)) {
+        (Value::Array(handle1), Some(Value::Array(handle2))) => Ok(Some(Value::Array(
+            vm.alloc.arrays.concat(handle1, *handle2),
+        ))),
+        (Value::Array(_), _) => Err(NativeFunctionError::new(
+            "An array can only be concatenated with another array.",
+        )),
+        _ => Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        ))),
     }
 }
 

@@ -1,0 +1,138 @@
+var test_description = "Testing array literals and indexing.";
+
+fn test_empty_array_literal() {
+  var arr = [];
+
+  assert_eq(arr.length(), 0);
+}
+
+fn test_array_literal_with_single_element() {
+  var arr = [1,];
+
+  assert_eq(arr.length(), 1);
+  assert_eq(arr[0], 1);
+}
+
+fn test_array_literal_with_multiple_elements() {
+  var arr = [1, 2, 3,];
+  
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], 1);
+  assert_eq(arr[1], 2);
+  assert_eq(arr[2], 3);
+}
+
+fn test_array_literal_with_mixed_types() {
+  var arr = [true, 0, nil,];
+  
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], true);
+  assert_eq(arr[1], 0);
+  assert_eq(arr[2], nil);
+}
+
+fn test_array_index_assignment() {
+  var arr = [1,];
+
+  assert_eq(arr[0], 1);
+  arr[0] = 2;
+  assert_eq(arr[0], 2);
+}
+
+fn test_negative_index() {
+  var arr = [true, 0, nil,];
+  
+  assert_eq(arr[-1], nil);
+  assert_eq(arr[-2], 0);
+  assert_eq(arr[-3], true);
+}
+
+fn test_array_pop() {
+    var arr = [1,];
+    assert_eq(arr.length(), 1);
+    assert_eq(arr[0], 1);
+    assert_eq(arr.pop(), 1);
+    assert_eq(arr.length(), 0);
+}
+
+fn test_pop_throws_error_for_out_of_bounds() {
+  var arr = [];
+
+  assert_throws(() -> arr.pop());
+}
+
+fn test_array_push() {
+    var arr = [];
+    assert_eq(arr.length(), 0);
+    arr.push(1);
+    assert_eq(arr.length(), 1);
+    assert_eq(arr[0], 1);
+}
+
+fn test_array_reverse() {
+  var arr = [1, 2, 3,];
+  
+  assert_eq(arr[0], 1);
+  assert_eq(arr[1], 2);
+  assert_eq(arr[2], 3);
+  arr.reverse();
+  assert_eq(arr[0], 3);
+  assert_eq(arr[1], 2);
+  assert_eq(arr[2], 1);
+}
+
+fn test_array_slice() {
+  var arr = [1, 2, 3,];
+  var arr_slice = arr.slice(1);
+  assert_eq(arr_slice.length(), 2);
+  assert_eq(arr_slice[0], 2);
+  assert_eq(arr_slice[1], 3);
+
+  var arr_slice2 = arr.slice(-1);
+  assert_eq(arr_slice2.length(), 1);
+  assert_eq(arr_slice2[0], 3);
+
+  var arr_slice3 = arr.slice(1, 3);
+  assert_eq(arr_slice3.length(), 2);
+  assert_eq(arr_slice3[0], 2);
+  assert_eq(arr_slice3[1], 3);
+
+  var arr_slice4 = arr.slice(1, -1);
+  assert_eq(arr_slice4.length(), 1);
+  assert_eq(arr_slice4[0], 2);
+}
+
+// fn test_array_slice_as_shallow_copy() {
+//   var arr = [1, 2, 3,];
+//   var arr_slice = arr.slice();
+//   println(arr_slice);
+// }
+
+fn test_array_get() {
+  var arr = [1, 2, 3];
+  
+  assert_eq(arr.get(0), 1);
+  assert_eq(arr.get(-1), 3);
+}
+
+fn test_array_concat() {
+  var arr1 = [1, 2,];
+  var arr2 = [3, 4,];
+  var arr3 = arr1.concat(arr2);
+  
+   assert_eq(arr3[0], 1);
+   assert_eq(arr3[1], 2);
+   assert_eq(arr3[2], 3);
+   assert_eq(arr3[3], 4);
+}
+
+fn test_array_concat_with_plus() {
+  var arr1 = [1, 2,];
+  var arr2 = [3, 4,];
+  var arr3 = arr1 + arr2;
+  
+   assert_eq(arr3[0], 1);
+   assert_eq(arr3[1], 2);
+   assert_eq(arr3[2], 3);
+   assert_eq(arr3[3], 4);
+}

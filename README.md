@@ -251,3 +251,23 @@ An embedded scripting language written in Rust 🦀
   </tbody>
 </table>
 ```
+
+## Roadmap
+
+[ ] - `is` operator
+
+[ ] - operator-assignment (`+=`, `-=`, `*=`, `\=`, `%=`)
+
+[ ] - `call` intrinsic on functions (`the_function(arg1, arg2);` = `the_function.call([arg1, arg2]);`)
+
+[ ] - optional chaining for when getting the property of an object `var inner = outer?.inner`
+
+[ ] - add map operator (`outer.inner|inner -> nil|`) to AST and VM.
+
+[ ] - add map optional operator `var inner_times_two = outer?|inner -> inner * 2|;`
+
+[ ] - array destructuring for variable declaration `var (item1, item2, ..others) = [1, 2, 3, 4, 5];`
+
+[ ] - array destructuring for function parameters `fn the_function((item1, item2, ..others), arg2) {}` and lambda parameters `((item1, item2, ..others), arg2) -> nil`
+
+[ ] - array destructuring for map operator and map optional operator `var first = maybe_array?|(first) -> first|;`

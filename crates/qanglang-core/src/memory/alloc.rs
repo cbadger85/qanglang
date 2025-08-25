@@ -482,14 +482,12 @@ impl HeapAllocator {
 
         self.bytes_until_gc = new_allocated_bytes * GC_HEAP_GROW_FACTOR;
 
-        #[cfg(debug_assertions)]
-        {
-            println!(
-                "Collected {} bytes. Next collection at {} bytes.",
-                total_bytes_before_gc - new_allocated_bytes,
-                self.bytes_until_gc
-            );
-        }
+        debug_log!(
+            self.is_debug,
+            "Collected {} bytes. Next collection at {} bytes.",
+            total_bytes_before_gc - new_allocated_bytes,
+            self.bytes_until_gc
+        );
     }
 
     fn trace_references(&mut self, mut gray_list: VecDeque<Value>) {

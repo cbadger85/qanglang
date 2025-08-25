@@ -786,38 +786,36 @@ impl<'a> Parser<'a> {
                         span,
                     }))
                 }
-                ast::Expr::Call(call_expr) => {
-                    match call_expr.operation.as_ref() {
-                        ast::CallOperation::Property(property) => {
-                            let property_access = ast::PropertyAccess {
-                                object: call_expr.callee,
-                                property: property.clone(),
-                                span: call_expr.span,
-                            };
-                            Ok(ast::Expr::Assignment(ast::AssignmentExpr {
-                                target: ast::AssignmentTarget::Property(property_access),
-                                value,
-                                span,
-                            }))
-                        }
-                        ast::CallOperation::Index(index_expr) => {
-                            let index_access = ast::IndexAccess {
-                                object: call_expr.callee,
-                                index: Box::new(index_expr.clone()),
-                                span: call_expr.span,
-                            };
-                            Ok(ast::Expr::Assignment(ast::AssignmentExpr {
-                                target: ast::AssignmentTarget::Index(index_access),
-                                value,
-                                span,
-                            }))
-                        }
-                        _ => Err(QangSyntaxError::new(
-                            "Invalid assignment target".to_string(),
+                ast::Expr::Call(call_expr) => match call_expr.operation.as_ref() {
+                    ast::CallOperation::Property(property) => {
+                        let property_access = ast::PropertyAccess {
+                            object: call_expr.callee,
+                            property: property.clone(),
+                            span: call_expr.span,
+                        };
+                        Ok(ast::Expr::Assignment(ast::AssignmentExpr {
+                            target: ast::AssignmentTarget::Property(property_access),
+                            value,
                             span,
-                        ))
+                        }))
                     }
-                }
+                    ast::CallOperation::Index(index_expr) => {
+                        let index_access = ast::IndexAccess {
+                            object: call_expr.callee,
+                            index: Box::new(index_expr.clone()),
+                            span: call_expr.span,
+                        };
+                        Ok(ast::Expr::Assignment(ast::AssignmentExpr {
+                            target: ast::AssignmentTarget::Index(index_access),
+                            value,
+                            span,
+                        }))
+                    }
+                    _ => Err(QangSyntaxError::new(
+                        "Invalid assignment target".to_string(),
+                        span,
+                    )),
+                },
                 _ => Err(QangSyntaxError::new(
                     "Invalid assignment target".to_string(),
                     span,
@@ -1604,8 +1602,8 @@ mod expression_parser {
                 precedence: Precedence::None,
             },
             tokenizer::TokenType::Question => ParseRule {
-                infix: Some(ternary),
                 prefix: None,
+                infix: Some(ternary),
                 precedence: Precedence::Ternary,
             },
             tokenizer::TokenType::Pipe => ParseRule {

@@ -1,4 +1,4 @@
-use crate::{NativeFunctionError, QangRuntimeError, QangSyntaxError, Value, Vm};
+use crate::{NativeFunctionError, Value, Vm};
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args

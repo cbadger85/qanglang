@@ -119,16 +119,25 @@ impl ArrayArena {
         }
     }
 
-    // TODO allow negative numbers to get element from end.
-    pub fn get(&self, handle: ArrayHandle, index: usize) -> Value {
+    pub fn get(&self, handle: ArrayHandle, index: isize) -> Value {
         let header = &self.heads[handle];
+        let length = header.length as isize;
 
-        if index >= header.length {
+        // Handle negative indices (from the end)
+        let actual_index = if index < 0 {
+            length + index
+        } else {
+            index
+        };
+
+        // Check bounds - negative index too large or positive index out of bounds
+        if actual_index < 0 || actual_index >= length {
             return Value::Nil;
         }
 
-        let chunk_index = index / CHUNK_SIZE;
-        let slot_index = index % CHUNK_SIZE;
+        let actual_index = actual_index as usize;
+        let chunk_index = actual_index / CHUNK_SIZE;
+        let slot_index = actual_index % CHUNK_SIZE;
 
         let mut current_chunk = header.first_chunk;
 
@@ -309,12 +318,12 @@ impl ArrayArena {
         let new_handle = self.create_array(total_length);
 
         for i in 0..len1 {
-            let value = self.get(handle1, i);
+            let value = self.get(handle1, i as isize);
             self.insert(new_handle, i, value);
         }
 
         for i in 0..len2 {
-            let value = self.get(handle2, i);
+            let value = self.get(handle2, i as isize);
             self.insert(new_handle, len1 + i, value);
         }
 
@@ -335,7 +344,7 @@ impl ArrayArena {
         let new_handle = self.create_array(slice_length);
 
         for i in 0..slice_length {
-            let value = self.get(handle, start + i);
+            let value = self.get(handle, (start + i) as isize);
             self.insert(new_handle, i, value);
         }
 
@@ -416,7 +425,7 @@ impl<'a> Iterator for ArrayIterator<'a> {
             return None;
         }
 
-        let value = self.arena.get(self.handle, self.current_index);
+        let value = self.arena.get(self.handle, self.current_index as isize);
         self.current_index += 1;
 
         // Skip Nil values (empty slots)
@@ -671,6 +680,38 @@ mod tests {
         // Test slice from beyond bounds to end
         let empty_slice = arena.slice(handle, 10, None);
         assert_eq!(arena.length(empty_slice), 0);
+    }
+
+    #[test]
+    fn test_negative_indexing() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(5);
+
+        // Fill array with values [0, 1, 2, 3, 4]
+        for i in 0..5 {
+            arena.insert(handle, i, Value::Number(i as f64));
+        }
+
+        // Test negative indices
+        assert_eq!(arena.get(handle, -1), Value::Number(4.0)); // Last element
+        assert_eq!(arena.get(handle, -2), Value::Number(3.0)); // Second to last
+        assert_eq!(arena.get(handle, -3), Value::Number(2.0)); // Third to last
+        assert_eq!(arena.get(handle, -4), Value::Number(1.0)); // Fourth to last
+        assert_eq!(arena.get(handle, -5), Value::Number(0.0)); // First element
+
+        // Test out of bounds negative indices
+        assert_eq!(arena.get(handle, -6), Value::Nil); // Beyond bounds
+        assert_eq!(arena.get(handle, -10), Value::Nil); // Way beyond bounds
+
+        // Test positive indices still work
+        assert_eq!(arena.get(handle, 0), Value::Number(0.0));
+        assert_eq!(arena.get(handle, 4), Value::Number(4.0));
+        assert_eq!(arena.get(handle, 5), Value::Nil); // Out of bounds positive
+
+        // Test empty array
+        let empty_handle = arena.create_array(0);
+        assert_eq!(arena.get(empty_handle, -1), Value::Nil);
+        assert_eq!(arena.get(empty_handle, 0), Value::Nil);
     }
 
     #[test]

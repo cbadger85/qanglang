@@ -19,6 +19,7 @@ use crate::{
         UpvalueReference,
     },
     qang_std::{
+        qang_array_length, qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice,
         qang_assert, qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
         qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_string,
         qang_typeof,
@@ -319,6 +320,46 @@ impl Vm {
             IntrinsicMethod {
                 function: qang_string_to_lowercase,
                 arity: 0,
+            },
+        );
+        let array_length_handle = allocator.strings.intern("length");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_length_handle),
+            IntrinsicMethod {
+                function: qang_array_length,
+                arity: 0,
+            },
+        );
+        let array_push_handle = allocator.strings.intern("push");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_push_handle),
+            IntrinsicMethod {
+                function: qang_array_push,
+                arity: 1,
+            },
+        );
+        let array_pop_handle = allocator.strings.intern("pop");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_pop_handle),
+            IntrinsicMethod {
+                function: qang_array_pop,
+                arity: 0,
+            },
+        );
+        let array_reverse_handle = allocator.strings.intern("reverse");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_reverse_handle),
+            IntrinsicMethod {
+                function: qang_array_reverse,
+                arity: 0,
+            },
+        );
+        let array_slice_handle = allocator.strings.intern("slice");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_slice_handle),
+            IntrinsicMethod {
+                function: qang_array_slice,
+                arity: 2,
             },
         );
 
@@ -722,6 +763,14 @@ impl Vm {
                                 value,
                             )?;
                         }
+                        Value::Array(_) => {
+                            let identifer = read_string!(self);
+                            self.bind_intrinsic_method(
+                                identifer,
+                                IntrinsicKind::Array(identifer),
+                                value,
+                            )?;
+                        }
                         _ => {
                             return Err(QangRuntimeError::new(
                                 format!(
@@ -835,7 +884,7 @@ impl Vm {
                     let index = pop_value!(self);
                     match (index, peek_value!(self, 0)) {
                         (Value::Number(index), Value::Array(handle)) => {
-                            let value = self.allocator.arrays.get(handle, index.floor() as usize); // TODO verify this is an int instead of coercing it.
+                            let value = self.allocator.arrays.get(handle, index.floor() as isize); // TODO verify this is an int instead of coercing it.
                             pop_value!(self);
                             push_value!(self, value);
                         }
@@ -1149,6 +1198,19 @@ impl Vm {
                     .state
                     .intrinsics
                     .get(&IntrinsicKind::String(method_handle))
+                    .ok_or_else(|| {
+                        QangRuntimeError::new(
+                            "invalid method call.".to_string(),
+                            self.state.get_previous_loc(),
+                        )
+                    })?;
+                self.call_intrinsic_method(receiver, intrinsic, arg_count)
+            }
+            Value::Array(_) => {
+                let intrinsic = *self
+                    .state
+                    .intrinsics
+                    .get(&IntrinsicKind::Array(method_handle))
                     .ok_or_else(|| {
                         QangRuntimeError::new(
                             "invalid method call.".to_string(),

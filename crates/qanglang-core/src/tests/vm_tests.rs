@@ -1139,6 +1139,9 @@ fn test_arrays() {
         var test_array_2 = ["foo", 1, true,];
 
         println(test_array_2);
+        println(test_array_2[0]);
+        println(test_array_2[1]);
+        println(test_array_2[2]);
     "#;
 
     let source_map = SourceMap::new(source.to_string());

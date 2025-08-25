@@ -825,11 +825,39 @@ impl Vm {
                     let length = self.state.read_byte() as usize;
                     let array = self.allocator.arrays.create_array(length);
 
-                    for i in 0..length {
+                    for i in (0..length).rev() {
                         let value = pop_value!(self);
                         self.allocator.arrays.insert(array, i, value);
                     }
                     push_value!(self, Value::Array(array));
+                }
+                OpCode::GetArrayIndex => {
+                    let index = pop_value!(self);
+                    match (index, peek_value!(self, 0)) {
+                        (Value::Number(index), Value::Array(handle)) => {
+                            let value = self.allocator.arrays.get(handle, index.floor() as usize); // TODO verify this is an int instead of coercing it.
+                            pop_value!(self);
+                            push_value!(self, value);
+                        }
+                        (_, Value::Array(_)) => {
+                            return Err(QangRuntimeError::new(
+                                "An array can only be indexed by a number.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                        (Value::Number(_), _) => {
+                            return Err(QangRuntimeError::new(
+                                "Only arrays can be indexed.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Invalid operation.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    }
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);

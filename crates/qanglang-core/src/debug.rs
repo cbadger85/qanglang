@@ -99,6 +99,7 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::SuperInvoke => invoke_instruction("OP_SUPER_INVOKE", chunk, allocator, offset),
         OpCode::InitField => constant_instruction("OP_INIT_FIELD", chunk, allocator, offset),
         OpCode::ArrayLiteral => byte_instruction("OP_ARRAY_LITERAL", chunk, offset),
+        OpCode::GetArrayIndex => simple_instruction("OP_ARRAY_INDEX", offset),
     }
 }
 

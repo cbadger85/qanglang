@@ -1485,10 +1485,13 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 self.emit_opcode_and_byte(OpCode::GetProperty, byte, call.span);
                 Ok(())
             }
-            _ => Err(QangSyntaxError::new(
-                "Expected function call.".to_string(),
-                call.span,
-            )),
+            ast::CallOperation::Index(expr) => {
+                self.visit_expression(call.callee.as_ref(), errors)?;
+                self.visit_expression(expr, errors)?;
+
+                self.emit_opcode(OpCode::GetArrayIndex, call.span);
+                Ok(())
+            }
         }
     }
 

@@ -133,7 +133,7 @@ fn test_calling_functions_from_native() {
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     fn find_function_handle(identifier: &str, vm: &mut Vm) -> ClosureHandle {
-        let function_identifier_handle = vm.allocator.strings.intern(identifier.into());
+        let function_identifier_handle = vm.alloc.strings.intern(identifier.into());
         let (_, value) = vm
             .globals()
             .iter()
@@ -169,11 +169,11 @@ fn test_calling_functions_from_native() {
                 _ => panic!("Unexpected type conversion."),
             }
 
-            let foo = vm.allocator.strings.intern("foo".into());
+            let foo = vm.alloc.strings.intern("foo".into());
 
             match vm.call_function(function_handle, vec![Value::String(foo)]) {
                 Ok(Value::String(handle)) => {
-                    let string = vm.allocator.strings.get_string(handle);
+                    let string = vm.alloc.strings.get_string(handle);
                     assert_eq!("foo".to_string(), string.to_string());
                 }
                 Err(error) => {

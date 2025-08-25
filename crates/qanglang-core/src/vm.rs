@@ -111,65 +111,6 @@ macro_rules! read_string {
     };
 }
 
-#[macro_export]
-macro_rules! gc_allocate {
-    // Closure allocation
-    ($vm:expr, closure: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
-            $vm.collect_garbage();
-        }
-        $vm.allocator.allocate_closure($value)
-    }};
-
-    // Value allocation
-    ($vm:expr, value: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
-            $vm.collect_garbage();
-        }
-        $vm.allocator.allocate_upvalue($value)
-    }};
-
-    // Class allocation
-    ($vm:expr, class: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
-            $vm.collect_garbage();
-        }
-        $vm.allocator.allocate_class($value)
-    }};
-
-    // Instance allocation
-    ($vm:expr, instance: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
-            $vm.collect_garbage();
-        }
-        $vm.allocator.allocate_instance($value)
-    }};
-
-    // Method allocation
-    ($vm:expr, method: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
-            $vm.collect_garbage();
-        }
-        $vm.allocator.allocate_bound_method($value)
-    }};
-
-    // Intrinsic method allocation
-    ($vm:expr, intrinsic: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
-            $vm.collect_garbage();
-        }
-        $vm.allocator.allocate_bound_intrinsic($value)
-    }};
-
-    // Array allocation
-    ($vm:expr, array: $value:expr) => {{
-        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
-            $vm.collect_garbage();
-        }
-        $vm.allocator.arrays.create_array($value)
-    }};
-}
-
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
     closure: ClosureHandle,
@@ -272,50 +213,57 @@ pub struct Vm {
     pub is_debug: bool,
     pub is_gc_enabled: bool,
     state: VmState,
-    pub allocator: HeapAllocator,
+    pub alloc: HeapAllocator,
 }
 
 impl Vm {
-    pub fn new(mut allocator: HeapAllocator) -> Self {
+    pub fn with_gc_check<T>(&mut self, op: impl FnOnce(&mut HeapAllocator) -> T) -> T {
+        if self.is_gc_enabled && self.alloc.should_collect_garbage() {
+            self.collect_garbage();
+        }
+        op(&mut self.alloc)
+    }
+
+    pub fn new(mut alloc: HeapAllocator) -> Self {
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
-        let nil_type_handle = allocator.strings.intern("NIL");
-        let nil_type_value_handle = allocator.strings.intern(NIL_TYPE_STRING);
+        let nil_type_handle = alloc.strings.intern("NIL");
+        let nil_type_value_handle = alloc.strings.intern(NIL_TYPE_STRING);
         globals.insert(nil_type_handle, Value::String(nil_type_value_handle));
 
-        let boolean_type_handle = allocator.strings.intern("BOOLEAN");
-        let boolean_type_value_handle = allocator.strings.intern(BOOLEAN_TYPE_STRING);
+        let boolean_type_handle = alloc.strings.intern("BOOLEAN");
+        let boolean_type_value_handle = alloc.strings.intern(BOOLEAN_TYPE_STRING);
         globals.insert(
             boolean_type_handle,
             Value::String(boolean_type_value_handle),
         );
 
-        let number_type_handle = allocator.strings.intern("NUMBER");
-        let number_type_value_handle = allocator.strings.intern(NUMBER_TYPE_STRING);
+        let number_type_handle = alloc.strings.intern("NUMBER");
+        let number_type_value_handle = alloc.strings.intern(NUMBER_TYPE_STRING);
         globals.insert(number_type_handle, Value::String(number_type_value_handle));
 
-        let string_type_handle = allocator.strings.intern("STRING");
-        let string_type_value_handle = allocator.strings.intern(STRING_TYPE_STRING);
+        let string_type_handle = alloc.strings.intern("STRING");
+        let string_type_value_handle = alloc.strings.intern(STRING_TYPE_STRING);
         globals.insert(string_type_handle, Value::String(string_type_value_handle));
 
-        let function_type_handle = allocator.strings.intern("FUNCTION");
-        let function_type_value_handle = allocator.strings.intern(FUNCTION_TYPE_STRING);
+        let function_type_handle = alloc.strings.intern("FUNCTION");
+        let function_type_value_handle = alloc.strings.intern(FUNCTION_TYPE_STRING);
         globals.insert(
             function_type_handle,
             Value::String(function_type_value_handle),
         );
-        let class_type_handle = allocator.strings.intern("CLASS");
-        let class_type_value_handle = allocator.strings.intern(CLASS_TYPE_STRING);
+        let class_type_handle = alloc.strings.intern("CLASS");
+        let class_type_value_handle = alloc.strings.intern(CLASS_TYPE_STRING);
         globals.insert(class_type_handle, Value::String(class_type_value_handle));
-        let object_type_handle = allocator.strings.intern("OBJECT");
-        let object_type_value_handle = allocator.strings.intern(OBJECT_TYPE_STRING);
+        let object_type_handle = alloc.strings.intern("OBJECT");
+        let object_type_value_handle = alloc.strings.intern(OBJECT_TYPE_STRING);
         globals.insert(object_type_handle, Value::String(object_type_value_handle));
-        let array_type_handle = allocator.strings.intern("ARRAY");
-        let array_type_value_handle = allocator.strings.intern(ARRAY_TYPE_STRING);
+        let array_type_handle = alloc.strings.intern("ARRAY");
+        let array_type_value_handle = alloc.strings.intern(ARRAY_TYPE_STRING);
         globals.insert(array_type_handle, Value::String(array_type_value_handle));
 
         let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
-        let to_uppercase_handle = allocator.strings.intern("to_uppercase");
+        let to_uppercase_handle = alloc.strings.intern("to_uppercase");
         intrinsics.insert(
             IntrinsicKind::String(to_uppercase_handle),
             IntrinsicMethod {
@@ -323,7 +271,7 @@ impl Vm {
                 arity: 0,
             },
         );
-        let to_lowercase_handle = allocator.strings.intern("to_lowercase");
+        let to_lowercase_handle = alloc.strings.intern("to_lowercase");
         intrinsics.insert(
             IntrinsicKind::String(to_lowercase_handle),
             IntrinsicMethod {
@@ -331,7 +279,7 @@ impl Vm {
                 arity: 0,
             },
         );
-        let array_length_handle = allocator.strings.intern("length");
+        let array_length_handle = alloc.strings.intern("length");
         intrinsics.insert(
             IntrinsicKind::Array(array_length_handle),
             IntrinsicMethod {
@@ -339,7 +287,7 @@ impl Vm {
                 arity: 0,
             },
         );
-        let array_push_handle = allocator.strings.intern("push");
+        let array_push_handle = alloc.strings.intern("push");
         intrinsics.insert(
             IntrinsicKind::Array(array_push_handle),
             IntrinsicMethod {
@@ -347,7 +295,7 @@ impl Vm {
                 arity: 1,
             },
         );
-        let array_pop_handle = allocator.strings.intern("pop");
+        let array_pop_handle = alloc.strings.intern("pop");
         intrinsics.insert(
             IntrinsicKind::Array(array_pop_handle),
             IntrinsicMethod {
@@ -355,7 +303,7 @@ impl Vm {
                 arity: 0,
             },
         );
-        let array_reverse_handle = allocator.strings.intern("reverse");
+        let array_reverse_handle = alloc.strings.intern("reverse");
         intrinsics.insert(
             IntrinsicKind::Array(array_reverse_handle),
             IntrinsicMethod {
@@ -363,7 +311,7 @@ impl Vm {
                 arity: 0,
             },
         );
-        let array_slice_handle = allocator.strings.intern("slice");
+        let array_slice_handle = alloc.strings.intern("slice");
         intrinsics.insert(
             IntrinsicKind::Array(array_slice_handle),
             IntrinsicMethod {
@@ -376,7 +324,7 @@ impl Vm {
             is_debug: false,
             is_gc_enabled: true,
             state: VmState::new(globals, intrinsics),
-            allocator,
+            alloc,
         };
 
         vm.add_native_function("assert", 2, qang_assert)
@@ -401,13 +349,13 @@ impl Vm {
     }
 
     pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
-        let identifier_handle = self.allocator.strings.intern(name);
+        let identifier_handle = self.alloc.strings.intern(name);
         let native_function = NativeFunctionObject {
             name_handle: identifier_handle,
             arity,
             function,
         };
-        let handle = self.allocator.allocate_native_function(native_function);
+        let handle = self.alloc.allocate_native_function(native_function);
 
         self.state
             .globals
@@ -418,10 +366,10 @@ impl Vm {
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
         let function_handle = program.into_handle();
-        let upvalue_count = self.allocator.get_function(function_handle).upvalue_count;
+        let upvalue_count = self.alloc.get_function(function_handle).upvalue_count;
 
         let handle = self
-            .allocator
+            .alloc
             .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
         push_value!(self, Value::Closure(handle));
         self.call(handle, 0)?;
@@ -488,7 +436,7 @@ impl Vm {
                     push_value!(self, Value::Nil);
                 }
                 OpCode::Add => {
-                    self.binary_operation(|a, b, allocator| match (&a, &b) {
+                    self.binary_operation(|a, b, alloc| match (&a, &b) {
                         (Value::Number(num1), Value::Number(num2)) => {
                             Ok(Value::Number(num1 + num2))
                         }
@@ -496,7 +444,7 @@ impl Vm {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
                             Ok(Value::String(
-                                allocator.strings.concat_strings(*handle1, *handle2),
+                                alloc.strings.concat_strings(*handle1, *handle2),
                             ))
                         }
                         (Value::Number(_), _) => {
@@ -575,7 +523,7 @@ impl Vm {
                     let identifier_handle = read_string!(self);
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
-                        let identifier_name = self.allocator.strings.get_string(identifier_handle);
+                        let identifier_name = self.alloc.strings.get_string(identifier_handle);
                         QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name),
                             loc,
@@ -587,7 +535,7 @@ impl Vm {
                     let identifier_handle = read_string!(self);
 
                     if !self.state.globals.contains_key(&identifier_handle) {
-                        let identifier_name = self.allocator.strings.get_string(identifier_handle);
+                        let identifier_name = self.alloc.strings.get_string(identifier_handle);
                         let loc = self.state.get_previous_loc();
                         return Err(QangRuntimeError::new(
                             format!("Undefined variable: {}.", identifier_name).to_string(),
@@ -648,11 +596,12 @@ impl Vm {
                             ));
                         }
                     };
-                    let upvalue_count = self.allocator.get_function(handle).upvalue_count;
-                    let closure_handle =
-                        gc_allocate!(self, closure: ClosureObject::new(handle, upvalue_count));
+                    let upvalue_count = self.alloc.get_function(handle).upvalue_count;
+                    let closure_handle = self.with_gc_check(|alloc| {
+                        alloc.allocate_closure(ClosureObject::new(handle, upvalue_count))
+                    });
 
-                    for i in 0..self.allocator.get_closure(closure_handle).upvalue_count {
+                    for i in 0..self.alloc.get_closure(closure_handle).upvalue_count {
                         let is_local = self.state.read_byte() != 0;
                         let index = self.state.read_byte() as usize;
 
@@ -662,10 +611,10 @@ impl Vm {
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {
                             let current_closure = self
-                                .allocator
+                                .alloc
                                 .get_closure(self.state.frames[self.state.frame_count - 1].closure);
                             let current_upvalue = current_closure.upvalues[index];
-                            self.allocator.get_closure_mut(closure_handle).upvalues[i] =
+                            self.alloc.get_closure_mut(closure_handle).upvalues[i] =
                                 current_upvalue;
                         }
                     }
@@ -674,7 +623,7 @@ impl Vm {
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
                     let current_closure = self
-                        .allocator
+                        .alloc
                         .get_closure(self.state.frames[self.state.frame_count - 1].closure);
                     let upvalue = current_closure.upvalues[slot];
 
@@ -684,7 +633,7 @@ impl Vm {
                             push_value!(self, value);
                         }
                         UpvalueReference::Closed(value_handle) => {
-                            let value = *self.allocator.get_upvalue(value_handle);
+                            let value = *self.alloc.get_upvalue(value_handle);
                             push_value!(self, value);
                         }
                     }
@@ -695,13 +644,13 @@ impl Vm {
                     let current_closure_handle =
                         self.state.frames[self.state.frame_count - 1].closure;
 
-                    let upvalue = self.allocator.get_closure(current_closure_handle).upvalues[slot];
+                    let upvalue = self.alloc.get_closure(current_closure_handle).upvalues[slot];
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
                             self.state.stack[stack_slot] = value;
                         }
                         UpvalueReference::Closed(value_handle) => {
-                            *self.allocator.get_upvalue_mut(value_handle) = value;
+                            *self.alloc.get_upvalue_mut(value_handle) = value;
                         }
                     }
                 }
@@ -711,13 +660,14 @@ impl Vm {
                 }
                 OpCode::Class => {
                     let identifier_handle = read_string!(self);
-                    let class_handle = gc_allocate!(self, class:  identifier_handle);
+                    let class_handle =
+                        self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
                     push_value!(self, Value::Class(class_handle))
                 }
                 OpCode::SetProperty => {
                     let instance = peek_value!(self, 1);
                     if let Value::Instance(instance_handle) = instance {
-                        let instance = self.allocator.get_instance(instance_handle);
+                        let instance_table = self.alloc.get_instance(instance_handle).table;
                         let constant = self.state.read_constant();
                         if !matches!(constant, Value::String(_)) {
                             return Err(QangRuntimeError::new(
@@ -725,12 +675,10 @@ impl Vm {
                                 self.state.get_previous_loc(),
                             ));
                         }
-
-                        self.allocator.set_instance_field(
-                            instance.table,
-                            constant,
-                            peek_value!(self, 0),
-                        );
+                        let value = peek_value!(self, 0);
+                        self.with_gc_check(|alloc| {
+                            alloc.set_instance_field(instance_table, constant, value)
+                        });
                         let value = pop_value!(self); // value to assign
                         pop_value!(self); // instance
                         push_value!(self, value); // push assigned value to top of stack
@@ -746,7 +694,7 @@ impl Vm {
 
                     match value {
                         Value::Instance(instance_handle) => {
-                            let instance = self.allocator.get_instance(instance_handle);
+                            let instance = self.alloc.get_instance(instance_handle);
                             let constant = self.state.read_constant();
                             if !matches!(constant, Value::String(_)) {
                                 return Err(QangRuntimeError::new(
@@ -756,7 +704,7 @@ impl Vm {
                             }
 
                             if let Some(value) =
-                                self.allocator.get_instance_field(instance.table, constant)
+                                self.alloc.get_instance_field(instance.table, constant)
                             {
                                 pop_value!(self);
                                 push_value!(self, value);
@@ -811,16 +759,16 @@ impl Vm {
 
                     match (superclass, subclass) {
                         (Value::Class(superclass), Value::Class(subclass)) => {
-                            let superclass = self.allocator.get_class(superclass);
-                            let subclass = self.allocator.get_class(subclass);
+                            let superclass = self.alloc.get_class(superclass);
+                            let subclass = self.alloc.get_class(subclass);
                             let subclass_value_table = subclass.value_table;
                             let superclass_value_table = superclass.value_table;
                             let superclass_method_table = superclass.method_table;
                             let subclass_method_table = subclass.method_table;
-                            self.allocator
+                            self.alloc
                                 .tables
                                 .copy_into(superclass_method_table, subclass_method_table);
-                            self.allocator
+                            self.alloc
                                 .tables
                                 .copy_into(superclass_value_table, subclass_value_table);
                             pop_value!(self);
@@ -845,9 +793,9 @@ impl Vm {
                     let superclass = pop_value!(self);
 
                     if let Value::Class(superclass_handle) = superclass {
-                        let superclass_obj = self.allocator.get_class(superclass_handle);
+                        let superclass_obj = self.alloc.get_class(superclass_handle);
 
-                        if let Some(field_value) = self.allocator.get_class_method(
+                        if let Some(field_value) = self.alloc.get_class_method(
                             superclass_obj.value_table,
                             Value::String(property_handle),
                         ) {
@@ -881,10 +829,10 @@ impl Vm {
                 }
                 OpCode::ArrayLiteral => {
                     let length = self.state.read_byte() as usize;
-                    let array = gc_allocate!(self, array: length);
+                    let array = self.with_gc_check(|alloc| alloc.arrays.create_array(length));
                     for i in (0..length).rev() {
                         let value = pop_value!(self);
-                        self.allocator.arrays.insert(array, i, value);
+                        self.alloc.arrays.insert(array, i, value);
                     }
                     push_value!(self, Value::Array(array));
                 }
@@ -892,7 +840,7 @@ impl Vm {
                     let index = pop_value!(self);
                     match (index, peek_value!(self, 0)) {
                         (Value::Number(index), Value::Array(handle)) => {
-                            let value = self.allocator.arrays.get(handle, index.floor() as isize); // TODO verify this is an int instead of coercing it.
+                            let value = self.alloc.arrays.get(handle, index.floor() as isize); // TODO verify this is an int instead of coercing it.
                             pop_value!(self);
                             push_value!(self, value);
                         }
@@ -922,7 +870,7 @@ impl Vm {
                     match (index, peek_value!(self, 0)) {
                         (Value::Number(index), Value::Array(handle)) => {
                             let is_within_bounds =
-                                self.allocator
+                                self.alloc
                                     .arrays
                                     .insert(handle, index.floor() as usize, value); // TODO verify this is an int instead of coercing it.
 
@@ -973,8 +921,8 @@ impl Vm {
 
                     // Restore the previous function pointer
                     let previous_frame = &self.state.frames[self.state.frame_count - 1];
-                    let previous_closure = self.allocator.get_closure(previous_frame.closure);
-                    let previous_function = self.allocator.get_function(previous_closure.function);
+                    let previous_closure = self.alloc.get_closure(previous_frame.closure);
+                    let previous_function = self.alloc.get_function(previous_closure.function);
                     self.state.current_function_ptr = previous_function as *const FunctionObject;
 
                     self.state.stack_top = value_slot + 1;
@@ -988,8 +936,8 @@ impl Vm {
         if let Value::Closure(method) = peek_value!(self, 0)
             && let Value::Class(clazz_handle) = peek_value!(self, 1)
         {
-            let clazz = self.allocator.get_class(clazz_handle);
-            self.allocator.set_class_method(
+            let clazz = self.alloc.get_class(clazz_handle);
+            self.alloc.set_class_method(
                 clazz.method_table,
                 Value::String(name),
                 Value::Closure(method),
@@ -1002,8 +950,8 @@ impl Vm {
 
     fn init_field(&mut self, field_name: StringHandle, value: Value) -> RuntimeResult<()> {
         if let Value::Class(clazz_handle) = peek_value!(self, 0) {
-            let clazz = self.allocator.get_class(clazz_handle);
-            self.allocator
+            let clazz = self.alloc.get_class(clazz_handle);
+            self.alloc
                 .set_class_method(clazz.value_table, Value::String(field_name), value);
         }
 
@@ -1011,14 +959,13 @@ impl Vm {
     }
 
     fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
-        let clazz = self.allocator.get_class(clazz_handle);
-        if let Some(Value::Closure(closure)) = self
-            .allocator
-            .get_class_method(clazz.method_table, method_name)
+        let clazz = self.alloc.get_class(clazz_handle);
+        if let Some(Value::Closure(closure)) =
+            self.alloc.get_class_method(clazz.method_table, method_name)
         {
             let receiver = peek_value!(self, 0);
             let bound = BoundMethodObject::new(receiver, closure);
-            let handle = gc_allocate!(self, method: bound);
+            let handle = self.with_gc_check(|alloc| alloc.allocate_bound_method(bound));
             pop_value!(self);
             push_value!(self, Value::BoundMethod(handle));
         } else {
@@ -1041,7 +988,7 @@ impl Vm {
             )
         })?;
         let bound = BoundIntrinsicObject::new(receiver, intrinsic, method_name);
-        let handle = gc_allocate!(self, intrinsic: bound);
+        let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
         pop_value!(self);
         push_value!(self, Value::BoundIntrinsic(handle));
         Ok(())
@@ -1053,12 +1000,12 @@ impl Vm {
         method_name: StringHandle,
     ) -> RuntimeResult<bool> {
         if let Some(Value::Closure(closure)) = self
-            .allocator
+            .alloc
             .get_class_method(method_table_handle, Value::String(method_name))
         {
             let receiver = peek_value!(self, 0);
             let bound = BoundMethodObject::new(receiver, closure);
-            let handle = gc_allocate!(self, method: bound);
+            let handle = self.with_gc_check(|alloc| alloc.allocate_bound_method(bound));
             pop_value!(self); // Pop 'this'
             push_value!(self, Value::BoundMethod(handle));
             Ok(true)
@@ -1076,14 +1023,14 @@ impl Vm {
             if stack_slot >= last_slot {
                 let value = self.state.stack[stack_slot];
 
-                let value_handle = gc_allocate!(self, value: value);
+                let value_handle = self.with_gc_check(|alloc| alloc.allocate_upvalue(value));
 
                 // Extract the closures list by removing and then updating
                 let (_, closures_to_update) = self.state.open_upvalues.remove(i);
 
                 // Update all closures that reference this stack slot
                 for (closure_handle, upvalue_index) in closures_to_update.iter() {
-                    self.allocator.get_closure_mut(*closure_handle).upvalues[*upvalue_index] =
+                    self.alloc.get_closure_mut(*closure_handle).upvalues[*upvalue_index] =
                         UpvalueReference::Closed(value_handle);
                 }
             }
@@ -1101,14 +1048,14 @@ impl Vm {
             if *open_slot == stack_slot {
                 // Add this closure to the list for this stack slot
                 closures.push((closure_handle, upvalue_index));
-                self.allocator.get_closure_mut(closure_handle).upvalues[upvalue_index] =
+                self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
                     UpvalueReference::Open(stack_slot);
                 return;
             }
         }
 
         // Create a new open upvalue
-        self.allocator.get_closure_mut(closure_handle).upvalues[upvalue_index] =
+        self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
             UpvalueReference::Open(stack_slot);
         self.state
             .open_upvalues
@@ -1125,7 +1072,7 @@ impl Vm {
         let b = pop_value!(self);
         let a = pop_value!(self);
 
-        let value = op(a, b, &mut self.allocator)
+        let value = op(a, b, &mut self.alloc)
             .map_err(|e: BinaryOperationError| e.into_qang_error(self.state.get_previous_loc()))?;
 
         push_value!(self, value);
@@ -1137,21 +1084,21 @@ impl Vm {
             Value::Closure(handle) => self.call(handle, arg_count),
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             Value::Class(handle) => {
-                let constructor_handle = self.allocator.strings.intern(CLASS_INITIALIZER_STRING);
-                let clazz = self.allocator.get_class(handle);
+                let constructor_handle = self.alloc.strings.intern(CLASS_INITIALIZER_STRING);
+                let clazz = self.alloc.get_class(handle);
                 let clazz_method_table = clazz.method_table;
                 let value_method_table = clazz.value_table;
-                let insance_handle = gc_allocate!(self, instance: handle);
+                let insance_handle = self.with_gc_check(|alloc| alloc.allocate_instance(handle));
                 self.state.stack[self.state.stack_top - arg_count - 1] =
                     Value::Instance(insance_handle);
-                let instance_table = self.allocator.get_instance(insance_handle).table;
+                let instance_table = self.alloc.get_instance(insance_handle).table;
 
-                self.allocator
+                self.alloc
                     .tables
                     .copy_into(value_method_table, instance_table);
 
                 if let Some(Value::Closure(constructor)) = self
-                    .allocator
+                    .alloc
                     .get_class_method(clazz_method_table, Value::String(constructor_handle))
                 {
                     self.call(constructor, arg_count)?;
@@ -1159,7 +1106,7 @@ impl Vm {
                 Ok(())
             }
             Value::BoundMethod(handle) => {
-                let bound_method = self.allocator.get_bound_method(handle);
+                let bound_method = self.alloc.get_bound_method(handle);
 
                 // Replace the method function with the receiver in the stack
                 // so that when the method is called, 'this' (slot 0) contains the receiver
@@ -1167,7 +1114,7 @@ impl Vm {
                 self.call(bound_method.closure, arg_count)
             }
             Value::BoundIntrinsic(handle) => {
-                let bound_intrinsic = self.allocator.get_bound_intrinsic(handle);
+                let bound_intrinsic = self.alloc.get_bound_intrinsic(handle);
                 self.call_intrinsic_method(
                     bound_intrinsic.receiver,
                     bound_intrinsic.method,
@@ -1175,7 +1122,7 @@ impl Vm {
                 )
             }
             _ => {
-                let value_str = value.to_display_string(&self.allocator);
+                let value_str = value.to_display_string(&self.alloc);
                 Err(QangRuntimeError::new(
                     format!("Identifier '{}' not callable.", value_str).to_string(),
                     self.state.get_previous_loc(),
@@ -1189,10 +1136,10 @@ impl Vm {
 
         match receiver {
             Value::Instance(instance_handle) => {
-                let instance = self.allocator.get_instance(instance_handle);
+                let instance = self.alloc.get_instance(instance_handle);
 
                 if let Some(value) = self
-                    .allocator
+                    .alloc
                     .get_instance_field(instance.table, Value::String(method_handle))
                 {
                     self.state.stack[self.state.stack_top - arg_count - 1] = value;
@@ -1245,8 +1192,8 @@ impl Vm {
         coz::progress!("before_call");
 
         // Get closure and function, cache function pointer for fast access during execution
-        let closure = self.allocator.get_closure(closure_handle);
-        let function = self.allocator.get_function(closure.function);
+        let closure = self.alloc.get_closure(closure_handle);
+        let function = self.alloc.get_function(closure.function);
 
         let final_arg_count = {
             if arg_count < function.arity {
@@ -1319,7 +1266,7 @@ impl Vm {
         handle: NativeFunctionHandle,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let function = self.allocator.get_native_function(handle);
+        let function = self.alloc.get_native_function(handle);
         let mut args = vec![Value::Nil; function.arity];
 
         for i in (0..arg_count).rev() {
@@ -1380,15 +1327,15 @@ impl Vm {
         method_handle: StringHandle,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let clazz = self.allocator.get_class(clazz_handle);
+        let clazz = self.alloc.get_class(clazz_handle);
         if let Some(Value::Closure(method)) = self
-            .allocator
+            .alloc
             .get_class_method(clazz.method_table, Value::String(method_handle))
         {
             self.call(method, arg_count)
         } else {
             // If method is `init` and it does not exist, do nothing (return nil)
-            let method_name = self.allocator.strings.get_string(method_handle);
+            let method_name = self.alloc.strings.get_string(method_handle);
             if method_name == CLASS_INITIALIZER_STRING {
                 // Pop arguments but leave receiver on stack
                 for _ in 0..arg_count {
@@ -1401,8 +1348,8 @@ impl Vm {
                 Err(QangRuntimeError::new(
                     format!(
                         "{} does not exist on class {}.",
-                        Value::String(method_handle).to_display_string(&self.allocator),
-                        Value::Class(clazz_handle).to_display_string(&self.allocator),
+                        Value::String(method_handle).to_display_string(&self.alloc),
+                        Value::Class(clazz_handle).to_display_string(&self.alloc),
                     ),
                     self.state.get_previous_loc(),
                 ))
@@ -1435,7 +1382,7 @@ impl Vm {
     pub fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
         let roots = self.gather_roots();
-        self.allocator.collect_garbage(roots);
+        self.alloc.collect_garbage(roots);
         debug_log!(self.is_debug, "--gc end");
     }
 
@@ -1452,10 +1399,10 @@ impl Vm {
 
         for frame_idx in frame_id_range {
             let frame = &self.state.frames[frame_idx];
-            let closure = self.allocator.get_closure(frame.closure);
-            let function = self.allocator.get_function(closure.function);
+            let closure = self.alloc.get_closure(frame.closure);
+            let function = self.alloc.get_function(closure.function);
 
-            let name = self.allocator.strings.get_string(function.name);
+            let name = self.alloc.strings.get_string(function.name);
 
             let loc = if frame.ip > 0 {
                 function
@@ -1479,7 +1426,7 @@ impl Vm {
         print!("          ");
         for i in 0..self.state.stack_top {
             if let Some(value) = self.state.stack.get(i) {
-                value.print(&self.allocator);
+                value.print(&self.alloc);
                 print!(" ");
             }
         }
@@ -1487,7 +1434,7 @@ impl Vm {
 
         disassemble_instruction(
             &self.state.get_current_function().chunk,
-            &self.allocator,
+            &self.alloc,
             self.state.frames[self.state.frame_count - 1].ip,
         );
     }

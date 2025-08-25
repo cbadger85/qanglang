@@ -33,7 +33,7 @@ pub fn run_repl(debug: bool) {
 pub fn execute_repl_line(source: &str, vm: &mut Vm) {
     let source_map = SourceMap::new(source.to_string());
 
-    let program = match CompilerPipeline::new(source_map, &mut vm.allocator).run() {
+    let program = match CompilerPipeline::new(source_map, &mut vm.alloc).run() {
         Ok(program) => program,
         Err(errors) => {
             for error in errors.all() {

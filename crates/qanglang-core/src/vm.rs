@@ -859,6 +859,45 @@ impl Vm {
                         }
                     }
                 }
+                OpCode::SetArrayIndex => {
+                    let index = pop_value!(self);
+                    let value = pop_value!(self);
+                    match (index, peek_value!(self, 0)) {
+                        (Value::Number(index), Value::Array(handle)) => {
+                            let is_within_bounds =
+                                self.allocator
+                                    .arrays
+                                    .insert(handle, index.floor() as usize, value); // TODO verify this is an int instead of coercing it.
+
+                            if !is_within_bounds {
+                                return Err(QangRuntimeError::new(
+                                    "Index out of bounds.".to_string(),
+                                    self.state.get_previous_loc(),
+                                ));
+                            }
+                            pop_value!(self);
+                            push_value!(self, value);
+                        }
+                        (_, Value::Array(_)) => {
+                            return Err(QangRuntimeError::new(
+                                "An array can only be indexed by a number.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                        (Value::Number(_), _) => {
+                            return Err(QangRuntimeError::new(
+                                "Only arrays can be indexed.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                "Invalid operation.".to_string(),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    }
+                }
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;

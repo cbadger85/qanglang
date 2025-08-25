@@ -2786,3 +2786,15 @@ fn test_lambda_as_immediately_invoked_expression_with_args() {
         panic!("Expected variable declaration");
     }
 }
+
+#[test]
+fn test_index_assignment() {
+    let source_code = r#"
+        foo[1] = true;
+        "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+}

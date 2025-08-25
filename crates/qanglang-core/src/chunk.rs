@@ -46,6 +46,7 @@ pub enum OpCode {
     InitField,
     ArrayLiteral,
     GetArrayIndex,
+    SetArrayIndex,
 }
 
 impl From<u8> for OpCode {
@@ -93,6 +94,7 @@ impl From<u8> for OpCode {
             39 => OpCode::InitField,
             40 => OpCode::ArrayLiteral,
             41 => OpCode::GetArrayIndex,
+            42 => OpCode::SetArrayIndex,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

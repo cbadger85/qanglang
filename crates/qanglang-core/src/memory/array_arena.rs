@@ -330,16 +330,33 @@ impl ArrayArena {
         new_handle
     }
 
-    pub fn slice(&mut self, handle: ArrayHandle, begin: usize, end: Option<usize>) -> ArrayHandle {
-        let source_length = self.heads[handle].length;
+    pub fn slice(&mut self, handle: ArrayHandle, begin: isize, end: Option<isize>) -> ArrayHandle {
+        let source_length = self.heads[handle].length as isize;
 
-        let start = begin.min(source_length);
-        let finish = end.unwrap_or(source_length).min(source_length).max(start);
-        let slice_length = finish - start;
+        // Handle negative indices for begin
+        let start = if begin < 0 {
+            (source_length + begin).max(0) as usize
+        } else {
+            (begin.min(source_length) as usize).min(source_length as usize)
+        };
 
-        if slice_length == 0 {
+        // Handle negative indices for end
+        let finish = if let Some(end_val) = end {
+            if end_val < 0 {
+                (source_length + end_val).max(0) as usize
+            } else {
+                (end_val.min(source_length) as usize).min(source_length as usize)
+            }
+        } else {
+            source_length as usize
+        };
+
+        // Safeguard: if begin > end, return empty array
+        if start >= finish {
             return self.create_array(0);
         }
+
+        let slice_length = finish - start;
 
         let new_handle = self.create_array(slice_length);
 
@@ -972,5 +989,119 @@ mod tests {
         // Iterator should still work
         let values: Vec<Value> = arena.iter(handle).collect();
         assert_eq!(values.len(), 50);
+    }
+
+    #[test]
+    fn test_slice_with_negative_indices() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(10);
+
+        // Fill array with values [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        for i in 0..10 {
+            arena.insert(handle, i, Value::Number(i as f64));
+        }
+
+        // Test negative start index
+        let slice1 = arena.slice(handle, -3, None); // Last 3 elements [7, 8, 9]
+        assert_eq!(arena.length(slice1), 3);
+        assert_eq!(arena.get(slice1, 0), Value::Number(7.0));
+        assert_eq!(arena.get(slice1, 1), Value::Number(8.0));
+        assert_eq!(arena.get(slice1, 2), Value::Number(9.0));
+
+        // Test negative end index
+        let slice2 = arena.slice(handle, 2, Some(-2)); // Elements from index 2 to -2 (exclusive) [2, 3, 4, 5, 6, 7]
+        assert_eq!(arena.length(slice2), 6);
+        assert_eq!(arena.get(slice2, 0), Value::Number(2.0));
+        assert_eq!(arena.get(slice2, 5), Value::Number(7.0));
+
+        // Test both negative indices
+        let slice3 = arena.slice(handle, -5, Some(-2)); // Elements from -5 to -2 [5, 6, 7]
+        assert_eq!(arena.length(slice3), 3);
+        assert_eq!(arena.get(slice3, 0), Value::Number(5.0));
+        assert_eq!(arena.get(slice3, 1), Value::Number(6.0));
+        assert_eq!(arena.get(slice3, 2), Value::Number(7.0));
+
+        // Test negative index beyond bounds
+        let slice4 = arena.slice(handle, -15, Some(5)); // Should clamp to start
+        assert_eq!(arena.length(slice4), 5);
+        assert_eq!(arena.get(slice4, 0), Value::Number(0.0));
+        assert_eq!(arena.get(slice4, 4), Value::Number(4.0));
+
+        // Test negative end index beyond bounds
+        let slice5 = arena.slice(handle, 3, Some(-15)); // Should return empty array
+        assert_eq!(arena.length(slice5), 0);
+    }
+
+    #[test]
+    fn test_slice_negative_begin_greater_than_end() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(10);
+
+        // Fill array
+        for i in 0..10 {
+            arena.insert(handle, i, Value::Number(i as f64));
+        }
+
+        // Test where negative begin resolves to index greater than end
+        let slice1 = arena.slice(handle, -2, Some(3)); // -2 becomes 8, 8 > 3, should return empty
+        assert_eq!(arena.length(slice1), 0);
+
+        // Test where both are negative but begin > end after resolution
+        let slice2 = arena.slice(handle, -2, Some(-5)); // -2 becomes 8, -5 becomes 5, 8 > 5, should return empty
+        assert_eq!(arena.length(slice2), 0);
+
+        // Test positive begin greater than negative end after resolution
+        let slice3 = arena.slice(handle, 7, Some(-4)); // end becomes 6, 7 > 6, should return empty
+        assert_eq!(arena.length(slice3), 0);
+    }
+
+    #[test]
+    fn test_slice_edge_cases_with_negative_indices() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(5);
+
+        // Fill array with [0, 1, 2, 3, 4]
+        for i in 0..5 {
+            arena.insert(handle, i, Value::Number(i as f64));
+        }
+
+        // Test -1 to end (last element)
+        let slice1 = arena.slice(handle, -1, None);
+        assert_eq!(arena.length(slice1), 1);
+        assert_eq!(arena.get(slice1, 0), Value::Number(4.0));
+
+        // Test start to -1 (all but last element)
+        let slice2 = arena.slice(handle, 0, Some(-1));
+        assert_eq!(arena.length(slice2), 4);
+        assert_eq!(arena.get(slice2, 0), Value::Number(0.0));
+        assert_eq!(arena.get(slice2, 3), Value::Number(3.0));
+
+        // Test entire array with negative indices
+        let slice3 = arena.slice(handle, -5, None); // Should be equivalent to 0 to end
+        assert_eq!(arena.length(slice3), 5);
+        for i in 0..5 {
+            assert_eq!(arena.get(slice3, i), Value::Number(i as f64));
+        }
+
+        // Test single element slice with negative indices
+        let slice4 = arena.slice(handle, -3, Some(-2)); // Element at index 2
+        assert_eq!(arena.length(slice4), 1);
+        assert_eq!(arena.get(slice4, 0), Value::Number(2.0));
+    }
+
+    #[test]
+    fn test_slice_empty_array_with_negative_indices() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Test negative indices on empty array
+        let slice1 = arena.slice(handle, -1, None);
+        assert_eq!(arena.length(slice1), 0);
+
+        let slice2 = arena.slice(handle, -5, Some(-2));
+        assert_eq!(arena.length(slice2), 0);
+
+        let slice3 = arena.slice(handle, 0, Some(-1));
+        assert_eq!(arena.length(slice3), 0);
     }
 }

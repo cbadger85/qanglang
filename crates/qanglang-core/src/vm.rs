@@ -840,7 +840,7 @@ impl Vm {
                     let index = pop_value!(self);
                     match (index, peek_value!(self, 0)) {
                         (Value::Number(index), Value::Array(handle)) => {
-                            let value = self.alloc.arrays.get(handle, index.floor() as isize); // TODO verify this is an int instead of coercing it.
+                            let value = self.alloc.arrays.get(handle, index.trunc() as isize); // TODO verify this is an int instead of coercing it.
                             pop_value!(self);
                             push_value!(self, value);
                         }
@@ -872,7 +872,7 @@ impl Vm {
                             let is_within_bounds =
                                 self.alloc
                                     .arrays
-                                    .insert(handle, index.floor() as usize, value); // TODO verify this is an int instead of coercing it.
+                                    .insert(handle, index.trunc() as usize, value); // TODO verify this is an int instead of coercing it.
 
                             if !is_within_bounds {
                                 return Err(QangRuntimeError::new(

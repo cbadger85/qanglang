@@ -8,10 +8,13 @@ pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
     if assertion.is_truthy() {
         return Ok(None);
     }
-
     let message = args
         .get(1)
-        .map(|v| v.to_display_string(&vm.alloc))
+        .copied()
+        .and_then(|v| match v {
+            Value::Nil => None,
+            _ => Some(v.to_display_string(&vm.alloc)),
+        })
         .unwrap_or_else(|| "Assertion failed.".to_string());
 
     Err(NativeFunctionError(message))
@@ -28,9 +31,12 @@ pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
     if a != b {
         let message = args
             .get(2)
-            .map(|v| v.to_display_string(&vm.alloc))
+            .copied()
+            .and_then(|v| match v {
+                Value::Nil => None,
+                _ => Some(v.to_display_string(&vm.alloc)),
+            })
             .unwrap_or_else(|| "Assertion failed.".to_string());
-
         Err(NativeFunctionError(message))
     } else {
         Ok(None)
@@ -56,7 +62,11 @@ pub fn qang_assert_throws(
         Ok(_) => {
             let message = args
                 .get(1)
-                .map(|v| v.to_display_string(&vm.alloc))
+                .copied()
+                .and_then(|v| match v {
+                    Value::Nil => None,
+                    _ => Some(v.to_display_string(&vm.alloc)),
+                })
                 .unwrap_or_else(|| "Expected function to throw, but did not.".to_string());
 
             Err(NativeFunctionError::new(&message))
@@ -222,7 +232,6 @@ pub fn qang_array_slice(
     args: &[Value],
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    // TODO handle conversion of f64 to usize more gracefully.
     if let Value::Array(handle) = receiver {
         let begin = args
             .first()
@@ -236,19 +245,19 @@ pub fn qang_array_slice(
                     Value::Array(
                         alloc
                             .arrays
-                            .slice(handle, begin as usize, Some(end as usize)),
+                            .slice(handle, begin as isize, Some(end as isize)),
                     )
                 });
                 Ok(Some(slice))
             }
-            (Value::Number(begin), None) => {
+            (Value::Number(begin), Some(Value::Nil)) | (Value::Number(begin), None) => {
                 let slice = vm.with_gc_check(|alloc| {
-                    Value::Array(alloc.arrays.slice(handle, begin as usize, None))
+                    Value::Array(alloc.arrays.slice(handle, begin as isize, None))
                 });
                 Ok(Some(slice))
             }
             _ => Err(NativeFunctionError::new(
-                "Expectd both values to be a number.",
+                "Expected both values to be a number.",
             )),
         }
     } else {

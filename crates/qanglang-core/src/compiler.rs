@@ -6,8 +6,9 @@ use crate::{
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
     value::{
-        BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING,
+        FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING,
+        STRING_TYPE_STRING,
     },
 };
 
@@ -207,6 +208,8 @@ impl<'a> CompilerPipeline<'a> {
                 self.allocator.strings.intern(CLASS_TYPE_STRING);
                 self.allocator.strings.intern("OBJECT");
                 self.allocator.strings.intern(OBJECT_TYPE_STRING);
+                self.allocator.strings.intern("ARRAY");
+                self.allocator.strings.intern(ARRAY_TYPE_STRING);
                 Ok(QangProgram(self.allocator.allocate_function(program)))
             }
             Err(error) => Err(CompilerError(

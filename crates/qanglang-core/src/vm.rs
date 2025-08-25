@@ -24,8 +24,9 @@ use crate::{
         qang_typeof,
     },
     value::{
-        BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING,
+        FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING,
+        STRING_TYPE_STRING,
     },
 };
 
@@ -299,6 +300,9 @@ impl Vm {
         let object_type_handle = allocator.strings.intern("OBJECT");
         let object_type_value_handle = allocator.strings.intern(OBJECT_TYPE_STRING);
         globals.insert(object_type_handle, Value::String(object_type_value_handle));
+        let array_type_handle = allocator.strings.intern("ARRAY");
+        let array_type_value_handle = allocator.strings.intern(ARRAY_TYPE_STRING);
+        globals.insert(array_type_handle, Value::String(array_type_value_handle));
 
         let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
         let to_uppercase_handle = allocator.strings.intern("to_uppercase");

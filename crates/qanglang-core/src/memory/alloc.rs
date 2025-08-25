@@ -1,4 +1,5 @@
 use crate::memory::arena::{Arena, Index};
+use crate::memory::array_arena::ArrayArena;
 use crate::memory::hashmap_arena::HashMapArena;
 use crate::memory::object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, InstanceObject, NativeFunctionObject,
@@ -38,6 +39,7 @@ pub struct HeapAllocator {
     bound_methods: Arena<BoundMethodObject>,
     bound_intrinsics: Arena<BoundIntrinsicObject>,
     pub tables: HashMapArena,
+    pub arrays: ArrayArena,
     is_debug: bool,
     bytes_until_gc: usize,
 }
@@ -59,6 +61,7 @@ impl HeapAllocator {
             bound_methods: Arena::with_capacity(initial_capacity),
             bound_intrinsics: Arena::with_capacity(initial_capacity),
             instances: Arena::with_capacity(initial_capacity),
+            arrays: ArrayArena::with_capacity(initial_capacity),
             is_debug: false,
             bytes_until_gc: 1024 * 1024,
         }
@@ -371,6 +374,7 @@ impl HeapAllocator {
         let method_bytes = self.bound_methods.len() * std::mem::size_of::<BoundMethodObject>();
         let intrinsic_bytes =
             self.bound_intrinsics.len() * std::mem::size_of::<BoundIntrinsicObject>();
+        let array_bytes = self.arrays.get_allocated_bytes();
 
         string_bytes
             + closure_bytes
@@ -382,6 +386,7 @@ impl HeapAllocator {
             + instance_bytes
             + method_bytes
             + intrinsic_bytes
+            + array_bytes
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -470,6 +475,8 @@ impl HeapAllocator {
         for index in deleted_values.drain(..) {
             self.bound_intrinsics.remove(index);
         }
+
+        self.arrays.collect_garbage();
 
         let new_allocated_bytes = self.total_allocated_bytes();
 
@@ -593,6 +600,16 @@ impl HeapAllocator {
                         intrinsic_binding.is_marked = true;
                         debug_log!(self.is_debug, "Blackening intrinsic method: {:?}", handle);
                         gray_list.push_back(intrinsic_binding.receiver);
+                    }
+                }
+                Value::Array(handle) => {
+                    if !self.arrays.check_is_marked(handle) {
+                        debug_log!(self.is_debug, "Marking array: {:?}", handle);
+                        self.arrays.mark_array(handle);
+                        debug_log!(self.is_debug, "Blackening array: {:?}", handle);
+                        for value in self.arrays.iter(handle) {
+                            gray_list.push_back(value);
+                        }
                     }
                 }
                 _ => (),

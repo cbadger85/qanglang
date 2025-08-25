@@ -10,6 +10,7 @@ pub use alloc::{
     HeapAllocator, InstanceHandle, NativeFunctionHandle, UpvalueHandle,
 };
 pub use arena::{Arena, Index};
+pub use array_arena::ArrayHandle;
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
 pub use object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,

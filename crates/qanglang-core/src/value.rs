@@ -1,6 +1,6 @@
 use crate::{
     BoundMethodHandle, ClassHandle, HeapAllocator, InstanceHandle, NativeFunctionHandle,
-    memory::{ClosureHandle, FunctionHandle, StringHandle},
+    memory::{ArrayHandle, ClosureHandle, FunctionHandle, StringHandle},
 };
 
 // keywords
@@ -11,6 +11,7 @@ pub const STRING_TYPE_STRING: &str = "string";
 pub const FUNCTION_TYPE_STRING: &str = "function";
 pub const CLASS_TYPE_STRING: &str = "class";
 pub const OBJECT_TYPE_STRING: &str = "object";
+pub const ARRAY_TYPE_STRING: &str = "array";
 pub const CLASS_INITIALIZER_STRING: &str = "init";
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -28,6 +29,7 @@ pub enum Value {
     Instance(InstanceHandle),
     BoundMethod(BoundMethodHandle),
     BoundIntrinsic(BoundMethodHandle),
+    Array(ArrayHandle),
 }
 
 impl Value {
@@ -86,6 +88,18 @@ impl Value {
                     Value::String(intrinsic_binding.name_handle).to_display_string(allocator)
                 )
             }
+            Value::Array(handle) => {
+                let mut string = String::new();
+                "[".clone_into(&mut string);
+
+                for item in allocator.arrays.iter(*handle) {
+                    item.to_display_string(allocator).clone_into(&mut string);
+                    ",".clone_into(&mut string);
+                }
+                "]".clone_into(&mut string);
+
+                string
+            }
         }
     }
 
@@ -103,6 +117,7 @@ impl Value {
             Value::Instance(_) => OBJECT_TYPE_STRING,
             Value::BoundMethod(_) => FUNCTION_TYPE_STRING,
             Value::BoundIntrinsic(_) => FUNCTION_TYPE_STRING,
+            Value::Array(_) => ARRAY_TYPE_STRING,
         }
     }
 
@@ -125,6 +140,7 @@ impl Value {
             Value::Instance(handle) => handle.hash(&mut hasher),
             Value::BoundMethod(handle) => handle.hash(&mut hasher),
             Value::BoundIntrinsic(handle) => handle.hash(&mut hasher),
+            Value::Array(handle) => handle.hash(&mut hasher),
             Value::Nil | Value::True | Value::False => (),
         }
         hasher.finish()

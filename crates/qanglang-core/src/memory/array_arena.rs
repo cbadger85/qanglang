@@ -24,6 +24,7 @@ pub struct ArrayChunk {
     is_marked: bool,
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct ArrayArena {
     heads: Arena<ArrayHeader>,
     chunks: Arena<ArrayChunk>,
@@ -359,6 +360,10 @@ impl ArrayArena {
         }
     }
 
+    pub fn check_is_marked(&self, handle: ArrayHandle) -> bool {
+        self.heads[handle].is_marked
+    }
+
     pub fn collect_garbage(&mut self) {
         let estimated_deletions = (self.chunks.len() / 4).max(8);
         let mut handles_to_remove = Vec::with_capacity(estimated_deletions);
@@ -388,7 +393,7 @@ impl ArrayArena {
         }
     }
 
-    pub fn total_bytes_allocated(&self) -> usize {
+    pub fn get_allocated_bytes(&self) -> usize {
         std::mem::size_of::<ArrayHeader>() * self.heads.len()
             + std::mem::size_of::<ArrayChunk>() * self.chunks.len()
     }

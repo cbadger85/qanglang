@@ -135,7 +135,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     }
 
     // Extract test information
-    let (description, test_functions) = extract_test_info(vm.globals(), vm.allocator());
+    let (description, test_functions) = extract_test_info(vm.globals(), &vm.allocator);
 
     // Run each test function
     let mut test_results = Vec::new();

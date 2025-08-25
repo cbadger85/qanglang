@@ -111,6 +111,7 @@ macro_rules! read_string {
     };
 }
 
+#[macro_export]
 macro_rules! gc_allocate {
     // Closure allocation
     ($vm:expr, closure: $value:expr) => {{
@@ -158,6 +159,14 @@ macro_rules! gc_allocate {
             $vm.collect_garbage();
         }
         $vm.allocator.allocate_bound_intrinsic($value)
+    }};
+
+    // Array allocation
+    ($vm:expr, array: $value:expr) => {{
+        if $vm.is_gc_enabled && !$vm.allocator.should_collect_garbage() {
+            $vm.collect_garbage();
+        }
+        $vm.allocator.arrays.create_array($value)
     }};
 }
 
@@ -263,7 +272,7 @@ pub struct Vm {
     pub is_debug: bool,
     pub is_gc_enabled: bool,
     state: VmState,
-    allocator: HeapAllocator,
+    pub allocator: HeapAllocator,
 }
 
 impl Vm {
@@ -872,8 +881,7 @@ impl Vm {
                 }
                 OpCode::ArrayLiteral => {
                     let length = self.state.read_byte() as usize;
-                    let array = self.allocator.arrays.create_array(length);
-
+                    let array = gc_allocate!(self, array: length);
                     for i in (0..length).rev() {
                         let value = pop_value!(self);
                         self.allocator.arrays.insert(array, i, value);
@@ -1429,14 +1437,6 @@ impl Vm {
         let roots = self.gather_roots();
         self.allocator.collect_garbage(roots);
         debug_log!(self.is_debug, "--gc end");
-    }
-
-    pub fn allocator(&self) -> &HeapAllocator {
-        &self.allocator
-    }
-
-    pub fn allocator_mut(&mut self) -> &mut HeapAllocator {
-        &mut self.allocator
     }
 
     pub fn globals(&self) -> &FxHashMap<StringHandle, Value> {

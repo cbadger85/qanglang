@@ -89,15 +89,12 @@ impl Value {
                 )
             }
             Value::Array(handle) => {
-                let mut string = String::new();
-                "[".clone_into(&mut string);
-
+                let mut string = String::from("[");
                 for item in allocator.arrays.iter(*handle) {
-                    item.to_display_string(allocator).clone_into(&mut string);
-                    ",".clone_into(&mut string);
+                    string.push_str(&item.to_display_string(allocator));
+                    string.push(',');
                 }
-                "]".clone_into(&mut string);
-
+                string.push(']');
                 string
             }
         }

@@ -1128,3 +1128,41 @@ fn test_null_methods() {
         }
     }
 }
+
+#[test]
+fn test_arrays() {
+    let source = r#"
+        var test_array = [];
+
+        println(test_array);
+
+        var test_array_2 = ["foo", 1, true,];
+
+        println(test_array_2);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

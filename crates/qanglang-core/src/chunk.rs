@@ -44,6 +44,7 @@ pub enum OpCode {
     GetSuper,
     SuperInvoke,
     InitField,
+    ArrayLiteral,
 }
 
 impl From<u8> for OpCode {
@@ -89,6 +90,7 @@ impl From<u8> for OpCode {
             37 => OpCode::GetSuper,
             38 => OpCode::SuperInvoke,
             39 => OpCode::InitField,
+            40 => OpCode::ArrayLiteral,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

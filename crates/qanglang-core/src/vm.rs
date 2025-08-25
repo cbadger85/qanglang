@@ -821,6 +821,16 @@ impl Vm {
                         ));
                     }
                 }
+                OpCode::ArrayLiteral => {
+                    let length = self.state.read_byte() as usize;
+                    let array = self.allocator.arrays.create_array(length);
+
+                    for i in 0..length {
+                        let value = pop_value!(self);
+                        self.allocator.arrays.insert(array, i, value);
+                    }
+                    push_value!(self, Value::Array(array));
+                }
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;

@@ -1595,8 +1595,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.emit_opcode(OpCode::Inherit, superclass.span);
         }
 
-        // let previous_kind = self.compiler.kind;
-        // self.compiler.kind = CompilerKind::Initializer;
         for member in &class_decl.members {
             match &member {
                 ast::ClassMember::Method(function) => {
@@ -1630,12 +1628,34 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 }
             }
         }
-        // self.compiler.kind = previous_kind;
 
         self.emit_opcode(OpCode::Pop, class_decl.span);
         if class_decl.superclass.is_some() {
             self.end_scope(class_decl.span);
         }
+
+        Ok(())
+    }
+
+    fn visit_array_literal(
+        &mut self,
+        array: &ast::ArrayLiteral,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        let length = array.elements.len();
+
+        if length > u8::MAX.into() {
+            return Err(QangSyntaxError::new(
+                "An array literal cannot be initialized with more than 256 elements.".to_string(),
+                array.span,
+            ));
+        }
+
+        for expr in &array.elements {
+            self.visit_expression(expr, errors)?;
+        }
+
+        self.emit_opcode_and_byte(OpCode::ArrayLiteral, length as u8, array.span);
 
         Ok(())
     }

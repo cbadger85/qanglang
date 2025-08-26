@@ -887,7 +887,7 @@ impl Vm {
                 OpCode::ArrayLiteral => {
                     let length = self.state.read_byte() as usize;
                     let array = self.with_gc_check(|alloc| alloc.arrays.create_array(length));
-                    for i in (0..length).rev() {
+                    for i in 0..length {
                         let value = pop_value!(self);
                         self.alloc.arrays.insert(array, i, value);
                     }
@@ -962,6 +962,12 @@ impl Vm {
                 }
                 OpCode::ObjectLiteral => {
                     let handle = self.alloc.tables.new_hashmap();
+                    let length = self.state.read_byte() as usize;
+                    for _ in 0..length {
+                        let value = pop_value!(self);
+                        let key = pop_value!(self);
+                        self.alloc.tables.insert(handle, key, value);
+                    }
                     push_value!(self, Value::ObjectLiteral(handle));
                 }
                 OpCode::Return => {

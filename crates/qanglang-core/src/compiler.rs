@@ -1660,7 +1660,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ));
         }
 
-        for expr in &array.elements {
+        for expr in array.elements.iter().rev() {
             self.visit_expression(expr, errors)?;
         }
 
@@ -1672,10 +1672,33 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     fn visit_object_literal(
         &mut self,
         object: &ast::ObjectLiteral,
-        _errors: &mut ErrorReporter,
+        errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        // self.handle_variable(handle, span, is_assignment)
-        self.emit_opcode(OpCode::ObjectLiteral, object.span);
+        let length = object.entries.len();
+
+        if length > u8::MAX.into() {
+            return Err(QangSyntaxError::new(
+                "An object literal cannot be initialized with more than 256 entries.".to_string(),
+                object.span,
+            ));
+        }
+
+        for entry in object.entries.iter() {
+            self.visit_object_entry(entry, errors)?;
+        }
+
+        self.emit_opcode_and_byte(OpCode::ObjectLiteral, length as u8, object.span);
+        Ok(())
+    }
+
+    fn visit_object_entry(
+        &mut self,
+        entry: &ast::ObjectEntry,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        let identifier_handle = self.allocator.strings.intern(&entry.key.name);
+        self.emit_constant(Value::String(identifier_handle), entry.key.span)?;
+        self.visit_expression(&entry.value, errors)?;
         Ok(())
     }
 }

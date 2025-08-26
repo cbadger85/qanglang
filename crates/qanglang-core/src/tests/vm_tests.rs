@@ -1225,12 +1225,14 @@ fn test_object_literals() {
     let source = r#"
         var obj = {{}};
 
-        println(obj);
-
         obj.foo = true;
         assert(obj.foo);
         assert_eq(obj.not_exists, nil);
-        println(obj);
+
+        var obj2 = {{
+          bar = "foo",
+        }};
+        assert_eq(obj2.bar, "foo");
     "#;
 
     let source_map = SourceMap::new(source.to_string());

@@ -927,6 +927,7 @@ fn test_keyword_lexeme_token_contentt() {
         ("try", TokenType::Try),
         ("catch", TokenType::Catch),
         ("finally", TokenType::Finally),
+        ("is", TokenType::Is),
     ];
 
     for (keyword_str, expected_type) in keywords {
@@ -963,4 +964,26 @@ fn test_get_line_multiple_lines() {
     assert_eq!(line1, "first line");
     assert_eq!(line2, "second line");
     assert_eq!(line3, "third line");
+}
+
+#[test]
+fn test_is_operator() {
+    let input = "x is y";
+    let expected = vec![TokenType::Identifier, TokenType::Is, TokenType::Identifier, TokenType::Eof];
+    assert_token_types(&input, &expected);
+}
+
+#[test]
+fn test_assignment_operators() {
+    let input = "x += y -= z *= w /= v %= u";
+    let expected = vec![
+        TokenType::Identifier, TokenType::PlusAssign,
+        TokenType::Identifier, TokenType::MinusAssign, 
+        TokenType::Identifier, TokenType::StarAssign,
+        TokenType::Identifier, TokenType::SlashAssign,
+        TokenType::Identifier, TokenType::ModuloAssign,
+        TokenType::Identifier,
+        TokenType::Eof
+    ];
+    assert_token_types(&input, &expected);
 }

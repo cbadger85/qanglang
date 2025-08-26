@@ -694,7 +694,23 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> ParseResult<ast::Expr> {
         let expr = expression_parser::parse(self, expression_parser::Precedence::Ternary)?;
 
-        if self.match_token(TokenType::Equals) {
+        let assignment_operator = if self.match_token(TokenType::Equals) {
+            Some(ast::AssignmentOperator::Assign)
+        } else if self.match_token(TokenType::PlusAssign) {
+            Some(ast::AssignmentOperator::AddAssign)
+        } else if self.match_token(TokenType::MinusAssign) {
+            Some(ast::AssignmentOperator::SubtractAssign)
+        } else if self.match_token(TokenType::StarAssign) {
+            Some(ast::AssignmentOperator::MultiplyAssign)
+        } else if self.match_token(TokenType::SlashAssign) {
+            Some(ast::AssignmentOperator::DivideAssign)
+        } else if self.match_token(TokenType::ModuloAssign) {
+            Some(ast::AssignmentOperator::ModuloAssign)
+        } else {
+            None
+        };
+
+        if let Some(operator) = assignment_operator {
             let value = Box::new(self.expression()?);
             let span = ast::SourceSpan::combine(expr.span(), value.span());
 
@@ -702,7 +718,7 @@ impl<'a> Parser<'a> {
                 ast::Expr::Primary(ast::PrimaryExpr::Identifier(id)) => {
                     Ok(ast::Expr::Assignment(ast::AssignmentExpr {
                         target: ast::AssignmentTarget::Identifier(id),
-                        operator: ast::AssignmentOperator::Assign,
+                        operator,
                         value,
                         span,
                     }))
@@ -716,7 +732,7 @@ impl<'a> Parser<'a> {
                         };
                         Ok(ast::Expr::Assignment(ast::AssignmentExpr {
                             target: ast::AssignmentTarget::Property(property_access),
-                            operator: ast::AssignmentOperator::Assign,
+                            operator,
                             value,
                             span,
                         }))
@@ -729,7 +745,7 @@ impl<'a> Parser<'a> {
                         };
                         Ok(ast::Expr::Assignment(ast::AssignmentExpr {
                             target: ast::AssignmentTarget::Index(index_access),
-                            operator: ast::AssignmentOperator::Assign,
+                            operator,
                             value,
                             span,
                         }))
@@ -1218,6 +1234,12 @@ mod expression_parser {
                 right: Box::new(right),
                 span,
             })),
+            tokenizer::TokenType::Is => Ok(ast::Expr::Equality(ast::EqualityExpr {
+                left: Box::new(left),
+                operator: ast::EqualityOperator::Is,
+                right: Box::new(right),
+                span,
+            })),
             tokenizer::TokenType::Less => Ok(ast::Expr::Comparison(ast::ComparisonExpr {
                 left: Box::new(left),
                 operator: ast::ComparisonOperator::Less,
@@ -1450,6 +1472,11 @@ mod expression_parser {
                 precedence: Precedence::Equality,
             },
             tokenizer::TokenType::BangEquals => ParseRule {
+                prefix: None,
+                infix: Some(binary),
+                precedence: Precedence::Equality,
+            },
+            tokenizer::TokenType::Is => ParseRule {
                 prefix: None,
                 infix: Some(binary),
                 precedence: Precedence::Equality,

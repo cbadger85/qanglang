@@ -62,12 +62,12 @@ pub enum TokenType {
     DoubleBar,          // || (not implemented)
     OptionalBar,        // ?| (not implemented)
     OptionalDot,        // ?. (not implemented)
-    Is,                 // is (not implemented)
-    AssignPlus,         // += (not implemented)
-    AssignMinus,        // -= (not implemented)
-    AssignStar,         // *= (not implemented)
-    AssignSlash,        // /= (not implemented)
-    AssignModulo,       // /% (not implemented)
+    Is,                 // is
+    PlusAssign,         // +=
+    MinusAssign,        // -=
+    StarAssign,         // *=
+    SlashAssign,        // /=
+    ModuloAssign,       // /%
     Error,              // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -100,6 +100,7 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "try" => TokenType::Try,
     "catch" => TokenType::Catch,
     "finally" => TokenType::Finally,
+    "is" => TokenType::Is,
 };
 
 #[derive(PartialEq, Clone, Debug)]
@@ -196,12 +197,17 @@ impl<'a> Tokenizer<'a> {
             '=' if self.match_char('=') => self.make_token(TokenType::EqualsEquals, start),
             '=' => self.make_token(TokenType::Equals, start),
             '-' if self.match_char('>') => self.make_token(TokenType::Arrow, start),
+            '-' if self.match_char('=') => self.make_token(TokenType::MinusAssign, start),
             '-' => self.make_token(TokenType::Minus, start),
+            '*' if self.match_char('=') => self.make_token(TokenType::StarAssign, start),
             '*' => self.make_token(TokenType::Star, start),
+            '+' if self.match_char('=') => self.make_token(TokenType::PlusAssign, start),
             '+' => self.make_token(TokenType::Plus, start),
             '/' if self.match_char('/') => self.single_line_comment(),
             '/' if self.match_char('*') => self.multi_line_comment(),
+            '/' if self.match_char('=') => self.make_token(TokenType::SlashAssign, start),
             '/' => self.make_token(TokenType::Slash, start),
+            '%' if self.match_char('=') => self.make_token(TokenType::ModuloAssign, start),
             '%' => self.make_token(TokenType::Modulo, start),
             '.' if self.peek_char().is_ascii_digit() => self.number(),
             '.' => self.make_token(TokenType::Dot, start),

@@ -25,9 +25,9 @@ use crate::{
         qang_string_to_uppercase, qang_system_time, qang_to_string, qang_typeof,
     },
     value::{
-        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING,
-        FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING,
-        STRING_TYPE_STRING,
+        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CALL_INTRINSIC_STRING, CLASS_INITIALIZER_STRING,
+        CLASS_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING,
+        OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
 
@@ -760,7 +760,7 @@ impl Vm {
                         }
                         Value::Closure(_) => {
                             let identifier = read_string!(self);
-                            if identifier == self.alloc.strings.intern("call") {
+                            if identifier == self.alloc.strings.intern(CALL_INTRINSIC_STRING) {
                                 // do nothing, because function.call == function
                             } else {
                                 return Err(QangRuntimeError::new(
@@ -1219,7 +1219,7 @@ impl Vm {
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
             Value::Closure(closure_handle) => {
-                if method_handle == self.alloc.strings.intern("call") {
+                if method_handle == self.alloc.strings.intern(CALL_INTRINSIC_STRING) {
                     if let Value::Array(array_handle) = peek_value!(self, 0) {
                         pop_value!(self);
                         let array_length = self.alloc.arrays.length(array_handle);
@@ -1229,7 +1229,7 @@ impl Vm {
                         self.call(closure_handle, array_length)
                     } else {
                         Err(QangRuntimeError::new(
-                            "Only arrays may be passed to 'call'.".to_string(),
+                            "'call' must take one argument and it must be an array.".to_string(),
                             self.state.get_previous_loc(),
                         ))
                     }
@@ -1340,7 +1340,7 @@ impl Vm {
         arg_count: usize,
     ) -> RuntimeResult<()> {
         let function = self.alloc.get_native_function(handle);
-        let mut args = vec![Value::Nil; function.arity];
+        let mut args = [Value::Nil; 256];
 
         for i in (0..arg_count).rev() {
             if i < function.arity {
@@ -1352,7 +1352,7 @@ impl Vm {
 
         pop_value!(self); // pop function off the stack now that it has been called.
 
-        let value = (function.function)(args.as_slice(), self)
+        let value = (function.function)(&args[..function.arity], self)
             .map_err(|e: NativeFunctionError| {
                 let loc = self.state.get_previous_loc();
                 e.into_qang_error(loc)
@@ -1370,7 +1370,7 @@ impl Vm {
         method: IntrinsicMethod,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let mut args = vec![Value::Nil; method.arity]; // TODO use array of 256 in length instead of vec.
+        let mut args = [Value::Nil; 256];
 
         for i in (0..arg_count).rev() {
             if i < method.arity {
@@ -1382,7 +1382,7 @@ impl Vm {
 
         pop_value!(self); // pop function off the stack now that it has been called.
 
-        let value = (method.function)(receiver, args.as_slice(), self)
+        let value = (method.function)(receiver, &args[..method.arity], self)
             .map_err(|e: NativeFunctionError| {
                 let loc = self.state.get_previous_loc();
                 e.into_qang_error(loc)

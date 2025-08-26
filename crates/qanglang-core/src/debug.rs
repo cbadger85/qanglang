@@ -105,6 +105,7 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::SetArrayIndex => {
             constant_instruction("OP_SET_ARRAY_INDEX", chunk, allocator, offset)
         }
+        OpCode::ObjectLiteral => simple_instruction("OP_OBJECT_LITERAL", offset),
     }
 }
 

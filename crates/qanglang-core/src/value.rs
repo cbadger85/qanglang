@@ -1,5 +1,6 @@
 use crate::{
-    BoundMethodHandle, ClassHandle, HeapAllocator, InstanceHandle, NativeFunctionHandle,
+    BoundMethodHandle, ClassHandle, HashMapHandle, HeapAllocator, InstanceHandle,
+    NativeFunctionHandle,
     memory::{ArrayHandle, ClosureHandle, FunctionHandle, StringHandle},
 };
 
@@ -31,6 +32,7 @@ pub enum Value {
     BoundMethod(BoundMethodHandle),
     BoundIntrinsic(BoundMethodHandle),
     Array(ArrayHandle),
+    ObjectLiteral(HashMapHandle),
 }
 
 impl Value {
@@ -98,6 +100,19 @@ impl Value {
                 string.push(']');
                 string
             }
+            Value::ObjectLiteral(handle) => {
+                let mut string = String::from("{{");
+                for (key, value) in allocator.tables.iter(*handle) {
+                    string.push(' ');
+                    string.push_str(&key.to_display_string(allocator));
+                    string.push_str("=");
+                    string.push_str(&value.to_display_string(allocator));
+                    string.push(',');
+                    string.push(' ');
+                }
+                string.push_str("}}");
+                string
+            }
         }
     }
 
@@ -116,6 +131,7 @@ impl Value {
             Value::BoundMethod(_) => FUNCTION_TYPE_STRING,
             Value::BoundIntrinsic(_) => FUNCTION_TYPE_STRING,
             Value::Array(_) => ARRAY_TYPE_STRING,
+            Value::ObjectLiteral(_) => OBJECT_TYPE_STRING,
         }
     }
 
@@ -139,6 +155,7 @@ impl Value {
             Value::BoundMethod(handle) => handle.hash(&mut hasher),
             Value::BoundIntrinsic(handle) => handle.hash(&mut hasher),
             Value::Array(handle) => handle.hash(&mut hasher),
+            Value::ObjectLiteral(handle) => handle.hash(&mut hasher),
             Value::Nil | Value::True | Value::False => (),
         }
         hasher.finish()

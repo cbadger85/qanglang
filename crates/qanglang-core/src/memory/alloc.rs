@@ -610,6 +610,15 @@ impl HeapAllocator {
                         }
                     }
                 }
+                Value::ObjectLiteral(handle) => {
+                    debug_log!(self.is_debug, "Marking object: {:?}", handle);
+                    self.tables.mark_hashmap(handle);
+                    debug_log!(self.is_debug, "Blackening object: {:?}", handle);
+                    for (key, value) in self.tables.iter(handle) {
+                        gray_list.push_back(key);
+                        gray_list.push_back(value);
+                    }
+                }
                 _ => (),
             }
         }

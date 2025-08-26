@@ -916,7 +916,7 @@ impl Vm {
                             let is_within_bounds =
                                 self.alloc
                                     .arrays
-                                    .insert(handle, index.trunc() as usize, value); // TODO verify this is an int instead of coercing it.
+                                    .insert(handle, index.trunc() as usize, value);
 
                             if !is_within_bounds {
                                 return Err(QangRuntimeError::new(
@@ -946,6 +946,10 @@ impl Vm {
                             ));
                         }
                     }
+                }
+                OpCode::ObjectLiteral => {
+                    let handle = self.alloc.tables.new_hashmap();
+                    push_value!(self, Value::ObjectLiteral(handle));
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);

@@ -1668,4 +1668,14 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
         Ok(())
     }
+
+    fn visit_object_literal(
+        &mut self,
+        object: &ast::ObjectLiteral,
+        _errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        // self.handle_variable(handle, span, is_assignment)
+        self.emit_opcode(OpCode::ObjectLiteral, object.span);
+        Ok(())
+    }
 }

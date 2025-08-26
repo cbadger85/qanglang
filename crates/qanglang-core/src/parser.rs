@@ -361,7 +361,7 @@ impl<'a> Parser<'a> {
         let span = ast::SourceSpan::combine(var_span, semicolon_span);
 
         Ok(ast::Decl::Variable(ast::VariableDecl {
-            name: identifier,
+            target: ast::VariableTarget::Identifier(identifier),
             initializer,
             span,
         }))
@@ -702,6 +702,7 @@ impl<'a> Parser<'a> {
                 ast::Expr::Primary(ast::PrimaryExpr::Identifier(id)) => {
                     Ok(ast::Expr::Assignment(ast::AssignmentExpr {
                         target: ast::AssignmentTarget::Identifier(id),
+                        operator: ast::AssignmentOperator::Assign,
                         value,
                         span,
                     }))
@@ -715,6 +716,7 @@ impl<'a> Parser<'a> {
                         };
                         Ok(ast::Expr::Assignment(ast::AssignmentExpr {
                             target: ast::AssignmentTarget::Property(property_access),
+                            operator: ast::AssignmentOperator::Assign,
                             value,
                             span,
                         }))
@@ -727,6 +729,7 @@ impl<'a> Parser<'a> {
                         };
                         Ok(ast::Expr::Assignment(ast::AssignmentExpr {
                             target: ast::AssignmentTarget::Index(index_access),
+                            operator: ast::AssignmentOperator::Assign,
                             value,
                             span,
                         }))
@@ -746,7 +749,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn argument_parameters(&mut self) -> ParseResult<Vec<ast::Identifier>> {
+    fn argument_parameters(&mut self) -> ParseResult<Vec<ast::Parameter>> {
         self.consume(TokenType::LeftParen, "Expect '(' before parameters.")?;
 
         let mut parameters = Vec::new();
@@ -756,14 +759,14 @@ impl<'a> Parser<'a> {
         }
 
         self.advance();
-        parameters.push(self.get_identifier()?);
+        parameters.push(ast::Parameter::Identifier(self.get_identifier()?));
 
         while self.match_token(TokenType::Comma) {
             if self.check(TokenType::RightParen) {
                 break;
             }
             self.advance();
-            parameters.push(self.get_identifier()?);
+            parameters.push(ast::Parameter::Identifier(self.get_identifier()?));
         }
 
         self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
@@ -883,14 +886,14 @@ mod expression_parser {
 
         if !parser.match_token(TokenType::RightParen) {
             parser.consume(TokenType::Identifier, "Expect parameter name.")?;
-            parameters.push(parser.get_identifier()?);
+            parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
 
             while parser.match_token(TokenType::Comma) {
                 if parser.check(TokenType::RightParen) {
                     break;
                 }
                 parser.consume(TokenType::Identifier, "Expect parameter name.")?;
-                parameters.push(parser.get_identifier()?);
+                parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
             }
 
             parser.consume(TokenType::RightParen, "Expect ')' after parameters.")?;

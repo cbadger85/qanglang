@@ -1,6 +1,22 @@
 use super::{assert_no_parse_errors, parse_source};
 use crate::{SourceMap, ast};
 
+// Helper function to get the name from a VariableDecl target
+fn get_variable_name(var_decl: &ast::VariableDecl) -> &str {
+    match &var_decl.target {
+        ast::VariableTarget::Identifier(id) => &id.name,
+        ast::VariableTarget::Destructure(_) => panic!("Destructuring not expected in these tests"),
+    }
+}
+
+// Helper function to get the name from a Parameter
+fn get_parameter_name(param: &ast::Parameter) -> &str {
+    match param {
+        ast::Parameter::Identifier(id) => &id.name,
+        ast::Parameter::Destructure(_) => panic!("Destructuring not expected in these tests"),
+    }
+}
+
 #[test]
 fn test_object_literals() {
     let source_code = r#"
@@ -21,7 +37,7 @@ fn test_object_literals() {
 
     // First object: empty_obj = :{}
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "empty_obj");
+        assert_eq!(get_variable_name(var_decl), "empty_obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
             &var_decl.initializer
         {
@@ -35,7 +51,7 @@ fn test_object_literals() {
 
     // Second object: basic_obj = {{ field_1 = 1, field_2 = 2 }}
     if let ast::Decl::Variable(var_decl) = &program.decls[1] {
-        assert_eq!(var_decl.name.name.as_ref(), "basic_obj");
+        assert_eq!(get_variable_name(var_decl), "basic_obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
             &var_decl.initializer
         {
@@ -69,7 +85,7 @@ fn test_object_literals() {
 
     // Third declaration: other_field = "other value"
     if let ast::Decl::Variable(var_decl) = &program.decls[2] {
-        assert_eq!(var_decl.name.name.as_ref(), "other_field");
+        assert_eq!(get_variable_name(var_decl), "other_field");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::String(str_lit))) = &var_decl.initializer {
             assert_eq!(str_lit.value.as_ref(), "other value");
         } else {
@@ -81,7 +97,7 @@ fn test_object_literals() {
 
     // Fourth object: obj = {{ field = "value", other_field }}
     if let ast::Decl::Variable(var_decl) = &program.decls[3] {
-        assert_eq!(var_decl.name.name.as_ref(), "obj");
+        assert_eq!(get_variable_name(var_decl), "obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
             &var_decl.initializer
         {
@@ -133,7 +149,7 @@ fn test_object_literals_with_trailing_comma() {
 
     // First object: basic_obj = {{ field_1 = 1, field_2 = 2, }}
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "basic_obj");
+        assert_eq!(get_variable_name(var_decl), "basic_obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
             &var_decl.initializer
         {
@@ -167,7 +183,7 @@ fn test_object_literals_with_trailing_comma() {
 
     // Second declaration: other_field = "other value"
     if let ast::Decl::Variable(var_decl) = &program.decls[1] {
-        assert_eq!(var_decl.name.name.as_ref(), "other_field");
+        assert_eq!(get_variable_name(var_decl), "other_field");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::String(str_lit))) = &var_decl.initializer {
             assert_eq!(str_lit.value.as_ref(), "other value");
         } else {
@@ -179,7 +195,7 @@ fn test_object_literals_with_trailing_comma() {
 
     // Third object: shorthand_obj = {{ field = "value", other_field, }}
     if let ast::Decl::Variable(var_decl) = &program.decls[2] {
-        assert_eq!(var_decl.name.name.as_ref(), "shorthand_obj");
+        assert_eq!(get_variable_name(var_decl), "shorthand_obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
             &var_decl.initializer
         {
@@ -222,7 +238,7 @@ fn test_arithmetic_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression should be: a + b * c - d / e % f
@@ -329,7 +345,7 @@ fn test_comparison_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "check");
+        assert_eq!(get_variable_name(var_decl), "check");
         assert!(var_decl.initializer.is_some());
 
         // Expression should be: x > y and a <= b or c != d and e == f
@@ -460,7 +476,7 @@ fn test_unary_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression should be: !condition and -number
@@ -582,7 +598,7 @@ fn test_ternary_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
 
         if let Some(ast::Expr::Ternary(ternary)) = &var_decl.initializer {
             // Condition should be identifier 'condition'
@@ -633,7 +649,7 @@ fn test_pipe_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
 
         if let Some(ast::Expr::Pipe(pipe_expr)) = &var_decl.initializer {
             // Expression should be: value |> transform |> finalize
@@ -1149,7 +1165,7 @@ fn test_array_literals() {
 
     // First array: empty = [];
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "empty");
+        assert_eq!(get_variable_name(var_decl), "empty");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Array(array))) = &var_decl.initializer {
             assert_eq!(array.elements.len(), 0);
         } else {
@@ -1159,7 +1175,7 @@ fn test_array_literals() {
 
     // Second array: numbers = [1, 2, 3, 4];
     if let ast::Decl::Variable(var_decl) = &program.decls[1] {
-        assert_eq!(var_decl.name.name.as_ref(), "numbers");
+        assert_eq!(get_variable_name(var_decl), "numbers");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Array(array))) = &var_decl.initializer {
             assert_eq!(array.elements.len(), 4);
 
@@ -1197,7 +1213,7 @@ fn test_array_literals() {
 
     // Third array: mixed = [1, "string", true, nil];
     if let ast::Decl::Variable(var_decl) = &program.decls[2] {
-        assert_eq!(var_decl.name.name.as_ref(), "mixed");
+        assert_eq!(get_variable_name(var_decl), "mixed");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Array(array))) = &var_decl.initializer {
             assert_eq!(array.elements.len(), 4);
 
@@ -1246,7 +1262,7 @@ fn test_array_literals_with_trailing_commas() {
 
     // Second array: numbers = [1, 2, 3, 4,];
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "numbers");
+        assert_eq!(get_variable_name(var_decl), "numbers");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Array(array))) = &var_decl.initializer {
             assert_eq!(array.elements.len(), 4);
 
@@ -1293,7 +1309,7 @@ fn test_grouping_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         if let Some(ast::Expr::Factor(factor_expr)) = &var_decl.initializer {
@@ -1372,7 +1388,7 @@ fn test_literals() {
 
     // Check number literal: var num = 42.5;
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "num");
+        assert_eq!(get_variable_name(var_decl), "num");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num))) = &var_decl.initializer {
             assert_eq!(num.value, 42.5);
         } else {
@@ -1382,7 +1398,7 @@ fn test_literals() {
 
     // Check string literal: var str = "hello world";
     if let ast::Decl::Variable(var_decl) = &program.decls[1] {
-        assert_eq!(var_decl.name.name.as_ref(), "str");
+        assert_eq!(get_variable_name(var_decl), "str");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::String(str))) = &var_decl.initializer {
             assert_eq!(str.value.as_ref(), "hello world");
         } else {
@@ -1392,7 +1408,7 @@ fn test_literals() {
 
     // Check boolean literal true: var bool1 = true;
     if let ast::Decl::Variable(var_decl) = &program.decls[2] {
-        assert_eq!(var_decl.name.name.as_ref(), "bool1");
+        assert_eq!(get_variable_name(var_decl), "bool1");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Boolean(bool))) = &var_decl.initializer {
             assert_eq!(bool.value, true);
         } else {
@@ -1402,7 +1418,7 @@ fn test_literals() {
 
     // Check boolean literal false: var bool2 = false;
     if let ast::Decl::Variable(var_decl) = &program.decls[3] {
-        assert_eq!(var_decl.name.name.as_ref(), "bool2");
+        assert_eq!(get_variable_name(var_decl), "bool2");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Boolean(bool))) = &var_decl.initializer {
             assert_eq!(bool.value, false);
         } else {
@@ -1412,7 +1428,7 @@ fn test_literals() {
 
     // Check nil literal: var nothing = nil;
     if let ast::Decl::Variable(var_decl) = &program.decls[4] {
-        assert_eq!(var_decl.name.name.as_ref(), "nothing");
+        assert_eq!(get_variable_name(var_decl), "nothing");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Nil(_))) = &var_decl.initializer {
             // Expected nil
         } else {
@@ -1522,7 +1538,7 @@ fn test_nested_function_calls() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression: outer(inner(deep(value)))
@@ -1617,7 +1633,7 @@ fn test_operator_precedence() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
 
         // Expression: a + b * c == d - e / f
         // Should be parsed as: (a + (b * c)) == (d - (e / f))
@@ -1723,7 +1739,7 @@ fn test_right_associative_ternary() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
 
         // Expression: a ? b ? c : d : e
         // Should be parsed as: a ? (b ? c : d) : e (right associative)
@@ -1805,7 +1821,7 @@ fn test_chained_method_calls() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression: obj.method1().method2().method3()
@@ -1913,7 +1929,7 @@ fn test_mixed_property_and_method_access() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression: obj.property.method().field[index]
@@ -2008,7 +2024,7 @@ fn test_complex_array_access() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression: matrix[row + 1][col - 1]
@@ -2166,7 +2182,7 @@ fn test_nested_ternary_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
 
         // Expression: a ? b : c ? d : e ? f : g
         // Should be parsed as: a ? b : (c ? d : (e ? f : g)) (right associative)
@@ -2277,7 +2293,7 @@ fn test_complex_boolean_logic() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "condition");
+        assert_eq!(get_variable_name(var_decl), "condition");
         assert!(var_decl.initializer.is_some());
 
         // Expression: !a and (b or c) and !(d or e)
@@ -2374,7 +2390,7 @@ fn test_pipe_operator_precedence() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression: value + 1 |> transform |> process - 2
@@ -2468,7 +2484,7 @@ fn test_deeply_nested_expressions() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // Expression: ((((a + b) * c) - d) / e) % f
@@ -2594,7 +2610,7 @@ fn test_lambda_as_immediately_invoked_expression() {
 
     // Should be: var test = (() -> nil)();
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "test");
+        assert_eq!(get_variable_name(var_decl), "test");
         assert!(var_decl.initializer.is_some());
 
         // The initializer should be a call expression: (() -> nil)()
@@ -2647,7 +2663,7 @@ fn test_lambda_as_immediately_invoked_expression_with_args() {
 
     // Should be: var result = ((x) -> x * 2)(5);
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "result");
+        assert_eq!(get_variable_name(var_decl), "result");
         assert!(var_decl.initializer.is_some());
 
         // The initializer should be a call expression: ((x) -> x * 2)(5)
@@ -2657,7 +2673,7 @@ fn test_lambda_as_immediately_invoked_expression_with_args() {
             {
                 // Lambda should have one parameter 'x'
                 assert_eq!(lambda.parameters.len(), 1);
-                assert_eq!(lambda.parameters[0].name.as_ref(), "x");
+                assert_eq!(get_parameter_name(&lambda.parameters[0]), "x");
 
                 // Lambda body should be an expression: x * 2
                 if let ast::LambdaBody::Expr(body_expr) = lambda.body.as_ref() {

@@ -100,7 +100,7 @@ pub struct FunctionDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionExpr {
     pub name: Identifier,
-    pub parameters: Vec<Identifier>,
+    pub parameters: Vec<Parameter>,
     pub body: BlockStmt,
     pub span: SourceSpan,
 }
@@ -116,7 +116,7 @@ pub struct LambdaDecl {
 /// Lambda expression: ( parameters? ) -> ( block | expression )
 #[derive(Debug, Clone, PartialEq)]
 pub struct LambdaExpr {
-    pub parameters: Vec<Identifier>,
+    pub parameters: Vec<Parameter>,
     pub body: Box<LambdaBody>,
     pub span: SourceSpan,
 }
@@ -137,10 +137,26 @@ impl LambdaBody {
     }
 }
 
-/// Variable declaration: var IDENTIFIER ( = expression )? ;
+/// Variable target for declarations  
+#[derive(Debug, Clone, PartialEq)]
+pub enum VariableTarget {
+    Identifier(Identifier),
+    Destructure(DestructurePattern),
+}
+
+impl VariableTarget {
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            VariableTarget::Identifier(id) => id.span,
+            VariableTarget::Destructure(pattern) => pattern.span,
+        }
+    }
+}
+
+/// Variable declaration: var ( IDENTIFIER | destructurePattern ) ( = expression )? ;
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariableDecl {
-    pub name: Identifier,
+    pub target: VariableTarget,
     pub initializer: Option<Expr>,
     pub span: SourceSpan,
 }
@@ -285,12 +301,24 @@ impl Expr {
     }
 }
 
-/// Assignment expression: ( call . IDENTIFIER | IDENTIFIER ) = assignment | pipe
+/// Assignment expression: ( call . IDENTIFIER | IDENTIFIER ) ( = | += | -= | *= | /= | %= ) assignment | pipe
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssignmentExpr {
     pub target: AssignmentTarget,
+    pub operator: AssignmentOperator,
     pub value: Box<Expr>,
     pub span: SourceSpan,
+}
+
+/// Assignment operators
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum AssignmentOperator {
+    Assign,         // =
+    AddAssign,      // +=
+    SubtractAssign, // -=
+    MultiplyAssign, // *=
+    DivideAssign,   // /=
+    ModuloAssign,   // %=
 }
 
 /// Target of an assignment
@@ -374,6 +402,7 @@ pub struct EqualityExpr {
 pub enum EqualityOperator {
     Equal,    // ==
     NotEqual, // !=
+    Is,       // is
 }
 
 /// Comparison expression: term ( ( > | >= | < | <= ) term )*
@@ -453,9 +482,10 @@ pub struct CallExpr {
 /// Operations that can be chained on a call expression
 #[derive(Debug, Clone, PartialEq)]
 pub enum CallOperation {
-    Call(Vec<Expr>),      // ( arguments? )
-    Property(Identifier), // . IDENTIFIER
-    Index(Expr),          // [ expression ]
+    Call(Vec<Expr>),              // ( arguments? )
+    Property(Identifier),         // . IDENTIFIER
+    OptionalProperty(Identifier), // ?. IDENTIFIER
+    Index(Expr),                  // [ expression ]
 }
 
 impl CallOperation {
@@ -470,6 +500,7 @@ impl CallOperation {
                 }
             }
             CallOperation::Property(id) => id.span,
+            CallOperation::OptionalProperty(id) => id.span,
             CallOperation::Index(expr) => expr.span(),
         }
     }
@@ -489,6 +520,8 @@ pub enum PrimaryExpr {
     Lambda(Box<LambdaExpr>),
     Array(ArrayLiteral),
     ObjectLiteral(ObjectLiteral),
+    Map(MapExpr),
+    OptionalMap(OptionalMapExpr),
 }
 
 impl PrimaryExpr {
@@ -505,6 +538,8 @@ impl PrimaryExpr {
             PrimaryExpr::Lambda(lambda) => lambda.span,
             PrimaryExpr::Array(array) => array.span,
             PrimaryExpr::ObjectLiteral(object) => object.span,
+            PrimaryExpr::Map(map) => map.span,
+            PrimaryExpr::OptionalMap(map) => map.span,
         }
     }
 }
@@ -604,6 +639,46 @@ pub struct ObjectLiteral {
 pub struct ObjectEntry {
     pub key: Identifier,
     pub value: Box<Expr>,
+    pub span: SourceSpan,
+}
+
+/// Parameters can be either identifiers or destructuring patterns
+#[derive(Debug, Clone, PartialEq)]
+pub enum Parameter {
+    Identifier(Identifier),
+    Destructure(DestructurePattern),
+}
+
+impl Parameter {
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            Parameter::Identifier(id) => id.span,
+            Parameter::Destructure(pattern) => pattern.span,
+        }
+    }
+}
+
+/// Destructuring pattern: ( IDENTIFIER ( , IDENTIFIER )* ( , .. IDENTIFIER )? )
+#[derive(Debug, Clone, PartialEq)]
+pub struct DestructurePattern {
+    pub elements: Vec<Identifier>,
+    pub rest: Option<Identifier>,
+    pub span: SourceSpan,
+}
+
+/// Map expression: | parameters? -> expression |
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapExpr {
+    pub parameters: Vec<Parameter>,
+    pub body: Box<Expr>,
+    pub span: SourceSpan,
+}
+
+/// Optional map expression: ?| parameters? -> expression |
+#[derive(Debug, Clone, PartialEq)]
+pub struct OptionalMapExpr {
+    pub parameters: Vec<Parameter>,
+    pub body: Box<Expr>,
     pub span: SourceSpan,
 }
 
@@ -707,7 +782,7 @@ pub trait AstVisitor {
         self.visit_identifier(&func_expr.name, errors)?;
 
         for param in &func_expr.parameters {
-            self.visit_identifier(param, errors)?;
+            self.visit_parameter(param, errors)?;
         }
 
         self.visit_block_statement(&func_expr.body, errors)
@@ -728,7 +803,7 @@ pub trait AstVisitor {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         for param in &lambda_expr.parameters {
-            self.visit_identifier(param, errors)?;
+            self.visit_parameter(param, errors)?;
         }
 
         self.visit_lambda_body(&lambda_expr.body, errors)
@@ -750,7 +825,7 @@ pub trait AstVisitor {
         var_decl: &VariableDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(&var_decl.name, errors)?;
+        self.visit_variable_target(&var_decl.target, errors)?;
 
         if let Some(initializer) = &var_decl.initializer {
             self.visit_expression(initializer, errors)?;
@@ -1053,6 +1128,7 @@ pub trait AstVisitor {
                 Ok(())
             }
             CallOperation::Property(identifier) => self.visit_identifier(identifier, errors),
+            CallOperation::OptionalProperty(identifier) => self.visit_identifier(identifier, errors),
             CallOperation::Index(expr) => self.visit_expression(expr, errors),
         }
     }
@@ -1074,6 +1150,8 @@ pub trait AstVisitor {
             PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda, errors),
             PrimaryExpr::Array(array) => self.visit_array_literal(array, errors),
             PrimaryExpr::ObjectLiteral(object) => self.visit_object_literal(object, errors),
+            PrimaryExpr::Map(map) => self.visit_map_expression(map, errors),
+            PrimaryExpr::OptionalMap(map) => self.visit_optional_map_expression(map, errors),
         }
     }
 
@@ -1192,6 +1270,68 @@ pub trait AstVisitor {
         self.visit_expression(&entry.value, errors)?;
 
         Ok(())
+    }
+
+    fn visit_parameter(
+        &mut self,
+        parameter: &Parameter,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        match parameter {
+            Parameter::Identifier(identifier) => self.visit_identifier(identifier, errors),
+            Parameter::Destructure(pattern) => self.visit_destructure_pattern(pattern, errors),
+        }
+    }
+
+    fn visit_destructure_pattern(
+        &mut self,
+        pattern: &DestructurePattern,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        for element in &pattern.elements {
+            self.visit_identifier(element, errors)?;
+        }
+
+        if let Some(rest) = &pattern.rest {
+            self.visit_identifier(rest, errors)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_variable_target(
+        &mut self,
+        target: &VariableTarget,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        match target {
+            VariableTarget::Identifier(identifier) => self.visit_identifier(identifier, errors),
+            VariableTarget::Destructure(pattern) => self.visit_destructure_pattern(pattern, errors),
+        }
+    }
+
+    fn visit_map_expression(
+        &mut self,
+        map: &MapExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        for parameter in &map.parameters {
+            self.visit_parameter(parameter, errors)?;
+        }
+
+        self.visit_expression(&map.body, errors)
+    }
+
+    fn visit_optional_map_expression(
+        &mut self,
+        map: &OptionalMapExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        for parameter in &map.parameters {
+            self.visit_parameter(parameter, errors)?;
+        }
+
+        self.visit_expression(&map.body, errors)
     }
 }
 

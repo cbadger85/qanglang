@@ -1,6 +1,22 @@
 use super::{assert_no_parse_errors, parse_source};
 use crate::{SourceMap, ast};
 
+// Helper function to get the name from a VariableDecl target
+fn get_variable_name(var_decl: &ast::VariableDecl) -> &str {
+    match &var_decl.target {
+        ast::VariableTarget::Identifier(id) => &id.name,
+        ast::VariableTarget::Destructure(_) => panic!("Destructuring not expected in these tests"),
+    }
+}
+
+// Helper function to get the name from a Parameter
+fn get_parameter_name(param: &ast::Parameter) -> &str {
+    match param {
+        ast::Parameter::Identifier(id) => &id.name,
+        ast::Parameter::Destructure(_) => panic!("Destructuring not expected in these tests"),
+    }
+}
+
 #[test]
 fn test_simple_variable_declaration() {
     let source_code = r#"var x = 42;"#;
@@ -12,7 +28,7 @@ fn test_simple_variable_declaration() {
     assert_eq!(program.decls.len(), 1);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "x");
+        assert_eq!(get_variable_name(var_decl), "x");
         assert!(var_decl.initializer.is_some());
 
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num))) = &var_decl.initializer {
@@ -36,7 +52,7 @@ fn test_variable_declaration_without_initializer() {
     assert_eq!(program.decls.len(), 1);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "x");
+        assert_eq!(get_variable_name(var_decl), "x");
         assert!(var_decl.initializer.is_none());
     } else {
         panic!("Expected variable declaration");
@@ -60,8 +76,8 @@ fn test_function_declaration() {
     if let ast::Decl::Function(func_decl) = &program.decls[0] {
         assert_eq!(func_decl.function.name.name.as_ref(), "add");
         assert_eq!(func_decl.function.parameters.len(), 2);
-        assert_eq!(func_decl.function.parameters[0].name.as_ref(), "a");
-        assert_eq!(func_decl.function.parameters[1].name.as_ref(), "b");
+        assert_eq!(get_parameter_name(&func_decl.function.parameters[0]), "a");
+        assert_eq!(get_parameter_name(&func_decl.function.parameters[1]), "b");
         assert_eq!(func_decl.function.body.decls.len(), 1);
 
         // Verify the return statement in the function body
@@ -119,8 +135,8 @@ fn test_function_declaration_with_trailing_comma() {
         assert_eq!(func_decl.function.name.name.as_ref(), "add");
         assert_eq!(func_decl.function.parameters.len(), 2);
 
-        assert_eq!(func_decl.function.parameters[0].name.as_ref(), "a");
-        assert_eq!(func_decl.function.parameters[1].name.as_ref(), "b");
+        assert_eq!(get_parameter_name(&func_decl.function.parameters[0]), "a");
+        assert_eq!(get_parameter_name(&func_decl.function.parameters[1]), "b");
         assert_eq!(func_decl.function.body.decls.len(), 1);
 
         // Verify the return statement in the function body
@@ -286,14 +302,8 @@ fn test_class_declaration_with_method_containing_trailing_comma_in_parameters() 
         if let ast::ClassMember::Method(method) = &class_decl.members[0] {
             assert_eq!(method.name.name.as_ref(), "method");
             assert_eq!(method.parameters.len(), 2);
-            assert_eq!(
-                method.parameters[0].name,
-                "arg1".to_owned().into_boxed_str()
-            );
-            assert_eq!(
-                method.parameters[1].name,
-                "arg2".to_owned().into_boxed_str()
-            );
+            assert_eq!(get_parameter_name(&method.parameters[0]), "arg1");
+            assert_eq!(get_parameter_name(&method.parameters[1]), "arg2");
 
             // Verify method body contains return statement
             assert_eq!(method.body.decls.len(), 1);
@@ -346,12 +356,12 @@ fn test_lambda_declaration() {
     assert_eq!(program.decls.len(), 1);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "add");
+        assert_eq!(get_variable_name(var_decl), "add");
 
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
             assert_eq!(lambda.parameters.len(), 2);
-            assert_eq!(lambda.parameters[0].name.as_ref(), "a");
-            assert_eq!(lambda.parameters[1].name.as_ref(), "b");
+            assert_eq!(get_parameter_name(&lambda.parameters[0]), "a");
+            assert_eq!(get_parameter_name(&lambda.parameters[1]), "b");
 
             if let ast::LambdaBody::Expr(expr) = lambda.body.as_ref() {
                 // Verify the expression body: a + b
@@ -401,12 +411,12 @@ fn test_lambda_declaration_with_trailing_comma_in_parameters() {
     assert_eq!(program.decls.len(), 1);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "add");
+        assert_eq!(get_variable_name(var_decl), "add");
 
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
             assert_eq!(lambda.parameters.len(), 2);
-            assert_eq!(lambda.parameters[0].name.as_ref(), "a");
-            assert_eq!(lambda.parameters[1].name.as_ref(), "b");
+            assert_eq!(get_parameter_name(&lambda.parameters[0]), "a");
+            assert_eq!(get_parameter_name(&lambda.parameters[1]), "b");
 
             if let ast::LambdaBody::Expr(expr) = lambda.body.as_ref() {
                 // Verify the expression body: a + b
@@ -455,11 +465,11 @@ fn test_lambda_with_block_body() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "calc");
+        assert_eq!(get_variable_name(var_decl), "calc");
 
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {
             assert_eq!(lambda.parameters.len(), 1);
-            assert_eq!(lambda.parameters[0].name.as_ref(), "x");
+            assert_eq!(get_parameter_name(&lambda.parameters[0]), "x");
 
             if let ast::LambdaBody::Block(block) = lambda.body.as_ref() {
                 // Verify block contains one return statement
@@ -518,7 +528,7 @@ fn test_empty_lambda_parameters() {
 
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
         // Verify variable name
-        assert_eq!(var_decl.name.name.as_ref(), "func");
+        assert_eq!(get_variable_name(var_decl), "func");
         assert!(var_decl.initializer.is_some());
 
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::Lambda(lambda))) = &var_decl.initializer {

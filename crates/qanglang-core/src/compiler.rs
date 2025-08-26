@@ -635,12 +635,12 @@ impl<'a> CompilerVisitor<'a> {
             func_expr
                 .parameters
                 .first()
-                .map(|p| p.span)
+                .map(|p| p.span())
                 .unwrap_or(func_expr.span),
             func_expr
                 .parameters
                 .last()
-                .map(|p| p.span)
+                .map(|p| p.span())
                 .unwrap_or(func_expr.span),
         );
 
@@ -652,9 +652,19 @@ impl<'a> CompilerVisitor<'a> {
         }
 
         for parameter in &func_expr.parameters {
-            let handle = self.parse_variable(&parameter.name, parameter.span)?;
-
-            self.define_variable(handle, parameter.span)?;
+            match parameter {
+                ast::Parameter::Identifier(identifier) => {
+                    let handle = self.parse_variable(&identifier.name, identifier.span)?;
+                    self.define_variable(handle, identifier.span)?;
+                }
+                ast::Parameter::Destructure(_pattern) => {
+                    // TODO: Implement destructuring parameters
+                    return Err(QangSyntaxError::new(
+                        "Destructuring parameters not yet implemented.".to_string(),
+                        parameter.span(),
+                    ));
+                }
+            }
         }
 
         self.visit_block_statement(&func_expr.body, errors)?;
@@ -906,17 +916,28 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         var_decl: &ast::VariableDecl,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        let global = self.parse_variable(&var_decl.name.name, var_decl.name.span)?;
+        match &var_decl.target {
+            ast::VariableTarget::Identifier(identifier) => {
+                let global = self.parse_variable(&identifier.name, identifier.span)?;
 
-        if let Some(expr) = &var_decl.initializer {
-            self.visit_expression(expr, errors)?;
-        } else {
-            self.emit_opcode(OpCode::Nil, var_decl.span);
-        }
+                if let Some(expr) = &var_decl.initializer {
+                    self.visit_expression(expr, errors)?;
+                } else {
+                    self.emit_opcode(OpCode::Nil, var_decl.span);
+                }
 
-        self.define_variable(global, var_decl.name.span)?;
-        if global.is_none() {
-            self.handle_variable(&var_decl.name.name, var_decl.span, true)?;
+                self.define_variable(global, identifier.span)?;
+                if global.is_none() {
+                    self.handle_variable(&identifier.name, var_decl.span, true)?;
+                }
+            }
+            ast::VariableTarget::Destructure(_pattern) => {
+                // TODO: Implement destructuring assignment
+                return Err(QangSyntaxError::new(
+                    "Destructuring assignment not yet implemented.".to_string(),
+                    var_decl.span,
+                ));
+            }
         }
 
         Ok(())
@@ -1329,12 +1350,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             lambda_expr
                 .parameters
                 .first()
-                .map(|p| p.span)
+                .map(|p| p.span())
                 .unwrap_or(lambda_expr.span),
             lambda_expr
                 .parameters
                 .last()
-                .map(|p| p.span)
+                .map(|p| p.span())
                 .unwrap_or(lambda_expr.span),
         );
 
@@ -1346,9 +1367,19 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         }
 
         for parameter in &lambda_expr.parameters {
-            let handle = self.parse_variable(&parameter.name, parameter.span)?;
-
-            self.define_variable(handle, parameter.span)?;
+            match parameter {
+                ast::Parameter::Identifier(identifier) => {
+                    let handle = self.parse_variable(&identifier.name, identifier.span)?;
+                    self.define_variable(handle, identifier.span)?;
+                }
+                ast::Parameter::Destructure(_pattern) => {
+                    // TODO: Implement destructuring parameters
+                    return Err(QangSyntaxError::new(
+                        "Destructuring parameters not yet implemented.".to_string(),
+                        parameter.span(),
+                    ));
+                }
+            }
         }
 
         match lambda_expr.body.as_ref() {
@@ -1496,6 +1527,14 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 self.visit_expression(expr, errors)?;
 
                 self.emit_opcode(OpCode::GetArrayIndex, call.span);
+                Ok(())
+            }
+            ast::CallOperation::OptionalProperty(identifier) => {
+                self.visit_expression(call.callee.as_ref(), errors)?;
+                let identifier_handle = self.allocator.strings.intern(&identifier.name);
+                let byte = self.make_constant(Value::String(identifier_handle), identifier.span)?;
+                // TODO: Implement optional property access opcode when VM supports it
+                self.emit_opcode_and_byte(OpCode::GetProperty, byte, call.span);
                 Ok(())
             }
         }

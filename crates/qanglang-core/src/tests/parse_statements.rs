@@ -1,6 +1,14 @@
 use super::{assert_no_parse_errors, parse_source};
 use crate::{SourceMap, ast};
 
+// Helper function to get the name from a VariableDecl target
+fn get_variable_name(var_decl: &ast::VariableDecl) -> &str {
+    match &var_decl.target {
+        ast::VariableTarget::Identifier(id) => &id.name,
+        ast::VariableTarget::Destructure(_) => panic!("Destructuring not expected in these tests"),
+    }
+}
+
 #[test]
 fn test_if_statement() {
     let source_code = r#"
@@ -299,7 +307,7 @@ fn test_for_statement_with_all_clauses() {
 
         // Verify the initializer: var i = 0
         if let Some(ast::ForInitializer::Variable(var_decl)) = &for_stmt.initializer {
-            assert_eq!(var_decl.name.name.as_ref(), "i");
+            assert_eq!(get_variable_name(var_decl), "i");
             assert!(var_decl.initializer.is_some());
             if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit))) =
                 &var_decl.initializer
@@ -758,7 +766,7 @@ fn test_block_statements() {
 
         // First declaration: var x = 1;
         if let ast::Decl::Variable(var_decl) = &block.decls[0] {
-            assert_eq!(var_decl.name.name.as_ref(), "x");
+            assert_eq!(get_variable_name(var_decl), "x");
             assert!(var_decl.initializer.is_some());
             if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit))) =
                 &var_decl.initializer
@@ -773,7 +781,7 @@ fn test_block_statements() {
 
         // Second declaration: var y = 2;
         if let ast::Decl::Variable(var_decl) = &block.decls[1] {
-            assert_eq!(var_decl.name.name.as_ref(), "y");
+            assert_eq!(get_variable_name(var_decl), "y");
             assert!(var_decl.initializer.is_some());
             if let Some(ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit))) =
                 &var_decl.initializer

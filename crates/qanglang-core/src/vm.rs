@@ -758,6 +758,20 @@ impl Vm {
                                 value,
                             )?;
                         }
+                        Value::Closure(_) => {
+                            let identifier = read_string!(self);
+                            if identifier == self.alloc.strings.intern("call") {
+                                // do nothing, because function.call == function
+                            } else {
+                                return Err(QangRuntimeError::new(
+                                    format!(
+                                        "Cannot access properties from {}.",
+                                        value.to_type_string()
+                                    ),
+                                    self.state.get_previous_loc(),
+                                ));
+                            }
+                        }
                         _ => {
                             return Err(QangRuntimeError::new(
                                 format!(
@@ -1204,6 +1218,31 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
+            Value::Closure(closure_handle) => {
+                if method_handle == self.alloc.strings.intern("call") {
+                    if let Value::Array(array_handle) = peek_value!(self, 0) {
+                        pop_value!(self);
+                        let array_length = self.alloc.arrays.length(array_handle);
+                        for value in self.alloc.arrays.iter(array_handle) {
+                            push_value!(self, value);
+                        }
+                        self.call(closure_handle, array_length)
+                    } else {
+                        Err(QangRuntimeError::new(
+                            "Only arrays may be passed to 'call'.".to_string(),
+                            self.state.get_previous_loc(),
+                        ))
+                    }
+                } else {
+                    Err(QangRuntimeError::new(
+                        format!(
+                            "Cannot invoke {}, no methods exist.",
+                            receiver.to_type_string()
+                        ),
+                        self.state.get_previous_loc(),
+                    ))
+                }
+            }
             _ => Err(QangRuntimeError::new(
                 format!(
                     "Cannot invoke {}, no methods exist.",
@@ -1331,7 +1370,7 @@ impl Vm {
         method: IntrinsicMethod,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let mut args = vec![Value::Nil; method.arity];
+        let mut args = vec![Value::Nil; method.arity]; // TODO use array of 256 in length instead of vec.
 
         for i in (0..arg_count).rev() {
             if i < method.arity {

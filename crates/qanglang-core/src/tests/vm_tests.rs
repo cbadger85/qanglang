@@ -1176,3 +1176,42 @@ fn test_arrays() {
         }
     }
 }
+
+#[test]
+fn test_intrinsic_call_fn() {
+    let source = r#"
+        fn test_function() {
+            return true;
+        }
+
+        var foo = test_function.call;
+
+        assert(foo());
+        assert(foo.call([]));
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

@@ -140,3 +140,10 @@ fn test_array_concat_with_plus() {
    assert_eq(arr3[2], 3);
    assert_eq(arr3[3], 4);
 }
+
+
+fn test_array_from_constructor() {
+  var arr1 = Array(1);
+  assert_eq(arr1.length(), 1);
+  assert_eq(arr1[0], nil);
+}

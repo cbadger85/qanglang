@@ -308,6 +308,21 @@ pub fn qang_array_concat(
     }
 }
 
+pub fn qang_array_construct(
+    args: &[Value],
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    match args.get(0).copied().unwrap_or(Value::Nil) {
+        Value::Number(length) => {
+            // TODO verify length is positive.
+            Ok(Some(Value::Array(
+                vm.alloc.arrays.create_array(length.trunc() as usize),
+            )))
+        }
+        _ => Err(NativeFunctionError::new("Expected length to be a number.")),
+    }
+}
+
 pub fn qang_hash(args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let value = args.first().copied();
 

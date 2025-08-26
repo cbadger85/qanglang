@@ -19,10 +19,10 @@ use crate::{
         UpvalueReference,
     },
     qang_std::{
-        qang_array_concat, qang_array_get, qang_array_length, qang_array_pop, qang_array_push,
-        qang_array_reverse, qang_array_slice, qang_assert, qang_assert_eq, qang_assert_throws,
-        qang_hash, qang_print, qang_println, qang_string_to_lowercase, qang_string_to_uppercase,
-        qang_system_time, qang_to_string, qang_typeof,
+        qang_array_concat, qang_array_construct, qang_array_get, qang_array_length, qang_array_pop,
+        qang_array_push, qang_array_reverse, qang_array_slice, qang_assert, qang_assert_eq,
+        qang_assert_throws, qang_hash, qang_print, qang_println, qang_string_to_lowercase,
+        qang_string_to_uppercase, qang_system_time, qang_to_string, qang_typeof,
     },
     value::{
         ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING,
@@ -212,7 +212,7 @@ impl VmState {
 pub struct Vm {
     pub is_debug: bool,
     pub is_gc_enabled: bool,
-    state: VmState,
+    pub(crate) state: VmState,
     pub alloc: HeapAllocator,
 }
 
@@ -352,6 +352,7 @@ impl Vm {
             .add_native_function("typeof", 1, qang_typeof)
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("hash", 1, qang_hash)
+            .add_native_function("Array", 2, qang_array_construct)
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -1205,7 +1206,7 @@ impl Vm {
             }
             _ => Err(QangRuntimeError::new(
                 format!(
-                    "Cannot invoke {}, only instances have methods",
+                    "Cannot invoke {}, no methods exist.",
                     receiver.to_type_string()
                 ),
                 self.state.get_previous_loc(),
@@ -1213,7 +1214,11 @@ impl Vm {
         }
     }
 
-    fn call(&mut self, closure_handle: ClosureHandle, arg_count: usize) -> RuntimeResult<()> {
+    pub(crate) fn call(
+        &mut self,
+        closure_handle: ClosureHandle,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
 

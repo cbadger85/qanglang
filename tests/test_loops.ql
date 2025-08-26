@@ -67,7 +67,7 @@ fn test_for_loop_with_condition() {
 
 fn test_for_loop_with_all_parts() {
   var count = 0;
-  for (var i = 0; i < 10; i = i + 1) {
+  for (var i = 0; i < 10; i += 1) {
     assert_eq(i, count, "Expected loop variable to be incremented.");
     count = count + 1;
   }
@@ -75,7 +75,7 @@ fn test_for_loop_with_all_parts() {
 
 fn test_for_loop_with_missing_parts() {
   var count = 0;
-  for (var i = 0; ; i = i + 1) {
+  for (var i = 0; ; i += 1) {
     count = count + 1;
     if (i == 10) break;
   }
@@ -84,8 +84,8 @@ fn test_for_loop_with_missing_parts() {
 
 fn test_nested_for_loops() {
   var count = 0;
-  for (var i = 0; i < 10; i = i + 1) {
-    for (var j = 0; j < 10; j = j + 1) {
+  for (var i = 0; i < 10; i += 1) {
+    for (var j = 0; j < 10; j += 1) {
       count = count + 1;
     }
   }
@@ -131,7 +131,7 @@ fn test_while_loop_continue_statement() {
 
 fn test_for_loop_continue_statement() {
   var count = 0;
-  for (var i = 0; i < 10; i = i + 1) {
+  for (var i = 0; i < 10; i += 1) {
     if (i == 5) {
       continue;
     }

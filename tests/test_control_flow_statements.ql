@@ -16,7 +16,7 @@ fn test_break_statement_in_while_loop() {
 
 fn test_break_statement_in_for_loop() {
   var sum = 0;
-  for (var i = 0; i < 100; i = i + 1) {
+  for (var i = 0; i < 100; i += 1) {
     if (i == 10) {
       break;
     }
@@ -40,7 +40,7 @@ fn test_continue_statement_in_while_loop() {
 
 fn test_continue_statement_in_for_loop() {
   var sum = 0;
-  for (var i = 0; i < 10; i = i + 1) {
+  for (var i = 0; i < 10; i += 1) {
     if (i % 2 == 0) {
       continue;
     }
@@ -52,9 +52,9 @@ fn test_continue_statement_in_for_loop() {
 fn test_nested_loops_with_break() {
   var outer_count = 0;
   var inner_count = 0;
-  for (var i = 0; i < 5; i = i + 1) {
+  for (var i = 0; i < 5; i += 1) {
     outer_count = outer_count + 1;
-    for (var j = 0; j < 5; j = j + 1) {
+    for (var j = 0; j < 5; j += 1) {
       inner_count = inner_count + 1;
       if (j == 2) {
         break;

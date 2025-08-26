@@ -81,36 +81,40 @@ fn test_function_declaration() {
         assert_eq!(func_decl.function.body.decls.len(), 1);
 
         // Verify the return statement in the function body
-        if let ast::Decl::Stmt(ast::Stmt::Return(return_stmt)) = &func_decl.function.body.decls[0] {
-            assert!(return_stmt.value.is_some());
+        if let ast::Decl::Stmt(boxed_stmt) = &func_decl.function.body.decls[0] {
+            if let ast::Stmt::Return(return_stmt) = &**boxed_stmt {
+                assert!(return_stmt.value.is_some());
 
-            // Verify the return expression: a + b
-            if let Some(ast::Expr::Term(term_expr)) = &return_stmt.value {
-                // Left side should be identifier 'a'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
-                    term_expr.left.as_ref()
-                {
-                    assert_eq!(left_id.name.as_ref(), "a");
+                // Verify the return expression: a + b
+                if let Some(ast::Expr::Term(term_expr)) = &return_stmt.value {
+                    // Left side should be identifier 'a'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
+                        term_expr.left.as_ref()
+                    {
+                        assert_eq!(left_id.name.as_ref(), "a");
+                    } else {
+                        panic!("Expected identifier 'a' on left side of addition");
+                    }
+
+                    // Operator should be Add
+                    assert_eq!(term_expr.operator, ast::TermOperator::Add);
+
+                    // Right side should be identifier 'b'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) =
+                        term_expr.right.as_ref()
+                    {
+                        assert_eq!(right_id.name.as_ref(), "b");
+                    } else {
+                        panic!("Expected identifier 'b' on right side of addition");
+                    }
                 } else {
-                    panic!("Expected identifier 'a' on left side of addition");
-                }
-
-                // Operator should be Add
-                assert_eq!(term_expr.operator, ast::TermOperator::Add);
-
-                // Right side should be identifier 'b'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) =
-                    term_expr.right.as_ref()
-                {
-                    assert_eq!(right_id.name.as_ref(), "b");
-                } else {
-                    panic!("Expected identifier 'b' on right side of addition");
+                    panic!("Expected term expression (a + b) in return statement");
                 }
             } else {
-                panic!("Expected term expression (a + b) in return statement");
+                panic!("Expected return statement in function body");
             }
         } else {
-            panic!("Expected return statement in function body");
+            panic!("Expected statement with boxed return in function body");
         }
     } else {
         panic!("Expected function declaration");
@@ -140,36 +144,40 @@ fn test_function_declaration_with_trailing_comma() {
         assert_eq!(func_decl.function.body.decls.len(), 1);
 
         // Verify the return statement in the function body
-        if let ast::Decl::Stmt(ast::Stmt::Return(return_stmt)) = &func_decl.function.body.decls[0] {
-            assert!(return_stmt.value.is_some());
+        if let ast::Decl::Stmt(boxed_stmt) = &func_decl.function.body.decls[0] {
+            if let ast::Stmt::Return(return_stmt) = &**boxed_stmt {
+                assert!(return_stmt.value.is_some());
 
-            // Verify the return expression: a + b
-            if let Some(ast::Expr::Term(term_expr)) = &return_stmt.value {
-                // Left side should be identifier 'a'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
-                    term_expr.left.as_ref()
-                {
-                    assert_eq!(left_id.name.as_ref(), "a");
+                // Verify the return expression: a + b
+                if let Some(ast::Expr::Term(term_expr)) = &return_stmt.value {
+                    // Left side should be identifier 'a'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
+                        term_expr.left.as_ref()
+                    {
+                        assert_eq!(left_id.name.as_ref(), "a");
+                    } else {
+                        panic!("Expected identifier 'a' on left side of addition");
+                    }
+
+                    // Operator should be Add
+                    assert_eq!(term_expr.operator, ast::TermOperator::Add);
+
+                    // Right side should be identifier 'b'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) =
+                        term_expr.right.as_ref()
+                    {
+                        assert_eq!(right_id.name.as_ref(), "b");
+                    } else {
+                        panic!("Expected identifier 'b' on right side of addition");
+                    }
                 } else {
-                    panic!("Expected identifier 'a' on left side of addition");
-                }
-
-                // Operator should be Add
-                assert_eq!(term_expr.operator, ast::TermOperator::Add);
-
-                // Right side should be identifier 'b'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(right_id)) =
-                    term_expr.right.as_ref()
-                {
-                    assert_eq!(right_id.name.as_ref(), "b");
-                } else {
-                    panic!("Expected identifier 'b' on right side of addition");
+                    panic!("Expected term expression (a + b) in return statement");
                 }
             } else {
-                panic!("Expected term expression (a + b) in return statement");
+                panic!("Expected return statement in function body");
             }
         } else {
-            panic!("Expected return statement in function body");
+            panic!("Expected statement with boxed return in function body");
         }
     } else {
         panic!("Expected function declaration");
@@ -244,11 +252,12 @@ fn test_class_declaration() {
 
             // Verify method body contains return statement
             assert_eq!(method.body.decls.len(), 1);
-            if let ast::Decl::Stmt(ast::Stmt::Return(return_stmt)) = &method.body.decls[0] {
-                assert!(return_stmt.value.is_some());
+            if let ast::Decl::Stmt(stmt_box) = &method.body.decls[0] {
+                if let ast::Stmt::Return(return_stmt) = &**stmt_box {
+                    assert!(return_stmt.value.is_some());
 
-                // Verify the return expression: this.name
-                if let Some(ast::Expr::Call(call_expr)) = &return_stmt.value {
+                    // Verify the return expression: this.name
+                    if let Some(ast::Expr::Call(call_expr)) = &return_stmt.value {
                     // Verify the callee is 'this'
                     if let ast::Expr::Primary(ast::PrimaryExpr::This(_)) = call_expr.callee.as_ref()
                     {
@@ -266,8 +275,11 @@ fn test_class_declaration() {
                 } else {
                     panic!("Expected call expression (this.name) in return statement");
                 }
+                } else {
+                    panic!("Expected return statement in method body");
+                }
             } else {
-                panic!("Expected return statement in method body");
+                panic!("Expected statement with boxed return in method body");
             }
         } else {
             panic!("Expected method declaration");
@@ -307,10 +319,14 @@ fn test_class_declaration_with_method_containing_trailing_comma_in_parameters() 
 
             // Verify method body contains return statement
             assert_eq!(method.body.decls.len(), 1);
-            if let ast::Decl::Stmt(ast::Stmt::Return(return_stmt)) = &method.body.decls[0] {
-                assert!(return_stmt.value.is_none());
+            if let ast::Decl::Stmt(stmt_box) = &method.body.decls[0] {
+                if let ast::Stmt::Return(return_stmt) = &**stmt_box {
+                    assert!(return_stmt.value.is_none());
+                } else {
+                    panic!("Expected return statement in method body");
+                }
             } else {
-                panic!("Expected return statement in method body");
+                panic!("Expected statement with boxed return in method body");
             }
         } else {
             panic!("Expected method declaration");
@@ -475,7 +491,8 @@ fn test_lambda_with_block_body() {
                 // Verify block contains one return statement
                 assert_eq!(block.decls.len(), 1);
 
-                if let ast::Decl::Stmt(ast::Stmt::Return(return_stmt)) = &block.decls[0] {
+                if let ast::Decl::Stmt(stmt_box) = &block.decls[0] {
+                    if let ast::Stmt::Return(return_stmt) = &**stmt_box {
                     assert!(return_stmt.value.is_some());
 
                     // Verify the return expression: x * 2
@@ -503,8 +520,11 @@ fn test_lambda_with_block_body() {
                     } else {
                         panic!("Expected factor expression (x * 2) in return statement");
                     }
+                    } else {
+                        panic!("Expected return statement in lambda block");
+                    }
                 } else {
-                    panic!("Expected return statement in lambda block");
+                    panic!("Expected statement with boxed return in lambda block");
                 }
             } else {
                 panic!("Expected block body in lambda");

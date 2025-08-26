@@ -25,7 +25,8 @@ fn test_if_statement() {
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 1);
 
-    if let ast::Decl::Stmt(ast::Stmt::If(if_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::If(if_stmt) = stmt_box.as_ref() {
         // Verify the condition: x > 0
         if let ast::Expr::Comparison(comp_expr) = &if_stmt.condition {
             // Left side should be identifier 'x'
@@ -54,7 +55,8 @@ fn test_if_statement() {
         // Verify the then branch: { return true; }
         if let ast::Stmt::Block(then_block) = if_stmt.then_branch.as_ref() {
             assert_eq!(then_block.decls.len(), 1);
-            if let ast::Decl::Stmt(ast::Stmt::Return(return_stmt)) = &then_block.decls[0] {
+            if let ast::Decl::Stmt(stmt_box) = &then_block.decls[0] {
+                if let ast::Stmt::Return(return_stmt) = stmt_box.as_ref() {
                 assert!(return_stmt.value.is_some());
                 if let Some(ast::Expr::Primary(ast::PrimaryExpr::Boolean(bool_lit))) =
                     &return_stmt.value
@@ -63,8 +65,11 @@ fn test_if_statement() {
                 } else {
                     panic!("Expected boolean literal 'true' in then branch return");
                 }
+                } else {
+                    panic!("Expected return statement in then branch");
+                }
             } else {
-                panic!("Expected return statement in then branch");
+                panic!("Expected statement with boxed return in then branch");
             }
         } else {
             panic!("Expected block statement in then branch");
@@ -75,7 +80,8 @@ fn test_if_statement() {
         if let Some(else_branch) = &if_stmt.else_branch {
             if let ast::Stmt::Block(else_block) = else_branch.as_ref() {
                 assert_eq!(else_block.decls.len(), 1);
-                if let ast::Decl::Stmt(ast::Stmt::Return(return_stmt)) = &else_block.decls[0] {
+                if let ast::Decl::Stmt(stmt_box) = &else_block.decls[0] {
+                    if let ast::Stmt::Return(return_stmt) = stmt_box.as_ref() {
                     assert!(return_stmt.value.is_some());
                     if let Some(ast::Expr::Primary(ast::PrimaryExpr::Boolean(bool_lit))) =
                         &return_stmt.value
@@ -84,15 +90,21 @@ fn test_if_statement() {
                     } else {
                         panic!("Expected boolean literal 'false' in else branch return");
                     }
+                    } else {
+                        panic!("Expected return statement in else branch");
+                    }
                 } else {
-                    panic!("Expected return statement in else branch");
+                    panic!("Expected statement with boxed return in else branch");
                 }
             } else {
                 panic!("Expected block statement in else branch");
             }
         }
+        } else {
+            panic!("Expected if statement");
+        }
     } else {
-        panic!("Expected if statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -109,7 +121,8 @@ fn test_if_statement_without_else() {
 
     assert_no_parse_errors(&errors);
 
-    if let ast::Decl::Stmt(ast::Stmt::If(if_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::If(if_stmt) = stmt_box.as_ref() {
         // Verify the condition: condition (identifier)
         if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(cond_id)) = &if_stmt.condition {
             assert_eq!(cond_id.name.as_ref(), "condition");
@@ -120,7 +133,8 @@ fn test_if_statement_without_else() {
         // Verify the then branch: { doSomething(); }
         if let ast::Stmt::Block(then_block) = if_stmt.then_branch.as_ref() {
             assert_eq!(then_block.decls.len(), 1);
-            if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &then_block.decls[0] {
+            if let ast::Decl::Stmt(stmt_box) = &then_block.decls[0] {
+                if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
                 // Verify the function call: doSomething()
                 if let ast::Expr::Call(call_expr) = &expr_stmt.expr {
                     // Verify the callee is 'doSomething'
@@ -141,8 +155,11 @@ fn test_if_statement_without_else() {
                 } else {
                     panic!("Expected call expression in if branch");
                 }
+                } else {
+                    panic!("Expected expression statement in if branch");
+                }
             } else {
-                panic!("Expected expression statement in if branch");
+                panic!("Expected statement with boxed expr in if branch");
             }
         } else {
             panic!("Expected block statement in then branch");
@@ -150,8 +167,11 @@ fn test_if_statement_without_else() {
 
         // Verify no else branch
         assert!(if_stmt.else_branch.is_none());
+        } else {
+            panic!("Expected if statement");
+        }
     } else {
-        panic!("Expected if statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -209,7 +229,8 @@ fn test_while_statement() {
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 1);
 
-    if let ast::Decl::Stmt(ast::Stmt::While(while_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::While(while_stmt) = stmt_box.as_ref() {
         // Verify the condition: i < 10
         if let ast::Expr::Comparison(comp_expr) = &while_stmt.condition {
             // Left side should be identifier 'i'
@@ -238,7 +259,8 @@ fn test_while_statement() {
         // Verify the body: { i = i + 1; }
         if let ast::Stmt::Block(body_block) = while_stmt.body.as_ref() {
             assert_eq!(body_block.decls.len(), 1);
-            if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &body_block.decls[0] {
+            if let ast::Decl::Stmt(stmt_box) = &body_block.decls[0] {
+                if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
                 // Verify the assignment: i = i + 1
                 if let ast::Expr::Assignment(assign_expr) = &expr_stmt.expr {
                     // Verify the target is identifier 'i'
@@ -276,14 +298,20 @@ fn test_while_statement() {
                 } else {
                     panic!("Expected assignment expression in while body");
                 }
+                } else {
+                    panic!("Expected expression statement in while body");
+                }
             } else {
-                panic!("Expected expression statement in while body");
+                panic!("Expected statement with boxed expr in while body");
             }
         } else {
             panic!("Expected block statement as while body");
         }
+        } else {
+            panic!("Expected while statement");
+        }
     } else {
-        panic!("Expected while statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -300,7 +328,9 @@ fn test_for_statement_with_all_clauses() {
 
     assert_no_parse_errors(&errors);
 
-    if let ast::Decl::Stmt(ast::Stmt::For(for_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::For(for_box) = stmt_box.as_ref() {
+            let for_stmt = for_box.as_ref();
         assert!(for_stmt.initializer.is_some());
         assert!(for_stmt.condition.is_some());
         assert!(for_stmt.increment.is_some());
@@ -386,7 +416,8 @@ fn test_for_statement_with_all_clauses() {
         // Verify the body: { print(i); }
         if let ast::Stmt::Block(body_block) = for_stmt.body.as_ref() {
             assert_eq!(body_block.decls.len(), 1);
-            if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &body_block.decls[0] {
+            if let ast::Decl::Stmt(stmt_box) = &body_block.decls[0] {
+                if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
                 // Verify the function call: print(i)
                 if let ast::Expr::Call(call_expr) = &expr_stmt.expr {
                     // Verify the callee is 'print'
@@ -412,14 +443,20 @@ fn test_for_statement_with_all_clauses() {
                 } else {
                     panic!("Expected call expression in for body");
                 }
+                } else {
+                    panic!("Expected expression statement in for body");
+                }
             } else {
-                panic!("Expected expression statement in for body");
+                panic!("Expected statement with boxed expr in for body");
             }
         } else {
             panic!("Expected block statement as for body");
         }
+        } else {
+            panic!("Expected for statement");
+        }
     } else {
-        panic!("Expected for statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -436,7 +473,9 @@ fn test_for_statement_with_expression_initializer() {
 
     assert_no_parse_errors(&errors);
 
-    if let ast::Decl::Stmt(ast::Stmt::For(for_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::For(for_box) = stmt_box.as_ref() {
+            let for_stmt = for_box.as_ref();
         // Verify the expression initializer: i = 0
         if let Some(ast::ForInitializer::Expr(init_expr)) = &for_stmt.initializer {
             if let ast::Expr::Assignment(assign_expr) = init_expr {
@@ -526,8 +565,11 @@ fn test_for_statement_with_expression_initializer() {
         } else {
             panic!("Expected assignment expression in for increment");
         }
+        } else {
+            panic!("Expected for statement");
+        }
     } else {
-        panic!("Expected for statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -544,7 +586,9 @@ fn test_for_statement_minimal() {
 
     assert_no_parse_errors(&errors);
 
-    if let ast::Decl::Stmt(ast::Stmt::For(for_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::For(for_box) = stmt_box.as_ref() {
+            let for_stmt = for_box.as_ref();
         assert!(for_stmt.initializer.is_none());
         assert!(for_stmt.condition.is_none());
         assert!(for_stmt.increment.is_none());
@@ -552,16 +596,23 @@ fn test_for_statement_minimal() {
         // Verify the body: { break; }
         if let ast::Stmt::Block(body_block) = for_stmt.body.as_ref() {
             assert_eq!(body_block.decls.len(), 1);
-            if let ast::Decl::Stmt(ast::Stmt::Break(_)) = &body_block.decls[0] {
+            if let ast::Decl::Stmt(stmt_box) = &body_block.decls[0] {
+                if let ast::Stmt::Break(_) = stmt_box.as_ref() {
                 // Break statement verified
+                } else {
+                    panic!("Expected break statement in for body");
+                }
             } else {
-                panic!("Expected break statement in for body");
+                panic!("Expected statement with boxed break in for body");
             }
         } else {
             panic!("Expected block statement as for body");
         }
+        } else {
+            panic!("Expected for statement");
+        }
     } else {
-        panic!("Expected for statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -585,7 +636,8 @@ fn test_break_and_continue_statements() {
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 1);
 
-    if let ast::Decl::Stmt(ast::Stmt::While(while_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::While(while_stmt) = stmt_box.as_ref() {
         // Verify the condition: true
         if let ast::Expr::Primary(ast::PrimaryExpr::Boolean(bool_lit)) = &while_stmt.condition {
             assert_eq!(bool_lit.value, true);
@@ -598,7 +650,8 @@ fn test_break_and_continue_statements() {
             assert_eq!(body_block.decls.len(), 3);
 
             // First statement: if (condition1) { break; }
-            if let ast::Decl::Stmt(ast::Stmt::If(if_stmt1)) = &body_block.decls[0] {
+            if let ast::Decl::Stmt(stmt_box) = &body_block.decls[0] {
+                if let ast::Stmt::If(if_stmt1) = stmt_box.as_ref() {
                 // Verify condition1
                 if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(cond_id)) =
                     &if_stmt1.condition
@@ -611,10 +664,14 @@ fn test_break_and_continue_statements() {
                 // Verify then branch contains break
                 if let ast::Stmt::Block(then_block) = if_stmt1.then_branch.as_ref() {
                     assert_eq!(then_block.decls.len(), 1);
-                    if let ast::Decl::Stmt(ast::Stmt::Break(_)) = &then_block.decls[0] {
+                    if let ast::Decl::Stmt(stmt_box2) = &then_block.decls[0] {
+                        if let ast::Stmt::Break(_) = stmt_box2.as_ref() {
                         // Break statement verified
+                        } else {
+                            panic!("Expected break statement in first if then branch");
+                        }
                     } else {
-                        panic!("Expected break statement in first if then branch");
+                        panic!("Expected statement with boxed break in first if then branch");
                     }
                 } else {
                     panic!("Expected block statement in first if then branch");
@@ -622,12 +679,16 @@ fn test_break_and_continue_statements() {
 
                 // Verify no else branch
                 assert!(if_stmt1.else_branch.is_none());
+                } else {
+                    panic!("Expected first if statement");
+                }
             } else {
-                panic!("Expected first if statement");
+                panic!("Expected statement with boxed if in first position");
             }
 
             // Second statement: if (condition2) { continue; }
-            if let ast::Decl::Stmt(ast::Stmt::If(if_stmt2)) = &body_block.decls[1] {
+            if let ast::Decl::Stmt(stmt_box3) = &body_block.decls[1] {
+                if let ast::Stmt::If(if_stmt2) = stmt_box3.as_ref() {
                 // Verify condition2
                 if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(cond_id)) =
                     &if_stmt2.condition
@@ -640,10 +701,14 @@ fn test_break_and_continue_statements() {
                 // Verify then branch contains continue
                 if let ast::Stmt::Block(then_block) = if_stmt2.then_branch.as_ref() {
                     assert_eq!(then_block.decls.len(), 1);
-                    if let ast::Decl::Stmt(ast::Stmt::Continue(_)) = &then_block.decls[0] {
+                    if let ast::Decl::Stmt(stmt_box4) = &then_block.decls[0] {
+                        if let ast::Stmt::Continue(_) = stmt_box4.as_ref() {
                         // Continue statement verified
+                        } else {
+                            panic!("Expected continue statement in second if then branch");
+                        }
                     } else {
-                        panic!("Expected continue statement in second if then branch");
+                        panic!("Expected statement with boxed continue in second if then branch");
                     }
                 } else {
                     panic!("Expected block statement in second if then branch");
@@ -651,12 +716,16 @@ fn test_break_and_continue_statements() {
 
                 // Verify no else branch
                 assert!(if_stmt2.else_branch.is_none());
+                } else {
+                    panic!("Expected second if statement");
+                }
             } else {
-                panic!("Expected second if statement");
+                panic!("Expected statement with boxed if in second position");
             }
 
             // Third statement: doWork();
-            if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &body_block.decls[2] {
+            if let ast::Decl::Stmt(stmt_box5) = &body_block.decls[2] {
+                if let ast::Stmt::Expr(expr_stmt) = stmt_box5.as_ref() {
                 // Verify the function call: doWork()
                 if let ast::Expr::Call(call_expr) = &expr_stmt.expr {
                     // Verify the callee is 'doWork'
@@ -677,14 +746,20 @@ fn test_break_and_continue_statements() {
                 } else {
                     panic!("Expected call expression for doWork");
                 }
+                } else {
+                    panic!("Expected expression statement for doWork call");
+                }
             } else {
-                panic!("Expected expression statement for doWork call");
+                panic!("Expected statement with boxed expr in third position");
             }
         } else {
             panic!("Expected block statement as while body");
         }
+        } else {
+            panic!("Expected while statement");
+        }
     } else {
-        panic!("Expected while statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -707,7 +782,8 @@ fn test_return_statement() {
         assert_eq!(func_decl.function.parameters.len(), 0);
         assert_eq!(func_decl.function.body.decls.len(), 1);
 
-        if let ast::Decl::Stmt(ast::Stmt::Return(ret_stmt)) = &func_decl.function.body.decls[0] {
+        if let ast::Decl::Stmt(stmt_box) = &func_decl.function.body.decls[0] {
+            if let ast::Stmt::Return(ret_stmt) = stmt_box.as_ref() {
             assert!(ret_stmt.value.is_some());
 
             // Verify the return value: 42
@@ -716,8 +792,11 @@ fn test_return_statement() {
             } else {
                 panic!("Expected number literal '42' in return statement");
             }
+            } else {
+                panic!("Expected return statement");
+            }
         } else {
-            panic!("Expected return statement");
+            panic!("Expected statement with boxed return");
         }
     } else {
         panic!("Expected function declaration");
@@ -738,10 +817,14 @@ fn test_return_statement_without_value() {
     assert_no_parse_errors(&errors);
 
     if let ast::Decl::Function(func_decl) = &program.decls[0] {
-        if let ast::Decl::Stmt(ast::Stmt::Return(ret_stmt)) = &func_decl.function.body.decls[0] {
+        if let ast::Decl::Stmt(stmt_box) = &func_decl.function.body.decls[0] {
+            if let ast::Stmt::Return(ret_stmt) = stmt_box.as_ref() {
             assert!(ret_stmt.value.is_none());
+            } else {
+                panic!("Expected return statement");
+            }
         } else {
-            panic!("Expected return statement");
+            panic!("Expected statement with boxed return");
         }
     }
 }
@@ -761,7 +844,8 @@ fn test_block_statements() {
 
     assert_no_parse_errors(&errors);
 
-    if let ast::Decl::Stmt(ast::Stmt::Block(block)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Block(block) = stmt_box.as_ref() {
         assert_eq!(block.decls.len(), 3);
 
         // First declaration: var x = 1;
@@ -795,7 +879,8 @@ fn test_block_statements() {
         }
 
         // Third declaration: x + y; (expression statement)
-        if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &block.decls[2] {
+        if let ast::Decl::Stmt(stmt_box2) = &block.decls[2] {
+            if let ast::Stmt::Expr(expr_stmt) = stmt_box2.as_ref() {
             // Verify the expression: x + y
             if let ast::Expr::Term(term_expr) = &expr_stmt.expr {
                 // Left side should be identifier 'x'
@@ -821,11 +906,17 @@ fn test_block_statements() {
             } else {
                 panic!("Expected term expression (x + y) in expression statement");
             }
+            } else {
+                panic!("Expected expression statement for x + y");
+            }
         } else {
-            panic!("Expected expression statement for x + y");
+            panic!("Expected statement with boxed expr for x + y");
+        }
+        } else {
+            panic!("Expected block statement");
         }
     } else {
-        panic!("Expected block statement");
+        panic!("Expected statement declaration");
     }
 }
 
@@ -844,7 +935,8 @@ fn test_expression_statements() {
     assert_eq!(program.decls.len(), 3);
 
     // First expression statement: someFunction();
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
         if let ast::Expr::Call(call_expr) = &expr_stmt.expr {
             // Verify the callee is 'someFunction'
             if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
@@ -864,12 +956,16 @@ fn test_expression_statements() {
         } else {
             panic!("Expected call expression in first statement");
         }
+        } else {
+            panic!("Expected statement with boxed expr in first statement");
+        }
     } else {
         panic!("Expected first expression statement");
     }
 
     // Second expression statement: obj.method();
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[1] {
+    if let ast::Decl::Stmt(stmt_box2) = &program.decls[1] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box2.as_ref() {
         if let ast::Expr::Call(call_expr) = &expr_stmt.expr {
             // Verify it's a chained call: obj.method()
             if let ast::Expr::Call(inner_call) = call_expr.callee.as_ref() {
@@ -901,12 +997,16 @@ fn test_expression_statements() {
         } else {
             panic!("Expected call expression in second statement");
         }
+        } else {
+            panic!("Expected statement with boxed expr in second statement");
+        }
     } else {
         panic!("Expected second expression statement");
     }
 
     // Third expression statement: x + y;
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[2] {
+    if let ast::Decl::Stmt(stmt_box3) = &program.decls[2] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box3.as_ref() {
         if let ast::Expr::Term(term_expr) = &expr_stmt.expr {
             // Left side should be identifier 'x'
             if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
@@ -930,6 +1030,9 @@ fn test_expression_statements() {
             }
         } else {
             panic!("Expected term expression (x + y) in third statement");
+        }
+        } else {
+            panic!("Expected statement with boxed expr in third statement");
         }
     } else {
         panic!("Expected third expression statement");

@@ -148,7 +148,6 @@ impl ArrayArena {
 
         if let Some(chunk_handle) = current_chunk {
             self.chunks[chunk_handle].data[slot_index]
-                .clone()
                 .unwrap_or(Value::Nil)
         } else {
             Value::Nil
@@ -292,8 +291,8 @@ impl ArrayArena {
                     chunk.data.swap(start_slot_idx, end_slot_idx);
                 } else {
                     // Different chunks, need to extract and swap
-                    let start_value = self.chunks[start_handle].data[start_slot_idx].clone();
-                    let end_value = self.chunks[end_handle].data[end_slot_idx].clone();
+                    let start_value = self.chunks[start_handle].data[start_slot_idx];
+                    let end_value = self.chunks[end_handle].data[end_slot_idx];
 
                     self.chunks[start_handle].data[start_slot_idx] = end_value;
                     self.chunks[end_handle].data[end_slot_idx] = start_value;

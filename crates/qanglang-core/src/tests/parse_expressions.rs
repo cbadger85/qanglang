@@ -533,9 +533,10 @@ fn test_assignment_expressions() {
     assert_eq!(program.decls.len(), 2);
 
     // Both should be expression statements containing assignments
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // First assignment: x = 5
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Expr(expr_stmt) = &**stmt_box {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+                // First assignment: x = 5
             // Target should be identifier 'x'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "x");
@@ -547,17 +548,23 @@ fn test_assignment_expressions() {
             if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = assignment.value.as_ref()
             {
                 assert_eq!(num_lit.value, 5.0);
+                } else {
+                    panic!("Expected number literal '5'");
+                }
             } else {
-                panic!("Expected number literal '5'");
+                panic!("Expected assignment expression");
             }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected expression statement");
         }
+    } else {
+        panic!("Expected statement with boxed expression");
     }
 
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[1] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Second assignment: obj.property = "value"
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[1] {
+        if let ast::Stmt::Expr(expr_stmt) = &**stmt_box {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+                // Second assignment: obj.property = "value"
             // Target should be property access obj.property
             if let ast::AssignmentTarget::Property(prop_access) = &assignment.target {
                 // Object should be identifier 'obj'
@@ -579,12 +586,17 @@ fn test_assignment_expressions() {
             if let ast::Expr::Primary(ast::PrimaryExpr::String(str_lit)) = assignment.value.as_ref()
             {
                 assert_eq!(str_lit.value.as_ref(), "value");
+                } else {
+                    panic!("Expected string literal 'value'");
+                }
             } else {
-                panic!("Expected string literal 'value'");
+                panic!("Expected assignment expression");
             }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected expression statement");
         }
+    } else {
+        panic!("Expected statement with boxed expression");
     }
 }
 
@@ -713,8 +725,9 @@ fn test_function_calls() {
     assert_eq!(program.decls.len(), 3);
 
     // First call: result = func();
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Expr(expr_stmt) = &**stmt_box {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'result'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "result");
@@ -739,17 +752,23 @@ fn test_function_calls() {
                 } else {
                     panic!("Expected call operation");
                 }
+                } else {
+                    panic!("Expected call expression");
+                }
             } else {
-                panic!("Expected call expression");
+                panic!("Expected assignment expression");
             }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected expression statement");
         }
+    } else {
+        panic!("Expected statement with boxed expression");
     }
 
     // Second call: result2 = func(a, b, c);
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[1] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[1] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'result2'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "result2");
@@ -798,14 +817,18 @@ fn test_function_calls() {
             } else {
                 panic!("Expected call expression");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 
     // Third call: result3 = obj.method(arg);
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[2] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[2] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'result3'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "result3");
@@ -854,8 +877,11 @@ fn test_function_calls() {
             } else {
                 panic!("Expected call expression");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 }
@@ -873,8 +899,9 @@ fn test_function_calls_with_trailing_comma() {
     assert_eq!(program.decls.len(), 1);
 
     // Second call: result2 = func(a, b, c,);
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'result2'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "result2");
@@ -923,8 +950,11 @@ fn test_function_calls_with_trailing_comma() {
             } else {
                 panic!("Expected call expression");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 }
@@ -943,8 +973,9 @@ fn test_property_access() {
     assert_eq!(program.decls.len(), 2);
 
     // First access: value = obj.property;
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'value'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "value");
@@ -972,14 +1003,18 @@ fn test_property_access() {
             } else {
                 panic!("Expected call expression for property access");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 
     // Second access: value2 = obj.nested.deep.property;
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[1] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[1] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'value2'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "value2");
@@ -1034,8 +1069,11 @@ fn test_property_access() {
             } else {
                 panic!("Expected call expression for property access chain");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 }
@@ -1054,8 +1092,9 @@ fn test_array_access() {
     assert_eq!(program.decls.len(), 2);
 
     // First access: value = array[0];
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'value'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "value");
@@ -1087,14 +1126,18 @@ fn test_array_access() {
             } else {
                 panic!("Expected call expression for array access");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 
     // Second access: value2 = matrix[row][col];
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[1] {
-        if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[1] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
             // Target should be identifier 'value2'
             if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
                 assert_eq!(target_id.name.as_ref(), "value2");
@@ -1143,8 +1186,11 @@ fn test_array_access() {
             } else {
                 panic!("Expected call expression for chained array access");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 }
@@ -1469,8 +1515,9 @@ fn test_this_and_super() {
             assert_eq!(method.body.decls.len(), 1);
 
             // Verify method body contains: this.value = super.getValue();
-            if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &method.body.decls[0] {
-                if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
+            if let ast::Decl::Stmt(stmt_box) = &method.body.decls[0] {
+                if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+                    if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
                     // Left side: this.value (property assignment target)
                     if let ast::AssignmentTarget::Property(prop_access) = &assignment.target {
                         // Object should be 'this'
@@ -1512,8 +1559,11 @@ fn test_this_and_super() {
                     } else {
                         panic!("Expected call expression for super.getValue()");
                     }
+                    } else {
+                        panic!("Expected assignment expression");
+                    }
                 } else {
-                    panic!("Expected assignment expression");
+                    panic!("Expected statement with boxed expr");
                 }
             } else {
                 panic!("Expected expression statement");
@@ -2121,10 +2171,11 @@ fn test_assignment_chaining() {
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 1);
 
-    if let ast::Decl::Stmt(ast::Stmt::Expr(expr_stmt)) = &program.decls[0] {
-        // Expression: a = b = c = 5
-        // This should parse as: a = (b = (c = 5)) (right associative)
-        if let ast::Expr::Assignment(outer_assignment) = &expr_stmt.expr {
+    if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
+        if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
+            // Expression: a = b = c = 5
+            // This should parse as: a = (b = (c = 5)) (right associative)
+            if let ast::Expr::Assignment(outer_assignment) = &expr_stmt.expr {
             // Outermost assignment target should be identifier 'a'
             if let ast::AssignmentTarget::Identifier(a_id) = &outer_assignment.target {
                 assert_eq!(a_id.name.as_ref(), "a");
@@ -2164,8 +2215,11 @@ fn test_assignment_chaining() {
             } else {
                 panic!("Expected assignment expression (b = (c = 5))");
             }
+            } else {
+                panic!("Expected assignment expression");
+            }
         } else {
-            panic!("Expected assignment expression");
+            panic!("Expected statement with boxed expr");
         }
     }
 }

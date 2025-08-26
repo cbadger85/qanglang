@@ -41,7 +41,7 @@ pub enum Decl {
     Function(FunctionDecl),
     Lambda(LambdaDecl),
     Variable(VariableDecl),
-    Stmt(Stmt),
+    Stmt(Box<Stmt>),
 }
 
 impl Decl {
@@ -168,7 +168,7 @@ pub enum Stmt {
     Block(BlockStmt),
     If(IfStmt),
     While(WhileStmt),
-    For(ForStmt),
+    For(Box<ForStmt>),
     Break(BreakStmt),
     Continue(ContinueStmt),
     Return(ReturnStmt),
@@ -666,7 +666,7 @@ pub struct DestructurePattern {
     pub span: SourceSpan,
 }
 
-/// Map expression: | parameters? -> expression |
+/// Map expression: || parameters? -> expression |
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapExpr {
     pub parameters: Vec<Parameter>,
@@ -1128,7 +1128,9 @@ pub trait AstVisitor {
                 Ok(())
             }
             CallOperation::Property(identifier) => self.visit_identifier(identifier, errors),
-            CallOperation::OptionalProperty(identifier) => self.visit_identifier(identifier, errors),
+            CallOperation::OptionalProperty(identifier) => {
+                self.visit_identifier(identifier, errors)
+            }
             CallOperation::Index(expr) => self.visit_expression(expr, errors),
         }
     }

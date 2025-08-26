@@ -105,7 +105,7 @@ impl Value {
                 for (key, value) in allocator.tables.iter(*handle) {
                     string.push(' ');
                     string.push_str(&key.to_display_string(allocator));
-                    string.push_str("=");
+                    string.push('=');
                     string.push_str(&value.to_display_string(allocator));
                     string.push(',');
                     string.push(' ');

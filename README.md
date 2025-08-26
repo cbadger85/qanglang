@@ -233,7 +233,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>mapExpression</td>
       <td>=</td>
-      <td>"|" ( parameters | destructurePattern )? "->" expression "|"</td>
+      <td>"||" ( parameters | destructurePattern )? "->" expression "|"</td>
       <td>;</td>
     </tr>
     <tr>
@@ -262,7 +262,7 @@ An embedded scripting language written in Rust 🦀
 
 [ ] - optional chaining for when getting the property of an object `var inner = outer?.inner`
 
-[ ] - add map operator (`outer.inner|inner -> nil|`) to AST and VM.
+[ ] - add map operator (`outer.inner||inner -> nil|`) to AST and VM.
 
 [ ] - add map optional operator `var inner_times_two = outer?|inner -> inner * 2|;`
 

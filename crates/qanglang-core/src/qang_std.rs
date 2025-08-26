@@ -275,7 +275,7 @@ pub fn qang_array_get(
     args: &[Value],
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    match (receiver, args.get(0)) {
+    match (receiver, args.first()) {
         (Value::Array(handle), Some(Value::Number(index))) => {
             Ok(Some(vm.alloc.arrays.get(handle, index.trunc() as isize)))
         }
@@ -294,7 +294,7 @@ pub fn qang_array_concat(
     args: &[Value],
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    match (receiver, args.get(0)) {
+    match (receiver, args.first()) {
         (Value::Array(handle1), Some(Value::Array(handle2))) => Ok(Some(Value::Array(
             vm.alloc.arrays.concat(handle1, *handle2),
         ))),
@@ -312,7 +312,7 @@ pub fn qang_array_construct(
     args: &[Value],
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    match args.get(0).copied().unwrap_or(Value::Nil) {
+    match args.first().copied().unwrap_or(Value::Nil) {
         Value::Number(length) => {
             // TODO verify length is positive.
             Ok(Some(Value::Array(

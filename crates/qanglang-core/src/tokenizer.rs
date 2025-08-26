@@ -59,6 +59,15 @@ pub enum TokenType {
     Finally,            // finally
     DoubleLeftBrace,    // {{
     DoubleRightBrace,   // }}
+    DoubleBar,          // || (not implemented)
+    OptionalBar,        // ?| (not implemented)
+    OptionalDot,        // ?. (not implemented)
+    Is,                 // is (not implemented)
+    AssignPlus,         // += (not implemented)
+    AssignMinus,        // -= (not implemented)
+    AssignStar,         // *= (not implemented)
+    AssignSlash,        // /= (not implemented)
+    AssignModulo,       // /% (not implemented)
     Error,              // use when an error occurs during tokenization
     Eof,                // EoF
 }

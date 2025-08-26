@@ -65,13 +65,13 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>parameters</td>
       <td>=</td>
-      <td>IDENTIFIER ( "," IDENTIFIER )* ","?</td>
+      <td>( IDENTIFIER | destructurePattern ) ( "," ( IDENTIFIER | destructurePattern ) )* ","?</td>
       <td>;</td>
     </tr>
     <tr>
       <td>varDecl</td>
       <td>=</td>
-      <td>"var" IDENTIFIER ( "=" expression )? ";"</td>
+      <td>"var" ( IDENTIFIER | destructurePattern ) ( "=" expression )? ";"</td>
       <td>;</td>
     </tr>
     <tr>
@@ -137,7 +137,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>assignment</td>
       <td>=</td>
-      <td>( call "." IDENTIFIER | IDENTIFIER) "=" assignment | pipe</td>
+      <td>( call "." IDENTIFIER | IDENTIFIER) ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) assignment | pipe</td>
       <td>;</td>
     </tr>
     <tr>
@@ -167,7 +167,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>equality</td>
       <td>=</td>
-      <td>comparison ( ( "!=" | "==" ) comparison)*</td>
+      <td>comparison ( ( "!=" | "==" | "is" ) comparison)*</td>
       <td>;</td>
     </tr>
     <tr>
@@ -197,7 +197,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>call</td>
       <td>=</td>
-      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" )*</td>
+      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | "?." IDENTIFIER | "[" expression "]" )*</td>
       <td>;</td>
     </tr>
     <tr>
@@ -209,7 +209,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>primary</td>
       <td>=</td>
-      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral | objectLiteral</td>
+      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral | objectLiteral | mapExpression | mapOptionalExpression</td>
       <td>;</td>
     </tr>
     <tr>
@@ -230,6 +230,24 @@ An embedded scripting language written in Rust 🦀
       <td>IDENTIFIER ( "=" expression )?</td>
       <td>;</td>
     </tr>
+    <tr>
+      <td>mapExpression</td>
+      <td>=</td>
+      <td>"|" ( parameters | destructurePattern )? "->" expression "|"</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>mapOptionalExpression</td>
+      <td>=</td>
+      <td>"?|" ( parameters | destructurePattern )? "->" expression "|"</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>destructurePattern</td>
+      <td>=</td>
+      <td>"(" IDENTIFIER ( "," IDENTIFIER )* ( "," ".." IDENTIFIER )? ")"</td>
+      <td>;</td>
+    </tr>
   </tbody>
 </table>
 ```
@@ -241,8 +259,6 @@ An embedded scripting language written in Rust 🦀
 [ ] - `is` operator
 
 [ ] - operator-assignment (`+=`, `-=`, `*=`, `\=`, `%=`)
-
-[x] - `call` intrinsic on functions (`the_function(arg1, arg2);` = `the_function.call([arg1, arg2]);`)
 
 [ ] - optional chaining for when getting the property of an object `var inner = outer?.inner`
 

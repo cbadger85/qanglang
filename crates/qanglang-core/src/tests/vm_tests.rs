@@ -1226,6 +1226,11 @@ fn test_object_literals() {
         var obj = {{}};
 
         println(obj);
+
+        obj.foo = true;
+        assert(obj.foo);
+        assert_eq(obj.not_exists, nil);
+        println(obj);
     "#;
 
     let source_map = SourceMap::new(source.to_string());

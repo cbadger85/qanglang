@@ -696,58 +696,71 @@ impl Vm {
                 }
                 OpCode::SetProperty => {
                     let instance = peek_value!(self, 1);
-                    if let Value::Instance(instance_handle) = instance {
-                        let instance_table = self.alloc.get_instance(instance_handle).table;
-                        let constant = self.state.read_constant();
-                        if !matches!(constant, Value::String(_)) {
+                    match instance {
+                        Value::Instance(instance_handle) => {
+                            let instance_table = self.alloc.get_instance(instance_handle).table;
+                            let constant = Value::String(read_string!(self));
+                            let value = peek_value!(self, 0);
+                            self.with_gc_check(|alloc| {
+                                alloc.set_instance_field(instance_table, constant, value)
+                            });
+                            let value = pop_value!(self); // value to assign
+                            pop_value!(self); // instance
+                            push_value!(self, value); // push assigned value to top of stack
+                        }
+                        Value::ObjectLiteral(obj_handle) => {
+                            let constant = Value::String(read_string!(self));
+                            let value = peek_value!(self, 0);
+                            self.with_gc_check(|alloc| {
+                                alloc.tables.insert(obj_handle, constant, value)
+                            });
+                            let value = pop_value!(self); // value to assign
+                            pop_value!(self); // obj
+                            push_value!(self, value); // push assigned value to top of stack
+                        }
+                        _ => {
                             return Err(QangRuntimeError::new(
-                                "Expected property name as string".to_string(),
+                                format!(
+                                    "Cannot access properties on {}.",
+                                    instance.to_type_string()
+                                ),
                                 self.state.get_previous_loc(),
                             ));
                         }
-                        let value = peek_value!(self, 0);
-                        self.with_gc_check(|alloc| {
-                            alloc.set_instance_field(instance_table, constant, value)
-                        });
-                        let value = pop_value!(self); // value to assign
-                        pop_value!(self); // instance
-                        push_value!(self, value); // push assigned value to top of stack
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            format!("Cannot access properties on {}.", instance.to_type_string()),
-                            self.state.get_previous_loc(),
-                        ));
                     }
                 }
                 OpCode::GetProperty => {
-                    let value = peek_value!(self, 0);
+                    let object = peek_value!(self, 0);
 
-                    match value {
+                    match object {
                         Value::Instance(instance_handle) => {
                             let instance = self.alloc.get_instance(instance_handle);
-                            let constant = self.state.read_constant();
-                            if !matches!(constant, Value::String(_)) {
-                                return Err(QangRuntimeError::new(
-                                    "Expected property name as string".to_string(),
-                                    self.state.get_previous_loc(),
-                                ));
-                            }
+                            let key = Value::String(read_string!(self));
 
-                            if let Some(value) =
-                                self.alloc.get_instance_field(instance.table, constant)
+                            if let Some(value) = self.alloc.get_instance_field(instance.table, key)
                             {
                                 pop_value!(self);
                                 push_value!(self, value);
                             } else {
-                                self.bind_method(instance.clazz, constant)?;
+                                self.bind_method(instance.clazz, key)?;
                             }
+                        }
+                        Value::ObjectLiteral(obj_handle) => {
+                            let key = Value::String(read_string!(self));
+                            let value = self
+                                .alloc
+                                .tables
+                                .get(obj_handle, &key)
+                                .unwrap_or(Value::Nil);
+                            pop_value!(self);
+                            push_value!(self, value);
                         }
                         Value::String(_) => {
                             let identifer = read_string!(self);
                             self.bind_intrinsic_method(
                                 identifer,
                                 IntrinsicKind::String(identifer),
-                                value,
+                                object,
                             )?;
                         }
                         Value::Array(_) => {
@@ -755,7 +768,7 @@ impl Vm {
                             self.bind_intrinsic_method(
                                 identifer,
                                 IntrinsicKind::Array(identifer),
-                                value,
+                                object,
                             )?;
                         }
                         Value::Closure(_) => {
@@ -766,7 +779,7 @@ impl Vm {
                                 return Err(QangRuntimeError::new(
                                     format!(
                                         "Cannot access properties from {}.",
-                                        value.to_type_string()
+                                        object.to_type_string()
                                     ),
                                     self.state.get_previous_loc(),
                                 ));
@@ -776,7 +789,7 @@ impl Vm {
                             return Err(QangRuntimeError::new(
                                 format!(
                                     "Cannot access properties from {}.",
-                                    value.to_type_string()
+                                    object.to_type_string()
                                 ),
                                 self.state.get_previous_loc(),
                             ));

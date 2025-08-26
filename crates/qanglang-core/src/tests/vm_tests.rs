@@ -1233,6 +1233,48 @@ fn test_object_literals() {
           bar = "foo",
         }};
         assert_eq(obj2.bar, "foo");
+
+        var baz = 2;
+        var obj3 = {{ baz, }};
+        assert_eq(obj3.baz, 2);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_object_with_lambda_properties() {
+    let source = r#"
+        var obj = {{
+            fun = () -> true,
+        }};
+
+        var fun = obj.fun;
+        assert(fun()); // works
+        assert(obj.fun()); // does not
     "#;
 
     let source_map = SourceMap::new(source.to_string());

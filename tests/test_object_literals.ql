@@ -1,25 +1,61 @@
 var test_description = "Testing object literals and field access.";
 
-// fn test_empty_object_literal() {}
+fn test_empty_object_literal() {
+  var obj = {{}};
 
-// fn test_object_literal_with_single_field() {}
+  assert(obj != nil);
+}
 
-// fn test_object_literal_with_multiple_fields() {}
+fn test_object_literal_with_single_field() {
+  var obj = {{
+    field = true,
+  }};
 
-// fn test_object_literal_with_trailing_comma() {}
+  assert(obj.field);
+}
 
-// fn test_object_field_with_value() {}
+fn test_object_literal_with_multiple_fields() {
+  var obj = {{
+    field1 = 1,
+    field2 = 2,
+  }};
 
-// fn test_object_field_without_value() {}
+  assert_eq(obj.field1, 1);
+  assert_eq(obj.field2, 2);
+}
 
-// fn test_object_field_access_dot_notation() {}
+fn test_object_property_value_shorthand() {
+  var field = true;
+  var obj = {{ field }};
 
-// fn test_object_field_assignment() {}
+  assert(obj.field);
+}
 
-// fn test_nested_object_literals() {}
+fn test_object_field_assignment() {
+  var obj1 = {{}};
+  obj1.field = true;
+  assert(obj1.field);
 
-// fn test_object_field_expressions() {}
+  var obj2 = {{ field = obj1.field }};
+  assert(obj2.field);
+}
 
-// fn test_object_field_function_values() {}
+fn test_nested_object_literals() {
+  var obj = {{
+    field_obj = {{
+      field = true,
+    }},
+  }};
 
-// fn test_object_field_computed_names() {}
+  assert(obj.field_obj.field);
+}
+
+fn test_object_field_function_values() {
+  var obj = {{
+    fun = () -> true,
+  }};
+
+  var fun = obj.fun;
+  assert(fun());
+  assert(obj.fun());
+}

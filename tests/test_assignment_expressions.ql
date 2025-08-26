@@ -16,9 +16,18 @@ fn test_assignment_with_expression() {
   assert_eq(test_var, 6, "Expected test_var to be 6.");
 }
 
-// fn test_assignment_to_object_field() {}
+fn test_assignment_to_object_field() {
+  var obj = {{}};
+  obj.field = true;
+  assert(obj.field);
+}
 
-// fn test_assignment_to_array_index() {}
+fn test_assignment_to_array_index() {
+  var array = Array(1);
+  array[0] = true;
+
+  assert(array[0]);
+}
 
 fn test_chained_assignments() {
   var test_var_1;

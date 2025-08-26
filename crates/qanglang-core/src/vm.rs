@@ -1266,6 +1266,19 @@ impl Vm {
                     ))
                 }
             }
+            Value::ObjectLiteral(obj_handle) => {
+                let key = Value::String(method_handle);
+                if let Some(method_value) = self.alloc.tables.get(obj_handle, &key) {
+                    self.state.stack[self.state.stack_top - arg_count - 1] = method_value;
+                    self.call_value(method_value, arg_count)
+                } else {
+                    Err(QangRuntimeError::new(
+                        format!("Property '{}' does not exist on object.", 
+                                self.alloc.strings.get_string(method_handle)),
+                        self.state.get_previous_loc(),
+                    ))
+                }
+            }
             _ => Err(QangRuntimeError::new(
                 format!(
                     "Cannot invoke {}, no methods exist.",

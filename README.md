@@ -77,7 +77,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>statement</td>
       <td>=</td>
-      <td>exprStmt | block | ifStmt | whileStmt | forStmt | breakStmt | continueStmt | returnStmt | throwStmt | tryStmt</td>
+      <td>exprStmt | block | ifStmt | whileStmt | forStmt | breakStmt | continueStmt | returnStmt</td>
       <td>;</td>
     </tr>
       <tr>
@@ -126,24 +126,6 @@ An embedded scripting language written in Rust 🦀
       <td>continueStmt</td>
       <td>=</td>
       <td>"continue" ";"</td>
-      <td>;</td>
-    </tr>
-    <tr>
-      <td>throwStmt</td>
-      <td>=</td>
-      <td>"throw" expression? ";"</td>
-      <td>;</td>
-    </tr>
-    <tr>
-      <td>tryStmt</td>
-      <td>=</td>
-      <td>"try" block catchFinally</td>
-      <td>;</td>
-    </tr>
-    <tr>
-      <td>catchFinally</td>
-      <td>=</td>
-      <td>"catch" ( "(" IDENTIFIER ")" )? block ( "finally" block )? | "finally" block</td>
       <td>;</td>
     </tr>
     <tr>
@@ -233,13 +215,13 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>arrayLiteral</td>
       <td>=</td>
-      <td>"[" ( expression ( "," expression )* ","? )? "]" | "[" expression ";" expression? "]"</td>
+      <td>"[" ( expression ( "," expression )* ","? )? "]"</td>
       <td>;</td>
     </tr>
     <tr>
       <td>objectLiteral</td>
       <td>=</td>
-      <td>":{" ( objectField ( "," objectField )* ","? )? "}"</td>
+      <td>"{{" ( objectField ( "," objectField )* ","? )? "}}"</td>
       <td>;</td>
     </tr>
     <tr>
@@ -254,11 +236,13 @@ An embedded scripting language written in Rust 🦀
 
 ## Roadmap
 
+[ ] - implement object literals
+
 [ ] - `is` operator
 
 [ ] - operator-assignment (`+=`, `-=`, `*=`, `\=`, `%=`)
 
-[ ] - `call` intrinsic on functions (`the_function(arg1, arg2);` = `the_function.call([arg1, arg2]);`)
+[x] - `call` intrinsic on functions (`the_function(arg1, arg2);` = `the_function.call([arg1, arg2]);`)
 
 [ ] - optional chaining for when getting the property of an object `var inner = outer?.inner`
 

@@ -156,8 +156,6 @@ pub enum Stmt {
     Break(BreakStmt),
     Continue(ContinueStmt),
     Return(ReturnStmt),
-    Throw(ThrowStmt),
-    Try(TryStmt),
 }
 
 impl Stmt {
@@ -171,8 +169,6 @@ impl Stmt {
             Stmt::Break(stmt) => stmt.span,
             Stmt::Continue(stmt) => stmt.span,
             Stmt::Return(stmt) => stmt.span,
-            Stmt::Throw(stmt) => stmt.span,
-            Stmt::Try(stmt) => stmt.span,
         }
     }
 }
@@ -250,30 +246,6 @@ pub struct ContinueStmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReturnStmt {
     pub value: Option<Expr>,
-    pub span: SourceSpan,
-}
-
-/// Throw statement: throw expression? ;
-#[derive(Debug, Clone, PartialEq)]
-pub struct ThrowStmt {
-    pub value: Option<Expr>,
-    pub span: SourceSpan,
-}
-
-/// Try statement: try block catchFinally
-#[derive(Debug, Clone, PartialEq)]
-pub struct TryStmt {
-    pub try_block: BlockStmt,
-    pub catch_clause: Option<CatchClause>,
-    pub finally_block: Option<BlockStmt>,
-    pub span: SourceSpan,
-}
-
-/// Catch clause: catch ( IDENTIFIER )? block
-#[derive(Debug, Clone, PartialEq)]
-pub struct CatchClause {
-    pub parameter: Option<Identifier>,
-    pub body: BlockStmt,
     pub span: SourceSpan,
 }
 
@@ -516,7 +488,6 @@ pub enum PrimaryExpr {
     Grouping(GroupingExpr),
     Lambda(Box<LambdaExpr>),
     Array(ArrayLiteral),
-    ArrayOfLength(ArrayOfLength),
     ObjectLiteral(ObjectLiteral),
 }
 
@@ -533,7 +504,6 @@ impl PrimaryExpr {
             PrimaryExpr::Grouping(expr) => expr.span,
             PrimaryExpr::Lambda(lambda) => lambda.span,
             PrimaryExpr::Array(array) => array.span,
-            PrimaryExpr::ArrayOfLength(array) => array.span,
             PrimaryExpr::ObjectLiteral(object) => object.span,
         }
     }
@@ -634,14 +604,6 @@ pub struct ObjectLiteral {
 pub struct ObjectEntry {
     pub key: Identifier,
     pub value: Box<Expr>,
-    pub span: SourceSpan,
-}
-
-/// Array of length: [ expression ; expression? ]
-#[derive(Debug, Clone, PartialEq)]
-pub struct ArrayOfLength {
-    pub length: Box<Expr>,
-    pub initializer: Option<Box<Expr>>,
     pub span: SourceSpan,
 }
 
@@ -811,8 +773,6 @@ pub trait AstVisitor {
             Stmt::Break(break_stmt) => self.visit_break_statement(break_stmt, errors),
             Stmt::Continue(continue_stmt) => self.visit_continue_statement(continue_stmt, errors),
             Stmt::Return(return_stmt) => self.visit_return_statement(return_stmt, errors),
-            Stmt::Throw(throw_stmt) => self.visit_throw_statement(throw_stmt, errors),
-            Stmt::Try(try_stmt) => self.visit_try_statement(try_stmt, errors),
         }
     }
 
@@ -915,47 +875,6 @@ pub trait AstVisitor {
             self.visit_expression(value, errors)?;
         }
         Ok(())
-    }
-
-    fn visit_throw_statement(
-        &mut self,
-        throw_stmt: &ThrowStmt,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        if let Some(value) = &throw_stmt.value {
-            self.visit_expression(value, errors)?;
-        }
-        Ok(())
-    }
-
-    fn visit_try_statement(
-        &mut self,
-        try_stmt: &TryStmt,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        self.visit_block_statement(&try_stmt.try_block, errors)?;
-
-        if let Some(catch_clause) = &try_stmt.catch_clause {
-            self.visit_catch_clause(catch_clause, errors)?;
-        }
-
-        if let Some(finally_block) = &try_stmt.finally_block {
-            self.visit_block_statement(finally_block, errors)?;
-        }
-
-        Ok(())
-    }
-
-    fn visit_catch_clause(
-        &mut self,
-        catch_clause: &CatchClause,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        if let Some(parameter) = &catch_clause.parameter {
-            self.visit_identifier(parameter, errors)?;
-        }
-
-        self.visit_block_statement(&catch_clause.body, errors)
     }
 
     fn visit_expression(
@@ -1154,7 +1073,6 @@ pub trait AstVisitor {
             PrimaryExpr::Grouping(grouping) => self.visit_grouping_expression(grouping, errors),
             PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda, errors),
             PrimaryExpr::Array(array) => self.visit_array_literal(array, errors),
-            PrimaryExpr::ArrayOfLength(array) => self.visit_array_of_length(array, errors),
             PrimaryExpr::ObjectLiteral(object) => self.visit_object_literal(object, errors),
         }
     }
@@ -1249,18 +1167,6 @@ pub trait AstVisitor {
     ) -> Result<(), Self::Error> {
         for element in &array.elements {
             self.visit_expression(element, errors)?;
-        }
-        Ok(())
-    }
-
-    fn visit_array_of_length(
-        &mut self,
-        array: &ArrayOfLength,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        self.visit_expression(&array.length, errors)?;
-        if let Some(initializer) = &array.initializer {
-            self.visit_expression(initializer, errors)?;
         }
         Ok(())
     }

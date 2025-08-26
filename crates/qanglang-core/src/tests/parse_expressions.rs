@@ -4,13 +4,13 @@ use crate::{SourceMap, ast};
 #[test]
 fn test_object_literals() {
     let source_code = r#"
-        var empty_obj = :{};
-        var basic_obj = :{ field_1 = 1, field_2 = 2 };
+        var empty_obj = {{}};
+        var basic_obj = {{ field_1 = 1, field_2 = 2 }};
         var other_field = "other value";
-        var obj = :{
+        var obj = {{
             field = "value",
             other_field
-        };
+        }};
     "#;
     let source_map = SourceMap::new(source_code.to_string());
 
@@ -33,7 +33,7 @@ fn test_object_literals() {
         panic!("Expected variable declaration for empty_obj");
     }
 
-    // Second object: basic_obj = :{ field_1 = 1, field_2 = 2 }
+    // Second object: basic_obj = {{ field_1 = 1, field_2 = 2 }}
     if let ast::Decl::Variable(var_decl) = &program.decls[1] {
         assert_eq!(var_decl.name.name.as_ref(), "basic_obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
@@ -79,7 +79,7 @@ fn test_object_literals() {
         panic!("Expected variable declaration for other_field");
     }
 
-    // Fourth object: obj = :{ field = "value", other_field }
+    // Fourth object: obj = {{ field = "value", other_field }}
     if let ast::Decl::Variable(var_decl) = &program.decls[3] {
         assert_eq!(var_decl.name.name.as_ref(), "obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
@@ -117,12 +117,12 @@ fn test_object_literals() {
 #[test]
 fn test_object_literals_with_trailing_comma() {
     let source_code = r#"
-        var basic_obj = :{ field_1 = 1, field_2 = 2, };
+        var basic_obj = {{ field_1 = 1, field_2 = 2, }};
         var other_field = "other value";
-        var shorthand_obj = :{
+        var shorthand_obj = {{
             field = "value",
             other_field,
-        };
+        }};
     "#;
     let source_map = SourceMap::new(source_code.to_string());
 
@@ -131,7 +131,7 @@ fn test_object_literals_with_trailing_comma() {
     assert_no_parse_errors(&errors);
     assert_eq!(program.decls.len(), 3);
 
-    // First object: basic_obj = :{ field_1 = 1, field_2 = 2, }
+    // First object: basic_obj = {{ field_1 = 1, field_2 = 2, }}
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
         assert_eq!(var_decl.name.name.as_ref(), "basic_obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
@@ -177,7 +177,7 @@ fn test_object_literals_with_trailing_comma() {
         panic!("Expected variable declaration for other_field");
     }
 
-    // Third object: shorthand_obj = :{ field = "value", other_field, }
+    // Third object: shorthand_obj = {{ field = "value", other_field, }}
     if let ast::Decl::Variable(var_decl) = &program.decls[2] {
         assert_eq!(var_decl.name.name.as_ref(), "shorthand_obj");
         if let Some(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(object))) =
@@ -1284,78 +1284,6 @@ fn test_array_literals_with_trailing_commas() {
 }
 
 #[test]
-fn test_create_array_of_length() {
-    let source_code = r#"
-        var arr1 = [10; 0];
-        var arr2 = [2;]; // will default to [2;nil] if no initializer is provided.
-    "#;
-    let source_map = SourceMap::new(source_code.to_string());
-
-    let (program, errors) = parse_source(&source_map);
-
-    assert_no_parse_errors(&errors);
-    assert_eq!(program.decls.len(), 2);
-
-    // First array-of-length: arr1 = [10; 0];
-    if let ast::Decl::Variable(var_decl) = &program.decls[0] {
-        assert_eq!(var_decl.name.name.as_ref(), "arr1");
-        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ArrayOfLength(array))) =
-            &var_decl.initializer
-        {
-            // Check length expression: should be number 10
-            if let ast::Expr::Primary(ast::PrimaryExpr::Number(length_num)) = array.length.as_ref()
-            {
-                assert_eq!(length_num.value, 10.0);
-            } else {
-                panic!("Expected number literal '10' for array length");
-            }
-
-            // Check initializer expression: should be number 0
-            if let Some(initializer) = &array.initializer {
-                if let ast::Expr::Primary(ast::PrimaryExpr::Number(init_num)) = initializer.as_ref()
-                {
-                    assert_eq!(init_num.value, 0.0);
-                } else {
-                    panic!("Expected number literal '0' for array initializer");
-                }
-            } else {
-                panic!("Expected initializer for first array");
-            }
-        } else {
-            panic!("Expected ArrayOfLength for arr1");
-        }
-    } else {
-        panic!("Expected variable declaration for arr1");
-    }
-
-    // Second array-of-length: arr2 = [2;]; (no initializer)
-    if let ast::Decl::Variable(var_decl) = &program.decls[1] {
-        assert_eq!(var_decl.name.name.as_ref(), "arr2");
-        if let Some(ast::Expr::Primary(ast::PrimaryExpr::ArrayOfLength(array))) =
-            &var_decl.initializer
-        {
-            // Check length expression: should be number 2
-            if let ast::Expr::Primary(ast::PrimaryExpr::Number(length_num)) = array.length.as_ref()
-            {
-                assert_eq!(length_num.value, 2.0);
-            } else {
-                panic!("Expected number literal '2' for array length");
-            }
-
-            // Check that there's no initializer (should default to nil)
-            assert!(
-                array.initializer.is_none(),
-                "Expected no initializer for arr2"
-            );
-        } else {
-            panic!("Expected ArrayOfLength for arr2");
-        }
-    } else {
-        panic!("Expected variable declaration for arr2");
-    }
-}
-
-#[test]
 fn test_grouping_expressions() {
     let source_code = r#"var result = (a + b) * (c - d);"#;
     let source_map = SourceMap::new(source_code.to_string());
@@ -1367,10 +1295,6 @@ fn test_grouping_expressions() {
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
         assert_eq!(var_decl.name.name.as_ref(), "result");
         assert!(var_decl.initializer.is_some());
-
-        // Expression should be: (a + b) * (c - d)
-        // The parser optimizes away the parentheses since they don't change precedence here
-        // This actually parses as: (a + b) * (c - d) -> Factor(Term(a + b), *, Term(c - d))
 
         if let Some(ast::Expr::Factor(factor_expr)) = &var_decl.initializer {
             assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);

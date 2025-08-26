@@ -115,20 +115,6 @@ fn test_missing_class_name_error() {
 }
 
 #[test]
-fn test_invalid_try_without_catch_or_finally() {
-    let source_code = r#"
-            try {
-                riskyOperation();
-            }
-        "#;
-    let source_map = SourceMap::new(source_code.to_string());
-
-    let (_program, errors) = parse_source(&source_map);
-
-    assert_parse_error(&errors, "Expected 'catch' or 'finally'");
-}
-
-#[test]
 fn test_missing_parentheses_in_if() {
     let source_code = r#"
             if condition {

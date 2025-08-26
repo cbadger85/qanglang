@@ -474,8 +474,6 @@ impl<'a> Parser<'a> {
                 self.continue_statement()?,
             ))),
             TokenType::Return => Ok(ast::Decl::Stmt(ast::Stmt::Return(self.return_statement()?))),
-            TokenType::Throw => Ok(ast::Decl::Stmt(ast::Stmt::Throw(self.throw_statement()?))),
-            TokenType::Try => Ok(ast::Decl::Stmt(ast::Stmt::Try(self.try_statement()?))),
             _ => Ok(ast::Decl::Stmt(self.statement()?)),
         }
     }
@@ -548,8 +546,6 @@ impl<'a> Parser<'a> {
             TokenType::Break => Ok(ast::Stmt::Break(self.break_statement()?)),
             TokenType::Continue => Ok(ast::Stmt::Continue(self.continue_statement()?)),
             TokenType::Return => Ok(ast::Stmt::Return(self.return_statement()?)),
-            TokenType::Throw => Ok(ast::Stmt::Throw(self.throw_statement()?)),
-            TokenType::Try => Ok(ast::Stmt::Try(self.try_statement()?)),
             _ => Ok(ast::Stmt::Expr(self.expression_statement()?)),
         }
     }
@@ -657,82 +653,6 @@ impl<'a> Parser<'a> {
         let span = ast::SourceSpan::combine(start_span, end_span);
 
         Ok(ast::ReturnStmt { value, span })
-    }
-
-    fn throw_statement(&mut self) -> ParseResult<ast::ThrowStmt> {
-        let start_span = self.get_current_span();
-        self.advance();
-
-        let value = if self.check(TokenType::Semicolon) {
-            None
-        } else {
-            Some(self.expression()?)
-        };
-
-        self.consume(TokenType::Semicolon, "Expect ';' after throw value.")?;
-        let end_span = self.get_previous_span();
-        let span = ast::SourceSpan::combine(start_span, end_span);
-
-        Ok(ast::ThrowStmt { value, span })
-    }
-
-    fn try_statement(&mut self) -> ParseResult<ast::TryStmt> {
-        let start_span = self.get_current_span();
-        self.advance();
-
-        let try_block = self.block_statement()?;
-
-        let catch_clause = if self.match_token(TokenType::Catch) {
-            let catch_start = self.get_previous_span();
-
-            let parameter = if self.match_token(TokenType::LeftParen) {
-                self.consume(TokenType::Identifier, "Expect parameter name.")?;
-                let param = Some(self.get_identifier()?);
-                self.consume(TokenType::RightParen, "Expect ')' after catch parameter.")?;
-                param
-            } else {
-                None
-            };
-
-            let body = self.block_statement()?;
-            let catch_span = ast::SourceSpan::combine(catch_start, body.span);
-
-            Some(ast::CatchClause {
-                parameter,
-                body,
-                span: catch_span,
-            })
-        } else {
-            None
-        };
-
-        let finally_block = if self.match_token(TokenType::Finally) {
-            Some(self.block_statement()?)
-        } else {
-            None
-        };
-
-        if catch_clause.is_none() && finally_block.is_none() {
-            return Err(QangSyntaxError::new(
-                "Expected 'catch' or 'finally' after try block.".to_string(),
-                self.get_current_span(),
-            ));
-        }
-
-        let end_span = finally_block
-            .as_ref()
-            .map(|b| b.span)
-            .or_else(|| catch_clause.as_ref().map(|c| c.span))
-            .unwrap_or(try_block.span);
-
-        let span = ast::SourceSpan::combine(start_span, end_span);
-
-        Ok(ast::TryStmt {
-            try_block,
-            catch_clause,
-            finally_block,
-            span,
-        })
     }
 
     fn expression_statement(&mut self) -> ParseResult<ast::ExprStmt> {
@@ -1149,35 +1069,6 @@ mod expression_parser {
         // Parse the first expression
         let first_expr = parser.expression()?;
 
-        // Check if this is array-of-length syntax [length; initializer?]
-        if parser.match_token(tokenizer::TokenType::Semicolon) {
-            // This is array-of-length syntax
-            let length = Box::new(first_expr);
-            let initializer = if parser.check(tokenizer::TokenType::RightSquareBracket) {
-                // No initializer provided, will default to nil
-                None
-            } else {
-                // Parse the initializer expression
-                Some(Box::new(parser.expression()?))
-            };
-
-            parser.consume(
-                tokenizer::TokenType::RightSquareBracket,
-                "Expect ']' after array-of-length syntax.",
-            )?;
-
-            let end_span = parser.get_previous_span();
-            let span = ast::SourceSpan::combine(start_span, end_span);
-
-            return Ok(ast::Expr::Primary(ast::PrimaryExpr::ArrayOfLength(
-                ast::ArrayOfLength {
-                    length,
-                    initializer,
-                    span,
-                },
-            )));
-        }
-
         // This is regular array literal syntax [elem1, elem2, ...]
         let mut elements = vec![first_expr];
 
@@ -1211,8 +1102,7 @@ mod expression_parser {
         let start_span = parser.get_previous_span();
         let mut entries: Vec<ast::ObjectEntry> = Vec::new();
 
-        // Handle empty array case
-        if parser.check(tokenizer::TokenType::RightBrace) {
+        if parser.check(tokenizer::TokenType::DoubleRightBrace) {
             parser.advance();
             let end_span = parser.get_previous_span();
             let span = ast::SourceSpan::combine(start_span, end_span);
@@ -1221,7 +1111,7 @@ mod expression_parser {
             )));
         }
 
-        while !parser.check(tokenizer::TokenType::RightBrace) && !parser.is_at_end() {
+        while !parser.check(tokenizer::TokenType::DoubleRightBrace) && !parser.is_at_end() {
             parser.advance();
             let key = parser.get_identifier()?;
             let key_span = key.span;
@@ -1239,7 +1129,7 @@ mod expression_parser {
                     break;
                 }
             } else if parser.match_token(tokenizer::TokenType::Comma)
-                || parser.check(tokenizer::TokenType::RightBrace)
+                || parser.check(tokenizer::TokenType::DoubleRightBrace)
             {
                 let value = ast::Expr::Primary(ast::PrimaryExpr::Identifier(key.clone()));
                 entries.push(ast::ObjectEntry {
@@ -1252,7 +1142,7 @@ mod expression_parser {
             }
         }
 
-        parser.consume(tokenizer::TokenType::RightBrace, "Expected '}'.")?;
+        parser.consume(tokenizer::TokenType::DoubleRightBrace, "Expected '}}'.")?;
         let end_span = parser.get_previous_span();
 
         Ok(ast::Expr::Primary(ast::PrimaryExpr::ObjectLiteral(
@@ -1631,7 +1521,7 @@ mod expression_parser {
                 infix: Some(call),
                 precedence: Precedence::Call,
             },
-            tokenizer::TokenType::ColonBrace => ParseRule {
+            tokenizer::TokenType::DoubleLeftBrace => ParseRule {
                 prefix: Some(object),
                 infix: None,
                 precedence: Precedence::None,

@@ -57,7 +57,8 @@ pub enum TokenType {
     Try,                // try
     Catch,              // catch
     Finally,            // finally
-    ColonBrace,         // :{
+    DoubleLeftBrace,    // {{
+    DoubleRightBrace,   // }}
     Error,              // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -196,10 +197,11 @@ impl<'a> Tokenizer<'a> {
             '.' if self.peek_char().is_ascii_digit() => self.number(),
             '.' => self.make_token(TokenType::Dot, start),
             ',' => self.make_token(TokenType::Comma, start),
-            ':' if self.match_char('{') => self.make_token(TokenType::ColonBrace, start),
             ':' => self.make_token(TokenType::Colon, start),
             '?' => self.make_token(TokenType::Question, start),
             ';' => self.make_token(TokenType::Semicolon, start),
+            '{' if self.match_char('{') => self.make_token(TokenType::DoubleLeftBrace, start),
+            '}' if self.match_char('}') => self.make_token(TokenType::DoubleRightBrace, start),
             '{' => self.make_token(TokenType::LeftBrace, start),
             '}' => self.make_token(TokenType::RightBrace, start),
             '[' => self.make_token(TokenType::LeftSquareBracket, start),

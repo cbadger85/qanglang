@@ -695,6 +695,24 @@ impl<'a> CompilerVisitor<'a> {
         }
         Ok(())
     }
+
+    fn emit_compound_assignment_op(
+        &mut self,
+        operator: ast::AssignmentOperator,
+        span: SourceSpan,
+    ) -> Result<(), QangSyntaxError> {
+        let opcode = match operator {
+            ast::AssignmentOperator::Assign => unreachable!(),
+            ast::AssignmentOperator::AddAssign => OpCode::Add,
+            ast::AssignmentOperator::SubtractAssign => OpCode::Subtract,
+            ast::AssignmentOperator::MultiplyAssign => OpCode::Multiply,
+            ast::AssignmentOperator::DivideAssign => OpCode::Divide,
+            ast::AssignmentOperator::ModuloAssign => OpCode::Modulo,
+        };
+
+        self.emit_opcode(opcode, span);
+        Ok(())
+    }
 }
 
 impl<'a> AstVisitor for CompilerVisitor<'a> {
@@ -865,24 +883,93 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         assignment: &ast::AssignmentExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        match &assignment.target {
-            ast::AssignmentTarget::Identifier(identifier) => {
-                self.visit_expression(&assignment.value, errors)?;
-                self.handle_variable(&identifier.name, identifier.span, true)?;
+        match assignment.operator {
+            ast::AssignmentOperator::Assign => {
+                // Regular assignment - existing behavior
+                match &assignment.target {
+                    ast::AssignmentTarget::Identifier(identifier) => {
+                        self.visit_expression(&assignment.value, errors)?;
+                        self.handle_variable(&identifier.name, identifier.span, true)?;
+                    }
+                    ast::AssignmentTarget::Property(property) => {
+                        self.visit_expression(&property.object, errors)?;
+                        let identifier_handle =
+                            self.allocator.strings.intern(&property.property.name);
+                        let byte = self.make_constant(
+                            Value::String(identifier_handle),
+                            property.property.span,
+                        )?;
+                        self.visit_expression(&assignment.value, errors)?;
+                        self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
+                    }
+                    ast::AssignmentTarget::Index(index) => {
+                        self.visit_expression(&index.object, errors)?;
+                        self.visit_expression(&index.index, errors)?;
+                        self.visit_expression(&assignment.value, errors)?;
+                        self.emit_opcode(OpCode::SetArrayIndex, index.span);
+                    }
+                }
             }
-            ast::AssignmentTarget::Property(property) => {
-                self.visit_expression(&property.object, errors)?;
-                let identifier_handle = self.allocator.strings.intern(&property.property.name);
-                let byte =
-                    self.make_constant(Value::String(identifier_handle), property.property.span)?;
-                self.visit_expression(&assignment.value, errors)?;
-                self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
-            }
-            ast::AssignmentTarget::Index(index) => {
-                self.visit_expression(&index.object, errors)?;
-                self.visit_expression(&index.index, errors)?;
-                self.visit_expression(&assignment.value, errors)?;
-                self.emit_opcode(OpCode::SetArrayIndex, index.span);
+            _ => {
+                // Compound assignment operators (+=, -=, *=, /=, %=)
+                match &assignment.target {
+                    ast::AssignmentTarget::Identifier(identifier) => {
+                        // Get current value
+                        self.handle_variable(&identifier.name, identifier.span, false)?;
+                        // Get the new value
+                        self.visit_expression(&assignment.value, errors)?;
+                        // Apply the operation
+                        self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
+                        // Store the result
+                        self.handle_variable(&identifier.name, identifier.span, true)?;
+                    }
+                    ast::AssignmentTarget::Property(property) => {
+                        // First, put object on stack for SetProperty (it needs to be at the bottom)
+                        self.visit_expression(&property.object, errors)?;
+
+                        // Get current property value (this will consume the object and put the value on stack)
+                        self.visit_expression(&property.object, errors)?;
+                        let identifier_handle =
+                            self.allocator.strings.intern(&property.property.name);
+                        let byte = self.make_constant(
+                            Value::String(identifier_handle),
+                            property.property.span,
+                        )?;
+                        self.emit_opcode_and_byte(OpCode::GetProperty, byte, property.span);
+
+                        // Get the new value
+                        self.visit_expression(&assignment.value, errors)?;
+                        // Apply the operation - stack now has [object, result]
+                        self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
+
+                        // Stack now has [object, result] which is exactly what SetProperty expects
+                        let identifier_handle =
+                            self.allocator.strings.intern(&property.property.name);
+                        let byte = self.make_constant(
+                            Value::String(identifier_handle),
+                            property.property.span,
+                        )?;
+                        self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
+                    }
+                    ast::AssignmentTarget::Index(index) => {
+                        // Put array and index on stack for SetArrayIndex
+                        self.visit_expression(&index.object, errors)?;
+                        self.visit_expression(&index.index, errors)?;
+
+                        // Get current array element value
+                        self.visit_expression(&index.object, errors)?;
+                        self.visit_expression(&index.index, errors)?;
+                        self.emit_opcode(OpCode::GetArrayIndex, index.span);
+
+                        // Get the new value
+                        self.visit_expression(&assignment.value, errors)?;
+                        // Apply the operation
+                        self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
+
+                        // Stack now has [array, index, result] which is what SetArrayIndex expects
+                        self.emit_opcode(OpCode::SetArrayIndex, index.span);
+                    }
+                }
             }
         }
 

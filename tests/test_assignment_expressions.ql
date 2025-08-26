@@ -55,3 +55,35 @@ fn test_assignment_in_expression_context() {
   assert_eq(a, 1);
   assert_eq(b, 1);
 }
+
+fn test_operator_assignment() {
+  var a = 0;
+  a += 1;
+  assert_eq(a, 1);
+
+  var b = 0;
+  b -= 1;
+  assert_eq(b, -1);
+
+  var c = 1;
+  c *= 2;
+
+  assert_eq(c, 2);
+
+  var d = 2;
+  d /= 1;
+  assert_eq(d, 2);
+
+  var e = 3;
+  e %= 2;
+  assert_eq(e, 1);
+}
+
+
+fn test_operator_assignment_chaining() {
+  var a = 0;
+  var b = 0;
+  a += b = 1;
+  assert_eq(a, 1);
+  assert_eq(b, 1);
+}

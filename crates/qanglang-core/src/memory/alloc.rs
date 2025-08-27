@@ -205,6 +205,7 @@ impl HeapAllocator {
             name,
             method_table: self.tables.new_hashmap(),
             value_table: self.tables.new_hashmap(),
+            super_clazz: None,
             is_marked: false,
         });
         debug_log!(

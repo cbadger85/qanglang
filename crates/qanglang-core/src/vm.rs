@@ -648,6 +648,26 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
+                        (Value::Instance(instance_handle), Value::Class(clazz_handle)) => {
+                            let instance_of_handle = self.alloc.get_instance(instance_handle).clazz;
+
+                            if instance_of_handle == clazz_handle {
+                                true
+                            } else {
+                                let mut current_handle = instance_of_handle;
+                                loop {
+                                    let current_class = self.alloc.get_class(current_handle);
+                                    if let Some(super_handle) = current_class.super_clazz {
+                                        if super_handle == clazz_handle {
+                                            break true;
+                                        }
+                                        current_handle = super_handle;
+                                    } else {
+                                        break false;
+                                    }
+                                }
+                            }
+                        }
                         _ => false,
                     };
 
@@ -927,9 +947,11 @@ impl Vm {
                     let subclass = peek_value!(self, 1);
 
                     match (superclass, subclass) {
-                        (Value::Class(superclass), Value::Class(subclass)) => {
-                            let superclass = self.alloc.get_class(superclass);
-                            let subclass = self.alloc.get_class(subclass);
+                        (Value::Class(superclass_handle), Value::Class(subclass_handle)) => {
+                            let subclass = self.alloc.get_class_mut(subclass_handle);
+                            subclass.super_clazz = Some(superclass_handle);
+                            let subclass = self.alloc.get_class(subclass_handle);
+                            let superclass = self.alloc.get_class(superclass_handle);
                             let subclass_value_table = subclass.value_table;
                             let superclass_value_table = superclass.value_table;
                             let superclass_method_table = superclass.method_table;

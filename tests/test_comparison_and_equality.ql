@@ -62,3 +62,36 @@ fn test_comparison_operator_precedence() {
 fn test_chained_comparison() {
   assert(1 < 2 == true, "Expected 1 < 2 == true to be true.");
 }
+
+fn test_is_operator() {
+  assert([] is ARRAY);
+  assert({{}} is OBJECT);
+  assert("this is a string" is STRING);
+  assert(0 is NUMBER);
+  assert(true is BOOLEAN);
+  assert(false is BOOLEAN);
+  assert(nil is NIL);
+
+  fn test_function() {}
+  assert(test_function is FUNCTION);
+  var test_lambda = () -> nil;
+  assert(test_lambda is FUNCTION);
+
+  class TestClass {
+    test_method() {}
+  }
+  assert(TestClass is CLASS);
+  var test_instance = TestClass();
+  assert(test_instance.test_method is FUNCTION);
+  var bound_method = test_instance.test_method;
+  assert(bound_method is FUNCTION);
+  assert(test_instance is TestClass);
+  assert(test_instance is TestClass);
+  
+  class SubTestClass : TestClass {}
+  var sub_test_instance = SubTestClass();
+  assert(sub_test_instance is SubTestClass);
+  assert(sub_test_instance is TestClass);
+
+  assert(!(test_instance is SubTestClass));
+}

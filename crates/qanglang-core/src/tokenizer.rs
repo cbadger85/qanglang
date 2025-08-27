@@ -53,10 +53,6 @@ pub enum TokenType {
     Break,              // break
     Continue,           // continue
     Pipe,               // |>
-    Throw,              // throw
-    Try,                // try
-    Catch,              // catch
-    Finally,            // finally
     DoubleLeftBrace,    // {{
     DoubleRightBrace,   // }}
     DoubleBar,          // || (not implemented)
@@ -96,10 +92,6 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "super" => TokenType::Super,
     "this" => TokenType::This,
     "return" => TokenType::Return,
-    "throw" => TokenType::Throw,
-    "try" => TokenType::Try,
-    "catch" => TokenType::Catch,
-    "finally" => TokenType::Finally,
     "is" => TokenType::Is,
 };
 

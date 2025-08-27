@@ -258,23 +258,24 @@ fn test_class_declaration() {
 
                     // Verify the return expression: this.name
                     if let Some(ast::Expr::Call(call_expr)) = &return_stmt.value {
-                    // Verify the callee is 'this'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::This(_)) = call_expr.callee.as_ref()
-                    {
-                        // Verify the operation is property access to 'name'
-                        if let ast::CallOperation::Property(property_id) =
-                            call_expr.operation.as_ref()
+                        // Verify the callee is 'this'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::This(_)) =
+                            call_expr.callee.as_ref()
                         {
-                            assert_eq!(property_id.name.as_ref(), "name");
+                            // Verify the operation is property access to 'name'
+                            if let ast::CallOperation::Property(property_id) =
+                                call_expr.operation.as_ref()
+                            {
+                                assert_eq!(property_id.name.as_ref(), "name");
+                            } else {
+                                panic!("Expected property access to 'name'");
+                            }
                         } else {
-                            panic!("Expected property access to 'name'");
+                            panic!("Expected 'this' as callee");
                         }
                     } else {
-                        panic!("Expected 'this' as callee");
+                        panic!("Expected call expression (this.name) in return statement");
                     }
-                } else {
-                    panic!("Expected call expression (this.name) in return statement");
-                }
                 } else {
                     panic!("Expected return statement in method body");
                 }
@@ -493,33 +494,35 @@ fn test_lambda_with_block_body() {
 
                 if let ast::Decl::Stmt(stmt_box) = &block.decls[0] {
                     if let ast::Stmt::Return(return_stmt) = &**stmt_box {
-                    assert!(return_stmt.value.is_some());
+                        assert!(return_stmt.value.is_some());
 
-                    // Verify the return expression: x * 2
-                    if let Some(ast::Expr::Factor(factor_expr)) = &return_stmt.value {
-                        // Left side should be identifier 'x'
-                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
-                            factor_expr.left.as_ref()
-                        {
-                            assert_eq!(left_id.name.as_ref(), "x");
+                        // Verify the return expression: x * 2
+                        if let Some(ast::Expr::Factor(factor_expr)) = &return_stmt.value {
+                            // Left side should be identifier 'x'
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(left_id)) =
+                                factor_expr.left.as_ref()
+                            {
+                                assert_eq!(left_id.name.as_ref(), "x");
+                            } else {
+                                panic!("Expected identifier 'x' on left side of multiplication");
+                            }
+
+                            // Operator should be Multiply
+                            assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
+
+                            // Right side should be number literal 2
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
+                                factor_expr.right.as_ref()
+                            {
+                                assert_eq!(num_lit.value, 2.0);
+                            } else {
+                                panic!(
+                                    "Expected number literal '2' on right side of multiplication"
+                                );
+                            }
                         } else {
-                            panic!("Expected identifier 'x' on left side of multiplication");
+                            panic!("Expected factor expression (x * 2) in return statement");
                         }
-
-                        // Operator should be Multiply
-                        assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
-
-                        // Right side should be number literal 2
-                        if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
-                            factor_expr.right.as_ref()
-                        {
-                            assert_eq!(num_lit.value, 2.0);
-                        } else {
-                            panic!("Expected number literal '2' on right side of multiplication");
-                        }
-                    } else {
-                        panic!("Expected factor expression (x * 2) in return statement");
-                    }
                     } else {
                         panic!("Expected return statement in lambda block");
                     }

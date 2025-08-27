@@ -969,7 +969,12 @@ fn test_get_line_multiple_lines() {
 #[test]
 fn test_is_operator() {
     let input = "x is y";
-    let expected = vec![TokenType::Identifier, TokenType::Is, TokenType::Identifier, TokenType::Eof];
+    let expected = vec![
+        TokenType::Identifier,
+        TokenType::Is,
+        TokenType::Identifier,
+        TokenType::Eof,
+    ];
     assert_token_types(&input, &expected);
 }
 
@@ -977,13 +982,18 @@ fn test_is_operator() {
 fn test_assignment_operators() {
     let input = "x += y -= z *= w /= v %= u";
     let expected = vec![
-        TokenType::Identifier, TokenType::PlusAssign,
-        TokenType::Identifier, TokenType::MinusAssign, 
-        TokenType::Identifier, TokenType::StarAssign,
-        TokenType::Identifier, TokenType::SlashAssign,
-        TokenType::Identifier, TokenType::ModuloAssign,
         TokenType::Identifier,
-        TokenType::Eof
+        TokenType::PlusAssign,
+        TokenType::Identifier,
+        TokenType::MinusAssign,
+        TokenType::Identifier,
+        TokenType::StarAssign,
+        TokenType::Identifier,
+        TokenType::SlashAssign,
+        TokenType::Identifier,
+        TokenType::ModuloAssign,
+        TokenType::Identifier,
+        TokenType::Eof,
     ];
     assert_token_types(&input, &expected);
 }

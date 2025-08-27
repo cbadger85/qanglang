@@ -537,17 +537,18 @@ fn test_assignment_expressions() {
         if let ast::Stmt::Expr(expr_stmt) = &**stmt_box {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
                 // First assignment: x = 5
-            // Target should be identifier 'x'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "x");
-            } else {
-                panic!("Expected identifier target 'x'");
-            }
+                // Target should be identifier 'x'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "x");
+                } else {
+                    panic!("Expected identifier target 'x'");
+                }
 
-            // Value should be number literal 5
-            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = assignment.value.as_ref()
-            {
-                assert_eq!(num_lit.value, 5.0);
+                // Value should be number literal 5
+                if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
+                    assignment.value.as_ref()
+                {
+                    assert_eq!(num_lit.value, 5.0);
                 } else {
                     panic!("Expected number literal '5'");
                 }
@@ -565,27 +566,28 @@ fn test_assignment_expressions() {
         if let ast::Stmt::Expr(expr_stmt) = &**stmt_box {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
                 // Second assignment: obj.property = "value"
-            // Target should be property access obj.property
-            if let ast::AssignmentTarget::Property(prop_access) = &assignment.target {
-                // Object should be identifier 'obj'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
-                    prop_access.object.as_ref()
-                {
-                    assert_eq!(obj_id.name.as_ref(), "obj");
+                // Target should be property access obj.property
+                if let ast::AssignmentTarget::Property(prop_access) = &assignment.target {
+                    // Object should be identifier 'obj'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
+                        prop_access.object.as_ref()
+                    {
+                        assert_eq!(obj_id.name.as_ref(), "obj");
+                    } else {
+                        panic!("Expected identifier 'obj'");
+                    }
+
+                    // Property should be 'property'
+                    assert_eq!(prop_access.property.name.as_ref(), "property");
                 } else {
-                    panic!("Expected identifier 'obj'");
+                    panic!("Expected property access target");
                 }
 
-                // Property should be 'property'
-                assert_eq!(prop_access.property.name.as_ref(), "property");
-            } else {
-                panic!("Expected property access target");
-            }
-
-            // Value should be string literal "value"
-            if let ast::Expr::Primary(ast::PrimaryExpr::String(str_lit)) = assignment.value.as_ref()
-            {
-                assert_eq!(str_lit.value.as_ref(), "value");
+                // Value should be string literal "value"
+                if let ast::Expr::Primary(ast::PrimaryExpr::String(str_lit)) =
+                    assignment.value.as_ref()
+                {
+                    assert_eq!(str_lit.value.as_ref(), "value");
                 } else {
                     panic!("Expected string literal 'value'");
                 }
@@ -728,30 +730,30 @@ fn test_function_calls() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
         if let ast::Stmt::Expr(expr_stmt) = &**stmt_box {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'result'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "result");
-            } else {
-                panic!("Expected identifier target 'result'");
-            }
-
-            // Value should be function call func()
-            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                // Callee should be identifier 'func'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
-                    call_expr.callee.as_ref()
-                {
-                    assert_eq!(func_id.name.as_ref(), "func");
+                // Target should be identifier 'result'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "result");
                 } else {
-                    panic!("Expected identifier 'func'");
+                    panic!("Expected identifier target 'result'");
                 }
 
-                // Operation should be call with no arguments
-                if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
-                    assert_eq!(args.len(), 0);
-                } else {
-                    panic!("Expected call operation");
-                }
+                // Value should be function call func()
+                if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                    // Callee should be identifier 'func'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
+                        call_expr.callee.as_ref()
+                    {
+                        assert_eq!(func_id.name.as_ref(), "func");
+                    } else {
+                        panic!("Expected identifier 'func'");
+                    }
+
+                    // Operation should be call with no arguments
+                    if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                        assert_eq!(args.len(), 0);
+                    } else {
+                        panic!("Expected call operation");
+                    }
                 } else {
                     panic!("Expected call expression");
                 }
@@ -769,54 +771,54 @@ fn test_function_calls() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[1] {
         if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'result2'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "result2");
-            } else {
-                panic!("Expected identifier target 'result2'");
-            }
-
-            // Value should be function call func(a, b, c)
-            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                // Callee should be identifier 'func'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
-                    call_expr.callee.as_ref()
-                {
-                    assert_eq!(func_id.name.as_ref(), "func");
+                // Target should be identifier 'result2'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "result2");
                 } else {
-                    panic!("Expected identifier 'func'");
+                    panic!("Expected identifier target 'result2'");
                 }
 
-                // Operation should be call with 3 arguments
-                if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
-                    assert_eq!(args.len(), 3);
-
-                    // First argument should be 'a'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(a_id)) = &args[0] {
-                        assert_eq!(a_id.name.as_ref(), "a");
+                // Value should be function call func(a, b, c)
+                if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                    // Callee should be identifier 'func'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
+                        call_expr.callee.as_ref()
+                    {
+                        assert_eq!(func_id.name.as_ref(), "func");
                     } else {
-                        panic!("Expected identifier 'a' as first argument");
+                        panic!("Expected identifier 'func'");
                     }
 
-                    // Second argument should be 'b'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(b_id)) = &args[1] {
-                        assert_eq!(b_id.name.as_ref(), "b");
-                    } else {
-                        panic!("Expected identifier 'b' as second argument");
-                    }
+                    // Operation should be call with 3 arguments
+                    if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                        assert_eq!(args.len(), 3);
 
-                    // Third argument should be 'c'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(c_id)) = &args[2] {
-                        assert_eq!(c_id.name.as_ref(), "c");
+                        // First argument should be 'a'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(a_id)) = &args[0] {
+                            assert_eq!(a_id.name.as_ref(), "a");
+                        } else {
+                            panic!("Expected identifier 'a' as first argument");
+                        }
+
+                        // Second argument should be 'b'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(b_id)) = &args[1] {
+                            assert_eq!(b_id.name.as_ref(), "b");
+                        } else {
+                            panic!("Expected identifier 'b' as second argument");
+                        }
+
+                        // Third argument should be 'c'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(c_id)) = &args[2] {
+                            assert_eq!(c_id.name.as_ref(), "c");
+                        } else {
+                            panic!("Expected identifier 'c' as third argument");
+                        }
                     } else {
-                        panic!("Expected identifier 'c' as third argument");
+                        panic!("Expected call operation");
                     }
                 } else {
-                    panic!("Expected call operation");
+                    panic!("Expected call expression");
                 }
-            } else {
-                panic!("Expected call expression");
-            }
             } else {
                 panic!("Expected assignment expression");
             }
@@ -829,54 +831,55 @@ fn test_function_calls() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[2] {
         if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'result3'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "result3");
-            } else {
-                panic!("Expected identifier target 'result3'");
-            }
-
-            // Value should be method call obj.method(arg)
-            // This should be parsed as a chained call: (obj.method)(arg)
-            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                // The callee should be another call expression for obj.method
-                if let ast::Expr::Call(method_call) = call_expr.callee.as_ref() {
-                    // The callee of method_call should be 'obj'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
-                        method_call.callee.as_ref()
-                    {
-                        assert_eq!(obj_id.name.as_ref(), "obj");
-                    } else {
-                        panic!("Expected identifier 'obj'");
-                    }
-
-                    // The operation should be property access to 'method'
-                    if let ast::CallOperation::Property(method_id) = method_call.operation.as_ref()
-                    {
-                        assert_eq!(method_id.name.as_ref(), "method");
-                    } else {
-                        panic!("Expected property access to 'method'");
-                    }
+                // Target should be identifier 'result3'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "result3");
                 } else {
-                    panic!("Expected call expression for method access");
+                    panic!("Expected identifier target 'result3'");
                 }
 
-                // The operation should be call with 1 argument
-                if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
-                    assert_eq!(args.len(), 1);
+                // Value should be method call obj.method(arg)
+                // This should be parsed as a chained call: (obj.method)(arg)
+                if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                    // The callee should be another call expression for obj.method
+                    if let ast::Expr::Call(method_call) = call_expr.callee.as_ref() {
+                        // The callee of method_call should be 'obj'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
+                            method_call.callee.as_ref()
+                        {
+                            assert_eq!(obj_id.name.as_ref(), "obj");
+                        } else {
+                            panic!("Expected identifier 'obj'");
+                        }
 
-                    // Argument should be 'arg'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(arg_id)) = &args[0] {
-                        assert_eq!(arg_id.name.as_ref(), "arg");
+                        // The operation should be property access to 'method'
+                        if let ast::CallOperation::Property(method_id) =
+                            method_call.operation.as_ref()
+                        {
+                            assert_eq!(method_id.name.as_ref(), "method");
+                        } else {
+                            panic!("Expected property access to 'method'");
+                        }
                     } else {
-                        panic!("Expected identifier 'arg' as argument");
+                        panic!("Expected call expression for method access");
+                    }
+
+                    // The operation should be call with 1 argument
+                    if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                        assert_eq!(args.len(), 1);
+
+                        // Argument should be 'arg'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(arg_id)) = &args[0] {
+                            assert_eq!(arg_id.name.as_ref(), "arg");
+                        } else {
+                            panic!("Expected identifier 'arg' as argument");
+                        }
+                    } else {
+                        panic!("Expected call operation");
                     }
                 } else {
-                    panic!("Expected call operation");
+                    panic!("Expected call expression");
                 }
-            } else {
-                panic!("Expected call expression");
-            }
             } else {
                 panic!("Expected assignment expression");
             }
@@ -902,54 +905,54 @@ fn test_function_calls_with_trailing_comma() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
         if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'result2'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "result2");
-            } else {
-                panic!("Expected identifier target 'result2'");
-            }
-
-            // Value should be function call func(a, b, c,)
-            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                // Callee should be identifier 'func'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
-                    call_expr.callee.as_ref()
-                {
-                    assert_eq!(func_id.name.as_ref(), "func");
+                // Target should be identifier 'result2'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "result2");
                 } else {
-                    panic!("Expected identifier 'func'");
+                    panic!("Expected identifier target 'result2'");
                 }
 
-                // Operation should be call with 3 arguments
-                if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
-                    assert_eq!(args.len(), 3);
-
-                    // First argument should be 'a'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(a_id)) = &args[0] {
-                        assert_eq!(a_id.name.as_ref(), "a");
+                // Value should be function call func(a, b, c,)
+                if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                    // Callee should be identifier 'func'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(func_id)) =
+                        call_expr.callee.as_ref()
+                    {
+                        assert_eq!(func_id.name.as_ref(), "func");
                     } else {
-                        panic!("Expected identifier 'a' as first argument");
+                        panic!("Expected identifier 'func'");
                     }
 
-                    // Second argument should be 'b'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(b_id)) = &args[1] {
-                        assert_eq!(b_id.name.as_ref(), "b");
-                    } else {
-                        panic!("Expected identifier 'b' as second argument");
-                    }
+                    // Operation should be call with 3 arguments
+                    if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                        assert_eq!(args.len(), 3);
 
-                    // Third argument should be 'c'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(c_id)) = &args[2] {
-                        assert_eq!(c_id.name.as_ref(), "c");
+                        // First argument should be 'a'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(a_id)) = &args[0] {
+                            assert_eq!(a_id.name.as_ref(), "a");
+                        } else {
+                            panic!("Expected identifier 'a' as first argument");
+                        }
+
+                        // Second argument should be 'b'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(b_id)) = &args[1] {
+                            assert_eq!(b_id.name.as_ref(), "b");
+                        } else {
+                            panic!("Expected identifier 'b' as second argument");
+                        }
+
+                        // Third argument should be 'c'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(c_id)) = &args[2] {
+                            assert_eq!(c_id.name.as_ref(), "c");
+                        } else {
+                            panic!("Expected identifier 'c' as third argument");
+                        }
                     } else {
-                        panic!("Expected identifier 'c' as third argument");
+                        panic!("Expected call operation");
                     }
                 } else {
-                    panic!("Expected call operation");
+                    panic!("Expected call expression");
                 }
-            } else {
-                panic!("Expected call expression");
-            }
             } else {
                 panic!("Expected assignment expression");
             }
@@ -976,33 +979,34 @@ fn test_property_access() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
         if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'value'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "value");
-            } else {
-                panic!("Expected identifier target 'value'");
-            }
-
-            // Value should be property access obj.property
-            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                // Callee should be identifier 'obj'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
-                    call_expr.callee.as_ref()
-                {
-                    assert_eq!(obj_id.name.as_ref(), "obj");
+                // Target should be identifier 'value'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "value");
                 } else {
-                    panic!("Expected identifier 'obj'");
+                    panic!("Expected identifier target 'value'");
                 }
 
-                // Operation should be property access to 'property'
-                if let ast::CallOperation::Property(property_id) = call_expr.operation.as_ref() {
-                    assert_eq!(property_id.name.as_ref(), "property");
+                // Value should be property access obj.property
+                if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                    // Callee should be identifier 'obj'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
+                        call_expr.callee.as_ref()
+                    {
+                        assert_eq!(obj_id.name.as_ref(), "obj");
+                    } else {
+                        panic!("Expected identifier 'obj'");
+                    }
+
+                    // Operation should be property access to 'property'
+                    if let ast::CallOperation::Property(property_id) = call_expr.operation.as_ref()
+                    {
+                        assert_eq!(property_id.name.as_ref(), "property");
+                    } else {
+                        panic!("Expected property access to 'property'");
+                    }
                 } else {
-                    panic!("Expected property access to 'property'");
+                    panic!("Expected call expression for property access");
                 }
-            } else {
-                panic!("Expected call expression for property access");
-            }
             } else {
                 panic!("Expected assignment expression");
             }
@@ -1015,60 +1019,62 @@ fn test_property_access() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[1] {
         if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'value2'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "value2");
-            } else {
-                panic!("Expected identifier target 'value2'");
-            }
-
-            // Value should be chained property access obj.nested.deep.property
-            // This should be parsed as: (((obj.nested).deep).property)
-            if let ast::Expr::Call(call_expr3) = assignment.value.as_ref() {
-                // The final property access to 'property'
-                if let ast::CallOperation::Property(property_id) = call_expr3.operation.as_ref() {
-                    assert_eq!(property_id.name.as_ref(), "property");
+                // Target should be identifier 'value2'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "value2");
                 } else {
-                    panic!("Expected property access to 'property'");
+                    panic!("Expected identifier target 'value2'");
                 }
 
-                // The callee should be obj.nested.deep
-                if let ast::Expr::Call(call_expr2) = call_expr3.callee.as_ref() {
-                    // Property access to 'deep'
-                    if let ast::CallOperation::Property(deep_id) = call_expr2.operation.as_ref() {
-                        assert_eq!(deep_id.name.as_ref(), "deep");
+                // Value should be chained property access obj.nested.deep.property
+                // This should be parsed as: (((obj.nested).deep).property)
+                if let ast::Expr::Call(call_expr3) = assignment.value.as_ref() {
+                    // The final property access to 'property'
+                    if let ast::CallOperation::Property(property_id) = call_expr3.operation.as_ref()
+                    {
+                        assert_eq!(property_id.name.as_ref(), "property");
                     } else {
-                        panic!("Expected property access to 'deep'");
+                        panic!("Expected property access to 'property'");
                     }
 
-                    // The callee should be obj.nested
-                    if let ast::Expr::Call(call_expr1) = call_expr2.callee.as_ref() {
-                        // Property access to 'nested'
-                        if let ast::CallOperation::Property(nested_id) =
-                            call_expr1.operation.as_ref()
+                    // The callee should be obj.nested.deep
+                    if let ast::Expr::Call(call_expr2) = call_expr3.callee.as_ref() {
+                        // Property access to 'deep'
+                        if let ast::CallOperation::Property(deep_id) = call_expr2.operation.as_ref()
                         {
-                            assert_eq!(nested_id.name.as_ref(), "nested");
+                            assert_eq!(deep_id.name.as_ref(), "deep");
                         } else {
-                            panic!("Expected property access to 'nested'");
+                            panic!("Expected property access to 'deep'");
                         }
 
-                        // The callee should be 'obj'
-                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
-                            call_expr1.callee.as_ref()
-                        {
-                            assert_eq!(obj_id.name.as_ref(), "obj");
+                        // The callee should be obj.nested
+                        if let ast::Expr::Call(call_expr1) = call_expr2.callee.as_ref() {
+                            // Property access to 'nested'
+                            if let ast::CallOperation::Property(nested_id) =
+                                call_expr1.operation.as_ref()
+                            {
+                                assert_eq!(nested_id.name.as_ref(), "nested");
+                            } else {
+                                panic!("Expected property access to 'nested'");
+                            }
+
+                            // The callee should be 'obj'
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(obj_id)) =
+                                call_expr1.callee.as_ref()
+                            {
+                                assert_eq!(obj_id.name.as_ref(), "obj");
+                            } else {
+                                panic!("Expected identifier 'obj'");
+                            }
                         } else {
-                            panic!("Expected identifier 'obj'");
+                            panic!("Expected call expression for obj.nested");
                         }
                     } else {
-                        panic!("Expected call expression for obj.nested");
+                        panic!("Expected call expression for obj.nested.deep");
                     }
                 } else {
-                    panic!("Expected call expression for obj.nested.deep");
+                    panic!("Expected call expression for property access chain");
                 }
-            } else {
-                panic!("Expected call expression for property access chain");
-            }
             } else {
                 panic!("Expected assignment expression");
             }
@@ -1095,37 +1101,37 @@ fn test_array_access() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[0] {
         if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'value'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "value");
-            } else {
-                panic!("Expected identifier target 'value'");
-            }
-
-            // Value should be array access array[0]
-            if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                // Callee should be identifier 'array'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(array_id)) =
-                    call_expr.callee.as_ref()
-                {
-                    assert_eq!(array_id.name.as_ref(), "array");
+                // Target should be identifier 'value'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "value");
                 } else {
-                    panic!("Expected identifier 'array'");
+                    panic!("Expected identifier target 'value'");
                 }
 
-                // Operation should be index access with 0
-                if let ast::CallOperation::Index(index_expr) = call_expr.operation.as_ref() {
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = index_expr {
-                        assert_eq!(num_lit.value, 0.0);
+                // Value should be array access array[0]
+                if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                    // Callee should be identifier 'array'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(array_id)) =
+                        call_expr.callee.as_ref()
+                    {
+                        assert_eq!(array_id.name.as_ref(), "array");
                     } else {
-                        panic!("Expected number literal '0'");
+                        panic!("Expected identifier 'array'");
+                    }
+
+                    // Operation should be index access with 0
+                    if let ast::CallOperation::Index(index_expr) = call_expr.operation.as_ref() {
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) = index_expr {
+                            assert_eq!(num_lit.value, 0.0);
+                        } else {
+                            panic!("Expected number literal '0'");
+                        }
+                    } else {
+                        panic!("Expected index operation");
                     }
                 } else {
-                    panic!("Expected index operation");
+                    panic!("Expected call expression for array access");
                 }
-            } else {
-                panic!("Expected call expression for array access");
-            }
             } else {
                 panic!("Expected assignment expression");
             }
@@ -1138,54 +1144,56 @@ fn test_array_access() {
     if let ast::Decl::Stmt(stmt_box) = &program.decls[1] {
         if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
             if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-            // Target should be identifier 'value2'
-            if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
-                assert_eq!(target_id.name.as_ref(), "value2");
-            } else {
-                panic!("Expected identifier target 'value2'");
-            }
-
-            // Value should be chained array access matrix[row][col]
-            // This should be parsed as: (matrix[row])[col]
-            if let ast::Expr::Call(outer_call) = assignment.value.as_ref() {
-                // Final operation should be index access with 'col'
-                if let ast::CallOperation::Index(col_expr) = outer_call.operation.as_ref() {
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(col_id)) = col_expr {
-                        assert_eq!(col_id.name.as_ref(), "col");
-                    } else {
-                        panic!("Expected identifier 'col'");
-                    }
+                // Target should be identifier 'value2'
+                if let ast::AssignmentTarget::Identifier(target_id) = &assignment.target {
+                    assert_eq!(target_id.name.as_ref(), "value2");
                 } else {
-                    panic!("Expected index operation for 'col'");
+                    panic!("Expected identifier target 'value2'");
                 }
 
-                // The callee should be matrix[row]
-                if let ast::Expr::Call(inner_call) = outer_call.callee.as_ref() {
-                    // Callee should be identifier 'matrix'
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(matrix_id)) =
-                        inner_call.callee.as_ref()
-                    {
-                        assert_eq!(matrix_id.name.as_ref(), "matrix");
-                    } else {
-                        panic!("Expected identifier 'matrix'");
-                    }
-
-                    // Operation should be index access with 'row'
-                    if let ast::CallOperation::Index(row_expr) = inner_call.operation.as_ref() {
-                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(row_id)) = row_expr {
-                            assert_eq!(row_id.name.as_ref(), "row");
+                // Value should be chained array access matrix[row][col]
+                // This should be parsed as: (matrix[row])[col]
+                if let ast::Expr::Call(outer_call) = assignment.value.as_ref() {
+                    // Final operation should be index access with 'col'
+                    if let ast::CallOperation::Index(col_expr) = outer_call.operation.as_ref() {
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(col_id)) = col_expr {
+                            assert_eq!(col_id.name.as_ref(), "col");
                         } else {
-                            panic!("Expected identifier 'row'");
+                            panic!("Expected identifier 'col'");
                         }
                     } else {
-                        panic!("Expected index operation for 'row'");
+                        panic!("Expected index operation for 'col'");
+                    }
+
+                    // The callee should be matrix[row]
+                    if let ast::Expr::Call(inner_call) = outer_call.callee.as_ref() {
+                        // Callee should be identifier 'matrix'
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(matrix_id)) =
+                            inner_call.callee.as_ref()
+                        {
+                            assert_eq!(matrix_id.name.as_ref(), "matrix");
+                        } else {
+                            panic!("Expected identifier 'matrix'");
+                        }
+
+                        // Operation should be index access with 'row'
+                        if let ast::CallOperation::Index(row_expr) = inner_call.operation.as_ref() {
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(row_id)) =
+                                row_expr
+                            {
+                                assert_eq!(row_id.name.as_ref(), "row");
+                            } else {
+                                panic!("Expected identifier 'row'");
+                            }
+                        } else {
+                            panic!("Expected index operation for 'row'");
+                        }
+                    } else {
+                        panic!("Expected call expression for matrix[row]");
                     }
                 } else {
-                    panic!("Expected call expression for matrix[row]");
+                    panic!("Expected call expression for chained array access");
                 }
-            } else {
-                panic!("Expected call expression for chained array access");
-            }
             } else {
                 panic!("Expected assignment expression");
             }
@@ -1518,47 +1526,47 @@ fn test_this_and_super() {
             if let ast::Decl::Stmt(stmt_box) = &method.body.decls[0] {
                 if let ast::Stmt::Expr(expr_stmt) = stmt_box.as_ref() {
                     if let ast::Expr::Assignment(assignment) = &expr_stmt.expr {
-                    // Left side: this.value (property assignment target)
-                    if let ast::AssignmentTarget::Property(prop_access) = &assignment.target {
-                        // Object should be 'this'
-                        if let ast::Expr::Primary(ast::PrimaryExpr::This(_)) =
-                            prop_access.object.as_ref()
-                        {
-                            // Expected this
+                        // Left side: this.value (property assignment target)
+                        if let ast::AssignmentTarget::Property(prop_access) = &assignment.target {
+                            // Object should be 'this'
+                            if let ast::Expr::Primary(ast::PrimaryExpr::This(_)) =
+                                prop_access.object.as_ref()
+                            {
+                                // Expected this
+                            } else {
+                                panic!("Expected 'this' expression");
+                            }
+
+                            // Property should be 'value'
+                            assert_eq!(prop_access.property.name.as_ref(), "value");
                         } else {
-                            panic!("Expected 'this' expression");
+                            panic!("Expected property access target");
                         }
 
-                        // Property should be 'value'
-                        assert_eq!(prop_access.property.name.as_ref(), "value");
-                    } else {
-                        panic!("Expected property access target");
-                    }
-
-                    // Right side: super.getValue() (method call)
-                    if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
-                        // The callee should be a super method access
-                        if let ast::Expr::Primary(ast::PrimaryExpr::Super(super_expr)) =
-                            call_expr.callee.as_ref()
-                        {
-                            if let ast::SuperExpr::Method(super_method) = super_expr {
-                                assert_eq!(super_method.method.name.as_ref(), "getValue");
+                        // Right side: super.getValue() (method call)
+                        if let ast::Expr::Call(call_expr) = assignment.value.as_ref() {
+                            // The callee should be a super method access
+                            if let ast::Expr::Primary(ast::PrimaryExpr::Super(super_expr)) =
+                                call_expr.callee.as_ref()
+                            {
+                                if let ast::SuperExpr::Method(super_method) = super_expr {
+                                    assert_eq!(super_method.method.name.as_ref(), "getValue");
+                                } else {
+                                    panic!("Expected super method access");
+                                }
                             } else {
-                                panic!("Expected super method access");
+                                panic!("Expected super expression");
+                            }
+
+                            // The operation should be function call with no arguments
+                            if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
+                                assert_eq!(args.len(), 0);
+                            } else {
+                                panic!("Expected call operation");
                             }
                         } else {
-                            panic!("Expected super expression");
+                            panic!("Expected call expression for super.getValue()");
                         }
-
-                        // The operation should be function call with no arguments
-                        if let ast::CallOperation::Call(args) = call_expr.operation.as_ref() {
-                            assert_eq!(args.len(), 0);
-                        } else {
-                            panic!("Expected call operation");
-                        }
-                    } else {
-                        panic!("Expected call expression for super.getValue()");
-                    }
                     } else {
                         panic!("Expected assignment expression");
                     }
@@ -2176,45 +2184,47 @@ fn test_assignment_chaining() {
             // Expression: a = b = c = 5
             // This should parse as: a = (b = (c = 5)) (right associative)
             if let ast::Expr::Assignment(outer_assignment) = &expr_stmt.expr {
-            // Outermost assignment target should be identifier 'a'
-            if let ast::AssignmentTarget::Identifier(a_id) = &outer_assignment.target {
-                assert_eq!(a_id.name.as_ref(), "a");
-            } else {
-                panic!("Expected identifier target 'a'");
-            }
-
-            // Value should be another assignment: b = (c = 5)
-            if let ast::Expr::Assignment(middle_assignment) = outer_assignment.value.as_ref() {
-                // Middle assignment target should be identifier 'b'
-                if let ast::AssignmentTarget::Identifier(b_id) = &middle_assignment.target {
-                    assert_eq!(b_id.name.as_ref(), "b");
+                // Outermost assignment target should be identifier 'a'
+                if let ast::AssignmentTarget::Identifier(a_id) = &outer_assignment.target {
+                    assert_eq!(a_id.name.as_ref(), "a");
                 } else {
-                    panic!("Expected identifier target 'b'");
+                    panic!("Expected identifier target 'a'");
                 }
 
-                // Value should be another assignment: c = 5
-                if let ast::Expr::Assignment(inner_assignment) = middle_assignment.value.as_ref() {
-                    // Inner assignment target should be identifier 'c'
-                    if let ast::AssignmentTarget::Identifier(c_id) = &inner_assignment.target {
-                        assert_eq!(c_id.name.as_ref(), "c");
+                // Value should be another assignment: b = (c = 5)
+                if let ast::Expr::Assignment(middle_assignment) = outer_assignment.value.as_ref() {
+                    // Middle assignment target should be identifier 'b'
+                    if let ast::AssignmentTarget::Identifier(b_id) = &middle_assignment.target {
+                        assert_eq!(b_id.name.as_ref(), "b");
                     } else {
-                        panic!("Expected identifier target 'c'");
+                        panic!("Expected identifier target 'b'");
                     }
 
-                    // Value should be number literal 5
-                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
-                        inner_assignment.value.as_ref()
+                    // Value should be another assignment: c = 5
+                    if let ast::Expr::Assignment(inner_assignment) =
+                        middle_assignment.value.as_ref()
                     {
-                        assert_eq!(num_lit.value, 5.0);
+                        // Inner assignment target should be identifier 'c'
+                        if let ast::AssignmentTarget::Identifier(c_id) = &inner_assignment.target {
+                            assert_eq!(c_id.name.as_ref(), "c");
+                        } else {
+                            panic!("Expected identifier target 'c'");
+                        }
+
+                        // Value should be number literal 5
+                        if let ast::Expr::Primary(ast::PrimaryExpr::Number(num_lit)) =
+                            inner_assignment.value.as_ref()
+                        {
+                            assert_eq!(num_lit.value, 5.0);
+                        } else {
+                            panic!("Expected number literal '5'");
+                        }
                     } else {
-                        panic!("Expected number literal '5'");
+                        panic!("Expected assignment expression (c = 5)");
                     }
                 } else {
-                    panic!("Expected assignment expression (c = 5)");
+                    panic!("Expected assignment expression (b = (c = 5))");
                 }
-            } else {
-                panic!("Expected assignment expression (b = (c = 5))");
-            }
             } else {
                 panic!("Expected assignment expression");
             }

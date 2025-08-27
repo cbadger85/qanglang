@@ -147,8 +147,7 @@ impl ArrayArena {
         }
 
         if let Some(chunk_handle) = current_chunk {
-            self.chunks[chunk_handle].data[slot_index]
-                .unwrap_or(Value::Nil)
+            self.chunks[chunk_handle].data[slot_index].unwrap_or(Value::Nil)
         } else {
             Value::Nil
         }

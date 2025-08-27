@@ -1336,8 +1336,6 @@ fn test_is_operator() {
         assert(sub_test_instance is TestClass);
 
         assert(!(test_instance is SubTestClass));
-
-
     "#;
 
     let source_map = SourceMap::new(source.to_string());

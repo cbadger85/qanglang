@@ -465,15 +465,27 @@ impl<'a> Parser<'a> {
             .token_type;
 
         match current_token_type {
-            TokenType::While => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::While(self.while_statement()?)))),
-            TokenType::If => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::If(self.if_statement()?)))),
-            TokenType::LeftBrace => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::Block(self.block_statement()?)))),
-            TokenType::For => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::For(Box::new(self.for_statement()?))))),
-            TokenType::Break => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::Break(self.break_statement()?)))),
+            TokenType::While => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::While(
+                self.while_statement()?,
+            )))),
+            TokenType::If => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::If(
+                self.if_statement()?,
+            )))),
+            TokenType::LeftBrace => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::Block(
+                self.block_statement()?,
+            )))),
+            TokenType::For => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::For(Box::new(
+                self.for_statement()?,
+            ))))),
+            TokenType::Break => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::Break(
+                self.break_statement()?,
+            )))),
             TokenType::Continue => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::Continue(
                 self.continue_statement()?,
             )))),
-            TokenType::Return => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::Return(self.return_statement()?)))),
+            TokenType::Return => Ok(ast::Decl::Stmt(Box::new(ast::Stmt::Return(
+                self.return_statement()?,
+            )))),
             _ => Ok(ast::Decl::Stmt(Box::new(self.statement()?))),
         }
     }

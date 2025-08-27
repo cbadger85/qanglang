@@ -1444,3 +1444,50 @@ fn test_pipe_with_intrinsic() {
         }
     }
 }
+
+#[test]
+fn test_pipe_with_call() {
+    let source = r#"
+        // var arr = [true];
+        // var result = [false] |> arr.concat();
+        // println(result);
+        // assert_eq(result.length(), 2);
+        // assert_eq(result[0], true);
+        // assert_eq(result[1], false);
+
+        
+        // var identity = (x) -> x;
+        // assert_eq(true |> identity, true);
+        // assert_eq(true |> identity(), true);
+        var sum = (a, b) -> a + b;
+        // assert_eq(1 |> sum(2), 3);
+        assert_eq([1, 2] |> sum.call, 3);    
+        assert_eq([1, 2] |> sum.call(), 3); 
+        assert_throws(() -> 1 |> sum.call(2));
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

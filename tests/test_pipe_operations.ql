@@ -361,3 +361,28 @@ fn test_partial_application_edge_cases() {
   var result2 = 5 |> identity();
   assert_eq(result2, 5, "Expected identity with empty parens to work.");
 }
+
+fn test_pipe_with_methods() {
+  class MathLib {
+      sum(a, b) {
+          return a + b; 
+      }
+  }
+  var math = MathLib();
+  assert_eq([1, 2] |> math.sum.call, 3);
+}
+
+fn test_pipe_with_intrinsic() {
+  var arr = [true];
+  var result = [false] |> arr.concat();
+  println(result);
+  assert_eq(result.length(), 2);
+  assert_eq(result[0], true);
+  assert_eq(result[1], false);
+  
+  
+  var sum = (a, b) -> a + b;
+  assert_eq([1, 2] |> sum.call, 3);
+  assert_eq([1, 2] |> sum.call(), 3); 
+
+}

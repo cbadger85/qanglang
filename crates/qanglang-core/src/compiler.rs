@@ -1637,27 +1637,54 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 ast::Expr::Call(call_expr) => {
                     match call_expr.operation.as_ref() {
                         ast::CallOperation::Call(arguments) => {
-                            // Visit the function (callee) - don't call it, just get the function value
-                            self.visit_expression(&call_expr.callee, errors)?;
-
-                            // Visit the piped value (becomes first argument)
-                            self.visit_expression(&pipe.left, errors)?;
-
-                            // Visit all the existing arguments
-                            for arg in arguments {
-                                self.visit_expression(arg, errors)?;
-                            }
-
-                            // Call with 1 + existing args
-                            let total_args = 1 + arguments.len();
-                            if total_args > u8::MAX as usize {
-                                return Err(QangSyntaxError::new(
-                                    "Functions may only take up to 256 arguments.".to_string(),
+                            // Check if this is a special case: something.call(args...) if it is, drop the (args...) part and ignore it entirely. It should send the same thing vm something.call
+                            if let ast::Expr::Call(inner_call) = call_expr.callee.as_ref()
+                                && let ast::CallOperation::Property(method_name) =
+                                    inner_call.operation.as_ref()
+                                && method_name.name == "call".into()
+                            {
+                                self.visit_expression(&call_expr.callee, errors)?;
+                                self.visit_expression(&pipe.left, errors)?;
+                                let method_handle =
+                                    self.allocator.strings.intern(&method_name.name);
+                                let method_constant = self.make_constant(
+                                    Value::String(method_handle),
+                                    method_name.span,
+                                )?;
+                                self.emit_opcode_and_byte(
+                                    OpCode::Invoke,
+                                    method_constant,
                                     pipe.span,
-                                ));
-                            }
+                                );
+                                self.emit_byte(1, pipe.span);
+                            } else {
+                                // Regular function call with partial application
+                                // Visit the function (callee) - don't call it, just get the function value
+                                self.visit_expression(&call_expr.callee, errors)?;
 
-                            self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.span);
+                                // Visit the piped value (becomes first argument)
+                                self.visit_expression(&pipe.left, errors)?;
+
+                                // Visit all the existing arguments
+                                for arg in arguments {
+                                    self.visit_expression(arg, errors)?;
+                                }
+
+                                // Call with 1 + existing args
+                                let total_args = 1 + arguments.len();
+                                if total_args > u8::MAX as usize {
+                                    return Err(QangSyntaxError::new(
+                                        "Functions may only take up to 256 arguments.".to_string(),
+                                        pipe.span,
+                                    ));
+                                }
+
+                                self.emit_opcode_and_byte(
+                                    OpCode::Call,
+                                    total_args as u8,
+                                    pipe.span,
+                                );
+                            }
                         }
                         ast::CallOperation::Property(method_name) => {
                             self.visit_expression(&call_expr.callee, errors)?;

@@ -1187,11 +1187,11 @@ fn test_intrinsic_call_fn() {
         var foo = test_function.call;
 
         assert(foo());
-        assert(foo.call([]));
+        assert(foo.apply([]));
 
         var identity = (x) -> x;
 
-        assert_eq(identity.call([1]), 1);
+        assert_eq(identity.apply([1]), 1);
     "#;
 
     let source_map = SourceMap::new(source.to_string());

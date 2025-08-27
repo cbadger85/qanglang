@@ -69,7 +69,6 @@ enum Keyword {
     Init,
 }
 
-#[macro_export]
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {
         if $vm.state.stack_top >= STACK_MAX {
@@ -88,7 +87,6 @@ macro_rules! push_value {
     };
 }
 
-#[macro_export]
 macro_rules! pop_value {
     ($vm:expr) => {{
         debug_assert!(
@@ -100,7 +98,6 @@ macro_rules! pop_value {
     }};
 }
 
-#[macro_export]
 macro_rules! peek_value {
     ($vm:expr, $distance:expr) => {
         if $vm.state.stack_top > $distance {
@@ -115,7 +112,6 @@ macro_rules! peek_value {
     };
 }
 
-#[macro_export]
 macro_rules! read_string {
     ($vm:expr) => {
         match $vm.state.read_constant() {
@@ -1366,12 +1362,6 @@ impl Vm {
 
     fn invoke(&mut self, method_handle: StringHandle, arg_count: usize) -> RuntimeResult<()> {
         let receiver = peek_value!(self, arg_count);
-        let method_name = self.alloc.strings.get_string(method_handle);
-        println!(
-            "DEBUG: invoke called with receiver: {:?}, method: {}",
-            receiver, method_name
-        );
-
         match receiver {
             Value::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);

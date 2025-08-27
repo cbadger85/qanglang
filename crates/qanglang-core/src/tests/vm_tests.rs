@@ -1363,3 +1363,50 @@ fn test_is_operator() {
         }
     }
 }
+
+#[test]
+fn test_pipe_method() {
+    let source = r#"
+        fn sum(a, b) {
+            return a + b;
+        }
+        
+        assert_eq(sum.call, sum);
+        assert_eq(sum.call([1, 2]), 3);
+        // assert_eq([1, 2] |> sum.call, 3);
+        
+        class Foo {
+            sum(a, b) {
+                return a + b; 
+            }
+        }
+        var foo = Foo();
+        assert_eq([1, 2] |> foo.sum, 3);
+        // assert_eq([1, 2] |> foo.sum.call, 3);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

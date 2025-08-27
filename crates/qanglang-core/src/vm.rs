@@ -56,6 +56,19 @@ type StackSlot = usize;
 type UpvalueIndex = usize;
 type OpenUpvalueEntry = (StackSlot, Vec<(ClosureHandle, UpvalueIndex)>);
 
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
+#[repr(u8)]
+enum Keyword {
+    Number,
+    String,
+    Nil,
+    Boolean,
+    Function,
+    Class,
+    Array,
+    Object,
+}
+
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {{
         if $vm.state.stack_top >= STACK_MAX {
@@ -128,12 +141,14 @@ pub struct VmState {
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
+    keywords: FxHashMap<Keyword, StringHandle>,
 }
 
 impl VmState {
     fn new(
         globals: FxHashMap<StringHandle, Value>,
         intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
+        keywords: FxHashMap<Keyword, StringHandle>,
     ) -> Self {
         Self {
             frame_count: 0,
@@ -144,6 +159,7 @@ impl VmState {
             intrinsics,
             open_upvalues: Vec::with_capacity(8),
             current_function_ptr: std::ptr::null(),
+            keywords,
         }
     }
 
@@ -225,42 +241,57 @@ impl Vm {
     }
 
     pub fn new(mut alloc: HeapAllocator) -> Self {
+        let mut keywords = FxHashMap::with_hasher(FxBuildHasher);
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
-        let nil_type_handle = alloc.strings.intern("NIL");
         let nil_type_value_handle = alloc.strings.intern(NIL_TYPE_STRING);
-        globals.insert(nil_type_handle, Value::String(nil_type_value_handle));
-
-        let boolean_type_handle = alloc.strings.intern("BOOLEAN");
-        let boolean_type_value_handle = alloc.strings.intern(BOOLEAN_TYPE_STRING);
+        keywords.insert(Keyword::Nil, nil_type_value_handle);
         globals.insert(
-            boolean_type_handle,
+            alloc.strings.intern("NIL"),
+            Value::String(nil_type_value_handle),
+        );
+        let boolean_type_value_handle = alloc.strings.intern(BOOLEAN_TYPE_STRING);
+        keywords.insert(Keyword::Boolean, boolean_type_value_handle);
+        globals.insert(
+            alloc.strings.intern("BOOLEAN"),
             Value::String(boolean_type_value_handle),
         );
-
-        let number_type_handle = alloc.strings.intern("NUMBER");
         let number_type_value_handle = alloc.strings.intern(NUMBER_TYPE_STRING);
-        globals.insert(number_type_handle, Value::String(number_type_value_handle));
-
-        let string_type_handle = alloc.strings.intern("STRING");
-        let string_type_value_handle = alloc.strings.intern(STRING_TYPE_STRING);
-        globals.insert(string_type_handle, Value::String(string_type_value_handle));
-
-        let function_type_handle = alloc.strings.intern("FUNCTION");
-        let function_type_value_handle = alloc.strings.intern(FUNCTION_TYPE_STRING);
+        keywords.insert(Keyword::Number, number_type_value_handle);
         globals.insert(
-            function_type_handle,
+            alloc.strings.intern("NUMBER"),
+            Value::String(number_type_value_handle),
+        );
+        let string_type_value_handle = alloc.strings.intern(STRING_TYPE_STRING);
+        keywords.insert(Keyword::String, string_type_value_handle);
+        globals.insert(
+            alloc.strings.intern("STRING"),
+            Value::String(string_type_value_handle),
+        );
+        let function_type_value_handle = alloc.strings.intern(FUNCTION_TYPE_STRING);
+        keywords.insert(Keyword::Function, function_type_value_handle);
+        globals.insert(
+            alloc.strings.intern("FUNCTION"),
             Value::String(function_type_value_handle),
         );
-        let class_type_handle = alloc.strings.intern("CLASS");
         let class_type_value_handle = alloc.strings.intern(CLASS_TYPE_STRING);
-        globals.insert(class_type_handle, Value::String(class_type_value_handle));
-        let object_type_handle = alloc.strings.intern("OBJECT");
+        keywords.insert(Keyword::Class, class_type_value_handle);
+        globals.insert(
+            alloc.strings.intern("CLASS"),
+            Value::String(class_type_value_handle),
+        );
         let object_type_value_handle = alloc.strings.intern(OBJECT_TYPE_STRING);
-        globals.insert(object_type_handle, Value::String(object_type_value_handle));
-        let array_type_handle = alloc.strings.intern("ARRAY");
+        keywords.insert(Keyword::Object, object_type_value_handle);
+        globals.insert(
+            alloc.strings.intern("OBJECT"),
+            Value::String(object_type_value_handle),
+        );
         let array_type_value_handle = alloc.strings.intern(ARRAY_TYPE_STRING);
-        globals.insert(array_type_handle, Value::String(array_type_value_handle));
+        keywords.insert(Keyword::Array, array_type_value_handle);
+        globals.insert(
+            alloc.strings.intern("ARRAY"),
+            Value::String(array_type_value_handle),
+        );
 
         let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
         let to_uppercase_handle = alloc.strings.intern("to_uppercase");
@@ -339,7 +370,7 @@ impl Vm {
         let vm = Self {
             is_debug: false,
             is_gc_enabled: true,
-            state: VmState::new(globals, intrinsics),
+            state: VmState::new(globals, intrinsics, keywords),
             alloc,
         };
 
@@ -541,6 +572,87 @@ impl Vm {
                     (Value::Number(num1), Value::Number(num2)) => Ok((num1 <= num2).into()),
                     _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
+                OpCode::Is => {
+                    let b = pop_value!(self);
+                    let a = pop_value!(self);
+
+                    let result = match (a, b) {
+                        (Value::Array(_), Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Array)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        (Value::Number(_), Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Number)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        (Value::String(_), Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::String)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        (Value::Nil, Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Nil)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        (Value::True | Value::False, Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Boolean)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        (Value::Class(_), Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Class)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        (Value::ObjectLiteral(_), Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Object)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        (
+                            Value::FunctionDecl(_)
+                            | Value::NativeFunction(_)
+                            | Value::Closure(_)
+                            | Value::BoundMethod(_)
+                            | Value::BoundIntrinsic(_),
+                            Value::String(string_handle),
+                        ) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Function)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
+                        _ => false,
+                    };
+
+                    push_value!(self, result.into());
+                }
                 OpCode::Pop => {
                     pop_value!(self);
                 }
@@ -1273,8 +1385,10 @@ impl Vm {
                     self.call_value(method_value, arg_count)
                 } else {
                     Err(QangRuntimeError::new(
-                        format!("Property '{}' does not exist on object.", 
-                                self.alloc.strings.get_string(method_handle)),
+                        format!(
+                            "Property '{}' does not exist on object.",
+                            self.alloc.strings.get_string(method_handle)
+                        ),
                         self.state.get_previous_loc(),
                     ))
                 }

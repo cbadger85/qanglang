@@ -1302,3 +1302,55 @@ fn test_object_with_lambda_properties() {
         }
     }
 }
+
+#[test]
+fn test_is_operator() {
+    let source = r#"
+        assert([] is ARRAY);
+        assert({{}} is OBJECT);
+        assert("this is a string" is STRING);
+        assert(0 is NUMBER);
+        assert(true is BOOLEAN);
+        assert(false is BOOLEAN);
+        assert(nil is NIL);
+
+        fn test_function() {}
+        assert(test_function is FUNCTION);
+        var test_lambda = () -> nil;
+        assert(test_lambda is FUNCTION);
+
+        class TestClass {
+          test_method() {}
+        }
+        assert(TestClass is CLASS);
+        var test_instance = TestClass();
+        assert(test_instance.test_method is FUNCTION);
+        var bound_method = test_instance.test_method;
+        assert(bound_method is FUNCTION);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

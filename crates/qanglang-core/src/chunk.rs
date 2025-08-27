@@ -48,6 +48,7 @@ pub enum OpCode {
     GetArrayIndex,
     SetArrayIndex,
     ObjectLiteral,
+    Is,
 }
 
 impl From<u8> for OpCode {
@@ -97,6 +98,7 @@ impl From<u8> for OpCode {
             41 => OpCode::GetArrayIndex,
             42 => OpCode::SetArrayIndex,
             43 => OpCode::ObjectLiteral,
+            44 => OpCode::Is,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }
@@ -148,8 +150,11 @@ impl From<ast::UnaryOperator> for OpCode {
 }
 
 impl From<ast::EqualityOperator> for OpCode {
-    fn from(_value: ast::EqualityOperator) -> Self {
-        OpCode::Equal
+    fn from(value: ast::EqualityOperator) -> Self {
+        match value {
+            ast::EqualityOperator::Is => OpCode::Is,
+            _ => OpCode::Equal,
+        }
     }
 }
 

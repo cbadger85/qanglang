@@ -1,0 +1,23 @@
+fn sum(a, b) {
+    return a + b;
+}
+
+class Foo {
+    sum(a, b) {
+        return a + b; 
+    }
+}
+var foo = Foo();
+
+// Test regular call with array
+println("sum.call([1, 2]):");
+println(sum.call([1, 2]));
+
+// Test what we're trying to achieve  
+println("foo.sum.call([1, 2]):");
+println(foo.sum.call([1, 2]));
+
+// Test pipe with array - this should work the same
+println("[1, 2] |> foo.sum:");
+var result = [1, 2] |> foo.sum;
+println(result);

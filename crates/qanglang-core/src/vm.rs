@@ -927,6 +927,25 @@ impl Vm {
                                 ));
                             }
                         }
+                        Value::BoundMethod(_) => {
+                            let identifier = read_string!(self);
+                            let call_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Call)
+                                .expect("Expected keyword.");
+                            if identifier == call_handle {
+                                // do nothing, because boundMethod.call == boundMethod
+                            } else {
+                                return Err(QangRuntimeError::new(
+                                    format!(
+                                        "Cannot access properties from {}.",
+                                        object.to_type_string()
+                                    ),
+                                    self.state.get_previous_loc(),
+                                ));
+                            }
+                        }
                         _ => {
                             return Err(QangRuntimeError::new(
                                 format!(
@@ -1403,6 +1422,36 @@ impl Vm {
                             push_value!(self, value);
                         }
                         self.call(closure_handle, array_length)
+                    } else {
+                        Err(QangRuntimeError::new(
+                            "'call' must take one argument and it must be an array.".to_string(),
+                            self.state.get_previous_loc(),
+                        ))
+                    }
+                } else {
+                    Err(QangRuntimeError::new(
+                        format!(
+                            "Cannot invoke {}, no methods exist.",
+                            receiver.to_type_string()
+                        ),
+                        self.state.get_previous_loc(),
+                    ))
+                }
+            }
+            Value::BoundMethod(bound_method_handle) => {
+                let call_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Call)
+                    .expect("Expected keyword.");
+                if method_handle == call_handle {
+                    if let Value::Array(array_handle) = peek_value!(self, 0) {
+                        pop_value!(self);
+                        let array_length = self.alloc.arrays.length(array_handle);
+                        for value in self.alloc.arrays.iter(array_handle) {
+                            push_value!(self, value);
+                        }
+                        self.call_value(Value::BoundMethod(bound_method_handle), array_length)
                     } else {
                         Err(QangRuntimeError::new(
                             "'call' must take one argument and it must be an array.".to_string(),

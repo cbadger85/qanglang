@@ -1,0 +1,8 @@
+class Foo {
+    sum(a, b) {
+        return a + b; 
+    }
+}
+var foo = Foo();
+
+assert_eq([1, 2] |> foo.sum, 3);

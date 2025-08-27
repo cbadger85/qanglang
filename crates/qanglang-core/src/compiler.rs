@@ -1635,9 +1635,51 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             match right.as_ref() {
                 // Case 1: Right side is a function call - partial application
                 ast::Expr::Call(call_expr) => {
-                    // Extract arguments from the call operation
-                    let args = match call_expr.operation.as_ref() {
-                        ast::CallOperation::Call(arguments) => arguments,
+                    match call_expr.operation.as_ref() {
+                        ast::CallOperation::Call(arguments) => {
+                            // Visit the function (callee) - don't call it, just get the function value
+                            self.visit_expression(&call_expr.callee, errors)?;
+
+                            // Visit the piped value (becomes first argument)
+                            self.visit_expression(&pipe.left, errors)?;
+
+                            // Visit all the existing arguments
+                            for arg in arguments {
+                                self.visit_expression(arg, errors)?;
+                            }
+
+                            // Call with 1 + existing args
+                            let total_args = 1 + arguments.len();
+                            if total_args > u8::MAX as usize {
+                                return Err(QangSyntaxError::new(
+                                    "Functions may only take up to 256 arguments.".to_string(),
+                                    pipe.span,
+                                ));
+                            }
+
+                            self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.span);
+                        },
+                        ast::CallOperation::Property(method_name) => {
+                            // For method access like: value |> object.method
+                            // This should work like: object.method.call(value)
+                            
+                            // Visit the object (callee of the property access)
+                            self.visit_expression(&call_expr.callee, errors)?;
+                            
+                            // Get the method property to create a bound method
+                            let method_handle = self.allocator.strings.intern(&method_name.name);
+                            let method_constant = self.make_constant(Value::String(method_handle), method_name.span)?;
+                            self.emit_opcode_and_byte(OpCode::GetProperty, method_constant, pipe.span);
+                            
+                            // Visit the piped value (becomes the argument)
+                            self.visit_expression(&pipe.left, errors)?;
+                            
+                            // Invoke the .call method on the bound method
+                            let call_handle = self.allocator.strings.intern("call");
+                            let call_constant = self.make_constant(Value::String(call_handle), pipe.span)?;
+                            self.emit_opcode_and_byte(OpCode::Invoke, call_constant, pipe.span);
+                            self.emit_byte(1, pipe.span); // 1 argument (the piped value)
+                        },
                         _ => {
                             return Err(QangSyntaxError::new(
                                 "Pipe expression with non-call operation not supported."
@@ -1645,29 +1687,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                                 call_expr.span,
                             ));
                         }
-                    };
-
-                    // Visit the function (callee) - don't call it, just get the function value
-                    self.visit_expression(&call_expr.callee, errors)?;
-
-                    // Visit the piped value (becomes first argument)
-                    self.visit_expression(&pipe.left, errors)?;
-
-                    // Visit all the existing arguments
-                    for arg in args {
-                        self.visit_expression(arg, errors)?;
                     }
-
-                    // Call with 1 + existing args
-                    let total_args = 1 + args.len();
-                    if total_args > u8::MAX as usize {
-                        return Err(QangSyntaxError::new(
-                            "Functions may only take up to 256 arguments.".to_string(),
-                            pipe.span,
-                        ));
-                    }
-
-                    self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.span);
                 }
 
                 // Case 2: Right side is just an expression - current behavior

@@ -254,13 +254,7 @@ An embedded scripting language written in Rust 🦀
 
 ## Roadmap
 
-[ ] - implement object literals
-
-[ ] - `is` operator
-
-[ ] - operator-assignment (`+=`, `-=`, `*=`, `\=`, `%=`)
-
-[ ] - optional chaining for when getting the property of an object `var inner = outer?.inner`
+[ ] - optional chaining for getting the property of an object `var inner = outer?.inner`
 
 [ ] - add map operator (`outer.inner||inner -> nil|`) to AST and VM.
 

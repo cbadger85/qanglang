@@ -375,10 +375,12 @@ impl ArrayArena {
     }
 
     pub fn iter(&self, handle: ArrayHandle) -> ArrayIterator<'_> {
+        let length = self.length(handle);
         ArrayIterator {
             arena: self,
             handle,
             current_index: 0,
+            current_back_index: length,
         }
     }
 
@@ -436,33 +438,43 @@ pub struct ArrayIterator<'a> {
     arena: &'a ArrayArena,
     handle: ArrayHandle,
     current_index: usize,
+    current_back_index: usize,
 }
 
 impl<'a> Iterator for ArrayIterator<'a> {
     type Item = Value;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let length = self.arena.length(self.handle);
+        while self.current_index < self.current_back_index {
+            let value = self.arena.get(self.handle, self.current_index as isize);
+            self.current_index += 1;
 
-        if self.current_index >= length {
-            return None;
+            // Skip Nil values (empty slots)
+            if !matches!(value, Value::Nil) {
+                return Some(value);
+            }
         }
-
-        let value = self.arena.get(self.handle, self.current_index as isize);
-        self.current_index += 1;
-
-        // Skip Nil values (empty slots)
-        if matches!(value, Value::Nil) {
-            self.next()
-        } else {
-            Some(value)
-        }
+        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let length = self.arena.length(self.handle);
-        let remaining = length.saturating_sub(self.current_index);
+        let remaining = self.current_back_index.saturating_sub(self.current_index);
         (0, Some(remaining)) // Lower bound is 0 because we might have Nil values
+    }
+}
+
+impl<'a> DoubleEndedIterator for ArrayIterator<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        while self.current_index < self.current_back_index {
+            self.current_back_index -= 1;
+            let value = self.arena.get(self.handle, self.current_back_index as isize);
+
+            // Skip Nil values (empty slots)
+            if !matches!(value, Value::Nil) {
+                return Some(value);
+            }
+        }
+        None
     }
 }
 
@@ -1205,5 +1217,62 @@ mod tests {
         arena.insert(original, 1, Value::Number(2.0));
         assert_eq!(arena.get(original, 1), Value::Number(2.0));
         assert_eq!(arena.get(cloned, 1), Value::Nil);
+    }
+
+    #[test]
+    fn test_iterator_reverse() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(5);
+
+        // Fill array with values [1, 2, 3, 4, 5]
+        for i in 0..5 {
+            arena.insert(handle, i, Value::Number((i + 1) as f64));
+        }
+
+        // Test reverse iteration
+        let values: Vec<Value> = arena.iter(handle).rev().collect();
+        assert_eq!(values.len(), 5);
+        assert_eq!(values[0], Value::Number(5.0));
+        assert_eq!(values[1], Value::Number(4.0));
+        assert_eq!(values[2], Value::Number(3.0));
+        assert_eq!(values[3], Value::Number(2.0));
+        assert_eq!(values[4], Value::Number(1.0));
+    }
+
+    #[test]
+    fn test_iterator_reverse_with_empty_slots() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(6);
+
+        // Fill only some slots
+        arena.insert(handle, 0, Value::Number(1.0));
+        arena.insert(handle, 2, Value::Number(3.0));
+        arena.insert(handle, 5, Value::Number(6.0));
+
+        // Test reverse iteration (should skip Nil values)
+        let values: Vec<Value> = arena.iter(handle).rev().collect();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0], Value::Number(6.0));
+        assert_eq!(values[1], Value::Number(3.0));
+        assert_eq!(values[2], Value::Number(1.0));
+    }
+
+    #[test]
+    fn test_iterator_reverse_large_array() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push values across multiple chunks
+        for i in 0..50 {
+            arena.push(handle, Value::Number(i as f64));
+        }
+
+        // Test reverse iteration
+        let values: Vec<Value> = arena.iter(handle).rev().collect();
+        assert_eq!(values.len(), 50);
+
+        for (i, value) in values.iter().enumerate() {
+            assert_eq!(*value, Value::Number((49 - i) as f64));
+        }
     }
 }

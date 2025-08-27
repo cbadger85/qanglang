@@ -19,10 +19,11 @@ use crate::{
         UpvalueReference,
     },
     qang_std::{
-        qang_array_concat, qang_array_construct, qang_array_get, qang_array_length, qang_array_pop,
-        qang_array_push, qang_array_reverse, qang_array_slice, qang_assert, qang_assert_eq,
-        qang_assert_throws, qang_hash, qang_print, qang_println, qang_string_to_lowercase,
-        qang_string_to_uppercase, qang_system_time, qang_to_string, qang_typeof,
+        qang_apply, qang_array_concat, qang_array_construct, qang_array_get, qang_array_length,
+        qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice, qang_assert,
+        qang_assert_eq, qang_assert_throws, qang_call, qang_hash, qang_print, qang_println,
+        qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_string,
+        qang_typeof,
     },
     value::{
         ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -66,26 +67,29 @@ enum Keyword {
     Class,
     Array,
     Object,
-    Call,
     Init,
 }
 
+#[macro_export]
 macro_rules! push_value {
-    ($vm:expr, $value:expr) => {{
+    ($vm:expr, $value:expr) => {
         if $vm.state.stack_top >= STACK_MAX {
-            return Err(QangRuntimeError::new(
+            Err(crate::QangRuntimeError::new(
                 format!(
                     "Stack overflow: maximum stack size of {} exceeded",
                     STACK_MAX
                 ),
                 $vm.state.get_current_loc(),
-            ));
+            ))
+        } else {
+            $vm.state.stack[$vm.state.stack_top] = $value;
+            $vm.state.stack_top += 1;
+            Ok(())
         }
-        $vm.state.stack[$vm.state.stack_top] = $value;
-        $vm.state.stack_top += 1;
-    }};
+    };
 }
 
+#[macro_export]
 macro_rules! pop_value {
     ($vm:expr) => {{
         debug_assert!(
@@ -97,6 +101,7 @@ macro_rules! pop_value {
     }};
 }
 
+#[macro_export]
 macro_rules! peek_value {
     ($vm:expr, $distance:expr) => {
         if $vm.state.stack_top > $distance {
@@ -111,6 +116,7 @@ macro_rules! peek_value {
     };
 }
 
+#[macro_export]
 macro_rules! read_string {
     ($vm:expr) => {
         match $vm.state.read_constant() {
@@ -134,9 +140,9 @@ struct CallFrame {
 
 #[derive(Clone)]
 pub struct VmState {
-    stack_top: usize,
+    pub stack_top: usize,
     frame_count: usize,
-    stack: Vec<Value>,
+    pub stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
     globals: FxHashMap<StringHandle, Value>,
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
@@ -172,11 +178,11 @@ impl VmState {
         unsafe { &*self.current_function_ptr }
     }
 
-    fn get_current_loc(&self) -> SourceLocation {
+    pub fn get_current_loc(&self) -> SourceLocation {
         self.get_loc_at(self.frames[self.frame_count - 1].ip)
     }
 
-    fn get_previous_loc(&self) -> SourceLocation {
+    pub fn get_previous_loc(&self) -> SourceLocation {
         if self.frames[self.frame_count - 1].ip > 0 {
             self.get_loc_at(self.frames[self.frame_count - 1].ip - 1)
         } else {
@@ -184,7 +190,7 @@ impl VmState {
         }
     }
 
-    fn get_loc_at(&self, index: usize) -> SourceLocation {
+    pub fn get_loc_at(&self, index: usize) -> SourceLocation {
         self.get_current_function()
             .chunk
             .locs
@@ -243,8 +249,6 @@ impl Vm {
 
     pub fn new(mut alloc: HeapAllocator) -> Self {
         let mut keywords = FxHashMap::with_hasher(FxBuildHasher);
-        let call_handle = alloc.strings.intern("call");
-        keywords.insert(Keyword::Call, call_handle);
         let init_handle = alloc.strings.intern("init");
         keywords.insert(Keyword::Init, init_handle);
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
@@ -371,6 +375,22 @@ impl Vm {
                 arity: 1,
             },
         );
+        let fn_call_handle = alloc.strings.intern("call");
+        intrinsics.insert(
+            IntrinsicKind::Function(fn_call_handle),
+            IntrinsicMethod {
+                function: qang_call,
+                arity: 1,
+            },
+        );
+        let fn_apply_handle = alloc.strings.intern("apply");
+        intrinsics.insert(
+            IntrinsicKind::Function(fn_apply_handle),
+            IntrinsicMethod {
+                function: qang_apply,
+                arity: 1,
+            },
+        );
 
         let vm = Self {
             is_debug: false,
@@ -424,7 +444,7 @@ impl Vm {
         let handle = self
             .alloc
             .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
-        push_value!(self, Value::Closure(handle));
+        push_value!(self, Value::Closure(handle))?;
         self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]
@@ -457,7 +477,7 @@ impl Vm {
             match opcode {
                 OpCode::Constant => {
                     let constant = self.state.read_constant();
-                    push_value!(self, constant);
+                    push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
                     if let Value::Number(number) = peek_value!(self, 0) {
@@ -480,13 +500,13 @@ impl Vm {
                     }
                 }
                 OpCode::True => {
-                    push_value!(self, Value::True);
+                    push_value!(self, Value::True)?;
                 }
                 OpCode::False => {
-                    push_value!(self, Value::False);
+                    push_value!(self, Value::False)?;
                 }
                 OpCode::Nil => {
-                    push_value!(self, Value::Nil);
+                    push_value!(self, Value::Nil)?;
                 }
                 OpCode::Add => {
                     self.binary_operation(|a, b, alloc| match (&a, &b) {
@@ -653,6 +673,14 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
+                        (Value::Instance(_), Value::String(string_handle)) => {
+                            let keyword_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Object)
+                                .expect("expected keyword");
+                            keyword_handle == string_handle
+                        }
                         (Value::Instance(instance_handle), Value::Class(clazz_handle)) => {
                             let instance_of_handle = self.alloc.get_instance(instance_handle).clazz;
 
@@ -676,7 +704,7 @@ impl Vm {
                         _ => false,
                     };
 
-                    push_value!(self, result.into());
+                    push_value!(self, result.into())?;
                 }
                 OpCode::Pop => {
                     pop_value!(self);
@@ -696,7 +724,7 @@ impl Vm {
                             loc,
                         )
                     })?;
-                    push_value!(self, value);
+                    push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
                     let identifier_handle = read_string!(self);
@@ -723,7 +751,7 @@ impl Vm {
                     );
 
                     let value = self.state.stack[absolute_slot];
-                    push_value!(self, value);
+                    push_value!(self, value)?;
                 }
                 OpCode::SetLocal => {
                     let slot = self.state.read_byte();
@@ -785,7 +813,7 @@ impl Vm {
                                 current_upvalue;
                         }
                     }
-                    push_value!(self, Value::Closure(closure_handle));
+                    push_value!(self, Value::Closure(closure_handle))?;
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
@@ -797,11 +825,11 @@ impl Vm {
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
                             let value = self.state.stack[stack_slot];
-                            push_value!(self, value);
+                            push_value!(self, value)?;
                         }
                         UpvalueReference::Closed(value_handle) => {
                             let value = *self.alloc.get_upvalue(value_handle);
-                            push_value!(self, value);
+                            push_value!(self, value)?;
                         }
                     }
                 }
@@ -829,7 +857,7 @@ impl Vm {
                     let identifier_handle = read_string!(self);
                     let class_handle =
                         self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
-                    push_value!(self, Value::Class(class_handle))
+                    push_value!(self, Value::Class(class_handle))?
                 }
                 OpCode::SetProperty => {
                     let instance = peek_value!(self, 1);
@@ -843,7 +871,7 @@ impl Vm {
                             });
                             let value = pop_value!(self); // value to assign
                             pop_value!(self); // instance
-                            push_value!(self, value); // push assigned value to top of stack
+                            push_value!(self, value)?; // push assigned value to top of stack
                         }
                         Value::ObjectLiteral(obj_handle) => {
                             let constant = Value::String(read_string!(self));
@@ -853,7 +881,7 @@ impl Vm {
                             });
                             let value = pop_value!(self); // value to assign
                             pop_value!(self); // obj
-                            push_value!(self, value); // push assigned value to top of stack
+                            push_value!(self, value)?; // push assigned value to top of stack
                         }
                         _ => {
                             return Err(QangRuntimeError::new(
@@ -877,7 +905,7 @@ impl Vm {
                             if let Some(value) = self.alloc.get_instance_field(instance.table, key)
                             {
                                 pop_value!(self);
-                                push_value!(self, value);
+                                push_value!(self, value)?;
                             } else {
                                 self.bind_method(instance.clazz, key)?;
                             }
@@ -890,7 +918,7 @@ impl Vm {
                                 .get(obj_handle, &key)
                                 .unwrap_or(Value::Nil);
                             pop_value!(self);
-                            push_value!(self, value);
+                            push_value!(self, value)?;
                         }
                         Value::String(_) => {
                             let identifer = read_string!(self);
@@ -908,43 +936,13 @@ impl Vm {
                                 object,
                             )?;
                         }
-                        Value::Closure(_) => {
-                            let identifier = read_string!(self);
-                            let call_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Call)
-                                .expect("Expected keyword.");
-                            if identifier == call_handle {
-                                // do nothing, because function.call == function
-                            } else {
-                                return Err(QangRuntimeError::new(
-                                    format!(
-                                        "Cannot access properties from {}.",
-                                        object.to_type_string()
-                                    ),
-                                    self.state.get_previous_loc(),
-                                ));
-                            }
-                        }
-                        Value::BoundMethod(_) => {
-                            let identifier = read_string!(self);
-                            let call_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Call)
-                                .expect("Expected keyword.");
-                            if identifier == call_handle {
-                                // do nothing, because boundMethod.call == boundMethod
-                            } else {
-                                return Err(QangRuntimeError::new(
-                                    format!(
-                                        "Cannot access properties from {}.",
-                                        object.to_type_string()
-                                    ),
-                                    self.state.get_previous_loc(),
-                                ));
-                            }
+                        Value::Closure(_) | Value::BoundMethod(_) => {
+                            let identifer = read_string!(self);
+                            self.bind_intrinsic_method(
+                                identifer,
+                                IntrinsicKind::Function(identifer),
+                                object,
+                            )?;
                         }
                         _ => {
                             return Err(QangRuntimeError::new(
@@ -1024,7 +1022,7 @@ impl Vm {
                             .bind_super_method(superclass_obj.method_table, property_handle)?
                         {
                             pop_value!(self); // Pop 'this'
-                            push_value!(self, Value::Nil);
+                            push_value!(self, Value::Nil)?;
                         }
                     } else {
                         return Err(QangRuntimeError::new(
@@ -1054,7 +1052,7 @@ impl Vm {
                         let value = pop_value!(self);
                         self.alloc.arrays.insert(array, i, value);
                     }
-                    push_value!(self, Value::Array(array));
+                    push_value!(self, Value::Array(array))?;
                 }
                 OpCode::GetArrayIndex => {
                     let index = pop_value!(self);
@@ -1062,7 +1060,7 @@ impl Vm {
                         (Value::Number(index), Value::Array(handle)) => {
                             let value = self.alloc.arrays.get(handle, index.trunc() as isize); // TODO verify this is an int instead of coercing it.
                             pop_value!(self);
-                            push_value!(self, value);
+                            push_value!(self, value)?;
                         }
                         (_, Value::Array(_)) => {
                             return Err(QangRuntimeError::new(
@@ -1101,7 +1099,7 @@ impl Vm {
                                 ));
                             }
                             pop_value!(self);
-                            push_value!(self, value);
+                            push_value!(self, value)?;
                         }
                         (_, Value::Array(_)) => {
                             return Err(QangRuntimeError::new(
@@ -1131,7 +1129,7 @@ impl Vm {
                         let key = pop_value!(self);
                         self.alloc.tables.insert(handle, key, value);
                     }
-                    push_value!(self, Value::ObjectLiteral(handle));
+                    push_value!(self, Value::ObjectLiteral(handle))?;
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
@@ -1197,10 +1195,10 @@ impl Vm {
             let bound = BoundMethodObject::new(receiver, closure);
             let handle = self.with_gc_check(|alloc| alloc.allocate_bound_method(bound));
             pop_value!(self);
-            push_value!(self, Value::BoundMethod(handle));
+            push_value!(self, Value::BoundMethod(handle))?;
         } else {
             pop_value!(self);
-            push_value!(self, Value::Nil);
+            push_value!(self, Value::Nil)?;
         }
         Ok(())
     }
@@ -1220,7 +1218,7 @@ impl Vm {
         let bound = BoundIntrinsicObject::new(receiver, intrinsic, method_name);
         let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
         pop_value!(self);
-        push_value!(self, Value::BoundIntrinsic(handle));
+        push_value!(self, Value::BoundIntrinsic(handle))?;
         Ok(())
     }
 
@@ -1237,7 +1235,7 @@ impl Vm {
             let bound = BoundMethodObject::new(receiver, closure);
             let handle = self.with_gc_check(|alloc| alloc.allocate_bound_method(bound));
             pop_value!(self); // Pop 'this'
-            push_value!(self, Value::BoundMethod(handle));
+            push_value!(self, Value::BoundMethod(handle))?;
             Ok(true)
         } else {
             Ok(false)
@@ -1305,11 +1303,11 @@ impl Vm {
         let value = op(a, b, &mut self.alloc)
             .map_err(|e: BinaryOperationError| e.into_qang_error(self.state.get_previous_loc()))?;
 
-        push_value!(self, value);
+        push_value!(self, value)?;
         Ok(())
     }
 
-    fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
+    pub(crate) fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
         match value {
             Value::Closure(handle) => self.call(handle, arg_count),
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
@@ -1408,66 +1406,20 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            Value::Closure(closure_handle) => {
-                let call_handle = *self
+            Value::Closure(_) | Value::BoundIntrinsic(_) | Value::BoundMethod(_) => {
+                let intrinsic = *self
                     .state
-                    .keywords
-                    .get(&Keyword::Call)
-                    .expect("Expected keyword.");
-                if method_handle == call_handle {
-                    if let Value::Array(array_handle) = peek_value!(self, 0) {
-                        pop_value!(self);
-                        let array_length = self.alloc.arrays.length(array_handle);
-                        for value in self.alloc.arrays.iter(array_handle) {
-                            push_value!(self, value);
-                        }
-                        self.call(closure_handle, array_length)
-                    } else {
-                        Err(QangRuntimeError::new(
-                            "'call' must take one argument and it must be an array.".to_string(),
+                    .intrinsics
+                    .get(&IntrinsicKind::Function(method_handle))
+                    .ok_or_else(|| {
+                        QangRuntimeError::new(
+                            "invalid method call.".to_string(),
                             self.state.get_previous_loc(),
-                        ))
-                    }
-                } else {
-                    Err(QangRuntimeError::new(
-                        format!(
-                            "Cannot invoke {}, no methods exist.",
-                            receiver.to_type_string()
-                        ),
-                        self.state.get_previous_loc(),
-                    ))
-                }
+                        )
+                    })?;
+                self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            Value::BoundMethod(bound_method_handle) => {
-                let call_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Call)
-                    .expect("Expected keyword.");
-                if method_handle == call_handle {
-                    if let Value::Array(array_handle) = peek_value!(self, 0) {
-                        pop_value!(self);
-                        let array_length = self.alloc.arrays.length(array_handle);
-                        for value in self.alloc.arrays.iter(array_handle) {
-                            push_value!(self, value);
-                        }
-                        self.call_value(Value::BoundMethod(bound_method_handle), array_length)
-                    } else {
-                        Err(QangRuntimeError::new(
-                            "'call' must take one argument and it must be an array.".to_string(),
-                            self.state.get_previous_loc(),
-                        ))
-                    }
-                } else {
-                    Err(QangRuntimeError::new(
-                        format!(
-                            "Cannot invoke {}, no methods exist.",
-                            receiver.to_type_string()
-                        ),
-                        self.state.get_previous_loc(),
-                    ))
-                }
-            }
+
             Value::ObjectLiteral(obj_handle) => {
                 let key = Value::String(method_handle);
                 if let Some(method_value) = self.alloc.tables.get(obj_handle, &key) {
@@ -1493,11 +1445,7 @@ impl Vm {
         }
     }
 
-    pub(crate) fn call(
-        &mut self,
-        closure_handle: ClosureHandle,
-        arg_count: usize,
-    ) -> RuntimeResult<()> {
+    fn call(&mut self, closure_handle: ClosureHandle, arg_count: usize) -> RuntimeResult<()> {
         #[cfg(feature = "profiler")]
         coz::scope!("call_function");
 
@@ -1512,7 +1460,7 @@ impl Vm {
             if arg_count < function.arity {
                 let arity = function.arity;
                 for _ in arg_count..arity {
-                    push_value!(self, Value::Nil);
+                    push_value!(self, Value::Nil)?;
                 }
                 arity
             } else {
@@ -1557,10 +1505,10 @@ impl Vm {
         let saved_frame_count = self.state.frame_count;
         let saved_function_ptr = self.state.current_function_ptr;
 
-        push_value!(self, Value::Closure(handle));
+        push_value!(self, Value::Closure(handle))?;
 
         for value in &args {
-            push_value!(self, *value);
+            push_value!(self, *value)?;
         }
 
         self.call(handle, args.len())?;
@@ -1599,7 +1547,7 @@ impl Vm {
             })?
             .unwrap_or_default();
 
-        push_value!(self, value);
+        push_value!(self, value)?;
 
         Ok(())
     }
@@ -1629,7 +1577,7 @@ impl Vm {
             })?
             .unwrap_or_default();
 
-        push_value!(self, value);
+        push_value!(self, value)?;
 
         Ok(())
     }
@@ -1659,7 +1607,7 @@ impl Vm {
                     pop_value!(self);
                 }
                 // Push nil as return value
-                push_value!(self, Value::Nil);
+                push_value!(self, Value::Nil)?;
                 Ok(())
             } else {
                 Err(QangRuntimeError::new(

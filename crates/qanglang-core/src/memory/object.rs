@@ -112,6 +112,7 @@ pub enum IntrinsicKind {
     String(StringHandle),
     Number(StringHandle),
     Array(StringHandle),
+    Function(StringHandle),
 }
 
 impl IntrinsicKind {
@@ -120,6 +121,7 @@ impl IntrinsicKind {
             Self::String(handle) => *handle,
             Self::Number(handle) => *handle,
             Self::Array(handle) => *handle,
+            Self::Function(handle) => *handle,
         }
     }
 }

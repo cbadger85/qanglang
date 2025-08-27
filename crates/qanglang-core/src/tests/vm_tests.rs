@@ -1367,21 +1367,20 @@ fn test_is_operator() {
 #[test]
 fn test_pipe_method() {
     let source = r#"
-        // fn sum(a, b) {
-        //     return a + b;
-        // }
+        fn sum(a, b) {
+            return a + b;
+        }
         
-        // assert_eq(sum.call, sum);
-        // assert_eq(sum.call([1, 2]), 3);
-        // assert_eq([1, 2] |> sum.call, 3);
+        assert_eq(sum.apply([1, 2]), 3);
+        assert_eq([1, 2] |> sum.apply, 3);
         
-        // class Foo {
-        //     sum(a, b) {
-        //         return a + b; 
-        //     }
-        // }
-        // var foo = Foo();
-        // assert_eq([1, 2] |> foo.sum.call, 3);
+        class Foo {
+            sum(a, b) {
+                return a + b; 
+            }
+        }
+        var foo = Foo();
+        assert_eq([1, 2] |> foo.sum.apply, 3);
     "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -1448,22 +1447,22 @@ fn test_pipe_with_intrinsic() {
 #[test]
 fn test_pipe_with_apply() {
     let source = r#"
-        // var arr = [true];
-        // var result = [false] |> arr.concat();
-        // println(result);
-        // assert_eq(result.length(), 2);
-        // assert_eq(result[0], true);
-        // assert_eq(result[1], false);
+        var arr = [true];
+        var result = [false] |> arr.concat();
+        println(result);
+        assert_eq(result.length(), 2);
+        assert_eq(result[0], true);
+        assert_eq(result[1], false);
 
         
-        // var identity = (x) -> x;
-        // assert_eq(true |> identity, true);
-        // assert_eq(true |> identity(), true);
-        // var sum = (a, b) -> a + b;
-        // assert_eq(1 |> sum(2), 3);
-        // assert_eq([1, 2] |> sum.apply, 3);    
-        // assert_eq([1, 2] |> sum.apply(), 3); 
-        // assert_throws(() -> 1 |> sum.apply(2));
+        var identity = (x) -> x;
+        assert_eq(true |> identity, true);
+        assert_eq(true |> identity(), true);
+        var sum = (a, b) -> a + b;
+        assert_eq(1 |> sum(2), 3);
+        assert_eq([1, 2] |> sum.apply, 3);    
+        assert_eq([1, 2] |> sum.apply(), 3); 
+        assert_throws(() -> 1 |> sum.apply(2));
     "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -1474,7 +1473,7 @@ fn test_pipe_with_apply() {
             disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
-                .set_debug(false)
+                .set_debug(true)
                 .interpret(program)
             {
                 Ok(_) => (),
@@ -1504,6 +1503,12 @@ fn test_call_and_apply_intrinsics() {
 
         assert_eq(sum.call(1, 2), 3);
         assert_eq(sum.apply([1, 2]), 3);
+        var math = Math();
+        assert_eq(math.sum.call(1, 2), 3);
+        assert_eq(math.sum.apply([1, 2]), 3);
+
+        var sum_call = sum.call;
+        assert_eq(sum_call(1, 2), 3);
     "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -1511,7 +1516,7 @@ fn test_call_and_apply_intrinsics() {
 
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            disassemble_program(&allocator);
+            // disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)

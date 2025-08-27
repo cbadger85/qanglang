@@ -369,7 +369,7 @@ fn test_pipe_with_methods() {
       }
   }
   var math = MathLib();
-  assert_eq([1, 2] |> math.sum.call, 3);
+  assert_eq([1, 2] |> math.sum.apply, 3);
 }
 
 fn test_pipe_with_intrinsic() {
@@ -382,7 +382,6 @@ fn test_pipe_with_intrinsic() {
   
   
   var sum = (a, b) -> a + b;
-  assert_eq([1, 2] |> sum.call, 3);
-  assert_eq([1, 2] |> sum.call(), 3); 
-
+  assert_eq([1, 2] |> sum.apply, 3);
+  assert_eq([1, 2] |> sum.apply(), 3); 
 }

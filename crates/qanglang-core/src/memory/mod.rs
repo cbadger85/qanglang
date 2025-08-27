@@ -14,7 +14,7 @@ pub use array_arena::ArrayHandle;
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
 pub use object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,
-    InstanceObject, IntrinsicFn, IntrinsicKind, IntrinsicMethod, NativeFn, NativeFunctionObject,
-    Upvalue, UpvalueReference,
+    InstanceObject, IntrinsicFn, IntrinsicKind, IntrinsicMethod, IntrinsicMethodKind, NativeFn,
+    NativeFunctionObject, Upvalue, UpvalueReference,
 };
 pub use string_interner::StringHandle;

@@ -144,11 +144,18 @@ fn test_higher_order_function_calls() {
   assert_eq(result, 7, "Expected higher order function calls to work correctly.");
 }
 
+fn test_calling_function_with_apply_intrinsic() {
+  fn sum(a, b) {
+    return a + b;
+  }
+  
+  assert_eq(sum.apply([1, 2]), 3);
+}
+
 fn test_calling_function_with_call_intrinsic() {
   fn sum(a, b) {
     return a + b;
   }
   
-  assert_eq(sum.call, sum);
-  assert_eq(sum.call([1, 2]), 3);
+  assert_eq(sum.call(1, 2), 3);
 }

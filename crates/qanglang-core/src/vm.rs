@@ -15,15 +15,14 @@ use crate::{
     debug_log,
     error::Trace,
     memory::{
-        ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, StringHandle,
-        UpvalueReference,
+        ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod,
+        IntrinsicMethodKind, StringHandle, UpvalueReference,
     },
     qang_std::{
-        qang_apply, qang_array_concat, qang_array_construct, qang_array_get, qang_array_length,
-        qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice, qang_assert,
-        qang_assert_eq, qang_assert_throws, qang_call, qang_hash, qang_print, qang_println,
-        qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_string,
-        qang_typeof,
+        qang_array_concat, qang_array_construct, qang_array_get, qang_array_length, qang_array_pop,
+        qang_array_push, qang_array_reverse, qang_array_slice, qang_assert, qang_assert_eq,
+        qang_assert_throws, qang_hash, qang_print, qang_println, qang_string_to_lowercase,
+        qang_string_to_uppercase, qang_system_time, qang_to_string, qang_typeof,
     },
     value::{
         ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -139,10 +138,10 @@ struct CallFrame {
 }
 
 #[derive(Clone)]
-pub struct VmState {
-    pub stack_top: usize,
+struct VmState {
+    stack_top: usize,
     frame_count: usize,
-    pub stack: Vec<Value>,
+    stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
     globals: FxHashMap<StringHandle, Value>,
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
@@ -235,7 +234,7 @@ impl VmState {
 pub struct Vm {
     pub is_debug: bool,
     pub is_gc_enabled: bool,
-    pub(crate) state: VmState,
+    state: VmState,
     pub alloc: HeapAllocator,
 }
 
@@ -307,7 +306,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::String(to_uppercase_handle),
             IntrinsicMethod {
-                function: qang_string_to_uppercase,
+                function: IntrinsicMethodKind::Native(qang_string_to_uppercase),
                 arity: 0,
             },
         );
@@ -315,7 +314,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::String(to_lowercase_handle),
             IntrinsicMethod {
-                function: qang_string_to_lowercase,
+                function: IntrinsicMethodKind::Native(qang_string_to_lowercase),
                 arity: 0,
             },
         );
@@ -323,7 +322,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(length_handle),
             IntrinsicMethod {
-                function: qang_array_length,
+                function: IntrinsicMethodKind::Native(qang_array_length),
                 arity: 0,
             },
         );
@@ -331,7 +330,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(array_push_handle),
             IntrinsicMethod {
-                function: qang_array_push,
+                function: IntrinsicMethodKind::Native(qang_array_push),
                 arity: 1,
             },
         );
@@ -339,7 +338,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(array_pop_handle),
             IntrinsicMethod {
-                function: qang_array_pop,
+                function: IntrinsicMethodKind::Native(qang_array_pop),
                 arity: 0,
             },
         );
@@ -347,7 +346,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(array_reverse_handle),
             IntrinsicMethod {
-                function: qang_array_reverse,
+                function: IntrinsicMethodKind::Native(qang_array_reverse),
                 arity: 0,
             },
         );
@@ -355,7 +354,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(array_slice_handle),
             IntrinsicMethod {
-                function: qang_array_slice,
+                function: IntrinsicMethodKind::Native(qang_array_slice),
                 arity: 2,
             },
         );
@@ -363,7 +362,7 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(array_get_handle),
             IntrinsicMethod {
-                function: qang_array_get,
+                function: IntrinsicMethodKind::Native(qang_array_get),
                 arity: 1,
             },
         );
@@ -371,24 +370,24 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(concat_handle),
             IntrinsicMethod {
-                function: qang_array_concat,
+                function: IntrinsicMethodKind::Native(qang_array_concat),
                 arity: 1,
             },
         );
-        let fn_call_handle = alloc.strings.intern("call");
+        let function_call_handle = alloc.strings.intern("call");
         intrinsics.insert(
-            IntrinsicKind::Function(fn_call_handle),
+            IntrinsicKind::Function(function_call_handle),
             IntrinsicMethod {
-                function: qang_call,
-                arity: 1,
+                function: IntrinsicMethodKind::Call,
+                arity: 0,
             },
         );
-        let fn_apply_handle = alloc.strings.intern("apply");
+        let function_apply_handle = alloc.strings.intern("apply");
         intrinsics.insert(
-            IntrinsicKind::Function(fn_apply_handle),
+            IntrinsicKind::Function(function_apply_handle),
             IntrinsicMethod {
-                function: qang_apply,
-                arity: 1,
+                function: IntrinsicMethodKind::Apply,
+                arity: 0,
             },
         );
 
@@ -1209,6 +1208,8 @@ impl Vm {
         kind: IntrinsicKind,
         receiver: Value,
     ) -> RuntimeResult<()> {
+        // TODO handle apply and call
+
         let intrinsic = *self.state.intrinsics.get(&kind).ok_or_else(|| {
             QangRuntimeError::new(
                 "invalid method call.".to_string(),
@@ -1365,6 +1366,11 @@ impl Vm {
 
     fn invoke(&mut self, method_handle: StringHandle, arg_count: usize) -> RuntimeResult<()> {
         let receiver = peek_value!(self, arg_count);
+        let method_name = self.alloc.strings.get_string(method_handle);
+        println!(
+            "DEBUG: invoke called with receiver: {:?}, method: {}",
+            receiver, method_name
+        );
 
         match receiver {
             Value::Instance(instance_handle) => {
@@ -1406,7 +1412,10 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            Value::Closure(_) | Value::BoundIntrinsic(_) | Value::BoundMethod(_) => {
+            Value::Closure(_)
+            | Value::NativeFunction(_)
+            | Value::BoundIntrinsic(_)
+            | Value::BoundMethod(_) => {
                 let intrinsic = *self
                     .state
                     .intrinsics
@@ -1419,7 +1428,6 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-
             Value::ObjectLiteral(obj_handle) => {
                 let key = Value::String(method_handle);
                 if let Some(method_value) = self.alloc.tables.get(obj_handle, &key) {
@@ -1558,28 +1566,34 @@ impl Vm {
         method: IntrinsicMethod,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let mut args = [Value::Nil; 256];
+        match method.function {
+            IntrinsicMethodKind::Native(function) => {
+                let mut args = [Value::Nil; 256];
 
-        for i in (0..arg_count).rev() {
-            if i < method.arity {
-                args[i] = pop_value!(self);
-            } else {
-                pop_value!(self); // discard values that are passed in but not needed by the function.
+                for i in (0..arg_count).rev() {
+                    if i < method.arity {
+                        args[i] = pop_value!(self);
+                    } else {
+                        pop_value!(self); // discard values that are passed in but not needed by the function.
+                    }
+                }
+
+                pop_value!(self); // pop function off the stack now that it has been called.
+
+                let value = function(receiver, &args[..method.arity], self)
+                    .map_err(|e: NativeFunctionError| {
+                        let loc = self.state.get_previous_loc();
+                        e.into_qang_error(loc)
+                    })?
+                    .unwrap_or_default();
+
+                push_value!(self, value)?;
+
+                Ok(())
             }
+            IntrinsicMethodKind::Apply => self.handle_async_apply_intrinsic(receiver, arg_count),
+            IntrinsicMethodKind::Call => self.handle_async_call_intrinsic(receiver, arg_count),
         }
-
-        pop_value!(self); // pop function off the stack now that it has been called.
-
-        let value = (method.function)(receiver, &args[..method.arity], self)
-            .map_err(|e: NativeFunctionError| {
-                let loc = self.state.get_previous_loc();
-                e.into_qang_error(loc)
-            })?
-            .unwrap_or_default();
-
-        push_value!(self, value)?;
-
-        Ok(())
     }
 
     fn invoke_from_class(
@@ -1684,6 +1698,81 @@ impl Vm {
         }
 
         traces
+    }
+
+    fn handle_async_call_intrinsic(
+        &mut self,
+        receiver: Value,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
+        match receiver {
+            Value::Closure(_)
+            | Value::BoundIntrinsic(_)
+            | Value::BoundMethod(_)
+            | Value::NativeFunction(_) => {
+                // Replace the bound intrinsic on the stack with the actual function
+                // The bound intrinsic is at position (stack_top - arg_count - 1)
+                self.state.stack[self.state.stack_top - arg_count - 1] = receiver;
+                // Now call the function with the arguments
+                self.call_value(receiver, arg_count)
+            }
+            _ => Err(QangRuntimeError::new(
+                "'call' can only be used on functions.".to_string(),
+                self.state.get_previous_loc(),
+            )),
+        }
+    }
+
+    fn handle_async_apply_intrinsic(
+        &mut self,
+        receiver: Value,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
+        match receiver {
+            Value::Closure(_)
+            | Value::BoundIntrinsic(_)
+            | Value::BoundMethod(_)
+            | Value::NativeFunction(_) => {
+                // For apply, we expect exactly 1 argument which should be an array
+                if arg_count != 1 {
+                    return Err(QangRuntimeError::new(
+                        "'apply' must be called with one argument and it must be an array."
+                            .to_string(),
+                        self.state.get_previous_loc(),
+                    ));
+                }
+
+                // Get the array argument from the stack
+                let array_arg = peek_value!(self, 0);
+                match array_arg {
+                    Value::Array(array_handle) => {
+                        // Pop the array argument
+                        pop_value!(self);
+
+                        // Replace the bound intrinsic on the stack with the actual function
+                        self.state.stack[self.state.stack_top - 1] = receiver;
+
+                        // Push array elements as individual arguments
+                        let array_length = self.alloc.arrays.length(array_handle);
+                        for value in self.alloc.arrays.iter(array_handle) {
+                            push_value!(self, value)?;
+                        }
+
+                        // Call the function with the array elements as arguments
+                        self.call_value(receiver, array_length)
+                    }
+                    _ => Err(QangRuntimeError::new(
+                        "'apply' must be called with one argument and it must be an array."
+                            .to_string(),
+                        self.state.get_previous_loc(),
+                    )),
+                }
+            }
+            _ => Err(QangRuntimeError::new(
+                "'apply' can only be used on functions.".to_string(),
+                self.state.get_previous_loc(),
+            )),
+        }
     }
 
     #[cfg(debug_assertions)]

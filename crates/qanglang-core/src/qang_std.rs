@@ -1,4 +1,4 @@
-use crate::{NativeFunctionError, Value, Vm, compiler::STACK_MAX, pop_value, push_value};
+use crate::{NativeFunctionError, Value, Vm};
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args
@@ -331,63 +331,56 @@ pub fn qang_hash(args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFu
     }
 }
 
-pub fn qang_call(
-    receiver: Value,
-    args: &[Value],
-    vm: &mut Vm,
-) -> Result<Option<Value>, NativeFunctionError> {
-    match receiver {
-        Value::Closure(handle) | Value::BoundMethod(handle) | Value::BoundIntrinsic(handle) => {
-            let arg_count = args.len();
-            // - push args
-            for value in args.iter().rev() {
-                push_value!(vm, *value).map_err(|e| NativeFunctionError(e.message))?;
-            }
-            let function = Value::Closure(handle);
-            // - push function
-            push_value!(vm, function).map_err(|e| NativeFunctionError(e.message))?;
-            // - call call_value with function and arg_count
-            vm.call_value(function, arg_count)
-                .map_err(|e| NativeFunctionError(e.message))?;
-            // - pop and return value
-            Ok(Some(pop_value!(vm)))
-        }
-        _ => Err(NativeFunctionError::new(
-            "'call' can only be used on functions.",
-        )),
-    }
-}
+// pub fn qang_call(
+//     receiver: Value,
+//     args: &[Value],
+//     vm: &mut Vm,
+// ) -> Result<Option<Value>, NativeFunctionError> {
+//     match receiver {
+//         Value::Closure(handle) => {
+//             let result = vm
+//                 .call_function(handle, args.to_vec())
+//                 .map_err(|e| NativeFunctionError(e.message))?;
+//             Ok(Some(result))
+//         }
+//         Value::BoundMethod(_) | Value::BoundIntrinsic(_) => {
+//             // For bound methods and intrinsics, we use call_value but need to handle it properly
+//             // This mimics what OpCode::Call does - it calls call_value and continues VM execution
+//             Err(NativeFunctionError::new(
+//                 "'call' on bound methods and intrinsics is not yet supported.",
+//             ))
+//         }
+//         _ => Err(NativeFunctionError::new(
+//             "'call' can only be used on functions.",
+//         )),
+//     }
+// }
 
-pub fn qang_apply(
-    receiver: Value,
-    args: &[Value],
-    vm: &mut Vm,
-) -> Result<Option<Value>, NativeFunctionError> {
-    match (receiver, args.first().copied().unwrap_or(Value::Nil)) {
-        (
-            Value::Closure(handle) | Value::BoundMethod(handle) | Value::BoundIntrinsic(handle),
-            Value::Array(array_handle),
-        ) => {
-            let arg_count = vm.alloc.arrays.length(array_handle);
-            for value in vm.alloc.arrays.iter(array_handle).rev() {
-                push_value!(vm, value).map_err(|e| NativeFunctionError(e.message))?;
-            }
-            let function = Value::Closure(handle);
-            // - push function
-            push_value!(vm, function).map_err(|e| NativeFunctionError(e.message))?;
-            // - call call_value with function and arg_count
-            vm.call_value(function, arg_count)
-                .map_err(|e| NativeFunctionError(e.message))?;
-            // - pop and return value
-            Ok(Some(pop_value!(vm)))
-        }
-        (Value::Closure(_) | Value::BoundMethod(_) | Value::BoundIntrinsic(_), _) => {
-            Err(NativeFunctionError::new(
-                "'apply' must be called with one argument and it must be an array.",
-            ))
-        }
-        _ => Err(NativeFunctionError::new(
-            "'apply' can only be used on functions.",
-        )),
-    }
-}
+// pub fn qang_apply(
+//     receiver: Value,
+//     args: &[Value],
+//     vm: &mut Vm,
+// ) -> Result<Option<Value>, NativeFunctionError> {
+//     match (receiver, args.first().copied().unwrap_or(Value::Nil)) {
+//         (Value::Closure(handle), Value::Array(array_handle)) => {
+//             let call_args: Vec<Value> = vm.alloc.arrays.iter(array_handle).collect();
+//             let result = vm
+//                 .call_function(handle, call_args)
+//                 .map_err(|e| NativeFunctionError(e.message))?;
+//             Ok(Some(result))
+//         }
+//         (Value::BoundMethod(_) | Value::BoundIntrinsic(_), Value::Array(_)) => {
+//             Err(NativeFunctionError::new(
+//                 "'apply' on bound methods and intrinsics is not yet supported.",
+//             ))
+//         }
+//         (Value::Closure(_) | Value::BoundMethod(_) | Value::BoundIntrinsic(_), _) => {
+//             Err(NativeFunctionError::new(
+//                 "'apply' must be called with one argument and it must be an array.",
+//             ))
+//         }
+//         _ => Err(NativeFunctionError::new(
+//             "'apply' can only be used on functions.",
+//         )),
+//     }
+// }

@@ -1373,7 +1373,7 @@ fn test_pipe_method() {
         
         assert_eq(sum.call, sum);
         assert_eq(sum.call([1, 2]), 3);
-        // assert_eq([1, 2] |> sum.call, 3);
+        assert_eq([1, 2] |> sum.call, 3);
         
         class Foo {
             sum(a, b) {
@@ -1381,8 +1381,7 @@ fn test_pipe_method() {
             }
         }
         var foo = Foo();
-        assert_eq([1, 2] |> foo.sum, 3);
-        // assert_eq([1, 2] |> foo.sum.call, 3);
+        assert_eq([1, 2] |> foo.sum.call, 3);
     "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -1414,8 +1413,10 @@ fn test_pipe_method() {
 #[test]
 fn test_pipe_with_intrinsic() {
     let source = r#"
-        var a = true |> [].push;
-        assert(a[0]);
+        var arr = [true];
+        var result = [false] |> arr.concat;
+        println(result);
+        assert_eq(result.length(), 2);
     "#;
 
     let source_map = SourceMap::new(source.to_string());

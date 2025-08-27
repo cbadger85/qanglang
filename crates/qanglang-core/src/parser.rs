@@ -160,9 +160,6 @@ impl<'a> Parser<'a> {
                 | TokenType::If
                 | TokenType::While
                 | TokenType::Return
-                | TokenType::Try
-                | TokenType::Catch
-                | TokenType::Finally
                 | TokenType::Break
                 | TokenType::Continue => {
                     return;

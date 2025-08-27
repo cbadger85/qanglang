@@ -6,9 +6,8 @@ use crate::{
     parser::Parser,
     source::DEFALT_SOURCE_MAP,
     value::{
-        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_INITIALIZER_STRING, CLASS_TYPE_STRING,
-        FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING,
-        STRING_TYPE_STRING,
+        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
+        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
 
@@ -1733,7 +1732,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         for member in &class_decl.members {
             match &member {
                 ast::ClassMember::Method(function) => {
-                    let compiler_kind = if function.name.name == CLASS_INITIALIZER_STRING.into() {
+                    let compiler_kind = if function.name.name == "init".into() {
                         CompilerKind::Initializer
                     } else {
                         CompilerKind::Method

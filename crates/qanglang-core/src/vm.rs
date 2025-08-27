@@ -25,9 +25,8 @@ use crate::{
         qang_string_to_uppercase, qang_system_time, qang_to_string, qang_typeof,
     },
     value::{
-        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CALL_INTRINSIC_STRING, CLASS_INITIALIZER_STRING,
-        CLASS_TYPE_STRING, FUNCTION_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING,
-        OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
+        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
 
@@ -67,6 +66,8 @@ enum Keyword {
     Class,
     Array,
     Object,
+    Call,
+    Init,
 }
 
 macro_rules! push_value {
@@ -242,6 +243,10 @@ impl Vm {
 
     pub fn new(mut alloc: HeapAllocator) -> Self {
         let mut keywords = FxHashMap::with_hasher(FxBuildHasher);
+        let call_handle = alloc.strings.intern("call");
+        keywords.insert(Keyword::Call, call_handle);
+        let init_handle = alloc.strings.intern("init");
+        keywords.insert(Keyword::Init, init_handle);
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
         let nil_type_value_handle = alloc.strings.intern(NIL_TYPE_STRING);
@@ -310,9 +315,9 @@ impl Vm {
                 arity: 0,
             },
         );
-        let array_length_handle = alloc.strings.intern("length");
+        let length_handle = alloc.strings.intern("length");
         intrinsics.insert(
-            IntrinsicKind::Array(array_length_handle),
+            IntrinsicKind::Array(length_handle),
             IntrinsicMethod {
                 function: qang_array_length,
                 arity: 0,
@@ -358,9 +363,9 @@ impl Vm {
                 arity: 1,
             },
         );
-        let array_concat_handle = alloc.strings.intern("concat");
+        let concat_handle = alloc.strings.intern("concat");
         intrinsics.insert(
-            IntrinsicKind::Array(array_concat_handle),
+            IntrinsicKind::Array(concat_handle),
             IntrinsicMethod {
                 function: qang_array_concat,
                 arity: 1,
@@ -905,7 +910,12 @@ impl Vm {
                         }
                         Value::Closure(_) => {
                             let identifier = read_string!(self);
-                            if identifier == self.alloc.strings.intern(CALL_INTRINSIC_STRING) {
+                            let call_handle = *self
+                                .state
+                                .keywords
+                                .get(&Keyword::Call)
+                                .expect("Expected keyword.");
+                            if identifier == call_handle {
                                 // do nothing, because function.call == function
                             } else {
                                 return Err(QangRuntimeError::new(
@@ -1285,7 +1295,11 @@ impl Vm {
             Value::Closure(handle) => self.call(handle, arg_count),
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             Value::Class(handle) => {
-                let constructor_handle = self.alloc.strings.intern(CLASS_INITIALIZER_STRING);
+                let constructor_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Init)
+                    .expect("Expected keyword.");
                 let clazz = self.alloc.get_class(handle);
                 let clazz_method_table = clazz.method_table;
                 let value_method_table = clazz.value_table;
@@ -1376,7 +1390,12 @@ impl Vm {
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
             Value::Closure(closure_handle) => {
-                if method_handle == self.alloc.strings.intern(CALL_INTRINSIC_STRING) {
+                let call_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Call)
+                    .expect("Expected keyword.");
+                if method_handle == call_handle {
                     if let Value::Array(array_handle) = peek_value!(self, 0) {
                         pop_value!(self);
                         let array_length = self.alloc.arrays.length(array_handle);
@@ -1580,8 +1599,12 @@ impl Vm {
             self.call(method, arg_count)
         } else {
             // If method is `init` and it does not exist, do nothing (return nil)
-            let method_name = self.alloc.strings.get_string(method_handle);
-            if method_name == CLASS_INITIALIZER_STRING {
+            let init_handle = *self
+                .state
+                .keywords
+                .get(&Keyword::Init)
+                .expect("Expected keyword.");
+            if method_handle == init_handle {
                 // Pop arguments but leave receiver on stack
                 for _ in 0..arg_count {
                     pop_value!(self);

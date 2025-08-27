@@ -13,8 +13,6 @@ pub const FUNCTION_TYPE_STRING: &str = "function";
 pub const CLASS_TYPE_STRING: &str = "class";
 pub const OBJECT_TYPE_STRING: &str = "object";
 pub const ARRAY_TYPE_STRING: &str = "array";
-pub const CLASS_INITIALIZER_STRING: &str = "init";
-pub const CALL_INTRINSIC_STRING: &str = "call";
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]

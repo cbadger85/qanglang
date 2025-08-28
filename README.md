@@ -254,8 +254,6 @@ An embedded scripting language written in Rust 🦀
 
 ## Roadmap
 
-[ ] - optional chaining for getting the property of an object `var inner = outer?.inner`
-
 [ ] - add map operator (`outer.inner||inner -> nil|`).
 
 [ ] - add map optional operator `var inner_times_two = outer?|inner -> inner * 2|;`

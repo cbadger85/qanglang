@@ -1008,10 +1008,10 @@ mod expression_parser {
                 let method_span = ast::SourceSpan::combine(span, method_name.span);
 
                 Ok(ast::Expr::Primary(ast::PrimaryExpr::Super(
-                    ast::SuperExpr::Method(ast::SuperMethod {
+                    ast::SuperExpr {
                         method: method_name,
                         span: method_span,
-                    }),
+                    },
                 )))
             }
             _ => Err(crate::QangSyntaxError::new(

@@ -1549,11 +1549,7 @@ fn test_this_and_super() {
                             if let ast::Expr::Primary(ast::PrimaryExpr::Super(super_expr)) =
                                 call_expr.callee.as_ref()
                             {
-                                if let ast::SuperExpr::Method(super_method) = super_expr {
-                                    assert_eq!(super_method.method.name.as_ref(), "getValue");
-                                } else {
-                                    panic!("Expected super method access");
-                                }
+                                assert_eq!(super_expr.method.name.as_ref(), "getValue");
                             } else {
                                 panic!("Expected super expression");
                             }

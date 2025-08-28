@@ -534,7 +534,7 @@ impl PrimaryExpr {
             PrimaryExpr::Boolean(lit) => lit.span,
             PrimaryExpr::Nil(lit) => lit.span,
             PrimaryExpr::This(expr) => expr.span,
-            PrimaryExpr::Super(expr) => expr.span(),
+            PrimaryExpr::Super(expr) => expr.span,
             PrimaryExpr::Identifier(id) => id.span,
             PrimaryExpr::Grouping(expr) => expr.span,
             PrimaryExpr::Lambda(lambda) => lambda.span,
@@ -577,33 +577,9 @@ pub struct ThisExpr {
     pub span: SourceSpan,
 }
 
-/// Super expression variants
-#[derive(Debug, Clone, PartialEq)]
-pub enum SuperExpr {
-    /// "super" - bare super keyword (this will be an error)
-    Bare(SuperBare),
-    /// "super.method" - super method access
-    Method(SuperMethod),
-}
-
-impl SuperExpr {
-    fn span(&self) -> SourceSpan {
-        match self {
-            Self::Bare(bare_super) => bare_super.span,
-            Self::Method(super_method) => super_method.span,
-        }
-    }
-}
-
-/// Bare super expression (invalid)
-#[derive(Debug, Clone, PartialEq)]
-pub struct SuperBare {
-    pub span: SourceSpan,
-}
-
 /// Super method access: "super.method"
 #[derive(Debug, Clone, PartialEq)]
-pub struct SuperMethod {
+pub struct SuperExpr {
     pub method: Identifier,
     pub span: SourceSpan,
 }
@@ -1201,29 +1177,10 @@ pub trait AstVisitor {
 
     fn visit_super_expression(
         &mut self,
-        super_expr: &SuperExpr,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        match super_expr {
-            SuperExpr::Bare(bare) => self.visit_super_bare(bare, errors),
-            SuperExpr::Method(method) => self.visit_super_method(method, errors),
-        }
-    }
-
-    fn visit_super_bare(
-        &mut self,
-        _super_bare: &SuperBare,
+        _super_expr: &SuperExpr,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         Ok(())
-    }
-
-    fn visit_super_method(
-        &mut self,
-        super_method: &SuperMethod,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        self.visit_identifier(&super_method.method, errors)
     }
 
     fn visit_identifier(

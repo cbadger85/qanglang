@@ -1578,6 +1578,8 @@ fn test_optional_calling_of_methods() {
         var obj = {{}};
 
         assert_eq(obj.foo?.call(), nil);
+        assert_eq(nil?.call(), nil);
+        assert_throws(() -> nil?.length());
     "#;
 
     let source_map = SourceMap::new(source.to_string());

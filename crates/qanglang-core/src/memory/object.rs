@@ -131,6 +131,8 @@ pub enum IntrinsicMethod {
     Native { function: IntrinsicFn, arity: usize },
     Call,
     Apply,
+    NilSafeCall,
+    NilSafeApply,
 }
 
 #[derive(Debug, Clone)]

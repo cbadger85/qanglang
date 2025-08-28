@@ -456,10 +456,65 @@ impl Vm {
     fn get_property_value(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
         match object {
             Value::Nil if optional => {
-                // For optional property access, return nil when accessing properties on nil
-                let _ = read_string!(self); // consume the property name from bytecode
-                pop_value!(self);
-                push_value!(self, Value::Nil)?;
+                // Handle call and apply specially for nil, even with optional access
+                let property_name = read_string!(self);
+                let call_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Call)
+                    .expect("Expected identifier.");
+                let apply_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Apply)
+                    .expect("Expected identifier.");
+
+                if property_name == call_handle || property_name == apply_handle {
+                    let method = if property_name == call_handle {
+                        IntrinsicMethod::NilSafeCall
+                    } else {
+                        IntrinsicMethod::NilSafeApply
+                    };
+                    let bound = BoundIntrinsicObject::new(object, method, property_name);
+                    let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
+                    pop_value!(self);
+                    push_value!(self, Value::BoundIntrinsic(handle))?;
+                } else {
+                    // For other properties, return nil
+                    pop_value!(self);
+                    push_value!(self, Value::Nil)?;
+                }
+            }
+            Value::Nil => {
+                // Handle call and apply specially for nil
+                let property_name = read_string!(self);
+                let call_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Call)
+                    .expect("Expected idenfitier.");
+                let apply_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Apply)
+                    .expect("Expected idenfitier.");
+
+                if property_name == call_handle || property_name == apply_handle {
+                    let method = if property_name == call_handle {
+                        IntrinsicMethod::NilSafeCall
+                    } else {
+                        IntrinsicMethod::NilSafeApply
+                    };
+                    let bound = BoundIntrinsicObject::new(object, method, property_name);
+                    let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
+                    pop_value!(self);
+                    push_value!(self, Value::BoundIntrinsic(handle))?;
+                } else {
+                    return Err(QangRuntimeError::new(
+                        format!("Cannot access properties from {}.", object.to_type_string()),
+                        self.state.get_previous_loc(),
+                    ));
+                }
             }
             Value::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);
@@ -484,27 +539,15 @@ impl Vm {
             }
             Value::String(_) => {
                 let identifer = read_string!(self);
-                self.bind_intrinsic_method(
-                    identifer,
-                    IntrinsicKind::String(identifer),
-                    object,
-                )?;
+                self.bind_intrinsic_method(identifer, IntrinsicKind::String(identifer), object)?;
             }
             Value::Array(_) => {
                 let identifer = read_string!(self);
-                self.bind_intrinsic_method(
-                    identifer,
-                    IntrinsicKind::Array(identifer),
-                    object,
-                )?;
+                self.bind_intrinsic_method(identifer, IntrinsicKind::Array(identifer), object)?;
             }
             Value::Closure(_) | Value::BoundMethod(_) => {
                 let identifer = read_string!(self);
-                self.bind_intrinsic_method(
-                    identifer,
-                    IntrinsicKind::Function(identifer),
-                    object,
-                )?;
+                self.bind_intrinsic_method(identifer, IntrinsicKind::Function(identifer), object)?;
             }
             _ => {
                 if optional {
@@ -514,10 +557,7 @@ impl Vm {
                     push_value!(self, Value::Nil)?;
                 } else {
                     return Err(QangRuntimeError::new(
-                        format!(
-                            "Cannot access properties from {}.",
-                            object.to_type_string()
-                        ),
+                        format!("Cannot access properties from {}.", object.to_type_string()),
                         self.state.get_previous_loc(),
                     ));
                 }
@@ -1228,7 +1268,19 @@ impl Vm {
                 self.state.get_previous_loc(),
             )
         })?;
-        let bound = BoundIntrinsicObject::new(receiver, intrinsic, method_name);
+
+        // Use nil-safe variants for call and apply when receiver is nil
+        let final_intrinsic = if receiver == Value::Nil {
+            match intrinsic {
+                IntrinsicMethod::Call => IntrinsicMethod::NilSafeCall,
+                IntrinsicMethod::Apply => IntrinsicMethod::NilSafeApply,
+                other => other,
+            }
+        } else {
+            intrinsic
+        };
+
+        let bound = BoundIntrinsicObject::new(receiver, final_intrinsic, method_name);
         let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
         pop_value!(self);
         push_value!(self, Value::BoundIntrinsic(handle))?;
@@ -1599,6 +1651,24 @@ impl Vm {
             }
             IntrinsicMethod::Apply => self.handle_async_apply_intrinsic(receiver, arg_count),
             IntrinsicMethod::Call => self.handle_async_call_intrinsic(receiver, arg_count),
+            IntrinsicMethod::NilSafeCall => {
+                // For nil-safe call, consume arguments and return nil
+                for _ in 0..arg_count {
+                    pop_value!(self);
+                }
+                pop_value!(self); // pop the bound method
+                push_value!(self, Value::Nil)?;
+                Ok(())
+            }
+            IntrinsicMethod::NilSafeApply => {
+                // For nil-safe apply, consume arguments and return nil
+                for _ in 0..arg_count {
+                    pop_value!(self);
+                }
+                pop_value!(self); // pop the bound method
+                push_value!(self, Value::Nil)?;
+                Ok(())
+            }
         }
     }
 

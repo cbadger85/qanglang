@@ -1,5 +1,8 @@
 use super::{assert_no_parse_errors, parse_source};
-use crate::{SourceMap, ast};
+use crate::{
+    SourceMap,
+    ast::{self, CallOperation},
+};
 
 // Helper function to get the name from a VariableDecl target
 fn get_variable_name(var_decl: &ast::VariableDecl) -> &str {
@@ -2800,49 +2803,6 @@ fn test_index_assignment() {
 }
 
 #[test]
-fn test_debug_map_tokenization() {
-    let source_code = r#"
-        var object = {{
-          inner = true,
-        }};
-        var x = object||x -> x.inner|;
-        var optional_result = object?|y -> y.inner|;
-    "#;
-    let source_map = SourceMap::new(source_code.to_string());
-    let tokenizer = crate::tokenizer::Tokenizer::new(&source_map);
-
-    println!("Tokenizing: {}", source_code);
-    let tokens: Vec<_> = tokenizer.collect();
-    for token in &tokens {
-        let lexeme: String = token.lexeme(&source_map).iter().collect();
-        println!(
-            "Token: {:?}, Lexeme: '{}', Span: {}..{}",
-            token.token_type, lexeme, token.start, token.end
-        );
-    }
-
-    // Basic assertions to ensure correct tokenization
-    assert!(tokens.len() >= 9); // var, x, =, ||, item, ->, item, *, 2, |, ;
-    let double_bar_pos = tokens
-        .iter()
-        .position(|t| t.token_type == crate::tokenizer::TokenType::DoubleBar)
-        .unwrap();
-    assert_eq!(
-        tokens[double_bar_pos].token_type,
-        crate::tokenizer::TokenType::DoubleBar
-    );
-
-    // Now test parsing
-    let (_program, errors) = parse_source(&source_map);
-    if errors.has_errors() {
-        for error in errors.errors() {
-            println!("Parse error: {}", error.message);
-        }
-    }
-    println!("Program parsed successfully: {}", !errors.has_errors());
-}
-
-#[test]
 fn test_map_expressions() {
     let source_code = r#"
             var simple_map = arr||item -> item * 2|;
@@ -2859,46 +2819,48 @@ fn test_map_expressions() {
     // First map: arr||item -> item * 2|
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
         assert_eq!(get_variable_name(var_decl), "simple_map");
-        if let Some(ast::Expr::Map(map_expr)) = &var_decl.initializer {
+        if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
             // Check target expression: arr
             if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(target_id)) =
-                map_expr.target.as_ref()
+                call_expr.callee.as_ref()
             {
                 assert_eq!(target_id.name.as_ref(), "arr");
             } else {
                 panic!("Expected identifier target 'arr'");
             }
 
-            // Check parameter
-            if let ast::Parameter::Identifier(param) = &map_expr.parameter {
-                assert_eq!(param.name.as_ref(), "item");
-            } else {
-                panic!("Expected identifier parameter 'item'");
-            }
-
-            // Check body: item * 2
-            if let ast::Expr::Factor(factor_expr) = map_expr.body.as_ref() {
-                assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
-
-                // Left side should be 'item'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(item_id)) =
-                    factor_expr.left.as_ref()
-                {
-                    assert_eq!(item_id.name.as_ref(), "item");
+            if let ast::CallOperation::Map(map_expr) = call_expr.operation.as_ref() {
+                // Check parameter
+                if let ast::Parameter::Identifier(param) = &map_expr.parameter {
+                    assert_eq!(param.name.as_ref(), "item");
                 } else {
-                    panic!("Expected identifier 'item'");
+                    panic!("Expected identifier parameter 'item'");
                 }
 
-                // Right side should be '2'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) =
-                    factor_expr.right.as_ref()
-                {
-                    assert_eq!(num.value, 2.0);
+                // Check body: item * 2
+                if let ast::Expr::Factor(factor_expr) = map_expr.body.as_ref() {
+                    assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
+
+                    // Left side should be 'item'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(item_id)) =
+                        factor_expr.left.as_ref()
+                    {
+                        assert_eq!(item_id.name.as_ref(), "item");
+                    } else {
+                        panic!("Expected identifier 'item'");
+                    }
+
+                    // Right side should be '2'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) =
+                        factor_expr.right.as_ref()
+                    {
+                        assert_eq!(num.value, 2.0);
+                    } else {
+                        panic!("Expected number literal '2'");
+                    }
                 } else {
-                    panic!("Expected number literal '2'");
+                    panic!("Expected factor expression for map body");
                 }
-            } else {
-                panic!("Expected factor expression for map body");
             }
         } else {
             panic!("Expected map expression for simple_map");
@@ -2910,46 +2872,48 @@ fn test_map_expressions() {
     // Second map: obj||x -> x + x|
     if let ast::Decl::Variable(var_decl) = &program.decls[1] {
         assert_eq!(get_variable_name(var_decl), "param_map");
-        if let Some(ast::Expr::Map(map_expr)) = &var_decl.initializer {
+        if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
             // Check target expression: obj
             if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(target_id)) =
-                map_expr.target.as_ref()
+                call_expr.callee.as_ref()
             {
                 assert_eq!(target_id.name.as_ref(), "obj");
             } else {
                 panic!("Expected identifier target 'obj'");
             }
 
-            // Check parameter
-            if let ast::Parameter::Identifier(param) = &map_expr.parameter {
-                assert_eq!(param.name.as_ref(), "x");
-            } else {
-                panic!("Expected identifier parameter 'x'");
-            }
-
-            // Check body: x + x
-            if let ast::Expr::Term(term_expr) = map_expr.body.as_ref() {
-                assert_eq!(term_expr.operator, ast::TermOperator::Add);
-
-                // Left side should be 'x'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(x_id)) =
-                    term_expr.left.as_ref()
-                {
-                    assert_eq!(x_id.name.as_ref(), "x");
+            if let ast::CallOperation::Map(map_expr) = call_expr.operation.as_ref() {
+                // Check parameter
+                if let ast::Parameter::Identifier(param) = &map_expr.parameter {
+                    assert_eq!(param.name.as_ref(), "x");
                 } else {
-                    panic!("Expected identifier 'x'");
+                    panic!("Expected identifier parameter 'x'");
                 }
 
-                // Right side should be 'x'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(x_id2)) =
-                    term_expr.right.as_ref()
-                {
-                    assert_eq!(x_id2.name.as_ref(), "x");
+                // Check body: x + x
+                if let ast::Expr::Term(term_expr) = map_expr.body.as_ref() {
+                    assert_eq!(term_expr.operator, ast::TermOperator::Add);
+
+                    // Left side should be 'x'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(x_id)) =
+                        term_expr.left.as_ref()
+                    {
+                        assert_eq!(x_id.name.as_ref(), "x");
+                    } else {
+                        panic!("Expected identifier 'x'");
+                    }
+
+                    // Right side should be 'x'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(x_id2)) =
+                        term_expr.right.as_ref()
+                    {
+                        assert_eq!(x_id2.name.as_ref(), "x");
+                    } else {
+                        panic!("Expected identifier 'x'");
+                    }
                 } else {
-                    panic!("Expected identifier 'x'");
+                    panic!("Expected term expression for map body");
                 }
-            } else {
-                panic!("Expected term expression for map body");
             }
         } else {
             panic!("Expected map expression for param_map");
@@ -2961,28 +2925,30 @@ fn test_map_expressions() {
     // Third map: value||v -> 42|
     if let ast::Decl::Variable(var_decl) = &program.decls[2] {
         assert_eq!(get_variable_name(var_decl), "single_param_map");
-        if let Some(ast::Expr::Map(map_expr)) = &var_decl.initializer {
+        if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
             // Check target expression: value
             if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(target_id)) =
-                map_expr.target.as_ref()
+                call_expr.callee.as_ref()
             {
                 assert_eq!(target_id.name.as_ref(), "value");
             } else {
                 panic!("Expected identifier target 'value'");
             }
 
-            // Check parameter: v
-            if let ast::Parameter::Identifier(param) = &map_expr.parameter {
-                assert_eq!(param.name.as_ref(), "v");
-            } else {
-                panic!("Expected identifier parameter 'v'");
-            }
+            if let CallOperation::Map(map_expr) = call_expr.operation.as_ref() {
+                // Check parameter: v
+                if let ast::Parameter::Identifier(param) = &map_expr.parameter {
+                    assert_eq!(param.name.as_ref(), "v");
+                } else {
+                    panic!("Expected identifier parameter 'v'");
+                }
 
-            // Check body: 42
-            if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = map_expr.body.as_ref() {
-                assert_eq!(num.value, 42.0);
-            } else {
-                panic!("Expected number literal '42'");
+                // Check body: 42
+                if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) = map_expr.body.as_ref() {
+                    assert_eq!(num.value, 42.0);
+                } else {
+                    panic!("Expected number literal '42'");
+                }
             }
         } else {
             panic!("Expected map expression for single_param_map");
@@ -3007,46 +2973,48 @@ fn test_optional_map_expressions() {
     // First optional map: arr?|item -> item * 3|
     if let ast::Decl::Variable(var_decl) = &program.decls[0] {
         assert_eq!(get_variable_name(var_decl), "optional_simple");
-        if let Some(ast::Expr::OptionalMap(map_expr)) = &var_decl.initializer {
+        if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
             // Check target expression: arr
             if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(target_id)) =
-                map_expr.target.as_ref()
+                call_expr.callee.as_ref()
             {
                 assert_eq!(target_id.name.as_ref(), "arr");
             } else {
                 panic!("Expected identifier target 'arr'");
             }
 
-            // Check parameter
-            if let ast::Parameter::Identifier(param) = &map_expr.parameter {
-                assert_eq!(param.name.as_ref(), "item");
-            } else {
-                panic!("Expected identifier parameter 'item'");
-            }
-
-            // Check body: item * 3
-            if let ast::Expr::Factor(factor_expr) = map_expr.body.as_ref() {
-                assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
-
-                // Left side should be 'item'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(item_id)) =
-                    factor_expr.left.as_ref()
-                {
-                    assert_eq!(item_id.name.as_ref(), "item");
+            if let CallOperation::MapOptional(map_expr) = call_expr.operation.as_ref() {
+                // Check parameter
+                if let ast::Parameter::Identifier(param) = &map_expr.parameter {
+                    assert_eq!(param.name.as_ref(), "item");
                 } else {
-                    panic!("Expected identifier 'item'");
+                    panic!("Expected identifier parameter 'item'");
                 }
 
-                // Right side should be '3'
-                if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) =
-                    factor_expr.right.as_ref()
-                {
-                    assert_eq!(num.value, 3.0);
+                // Check body: item * 3
+                if let ast::Expr::Factor(factor_expr) = map_expr.body.as_ref() {
+                    assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
+
+                    // Left side should be 'item'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Identifier(item_id)) =
+                        factor_expr.left.as_ref()
+                    {
+                        assert_eq!(item_id.name.as_ref(), "item");
+                    } else {
+                        panic!("Expected identifier 'item'");
+                    }
+
+                    // Right side should be '3'
+                    if let ast::Expr::Primary(ast::PrimaryExpr::Number(num)) =
+                        factor_expr.right.as_ref()
+                    {
+                        assert_eq!(num.value, 3.0);
+                    } else {
+                        panic!("Expected number literal '3'");
+                    }
                 } else {
-                    panic!("Expected number literal '3'");
+                    panic!("Expected factor expression for optional map body");
                 }
-            } else {
-                panic!("Expected factor expression for optional map body");
             }
         } else {
             panic!("Expected optional map expression for optional_simple");

@@ -1149,10 +1149,13 @@ mod expression_parser {
 
         let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
 
-        Ok(ast::Expr::Map(ast::MapCallExpr {
-            target: Box::new(left),
-            parameter,
-            body,
+        Ok(ast::Expr::Call(ast::CallExpr {
+            callee: Box::new(left),
+            operation: Box::new(ast::CallOperation::Map(ast::MapExpr {
+                body,
+                parameter,
+                span,
+            })),
             span,
         }))
     }
@@ -1182,10 +1185,13 @@ mod expression_parser {
 
         let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
 
-        Ok(ast::Expr::OptionalMap(ast::OptionalMapCallExpr {
-            target: Box::new(left),
-            parameter,
-            body,
+        Ok(ast::Expr::Call(ast::CallExpr {
+            callee: Box::new(left),
+            operation: Box::new(ast::CallOperation::MapOptional(ast::MapOptionalExpr {
+                body,
+                parameter,
+                span,
+            })),
             span,
         }))
     }

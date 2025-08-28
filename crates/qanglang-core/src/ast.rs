@@ -270,8 +270,6 @@ pub struct ReturnStmt {
 pub enum Expr {
     Assignment(AssignmentExpr),
     Pipe(PipeExpr),
-    Map(MapCallExpr),
-    OptionalMap(OptionalMapCallExpr),
     Ternary(TernaryExpr),
     LogicalOr(LogicalOrExpr),
     LogicalAnd(LogicalAndExpr),
@@ -289,8 +287,6 @@ impl Expr {
         match self {
             Expr::Assignment(expr) => expr.span,
             Expr::Pipe(expr) => expr.span,
-            Expr::Map(expr) => expr.span,
-            Expr::OptionalMap(expr) => expr.span,
             Expr::Ternary(expr) => expr.span,
             Expr::LogicalOr(expr) => expr.span,
             Expr::LogicalAnd(expr) => expr.span,
@@ -490,6 +486,8 @@ pub enum CallOperation {
     Property(Identifier),         // . IDENTIFIER
     OptionalProperty(Identifier), // ?. IDENTIFIER
     Index(Expr),                  // [ expression ]
+    Map(MapExpr),                 // ||parameter -> expression|
+    MapOptional(MapOptionalExpr), // ?|parameter -> expression|
 }
 
 impl CallOperation {
@@ -506,6 +504,8 @@ impl CallOperation {
             CallOperation::Property(id) => id.span,
             CallOperation::OptionalProperty(id) => id.span,
             CallOperation::Index(expr) => expr.span(),
+            CallOperation::Map(expr) => expr.span,
+            CallOperation::MapOptional(expr) => expr.span,
         }
     }
 }
@@ -644,8 +644,7 @@ pub struct DestructurePattern {
 
 /// Map call expression: target||parameter -> expression|
 #[derive(Debug, Clone, PartialEq)]
-pub struct MapCallExpr {
-    pub target: Box<Expr>,
+pub struct MapExpr {
     pub parameter: Parameter,
     pub body: Box<Expr>,
     pub span: SourceSpan,
@@ -653,8 +652,7 @@ pub struct MapCallExpr {
 
 /// Optional map call expression: target?|parameter -> expression|
 #[derive(Debug, Clone, PartialEq)]
-pub struct OptionalMapCallExpr {
-    pub target: Box<Expr>,
+pub struct MapOptionalExpr {
     pub parameter: Parameter,
     pub body: Box<Expr>,
     pub span: SourceSpan,
@@ -938,8 +936,6 @@ pub trait AstVisitor {
         match expr {
             Expr::Assignment(assignment) => self.visit_assignment_expression(assignment, errors),
             Expr::Pipe(pipe) => self.visit_pipe_expression(pipe, errors),
-            Expr::Map(map) => self.visit_map_call_expression(map, errors),
-            Expr::OptionalMap(map) => self.visit_optional_map_call_expression(map, errors),
             Expr::Ternary(ternary) => self.visit_ternary_expression(ternary, errors),
             Expr::LogicalOr(logical_or) => self.visit_logical_or_expression(logical_or, errors),
             Expr::LogicalAnd(logical_and) => self.visit_logical_and_expression(logical_and, errors),
@@ -1112,6 +1108,8 @@ pub trait AstVisitor {
                 self.visit_identifier(identifier, errors)
             }
             CallOperation::Index(expr) => self.visit_expression(expr, errors),
+            CallOperation::Map(map) => self.visit_map_expression(map, errors),
+            CallOperation::MapOptional(map) => self.visit_map_optional_expression(map, errors),
         }
     }
 
@@ -1271,22 +1269,20 @@ pub trait AstVisitor {
         }
     }
 
-    fn visit_map_call_expression(
+    fn visit_map_expression(
         &mut self,
-        map: &MapCallExpr,
+        map: &MapExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(&map.target, errors)?;
         self.visit_parameter(&map.parameter, errors)?;
         self.visit_expression(&map.body, errors)
     }
 
-    fn visit_optional_map_call_expression(
+    fn visit_map_optional_expression(
         &mut self,
-        map: &OptionalMapCallExpr,
+        map: &MapOptionalExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(&map.target, errors)?;
         self.visit_parameter(&map.parameter, errors)?;
         self.visit_expression(&map.body, errors)
     }

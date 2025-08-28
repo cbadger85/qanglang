@@ -1590,6 +1590,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 self.emit_opcode_and_byte(OpCode::GetOptionalProperty, byte, call.span);
                 Ok(())
             }
+            _ => Err(QangSyntaxError::new(
+                "Unsupported call expression.".to_string(),
+                call.span,
+            )),
         }
     }
 

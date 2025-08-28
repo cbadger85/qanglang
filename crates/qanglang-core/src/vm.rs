@@ -15,8 +15,8 @@ use crate::{
     debug_log,
     error::Trace,
     memory::{
-        ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod,
-        IntrinsicMethodKind, StringHandle, UpvalueReference,
+        ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, StringHandle,
+        UpvalueReference,
     },
     qang_std::{
         qang_array_concat, qang_array_construct, qang_array_get, qang_array_length, qang_array_pop,
@@ -67,6 +67,8 @@ enum Keyword {
     Array,
     Object,
     Init,
+    Call,
+    Apply,
 }
 
 macro_rules! push_value {
@@ -244,6 +246,8 @@ impl Vm {
 
     pub fn new(mut alloc: HeapAllocator) -> Self {
         let mut keywords = FxHashMap::with_hasher(FxBuildHasher);
+        keywords.insert(Keyword::Apply, alloc.strings.intern("apply"));
+        keywords.insert(Keyword::Call, alloc.strings.intern("call"));
         let init_handle = alloc.strings.intern("init");
         keywords.insert(Keyword::Init, init_handle);
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
@@ -301,90 +305,84 @@ impl Vm {
         let to_uppercase_handle = alloc.strings.intern("to_uppercase");
         intrinsics.insert(
             IntrinsicKind::String(to_uppercase_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_string_to_uppercase),
+            IntrinsicMethod::Native {
+                function: qang_string_to_uppercase,
                 arity: 0,
             },
         );
         let to_lowercase_handle = alloc.strings.intern("to_lowercase");
         intrinsics.insert(
             IntrinsicKind::String(to_lowercase_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_string_to_lowercase),
+            IntrinsicMethod::Native {
+                function: qang_string_to_lowercase,
                 arity: 0,
             },
         );
         let length_handle = alloc.strings.intern("length");
         intrinsics.insert(
             IntrinsicKind::Array(length_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_array_length),
+            IntrinsicMethod::Native {
+                function: qang_array_length,
                 arity: 0,
             },
         );
         let array_push_handle = alloc.strings.intern("push");
         intrinsics.insert(
             IntrinsicKind::Array(array_push_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_array_push),
+            IntrinsicMethod::Native {
+                function: qang_array_push,
                 arity: 1,
             },
         );
         let array_pop_handle = alloc.strings.intern("pop");
         intrinsics.insert(
             IntrinsicKind::Array(array_pop_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_array_pop),
+            IntrinsicMethod::Native {
+                function: qang_array_pop,
                 arity: 0,
             },
         );
         let array_reverse_handle = alloc.strings.intern("reverse");
         intrinsics.insert(
             IntrinsicKind::Array(array_reverse_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_array_reverse),
+            IntrinsicMethod::Native {
+                function: qang_array_reverse,
                 arity: 0,
             },
         );
         let array_slice_handle = alloc.strings.intern("slice");
         intrinsics.insert(
             IntrinsicKind::Array(array_slice_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_array_slice),
+            IntrinsicMethod::Native {
+                function: qang_array_slice,
                 arity: 2,
             },
         );
         let array_get_handle = alloc.strings.intern("get");
         intrinsics.insert(
             IntrinsicKind::Array(array_get_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_array_get),
+            IntrinsicMethod::Native {
+                function: qang_array_get,
                 arity: 1,
             },
         );
         let concat_handle = alloc.strings.intern("concat");
         intrinsics.insert(
             IntrinsicKind::Array(concat_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Native(qang_array_concat),
+            IntrinsicMethod::Native {
+                function: qang_array_concat,
                 arity: 1,
             },
         );
         let function_call_handle = alloc.strings.intern("call");
         intrinsics.insert(
             IntrinsicKind::Function(function_call_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Call,
-                arity: 0,
-            },
+            IntrinsicMethod::Call,
         );
         let function_apply_handle = alloc.strings.intern("apply");
         intrinsics.insert(
             IntrinsicKind::Function(function_apply_handle),
-            IntrinsicMethod {
-                function: IntrinsicMethodKind::Apply,
-                arity: 0,
-            },
+            IntrinsicMethod::Apply,
         );
 
         let vm = Self {
@@ -1204,8 +1202,6 @@ impl Vm {
         kind: IntrinsicKind,
         receiver: Value,
     ) -> RuntimeResult<()> {
-        // TODO handle apply and call
-
         let intrinsic = *self.state.intrinsics.get(&kind).ok_or_else(|| {
             QangRuntimeError::new(
                 "invalid method call.".to_string(),
@@ -1556,12 +1552,12 @@ impl Vm {
         method: IntrinsicMethod,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        match method.function {
-            IntrinsicMethodKind::Native(function) => {
+        match method {
+            IntrinsicMethod::Native { function, arity } => {
                 let mut args = [Value::Nil; 256];
 
                 for i in (0..arg_count).rev() {
-                    if i < method.arity {
+                    if i < arity {
                         args[i] = pop_value!(self);
                     } else {
                         pop_value!(self); // discard values that are passed in but not needed by the function.
@@ -1570,7 +1566,7 @@ impl Vm {
 
                 pop_value!(self); // pop function off the stack now that it has been called.
 
-                let value = function(receiver, &args[..method.arity], self)
+                let value = function(receiver, &args[..arity], self)
                     .map_err(|e: NativeFunctionError| {
                         let loc = self.state.get_previous_loc();
                         e.into_qang_error(loc)
@@ -1581,8 +1577,8 @@ impl Vm {
 
                 Ok(())
             }
-            IntrinsicMethodKind::Apply => self.handle_async_apply_intrinsic(receiver, arg_count),
-            IntrinsicMethodKind::Call => self.handle_async_call_intrinsic(receiver, arg_count),
+            IntrinsicMethod::Apply => self.handle_async_apply_intrinsic(receiver, arg_count),
+            IntrinsicMethod::Call => self.handle_async_call_intrinsic(receiver, arg_count),
         }
     }
 
@@ -1718,6 +1714,11 @@ impl Vm {
         receiver: Value,
         arg_count: usize,
     ) -> RuntimeResult<()> {
+        let apply_identifier = self
+            .state
+            .keywords
+            .get(&Keyword::Apply)
+            .expect("Expected identifier.");
         match receiver {
             Value::Closure(_)
             | Value::BoundIntrinsic(_)

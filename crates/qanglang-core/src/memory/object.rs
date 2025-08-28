@@ -127,16 +127,10 @@ impl IntrinsicKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum IntrinsicMethodKind {
-    Native(IntrinsicFn),
+pub enum IntrinsicMethod {
+    Native { function: IntrinsicFn, arity: usize },
     Call,
     Apply,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct IntrinsicMethod {
-    pub function: IntrinsicMethodKind,
-    pub arity: usize,
 }
 
 #[derive(Debug, Clone)]

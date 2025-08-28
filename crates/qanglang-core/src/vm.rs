@@ -455,36 +455,6 @@ impl Vm {
 
     fn get_property_value(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
         match object {
-            Value::Nil if optional => {
-                // Handle call and apply specially for nil, even with optional access
-                let property_name = read_string!(self);
-                let call_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Call)
-                    .expect("Expected identifier.");
-                let apply_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Apply)
-                    .expect("Expected identifier.");
-
-                if property_name == call_handle || property_name == apply_handle {
-                    let method = if property_name == call_handle {
-                        IntrinsicMethod::NilSafeCall
-                    } else {
-                        IntrinsicMethod::NilSafeApply
-                    };
-                    let bound = BoundIntrinsicObject::new(object, method, property_name);
-                    let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
-                    pop_value!(self);
-                    push_value!(self, Value::BoundIntrinsic(handle))?;
-                } else {
-                    // For other properties, return nil
-                    pop_value!(self);
-                    push_value!(self, Value::Nil)?;
-                }
-            }
             Value::Nil => {
                 // Handle call and apply specially for nil
                 let property_name = read_string!(self);
@@ -492,12 +462,12 @@ impl Vm {
                     .state
                     .keywords
                     .get(&Keyword::Call)
-                    .expect("Expected idenfitier.");
+                    .expect("Expected identifier.");
                 let apply_handle = *self
                     .state
                     .keywords
                     .get(&Keyword::Apply)
-                    .expect("Expected idenfitier.");
+                    .expect("Expected identifier.");
 
                 if property_name == call_handle || property_name == apply_handle {
                     let method = if property_name == call_handle {
@@ -509,6 +479,10 @@ impl Vm {
                     let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
                     pop_value!(self);
                     push_value!(self, Value::BoundIntrinsic(handle))?;
+                } else if optional {
+                    // For optional access, return nil for other properties
+                    pop_value!(self);
+                    push_value!(self, Value::Nil)?;
                 } else {
                     return Err(QangRuntimeError::new(
                         format!("Cannot access properties from {}.", object.to_type_string()),

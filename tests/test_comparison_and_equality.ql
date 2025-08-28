@@ -85,7 +85,7 @@ fn test_is_operator() {
   assert(test_instance.test_method is FUNCTION);
   var bound_method = test_instance.test_method;
   assert(bound_method is FUNCTION);
-  assert(test_instance is TestClass);
+  assert(test_instance is OBJECT);
   assert(test_instance is TestClass);
   
   class SubTestClass : TestClass {}

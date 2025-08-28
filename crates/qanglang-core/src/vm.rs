@@ -1714,11 +1714,6 @@ impl Vm {
         receiver: Value,
         arg_count: usize,
     ) -> RuntimeResult<()> {
-        let apply_identifier = self
-            .state
-            .keywords
-            .get(&Keyword::Apply)
-            .expect("Expected identifier.");
         match receiver {
             Value::Closure(_)
             | Value::BoundIntrinsic(_)

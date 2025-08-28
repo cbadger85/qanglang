@@ -209,3 +209,23 @@ fn test_class_super_method_calls() {
 
   assert_eq(OtherClass().test_method(), 0, "Expected 0.");
 }
+
+fn test_using_call_on_method() {
+  class TestClass {
+    sum(a, b) {
+      return a + b;
+    }
+  }
+
+  assert_eq(TestClass().sum.call(1, 2), 3, "Expected 3.");
+}
+
+fn test_using_appl_on_method() {
+  class TestClass {
+    sum(a, b) {
+      return a + b;
+    }
+  }
+
+  assert_eq(TestClass().sum.apply([1, 2]), 3, "Expected 3.");
+}

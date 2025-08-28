@@ -524,8 +524,6 @@ pub enum PrimaryExpr {
     Lambda(Box<LambdaExpr>),
     Array(ArrayLiteral),
     ObjectLiteral(ObjectLiteral),
-    Map(MapExpr),
-    OptionalMap(OptionalMapExpr),
 }
 
 impl PrimaryExpr {
@@ -542,8 +540,6 @@ impl PrimaryExpr {
             PrimaryExpr::Lambda(lambda) => lambda.span,
             PrimaryExpr::Array(array) => array.span,
             PrimaryExpr::ObjectLiteral(object) => object.span,
-            PrimaryExpr::Map(map) => map.span,
-            PrimaryExpr::OptionalMap(map) => map.span,
         }
     }
 }
@@ -670,36 +666,20 @@ pub struct DestructurePattern {
     pub span: SourceSpan,
 }
 
-/// Map expression: || parameters? -> expression |
-#[derive(Debug, Clone, PartialEq)]
-pub struct MapExpr {
-    pub parameters: Vec<Parameter>,
-    pub body: Box<Expr>,
-    pub span: SourceSpan,
-}
-
-/// Optional map expression: ?| parameters? -> expression |
-#[derive(Debug, Clone, PartialEq)]
-pub struct OptionalMapExpr {
-    pub parameters: Vec<Parameter>,
-    pub body: Box<Expr>,
-    pub span: SourceSpan,
-}
-
-/// Map call expression: target||parameters? -> expression|
+/// Map call expression: target||parameter -> expression|
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapCallExpr {
     pub target: Box<Expr>,
-    pub parameters: Vec<Parameter>,
+    pub parameter: Parameter,
     pub body: Box<Expr>,
     pub span: SourceSpan,
 }
 
-/// Optional map call expression: target?|parameters? -> expression|
+/// Optional map call expression: target?|parameter -> expression|
 #[derive(Debug, Clone, PartialEq)]
 pub struct OptionalMapCallExpr {
     pub target: Box<Expr>,
-    pub parameters: Vec<Parameter>,
+    pub parameter: Parameter,
     pub body: Box<Expr>,
     pub span: SourceSpan,
 }
@@ -1176,8 +1156,6 @@ pub trait AstVisitor {
             PrimaryExpr::Lambda(lambda) => self.visit_lambda_expression(lambda, errors),
             PrimaryExpr::Array(array) => self.visit_array_literal(array, errors),
             PrimaryExpr::ObjectLiteral(object) => self.visit_object_literal(object, errors),
-            PrimaryExpr::Map(map) => self.visit_map_expression(map, errors),
-            PrimaryExpr::OptionalMap(map) => self.visit_optional_map_expression(map, errors),
         }
     }
 
@@ -1336,39 +1314,13 @@ pub trait AstVisitor {
         }
     }
 
-    fn visit_map_expression(
-        &mut self,
-        map: &MapExpr,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        for parameter in &map.parameters {
-            self.visit_parameter(parameter, errors)?;
-        }
-
-        self.visit_expression(&map.body, errors)
-    }
-
-    fn visit_optional_map_expression(
-        &mut self,
-        map: &OptionalMapExpr,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        for parameter in &map.parameters {
-            self.visit_parameter(parameter, errors)?;
-        }
-
-        self.visit_expression(&map.body, errors)
-    }
-
     fn visit_map_call_expression(
         &mut self,
         map: &MapCallExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.visit_expression(&map.target, errors)?;
-        for parameter in &map.parameters {
-            self.visit_parameter(parameter, errors)?;
-        }
+        self.visit_parameter(&map.parameter, errors)?;
         self.visit_expression(&map.body, errors)
     }
 
@@ -1378,9 +1330,7 @@ pub trait AstVisitor {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.visit_expression(&map.target, errors)?;
-        for parameter in &map.parameters {
-            self.visit_parameter(parameter, errors)?;
-        }
+        self.visit_parameter(&map.parameter, errors)?;
         self.visit_expression(&map.body, errors)
     }
 }

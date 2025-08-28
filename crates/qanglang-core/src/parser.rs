@@ -1129,40 +1129,29 @@ mod expression_parser {
     fn map_expression(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
         let start_span = left.span();
 
-        let mut parameters = Vec::new();
-
-        // Parse parameters if any exist before the ->
-        if !parser.check(TokenType::Arrow) {
-            if parser.check(TokenType::Identifier) {
-                parser.advance();
-                parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
-
-                while parser.match_token(TokenType::Comma) {
-                    if parser.check(TokenType::Arrow) {
-                        break;
-                    }
-                    if parser.check(TokenType::Identifier) {
-                        parser.advance();
-                        parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
-                    } else {
-                        return Err(crate::QangSyntaxError::new(
-                            "Expect parameter name.".to_string(),
-                            parser.get_current_span(),
-                        ));
-                    }
-                }
-            }
-        }
+        // Parse the single parameter (always required for map expressions)
+        let parameter = if parser.check(TokenType::Identifier) {
+            parser.advance();
+            ast::Parameter::Identifier(parser.get_identifier()?)
+        } else {
+            return Err(crate::QangSyntaxError::new(
+                "Expect parameter name before '->' in map expression.".to_string(),
+                parser.get_current_span(),
+            ));
+        };
 
         parser.consume(TokenType::Arrow, "Expect '->' after parameters.")?;
-        let body = Box::new(expression_parser::parse(parser, expression_parser::Precedence::Or)?);
+        let body = Box::new(expression_parser::parse(
+            parser,
+            expression_parser::Precedence::Or,
+        )?);
         parser.consume(TokenType::Pipe, "Expect '|' after map body.")?;
 
         let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
 
         Ok(ast::Expr::Map(ast::MapCallExpr {
             target: Box::new(left),
-            parameters,
+            parameter,
             body,
             span,
         }))
@@ -1171,34 +1160,23 @@ mod expression_parser {
     fn optional_map_expression(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
         let start_span = left.span();
 
-        let mut parameters = Vec::new();
-
-        // Parse parameters if any exist before the ->
-        if !parser.check(TokenType::Arrow) {
-            if parser.check(TokenType::Identifier) {
-                parser.advance();
-                parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
-
-                while parser.match_token(TokenType::Comma) {
-                    if parser.check(TokenType::Arrow) {
-                        break;
-                    }
-                    if parser.check(TokenType::Identifier) {
-                        parser.advance();
-                        parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
-                    } else {
-                        return Err(crate::QangSyntaxError::new(
-                            "Expect parameter name.".to_string(),
-                            parser.get_current_span(),
-                        ));
-                    }
-                }
-            }
-        }
+        // Parse the single parameter (always required for map expressions)
+        let parameter = if parser.check(TokenType::Identifier) {
+            parser.advance();
+            ast::Parameter::Identifier(parser.get_identifier()?)
+        } else {
+            return Err(crate::QangSyntaxError::new(
+                "Expect parameter name before '->' in optional map expression.".to_string(),
+                parser.get_current_span(),
+            ));
+        };
 
         parser.consume(TokenType::Arrow, "Expect '->' after parameters.")?;
 
-        let body = Box::new(expression_parser::parse(parser, expression_parser::Precedence::Or)?);
+        let body = Box::new(expression_parser::parse(
+            parser,
+            expression_parser::Precedence::Or,
+        )?);
 
         parser.consume(TokenType::Pipe, "Expect '|' after map body.")?;
 
@@ -1206,7 +1184,7 @@ mod expression_parser {
 
         Ok(ast::Expr::OptionalMap(ast::OptionalMapCallExpr {
             target: Box::new(left),
-            parameters,
+            parameter,
             body,
             span,
         }))

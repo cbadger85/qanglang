@@ -205,6 +205,7 @@ impl<'a> Tokenizer<'a> {
             '.' => self.make_token(TokenType::Dot, start),
             ',' => self.make_token(TokenType::Comma, start),
             ':' => self.make_token(TokenType::Colon, start),
+            '?' if self.match_char('.') => self.make_token(TokenType::OptionalDot, start),
             '?' => self.make_token(TokenType::Question, start),
             ';' => self.make_token(TokenType::Semicolon, start),
             '{' if self.match_char('{') => self.make_token(TokenType::DoubleLeftBrace, start),

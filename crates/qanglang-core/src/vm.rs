@@ -948,6 +948,70 @@ impl Vm {
                         }
                     }
                 }
+                OpCode::GetOptionalProperty => {
+                    let object = peek_value!(self, 0);
+
+                    match object {
+                        Value::Nil => {
+                            // For optional property access, return nil when accessing properties on nil
+                            let _ = read_string!(self); // consume the property name from bytecode
+                            pop_value!(self);
+                            push_value!(self, Value::Nil)?;
+                        }
+                        Value::Instance(instance_handle) => {
+                            let instance = self.alloc.get_instance(instance_handle);
+                            let key = Value::String(read_string!(self));
+
+                            if let Some(value) = self.alloc.get_instance_field(instance.table, key)
+                            {
+                                pop_value!(self);
+                                push_value!(self, value)?;
+                            } else {
+                                self.bind_method(instance.clazz, key)?;
+                            }
+                        }
+                        Value::ObjectLiteral(obj_handle) => {
+                            let key = Value::String(read_string!(self));
+                            let value = self
+                                .alloc
+                                .tables
+                                .get(obj_handle, &key)
+                                .unwrap_or(Value::Nil);
+                            pop_value!(self);
+                            push_value!(self, value)?;
+                        }
+                        Value::String(_) => {
+                            let identifer = read_string!(self);
+                            self.bind_intrinsic_method(
+                                identifer,
+                                IntrinsicKind::String(identifer),
+                                object,
+                            )?;
+                        }
+                        Value::Array(_) => {
+                            let identifer = read_string!(self);
+                            self.bind_intrinsic_method(
+                                identifer,
+                                IntrinsicKind::Array(identifer),
+                                object,
+                            )?;
+                        }
+                        Value::Closure(_) | Value::BoundMethod(_) => {
+                            let identifer = read_string!(self);
+                            self.bind_intrinsic_method(
+                                identifer,
+                                IntrinsicKind::Function(identifer),
+                                object,
+                            )?;
+                        }
+                        _ => {
+                            // For optional property access, return nil instead of throwing an error
+                            let _ = read_string!(self); // consume the property name from bytecode
+                            pop_value!(self);
+                            push_value!(self, Value::Nil)?;
+                        }
+                    }
+                }
                 OpCode::Method => {
                     let identifier_handle = read_string!(self);
                     self.define_method(identifier_handle)?;

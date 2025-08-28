@@ -883,43 +883,32 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         match assignment.operator {
-            ast::AssignmentOperator::Assign => {
-                // Regular assignment - existing behavior
-                match &assignment.target {
-                    ast::AssignmentTarget::Identifier(identifier) => {
-                        self.visit_expression(&assignment.value, errors)?;
-                        self.handle_variable(&identifier.name, identifier.span, true)?;
-                    }
-                    ast::AssignmentTarget::Property(property) => {
-                        self.visit_expression(&property.object, errors)?;
-                        let identifier_handle =
-                            self.allocator.strings.intern(&property.property.name);
-                        let byte = self.make_constant(
-                            Value::String(identifier_handle),
-                            property.property.span,
-                        )?;
-                        self.visit_expression(&assignment.value, errors)?;
-                        self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
-                    }
-                    ast::AssignmentTarget::Index(index) => {
-                        self.visit_expression(&index.object, errors)?;
-                        self.visit_expression(&index.index, errors)?;
-                        self.visit_expression(&assignment.value, errors)?;
-                        self.emit_opcode(OpCode::SetArrayIndex, index.span);
-                    }
+            ast::AssignmentOperator::Assign => match &assignment.target {
+                ast::AssignmentTarget::Identifier(identifier) => {
+                    self.visit_expression(&assignment.value, errors)?;
+                    self.handle_variable(&identifier.name, identifier.span, true)?;
                 }
-            }
+                ast::AssignmentTarget::Property(property) => {
+                    self.visit_expression(&property.object, errors)?;
+                    let identifier_handle = self.allocator.strings.intern(&property.property.name);
+                    let byte = self
+                        .make_constant(Value::String(identifier_handle), property.property.span)?;
+                    self.visit_expression(&assignment.value, errors)?;
+                    self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
+                }
+                ast::AssignmentTarget::Index(index) => {
+                    self.visit_expression(&index.object, errors)?;
+                    self.visit_expression(&index.index, errors)?;
+                    self.visit_expression(&assignment.value, errors)?;
+                    self.emit_opcode(OpCode::SetArrayIndex, index.span);
+                }
+            },
             _ => {
-                // Compound assignment operators (+=, -=, *=, /=, %=)
                 match &assignment.target {
                     ast::AssignmentTarget::Identifier(identifier) => {
-                        // Get current value
                         self.handle_variable(&identifier.name, identifier.span, false)?;
-                        // Get the new value
                         self.visit_expression(&assignment.value, errors)?;
-                        // Apply the operation
                         self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
-                        // Store the result
                         self.handle_variable(&identifier.name, identifier.span, true)?;
                     }
                     ast::AssignmentTarget::Property(property) => {
@@ -972,18 +961,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             }
         }
 
-        Ok(())
-    }
-
-    fn visit_property_access(
-        &mut self,
-        property: &ast::PropertyAccess,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        self.visit_expression(&property.object, errors)?;
-        let identifier_handle = self.allocator.strings.intern(&property.property.name);
-        let byte = self.make_constant(Value::String(identifier_handle), property.property.span)?;
-        self.emit_opcode_and_byte(OpCode::GetProperty, byte, property.span);
         Ok(())
     }
 
@@ -1619,8 +1596,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 self.visit_expression(call.callee.as_ref(), errors)?;
                 let identifier_handle = self.allocator.strings.intern(&identifier.name);
                 let byte = self.make_constant(Value::String(identifier_handle), identifier.span)?;
-                // TODO: Implement optional property access opcode when VM supports it
-                self.emit_opcode_and_byte(OpCode::GetProperty, byte, call.span);
+                self.emit_opcode_and_byte(OpCode::GetOptionalProperty, byte, call.span);
                 Ok(())
             }
         }

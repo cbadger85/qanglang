@@ -1349,6 +1349,23 @@ mod expression_parser {
                 );
                 ast::CallOperation::Property(property)
             }
+            tokenizer::TokenType::OptionalDot => {
+                parser.consume(
+                    tokenizer::TokenType::Identifier,
+                    "Expect property name after '?.'.",
+                )?;
+                let property_span = parser.get_previous_span();
+                let property_name = parser
+                    .previous_token
+                    .as_ref()
+                    .map(|t| t.lexeme(parser.source_map))
+                    .unwrap();
+                let property = ast::Identifier::new(
+                    property_name.iter().collect::<String>().into_boxed_str(),
+                    property_span,
+                );
+                ast::CallOperation::OptionalProperty(property)
+            }
             tokenizer::TokenType::LeftSquareBracket => {
                 let index = parser.expression()?;
                 parser.consume(
@@ -1564,6 +1581,11 @@ mod expression_parser {
                 prefix: Some(object),
                 infix: None,
                 precedence: Precedence::None,
+            },
+            tokenizer::TokenType::OptionalDot => ParseRule {
+                prefix: None,
+                infix: Some(call),
+                precedence: Precedence::Call,
             },
             _ => ParseRule {
                 prefix: None,

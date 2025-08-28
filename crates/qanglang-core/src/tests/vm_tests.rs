@@ -1657,6 +1657,16 @@ fn test_map_expression() {
         var number_plus_one = number||n -> n + 1|;
 
         assert_eq(number_plus_one, 1);
+
+        fn test_map_expression_with_value() {
+            var number = 0;
+
+            var number_plus_one = number||n -> n + 1|;
+
+            assert_eq(number_plus_one, 1);
+        }
+
+        test_map_expression_with_value();
     "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -1664,10 +1674,10 @@ fn test_map_expression() {
 
     match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
-            // disassemble_program(&allocator);
+            disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
-                .set_debug(false)
+                .set_debug(true)
                 .interpret(program)
             {
                 Ok(_) => (),

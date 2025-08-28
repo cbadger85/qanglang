@@ -1636,6 +1636,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.parse_variable(&identifier.name, identifier.span)?;
                     let identifier_handle = self.allocator.strings.intern(&identifier.name);
                     self.define_variable(Some(identifier_handle), identifier.span)?;
+                    
+                    // Set the parameter variable to the value on the stack (from the callee)
+                    self.handle_variable(&identifier.name, map_expr.span, true)?;
+                    self.emit_opcode(OpCode::Pop, map_expr.span); // Pop the duplicate value
                 } else {
                     return Err(QangSyntaxError::new(
                         "Destructuring not supported.".to_string(),
@@ -1661,6 +1665,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.parse_variable(&identifier.name, identifier.span)?;
                     let identifier_handle = self.allocator.strings.intern(&identifier.name);
                     self.define_variable(Some(identifier_handle), identifier.span)?;
+                    
+                    // Set the parameter variable to the value on the stack (from the callee)
+                    self.handle_variable(&identifier.name, map_expr.span, true)?;
+                    self.emit_opcode(OpCode::Pop, map_expr.span); // Pop the duplicate value
                 } else {
                     return Err(QangSyntaxError::new(
                         "Destructuring not supported.".to_string(),

@@ -467,7 +467,9 @@ impl<'a> DoubleEndedIterator for ArrayIterator<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while self.current_index < self.current_back_index {
             self.current_back_index -= 1;
-            let value = self.arena.get(self.handle, self.current_back_index as isize);
+            let value = self
+                .arena
+                .get(self.handle, self.current_back_index as isize);
 
             // Skip Nil values (empty slots)
             if !matches!(value, Value::Nil) {

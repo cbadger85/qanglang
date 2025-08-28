@@ -262,3 +262,7 @@ var foo = [1, 2, 3]
 
 assert(foo);
 ```
+
+## Bugs
+
+[ ] - `init` should not be callable from an instance of a class.

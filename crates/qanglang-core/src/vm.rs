@@ -1351,23 +1351,23 @@ impl Vm {
             Value::Closure(handle) => self.call(handle, arg_count),
             Value::NativeFunction(function) => self.call_native_function(function, arg_count),
             Value::Class(handle) => {
+                let clazz = self.alloc.get_class(handle);
+                let clazz_method_table = clazz.method_table;
+                let clazz_value_table = clazz.value_table;
+                let instance_handle = self.with_gc_check(|alloc| alloc.allocate_instance(handle));
+                self.state.stack[self.state.stack_top - arg_count - 1] =
+                    Value::Instance(instance_handle);
+                let instance_table = self.alloc.get_instance(instance_handle).table;
+
+                self.alloc
+                    .tables
+                    .copy_into(clazz_value_table, instance_table);
+
                 let constructor_handle = *self
                     .state
                     .keywords
                     .get(&Keyword::Init)
                     .expect("Expected keyword.");
-                let clazz = self.alloc.get_class(handle);
-                let clazz_method_table = clazz.method_table;
-                let value_method_table = clazz.value_table;
-                let insance_handle = self.with_gc_check(|alloc| alloc.allocate_instance(handle));
-                self.state.stack[self.state.stack_top - arg_count - 1] =
-                    Value::Instance(insance_handle);
-                let instance_table = self.alloc.get_instance(insance_handle).table;
-
-                self.alloc
-                    .tables
-                    .copy_into(value_method_table, instance_table);
-
                 if let Some(Value::Closure(constructor)) = self
                     .alloc
                     .get_class_method(clazz_method_table, Value::String(constructor_handle))

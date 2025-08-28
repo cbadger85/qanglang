@@ -242,9 +242,9 @@ An embedded scripting language written in Rust 🦀
 
 ## Roadmap
 
-[ ] - add map operator (`outer.inner||inner -> nil|`).
+[x] - add map operator (`outer.inner||inner -> nil|`).
 
-[ ] - add map optional operator `var inner_times_two = outer?|inner -> inner * 2|;`
+[x] - add map optional operator `var inner_times_two = outer?|inner -> inner * 2|;`
 
 [ ] - array destructuring for variable declaration `var (item1, item2, ..others) = [1, 2, 3, 4, 5];`
 
@@ -252,16 +252,7 @@ An embedded scripting language written in Rust 🦀
 
 [ ] - array destructuring for map operator and map optional operator `var first = maybe_array?|(first) -> first|;`
 
-### Example of Map Operator
-
-```
-var foo = [1, 2, 3]
-  ||arr -> arr.length() > 2 ? nil : arr|
-  ?.length()
-  ?|len -> len == 2| == true;
-
-assert(foo);
-```
+[ ] - tail call optimization
 
 ## Bugs
 

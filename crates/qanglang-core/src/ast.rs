@@ -270,6 +270,8 @@ pub struct ReturnStmt {
 pub enum Expr {
     Assignment(AssignmentExpr),
     Pipe(PipeExpr),
+    Map(MapCallExpr),
+    OptionalMap(OptionalMapCallExpr),
     Ternary(TernaryExpr),
     LogicalOr(LogicalOrExpr),
     LogicalAnd(LogicalAndExpr),
@@ -287,6 +289,8 @@ impl Expr {
         match self {
             Expr::Assignment(expr) => expr.span,
             Expr::Pipe(expr) => expr.span,
+            Expr::Map(expr) => expr.span,
+            Expr::OptionalMap(expr) => expr.span,
             Expr::Ternary(expr) => expr.span,
             Expr::LogicalOr(expr) => expr.span,
             Expr::LogicalAnd(expr) => expr.span,
@@ -682,6 +686,24 @@ pub struct OptionalMapExpr {
     pub span: SourceSpan,
 }
 
+/// Map call expression: target||parameters? -> expression|
+#[derive(Debug, Clone, PartialEq)]
+pub struct MapCallExpr {
+    pub target: Box<Expr>,
+    pub parameters: Vec<Parameter>,
+    pub body: Box<Expr>,
+    pub span: SourceSpan,
+}
+
+/// Optional map call expression: target?|parameters? -> expression|
+#[derive(Debug, Clone, PartialEq)]
+pub struct OptionalMapCallExpr {
+    pub target: Box<Expr>,
+    pub parameters: Vec<Parameter>,
+    pub body: Box<Expr>,
+    pub span: SourceSpan,
+}
+
 /// Utility functions for working with the AST
 impl Program {
     pub fn new(decls: Vec<Decl>, span: SourceSpan) -> Self {
@@ -960,6 +982,8 @@ pub trait AstVisitor {
         match expr {
             Expr::Assignment(assignment) => self.visit_assignment_expression(assignment, errors),
             Expr::Pipe(pipe) => self.visit_pipe_expression(pipe, errors),
+            Expr::Map(map) => self.visit_map_call_expression(map, errors),
+            Expr::OptionalMap(map) => self.visit_optional_map_call_expression(map, errors),
             Expr::Ternary(ternary) => self.visit_ternary_expression(ternary, errors),
             Expr::LogicalOr(logical_or) => self.visit_logical_or_expression(logical_or, errors),
             Expr::LogicalAnd(logical_and) => self.visit_logical_and_expression(logical_and, errors),
@@ -1333,6 +1357,30 @@ pub trait AstVisitor {
             self.visit_parameter(parameter, errors)?;
         }
 
+        self.visit_expression(&map.body, errors)
+    }
+
+    fn visit_map_call_expression(
+        &mut self,
+        map: &MapCallExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&map.target, errors)?;
+        for parameter in &map.parameters {
+            self.visit_parameter(parameter, errors)?;
+        }
+        self.visit_expression(&map.body, errors)
+    }
+
+    fn visit_optional_map_call_expression(
+        &mut self,
+        map: &OptionalMapCallExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(&map.target, errors)?;
+        for parameter in &map.parameters {
+            self.visit_parameter(parameter, errors)?;
+        }
         self.visit_expression(&map.body, errors)
     }
 }

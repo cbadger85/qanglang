@@ -1126,6 +1126,92 @@ mod expression_parser {
         )))
     }
 
+    fn map_expression(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
+        let start_span = left.span();
+
+        let mut parameters = Vec::new();
+
+        // Parse parameters if any exist before the ->
+        if !parser.check(TokenType::Arrow) {
+            if parser.check(TokenType::Identifier) {
+                parser.advance();
+                parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
+
+                while parser.match_token(TokenType::Comma) {
+                    if parser.check(TokenType::Arrow) {
+                        break;
+                    }
+                    if parser.check(TokenType::Identifier) {
+                        parser.advance();
+                        parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
+                    } else {
+                        return Err(crate::QangSyntaxError::new(
+                            "Expect parameter name.".to_string(),
+                            parser.get_current_span(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        parser.consume(TokenType::Arrow, "Expect '->' after parameters.")?;
+        let body = Box::new(expression_parser::parse(parser, expression_parser::Precedence::Or)?);
+        parser.consume(TokenType::Pipe, "Expect '|' after map body.")?;
+
+        let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
+
+        Ok(ast::Expr::Map(ast::MapCallExpr {
+            target: Box::new(left),
+            parameters,
+            body,
+            span,
+        }))
+    }
+
+    fn optional_map_expression(parser: &mut Parser, left: ast::Expr) -> ParseResult<ast::Expr> {
+        let start_span = left.span();
+
+        let mut parameters = Vec::new();
+
+        // Parse parameters if any exist before the ->
+        if !parser.check(TokenType::Arrow) {
+            if parser.check(TokenType::Identifier) {
+                parser.advance();
+                parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
+
+                while parser.match_token(TokenType::Comma) {
+                    if parser.check(TokenType::Arrow) {
+                        break;
+                    }
+                    if parser.check(TokenType::Identifier) {
+                        parser.advance();
+                        parameters.push(ast::Parameter::Identifier(parser.get_identifier()?));
+                    } else {
+                        return Err(crate::QangSyntaxError::new(
+                            "Expect parameter name.".to_string(),
+                            parser.get_current_span(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        parser.consume(TokenType::Arrow, "Expect '->' after parameters.")?;
+
+        let body = Box::new(expression_parser::parse(parser, expression_parser::Precedence::Or)?);
+
+        parser.consume(TokenType::Pipe, "Expect '|' after map body.")?;
+
+        let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
+
+        Ok(ast::Expr::OptionalMap(ast::OptionalMapCallExpr {
+            target: Box::new(left),
+            parameters,
+            body,
+            span,
+        }))
+    }
+
     fn object(parser: &mut Parser) -> ParseResult<ast::Expr> {
         let start_span = parser.get_previous_span();
         let mut entries: Vec<ast::ObjectEntry> = Vec::new();
@@ -1585,6 +1671,16 @@ mod expression_parser {
             tokenizer::TokenType::OptionalDot => ParseRule {
                 prefix: None,
                 infix: Some(call),
+                precedence: Precedence::Call,
+            },
+            tokenizer::TokenType::DoubleBar => ParseRule {
+                prefix: None,
+                infix: Some(map_expression),
+                precedence: Precedence::Call,
+            },
+            tokenizer::TokenType::OptionalBar => ParseRule {
+                prefix: None,
+                infix: Some(optional_map_expression),
                 precedence: Precedence::Call,
             },
             _ => ParseRule {

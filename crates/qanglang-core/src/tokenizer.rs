@@ -57,7 +57,7 @@ pub enum TokenType {
     DoubleRightBrace,   // }}
     DoubleBar,          // || (not implemented)
     OptionalBar,        // ?| (not implemented)
-    OptionalDot,        // ?. (not implemented)
+    OptionalDot,        // ?.
     Is,                 // is
     PlusAssign,         // +=
     MinusAssign,        // -=
@@ -205,6 +205,7 @@ impl<'a> Tokenizer<'a> {
             '.' => self.make_token(TokenType::Dot, start),
             ',' => self.make_token(TokenType::Comma, start),
             ':' => self.make_token(TokenType::Colon, start),
+            '?' if self.match_char('|') => self.make_token(TokenType::OptionalBar, start),
             '?' if self.match_char('.') => self.make_token(TokenType::OptionalDot, start),
             '?' => self.make_token(TokenType::Question, start),
             ';' => self.make_token(TokenType::Semicolon, start),
@@ -215,7 +216,13 @@ impl<'a> Tokenizer<'a> {
             '[' => self.make_token(TokenType::LeftSquareBracket, start),
             ']' => self.make_token(TokenType::RightSquareBracket, start),
             '"' => self.string(),
+            '|' if self.match_char('|') => self.make_token(TokenType::DoubleBar, start),
             '|' if self.match_char('>') => self.make_token(TokenType::Pipe, start),
+            '|' => {
+                // For single '|', we need to determine context
+                // For now, treat as regular pipe for closing map expressions
+                self.make_token(TokenType::Pipe, start)
+            }
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
             _ => self.error_token(format!("Unexpected character: '{}'.", c).as_str()),

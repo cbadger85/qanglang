@@ -197,7 +197,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>call</td>
       <td>=</td>
-      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | "?." IDENTIFIER | "[" expression "]" )*</td>
+      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | "?." IDENTIFIER | "[" expression "]" | "||" IDENTIFIER "->" expression "|" | "?|" IDENTIFIER "->" expression "|" )*</td>
       <td>;</td>
     </tr>
     <tr>
@@ -209,7 +209,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>primary</td>
       <td>=</td>
-      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral | objectLiteral | mapExpression | mapOptionalExpression</td>
+      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral | objectLiteral</td>
       <td>;</td>
     </tr>
     <tr>
@@ -228,18 +228,6 @@ An embedded scripting language written in Rust 🦀
       <td>objectField</td>
       <td>=</td>
       <td>IDENTIFIER ( "=" expression )?</td>
-      <td>;</td>
-    </tr>
-    <tr>
-      <td>mapExpression</td>
-      <td>=</td>
-      <td>"||" ( parameters | destructurePattern )? "->" expression "|"</td>
-      <td>;</td>
-    </tr>
-    <tr>
-      <td>mapOptionalExpression</td>
-      <td>=</td>
-      <td>"?|" ( parameters | destructurePattern )? "->" expression "|"</td>
       <td>;</td>
     </tr>
     <tr>

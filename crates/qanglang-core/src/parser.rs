@@ -1187,7 +1187,7 @@ mod expression_parser {
 
         Ok(ast::Expr::Call(ast::CallExpr {
             callee: Box::new(left),
-            operation: Box::new(ast::CallOperation::MapOptional(ast::MapOptionalExpr {
+            operation: Box::new(ast::CallOperation::OptionalMap(ast::OptionalMapExpr {
                 body,
                 parameter,
                 span,

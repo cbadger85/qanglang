@@ -439,6 +439,44 @@ impl<'a> CompilerVisitor<'a> {
         }
     }
 
+    fn end_scope_expression(&mut self, span: SourceSpan) {
+        let current = &mut self.compiler;
+        current.scope_depth -= 1;
+
+        let mut instructions = Vec::new();
+
+        for i in (0..current.local_count).rev() {
+            if let Some(local) = current.locals.get(i) {
+                if let Some(depth) = local.depth {
+                    if depth > current.scope_depth {
+                        let instruction = if local.is_captured {
+                            OpCode::CloseUpvalue
+                        } else {
+                            OpCode::Pop
+                        };
+                        instructions.push(instruction);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        current.local_count -= instructions.len();
+
+        // Only emit CloseUpvalue instructions, skip Pop instructions
+        // since we want to keep the expression result on the stack
+        for instruction in instructions {
+            if instruction == OpCode::CloseUpvalue {
+                self.emit_opcode(instruction, span);
+            }
+        }
+    }
+
     fn add_local(&mut self, handle: &str, span: SourceSpan) -> Result<(), QangSyntaxError> {
         let current = &mut self.compiler;
         if current.local_count >= STACK_MAX {
@@ -1607,11 +1645,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
                 self.visit_expression(&map_expr.body, errors)?;
 
-                let current = &mut self.compiler;
-                current.scope_depth -= 1; // we don't use end_scope because we don't want to pop the value on the stack.
+                self.end_scope_expression(map_expr.span);
                 Ok(())
             }
-            ast::CallOperation::MapOptional(map_op_expr) => {
+            ast::CallOperation::OptionalMap(map_expr) => {
                 self.visit_expression(call.callee.as_ref(), errors)?;
 
                 // Jump if nil - short circuit, leaving nil on stack
@@ -1620,21 +1657,20 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 // Not nil, so proceed with mapping
                 self.begin_scope();
 
-                if let ast::Parameter::Identifier(identifier) = &map_op_expr.parameter {
+                if let ast::Parameter::Identifier(identifier) = &map_expr.parameter {
                     self.parse_variable(&identifier.name, identifier.span)?;
                     let identifier_handle = self.allocator.strings.intern(&identifier.name);
                     self.define_variable(Some(identifier_handle), identifier.span)?;
                 } else {
                     return Err(QangSyntaxError::new(
                         "Destructuring not supported.".to_string(),
-                        map_op_expr.span,
+                        map_expr.span,
                     ));
                 }
 
-                self.visit_expression(&map_op_expr.body, errors)?;
+                self.visit_expression(&map_expr.body, errors)?;
 
-                let current = &mut self.compiler;
-                current.scope_depth -= 1; // we don't use end_scope because we don't want to pop the value on the stack.
+                self.end_scope_expression(map_expr.span);
 
                 // Patch the nil jump to here
                 self.patch_jump(nil_jump, call.span)?;

@@ -2983,7 +2983,7 @@ fn test_optional_map_expressions() {
                 panic!("Expected identifier target 'arr'");
             }
 
-            if let CallOperation::MapOptional(map_expr) = call_expr.operation.as_ref() {
+            if let CallOperation::OptionalMap(map_expr) = call_expr.operation.as_ref() {
                 // Check parameter
                 if let ast::Parameter::Identifier(param) = &map_expr.parameter {
                     assert_eq!(param.name.as_ref(), "item");

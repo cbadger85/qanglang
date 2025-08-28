@@ -487,7 +487,7 @@ pub enum CallOperation {
     OptionalProperty(Identifier), // ?. IDENTIFIER
     Index(Expr),                  // [ expression ]
     Map(MapExpr),                 // ||parameter -> expression|
-    MapOptional(MapOptionalExpr), // ?|parameter -> expression|
+    OptionalMap(OptionalMapExpr), // ?|parameter -> expression|
 }
 
 impl CallOperation {
@@ -505,7 +505,7 @@ impl CallOperation {
             CallOperation::OptionalProperty(id) => id.span,
             CallOperation::Index(expr) => expr.span(),
             CallOperation::Map(expr) => expr.span,
-            CallOperation::MapOptional(expr) => expr.span,
+            CallOperation::OptionalMap(expr) => expr.span,
         }
     }
 }
@@ -652,7 +652,7 @@ pub struct MapExpr {
 
 /// Optional map call expression: target?|parameter -> expression|
 #[derive(Debug, Clone, PartialEq)]
-pub struct MapOptionalExpr {
+pub struct OptionalMapExpr {
     pub parameter: Parameter,
     pub body: Box<Expr>,
     pub span: SourceSpan,
@@ -1109,7 +1109,7 @@ pub trait AstVisitor {
             }
             CallOperation::Index(expr) => self.visit_expression(expr, errors),
             CallOperation::Map(map) => self.visit_map_expression(map, errors),
-            CallOperation::MapOptional(map) => self.visit_map_optional_expression(map, errors),
+            CallOperation::OptionalMap(map) => self.visit_optional_map_expression(map, errors),
         }
     }
 
@@ -1278,9 +1278,9 @@ pub trait AstVisitor {
         self.visit_expression(&map.body, errors)
     }
 
-    fn visit_map_optional_expression(
+    fn visit_optional_map_expression(
         &mut self,
-        map: &MapOptionalExpr,
+        map: &OptionalMapExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         self.visit_parameter(&map.parameter, errors)?;

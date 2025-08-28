@@ -106,6 +106,7 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::GetOptionalProperty => {
             constant_instruction("OP_GET_OPTIONAL_PROPERTY", chunk, allocator, offset)
         }
+        OpCode::JumpIfNil => jump_instruction("OP_JUMP_IF_NIL", 1, chunk, offset),
     }
 }
 

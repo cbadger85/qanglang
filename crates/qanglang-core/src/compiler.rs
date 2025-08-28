@@ -1612,12 +1612,35 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 Ok(())
             }
             ast::CallOperation::MapOptional(map_op_expr) => {
-                todo!();
+                self.visit_expression(call.callee.as_ref(), errors)?;
+
+                // Jump if nil - short circuit, leaving nil on stack
+                let nil_jump = self.emit_jump(OpCode::JumpIfNil, call.span);
+
+                // Not nil, so proceed with mapping
+                self.begin_scope();
+
+                if let ast::Parameter::Identifier(identifier) = &map_op_expr.parameter {
+                    self.parse_variable(&identifier.name, identifier.span)?;
+                    let identifier_handle = self.allocator.strings.intern(&identifier.name);
+                    self.define_variable(Some(identifier_handle), identifier.span)?;
+                } else {
+                    return Err(QangSyntaxError::new(
+                        "Destructuring not supported.".to_string(),
+                        map_op_expr.span,
+                    ));
+                }
+
+                self.visit_expression(&map_op_expr.body, errors)?;
+
+                let current = &mut self.compiler;
+                current.scope_depth -= 1; // we don't use end_scope because we don't want to pop the value on the stack.
+
+                // Patch the nil jump to here
+                self.patch_jump(nil_jump, call.span)?;
+
+                Ok(())
             }
-            _ => Err(QangSyntaxError::new(
-                "Unsupported call expression.".to_string(),
-                call.span,
-            )),
         }
     }
 

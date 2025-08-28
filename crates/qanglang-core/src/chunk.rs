@@ -50,6 +50,7 @@ pub enum OpCode {
     ObjectLiteral,
     Is,
     GetOptionalProperty,
+    JumpIfNil,
 }
 
 impl From<u8> for OpCode {
@@ -101,6 +102,7 @@ impl From<u8> for OpCode {
             43 => OpCode::ObjectLiteral,
             44 => OpCode::Is,
             45 => OpCode::GetOptionalProperty,
+            46 => OpCode::JumpIfNil,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

@@ -847,6 +847,12 @@ impl Vm {
                         self.state.frames[self.state.frame_count - 1].ip += offset;
                     }
                 }
+                OpCode::JumpIfNil => {
+                    let offset = self.state.read_short();
+                    if matches!(peek_value!(self, 0), Value::Nil) {
+                        self.state.frames[self.state.frame_count - 1].ip += offset;
+                    }
+                }
                 OpCode::Jump => {
                     let offset = self.state.read_short();
                     self.state.frames[self.state.frame_count - 1].ip += offset;

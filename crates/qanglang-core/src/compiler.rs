@@ -1590,6 +1590,30 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 self.emit_opcode_and_byte(OpCode::GetOptionalProperty, byte, call.span);
                 Ok(())
             }
+            ast::CallOperation::Map(map_expr) => {
+                self.visit_expression(call.callee.as_ref(), errors)?;
+                self.begin_scope();
+
+                if let ast::Parameter::Identifier(identifier) = &map_expr.parameter {
+                    self.parse_variable(&identifier.name, identifier.span)?;
+                    let identifier_handle = self.allocator.strings.intern(&identifier.name);
+                    self.define_variable(Some(identifier_handle), identifier.span)?;
+                } else {
+                    return Err(QangSyntaxError::new(
+                        "Destructuring not supported.".to_string(),
+                        map_expr.span,
+                    ));
+                }
+
+                self.visit_expression(&map_expr.body, errors)?;
+
+                let current = &mut self.compiler;
+                current.scope_depth -= 1; // we don't use end_scope because we don't want to pop the value on the stack.
+                Ok(())
+            }
+            ast::CallOperation::MapOptional(map_op_expr) => {
+                todo!();
+            }
             _ => Err(QangSyntaxError::new(
                 "Unsupported call expression.".to_string(),
                 call.span,

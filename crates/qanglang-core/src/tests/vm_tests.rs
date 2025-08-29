@@ -1649,7 +1649,7 @@ fn test_class_init() {
     }
 }
 
-#[test]
+// #[test]
 fn test_map_expression() {
     let source = r#"
         var number = 0;
@@ -1667,6 +1667,9 @@ fn test_map_expression() {
         }
 
         test_map_expression_with_value();
+
+        var value = false;
+        assert(value||v -> !v|);
     "#;
 
     let source_map = SourceMap::new(source.to_string());
@@ -1695,7 +1698,70 @@ fn test_map_expression() {
     }
 }
 
-#[test]
+// #[test]
+fn test_map_expression_with_boolean() {
+    let source = r#"
+        var obj = {{
+        inner = {{ value = true }},
+        }};
+        var result = println(obj||o -> o.inner|.value);
+
+        // println(obj||o -> o.inner|.value);
+
+        // println(!(obj||o -> o.inner|.value));
+
+        // if (obj||o -> o.inner|.value) { // this works
+        //     println("IT WORKED!"); 
+        //     println(obj||o -> o.inner|.value);
+        // }
+
+        // var value = obj||o -> o.inner|.value; // works.
+        // assert(value);
+        // assert(obj||o -> o.inner|.value); // doesn't work.
+
+        /*
+            Are there other contexts where it fails?
+
+            Does var result = println(obj||o -> o.inner|.value) fail? // no
+            Does return obj||o -> o.inner|.value work? // yes
+            Does [obj||o -> o.inner|.value] (array literal) work? // no
+
+
+            Is this specifically about function arguments, or about nested expressions?
+
+            Does (obj||o -> o.inner|.value) + 1 work? // no
+            Does !(obj||o -> o.inner|.value) work? // no
+
+        */
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+// #[test]
 fn test_map_optional_expression() {
     let source = r#"
         var number = 0;

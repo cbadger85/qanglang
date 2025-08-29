@@ -1145,7 +1145,7 @@ mod expression_parser {
             parser,
             expression_parser::Precedence::Or,
         )?);
-        parser.consume(TokenType::Pipe, "Expect '|' after map body.")?;
+        parser.consume(TokenType::Bar, "Expect '|' after map body.")?;
 
         let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
 
@@ -1181,7 +1181,7 @@ mod expression_parser {
             expression_parser::Precedence::Or,
         )?);
 
-        parser.consume(TokenType::Pipe, "Expect '|' after map body.")?;
+        parser.consume(TokenType::Bar, "Expect '|' after map body.")?;
 
         let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
 

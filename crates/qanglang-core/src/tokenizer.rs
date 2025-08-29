@@ -55,8 +55,9 @@ pub enum TokenType {
     Pipe,               // |>
     DoubleLeftBrace,    // {{
     DoubleRightBrace,   // }}
-    DoubleBar,          // || (not implemented)
-    OptionalBar,        // ?| (not implemented)
+    Bar,                // |
+    DoubleBar,          // ||
+    OptionalBar,        // ?|
     OptionalDot,        // ?.
     Is,                 // is
     PlusAssign,         // +=
@@ -218,11 +219,7 @@ impl<'a> Tokenizer<'a> {
             '"' => self.string(),
             '|' if self.match_char('|') => self.make_token(TokenType::DoubleBar, start),
             '|' if self.match_char('>') => self.make_token(TokenType::Pipe, start),
-            '|' => {
-                // For single '|', we need to determine context
-                // For now, treat as regular pipe for closing map expressions
-                self.make_token(TokenType::Pipe, start)
-            }
+            '|' => self.make_token(TokenType::Bar, start),
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
             _ => self.error_token(format!("Unexpected character: '{}'.", c).as_str()),

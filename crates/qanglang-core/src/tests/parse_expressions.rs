@@ -2959,6 +2959,22 @@ fn test_map_expressions() {
 }
 
 #[test]
+fn test_map_expression_chaining() {
+    let source_code = r#"
+        obj||o -> o.inner|.value; 
+        println(obj||o -> inner|.value);
+        var foo = obj||o -> (() -> o)|;
+        println(foo());
+    "#;
+    let source_map = SourceMap::new(source_code.to_string());
+
+    let (program, errors) = parse_source(&source_map);
+
+    assert_no_parse_errors(&errors);
+    println!("{:?}", program);
+}
+
+#[test]
 fn test_optional_map_expressions() {
     let source_code = r#"
             var optional_simple = arr?|item -> item * 3|;

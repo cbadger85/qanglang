@@ -3,7 +3,7 @@ var test_description = "Testing map expressions";
 fn test_map_expression_with_value() {
   var value = false;
 
-  // assert(value||v -> !v|);
+  assert(value||v -> !v|);
 
   var number = 0;
 

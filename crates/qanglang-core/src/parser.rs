@@ -1130,8 +1130,7 @@ mod expression_parser {
         let start_span = left.span();
 
         // Parse the single parameter (always required for map expressions)
-        let parameter = if parser.check(TokenType::Identifier) {
-            parser.advance();
+        let parameter = if parser.match_token(TokenType::Identifier) {
             ast::Parameter::Identifier(parser.get_identifier()?)
         } else {
             return Err(crate::QangSyntaxError::new(
@@ -1143,7 +1142,7 @@ mod expression_parser {
         parser.consume(TokenType::Arrow, "Expect '->' after parameters.")?;
         let body = Box::new(expression_parser::parse(
             parser,
-            expression_parser::Precedence::Or,
+            Precedence::Ternary,
         )?);
         parser.consume(TokenType::Bar, "Expect '|' after map body.")?;
 
@@ -1178,7 +1177,7 @@ mod expression_parser {
 
         let body = Box::new(expression_parser::parse(
             parser,
-            expression_parser::Precedence::Or,
+            Precedence::Ternary,
         )?);
 
         parser.consume(TokenType::Bar, "Expect '|' after map body.")?;

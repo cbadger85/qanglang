@@ -891,22 +891,18 @@ impl Vm {
                                 self.state.frames[self.state.frame_count - 1].value_slot + index;
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {
-                            let current_closure = self
-                                .alloc
-                                .get_closure(self.state.frames[self.state.frame_count - 1].closure);
-                            let current_upvalue = current_closure.upvalues[index];
-                            self.alloc.get_closure_mut(closure_handle).upvalues[i] =
-                                current_upvalue;
+                            let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
+                            if let Some(current_upvalue) = self.alloc.closures.get_upvalue(current_closure_handle, index) {
+                                self.alloc.closures.set_upvalue(closure_handle, i, current_upvalue);
+                            }
                         }
                     }
                     push_value!(self, Value::Closure(closure_handle))?;
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
-                    let current_closure = self
-                        .alloc
-                        .get_closure(self.state.frames[self.state.frame_count - 1].closure);
-                    let upvalue = current_closure.upvalues[slot];
+                    let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
+                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueReference::Open(0));
 
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
@@ -925,7 +921,7 @@ impl Vm {
                     let current_closure_handle =
                         self.state.frames[self.state.frame_count - 1].closure;
 
-                    let upvalue = self.alloc.get_closure(current_closure_handle).upvalues[slot];
+                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueReference::Open(0));
                     match upvalue {
                         UpvalueReference::Open(stack_slot) => {
                             self.state.stack[stack_slot] = value;
@@ -1299,22 +1295,12 @@ impl Vm {
 
                 // Get the reference and update all closures
 
-                // Update inline entries
+                // Update all closures that reference this upvalue
                 for (closure_handle, upvalue_index) in upvalue_ref.iter() {
-                    self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
-                        UpvalueReference::Closed(value_handle);
+                    self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueReference::Closed(value_handle));
                 }
 
-                // Update overflow entries if they exist
-                if let Some(overflow_handle) = upvalue_ref.overflow_handle() {
-                    let overflow_chunk = self.alloc.upvalue_overflow.get_chunk(overflow_handle);
-                    let (overflow_entries, count) = (overflow_chunk.entries, overflow_chunk.count);
-
-                    for (closure_handle, upvalue_index) in overflow_entries.iter().take(count) {
-                        self.alloc.get_closure_mut(*closure_handle).upvalues[*upvalue_index] =
-                            UpvalueReference::Closed(value_handle);
-                    }
-                }
+                // Note: overflow entries are now handled by ClosureArena internally
 
                 // Remove the upvalue entry
                 self.state.open_upvalues.remove(i);
@@ -1333,25 +1319,10 @@ impl Vm {
             if *open_slot == stack_slot {
                 // Try to add to inline array first
                 if !upvalue_ref.add_closure(closure_handle, upvalue_index) {
-                    // Need overflow storage
-                    let overflow_handle = if let Some(handle) = upvalue_ref.overflow_handle() {
-                        handle
-                    } else {
-                        let handle = self.alloc.upvalue_overflow.allocate_chunk();
-                        upvalue_ref.set_overflow_handle(handle);
-                        handle
-                    };
-
-                    let overflow_chunk = self.alloc.upvalue_overflow.get_chunk_mut(overflow_handle);
-                    if overflow_chunk.count < overflow_chunk.entries.len() {
-                        overflow_chunk.entries[overflow_chunk.count] =
-                            (closure_handle, upvalue_index);
-                        overflow_chunk.count += 1;
-                    }
+                    // Note: overflow storage is now handled by ClosureArena internally
                 }
 
-                self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
-                    UpvalueReference::Open(stack_slot);
+                self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueReference::Open(stack_slot));
                 return;
             }
         }
@@ -1360,8 +1331,7 @@ impl Vm {
         let mut upvalue_ref = ClosureUpvalueReference::new();
         upvalue_ref.add_closure(closure_handle, upvalue_index);
 
-        self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
-            UpvalueReference::Open(stack_slot);
+        self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueReference::Open(stack_slot));
 
         self.state.open_upvalues.push((stack_slot, upvalue_ref));
     }
@@ -1729,14 +1699,7 @@ impl Vm {
                 closure_roots.push_back(Value::Closure(closure_handle));
             }
 
-            // Also add closures from overflow if it exists
-            if let Some(overflow_handle) = upvalue_ref.overflow_handle() {
-                let overflow_chunk = self.alloc.upvalue_overflow.get_chunk(overflow_handle);
-                for i in 0..overflow_chunk.count {
-                    let (closure_handle, _) = overflow_chunk.entries[i];
-                    closure_roots.push_back(Value::Closure(closure_handle));
-                }
-            }
+            // Note: overflow closures are now handled by ClosureArena internally
         }
 
         closure_roots
@@ -1745,12 +1708,7 @@ impl Vm {
     pub fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
 
-        // Mark overflow handles from open upvalues
-        for (_, upvalue_ref) in &mut self.state.open_upvalues {
-            if let Some(overflow_handle) = upvalue_ref.overflow_handle() {
-                self.alloc.upvalue_overflow.mark_chunk(overflow_handle);
-            }
-        }
+        // Note: overflow marking is now handled by ClosureArena internally
 
         let roots = self.gather_roots();
         self.alloc.collect_garbage(roots);

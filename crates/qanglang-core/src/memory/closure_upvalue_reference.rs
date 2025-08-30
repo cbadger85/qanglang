@@ -1,4 +1,6 @@
-use crate::memory::{ClosureHandle, upvalue_overflow_arena::UpvalueOverflowHandle};
+use crate::memory::{ClosureHandle, arena::Index};
+
+pub type UpvalueOverflowHandle = Index;
 
 const INLINE_UPVALUE_CAPACITY: usize = 4;
 

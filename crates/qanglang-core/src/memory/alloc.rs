@@ -5,12 +5,10 @@ use crate::memory::object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, InstanceObject, NativeFunctionObject,
 };
 use crate::memory::string_interner::StringInterner;
-use crate::memory::upvalue_overflow_arena::UpvalueOverflowArena;
-use crate::{ClosureObject, FunctionObject, Upvalue, Value, debug_log};
-use crate::{StringHandle, UpvalueReference};
+use crate::memory::closure_arena::ClosureArena;
+use crate::{FunctionObject, Upvalue, Value, debug_log};
+use crate::StringHandle;
 use std::collections::VecDeque;
-
-pub type ClosureHandle = Index;
 
 pub type UpvalueHandle = Index;
 
@@ -31,7 +29,7 @@ const GC_HEAP_GROW_FACTOR: usize = 2;
 #[derive(Debug, Default, Clone)]
 pub struct HeapAllocator {
     functions: Vec<FunctionObject>,
-    closures: Arena<ClosureObject>,
+    pub closures: ClosureArena,
     upvalues: Arena<Upvalue>,
     pub strings: StringInterner,
     native_functions: Vec<NativeFunctionObject>,
@@ -41,7 +39,6 @@ pub struct HeapAllocator {
     bound_intrinsics: Arena<BoundIntrinsicObject>,
     pub tables: HashMapArena,
     pub arrays: ArrayArena,
-    pub upvalue_overflow: UpvalueOverflowArena,
     is_debug: bool,
     bytes_until_gc: usize,
 }
@@ -54,7 +51,7 @@ impl HeapAllocator {
     pub fn with_capacity(initial_capacity: usize) -> Self {
         Self {
             functions: Vec::with_capacity(initial_capacity),
-            closures: Arena::with_capacity(initial_capacity),
+            closures: ClosureArena::with_capacity(initial_capacity),
             strings: StringInterner::new(),
             upvalues: Arena::with_capacity(initial_capacity),
             native_functions: Vec::with_capacity(initial_capacity),
@@ -64,7 +61,6 @@ impl HeapAllocator {
             bound_intrinsics: Arena::with_capacity(initial_capacity),
             instances: Arena::with_capacity(initial_capacity),
             arrays: ArrayArena::with_capacity(initial_capacity),
-            upvalue_overflow: UpvalueOverflowArena::with_capacity(initial_capacity),
             is_debug: false,
             bytes_until_gc: 1024 * 1024,
         }
@@ -72,6 +68,7 @@ impl HeapAllocator {
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
         self.is_debug = is_debug;
+        self.closures = self.closures.set_debug(is_debug);
         self
     }
 
@@ -80,33 +77,21 @@ impl HeapAllocator {
         self
     }
 
-    pub fn allocate_closure(&mut self, closure: ClosureObject) -> ClosureHandle {
-        let handle = self.closures.insert(closure);
-        debug_log!(
-            self.is_debug,
-            "Allocated {} bytes for closure: {:?}",
-            std::mem::size_of::<ClosureObject>(),
-            handle
-        );
-        handle
+    // Closure methods delegated to ClosureArena
+    pub fn allocate_closure(&mut self, closure: crate::memory::ClosureObject) -> crate::memory::ClosureHandle {
+        self.closures.allocate_closure(closure)
     }
 
-    pub fn get_closure(&self, handle: ClosureHandle) -> &ClosureObject {
-        &self.closures[handle]
+    pub fn get_closure(&self, handle: crate::memory::ClosureHandle) -> &crate::memory::ClosureObject {
+        self.closures.get_closure(handle)
     }
 
-    pub fn get_closure_mut(&mut self, handle: ClosureHandle) -> &mut ClosureObject {
-        &mut self.closures[handle]
+    pub fn get_closure_mut(&mut self, handle: crate::memory::ClosureHandle) -> &mut crate::memory::ClosureObject {
+        self.closures.get_closure_mut(handle)
     }
 
-    pub fn free_closure(&mut self, handle: ClosureHandle) {
-        self.closures.remove(handle);
-        debug_log!(
-            self.is_debug,
-            "Freed {} byes for closure: {:?}",
-            std::mem::size_of::<ClosureObject>(),
-            handle
-        );
+    pub fn free_closure(&mut self, handle: crate::memory::ClosureHandle) {
+        self.closures.free_closure(handle)
     }
 
     pub fn allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
@@ -357,7 +342,7 @@ impl HeapAllocator {
 
     #[cfg(debug_assertions)]
     pub fn should_collect_garbage(&mut self) -> bool {
-        self.closures.len() < self.closures.capacity()
+        self.closures.len() < 100 // Simplified check for debug
             || self.upvalues.len() < self.upvalues.capacity()
     }
     #[cfg(not(debug_assertions))]
@@ -367,7 +352,7 @@ impl HeapAllocator {
 
     pub fn total_allocated_bytes(&self) -> usize {
         let string_bytes = self.strings.get_allocated_bytes();
-        let closure_bytes = self.closures.len() * std::mem::size_of::<ClosureObject>();
+        let closure_bytes = self.closures.get_allocated_bytes();
         let upvalue_bytes = self.upvalues.len() * std::mem::size_of::<Upvalue>();
         let function_bytes = self.functions.len() * std::mem::size_of::<FunctionObject>();
         let native_function_bytes =
@@ -379,7 +364,6 @@ impl HeapAllocator {
         let intrinsic_bytes =
             self.bound_intrinsics.len() * std::mem::size_of::<BoundIntrinsicObject>();
         let array_bytes = self.arrays.get_allocated_bytes();
-        let upvalue_overflow_bytes = self.upvalue_overflow.get_allocated_bytes();
 
         string_bytes
             + closure_bytes
@@ -392,7 +376,6 @@ impl HeapAllocator {
             + method_bytes
             + intrinsic_bytes
             + array_bytes
-            + upvalue_overflow_bytes
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -420,17 +403,7 @@ impl HeapAllocator {
             self.upvalues.remove(index);
         }
 
-        for (index, closure) in self.closures.iter_mut() {
-            if closure.is_marked {
-                closure.is_marked = false;
-            } else {
-                deleted_values.push(index);
-            }
-        }
-
-        for index in deleted_values.drain(..) {
-            self.closures.remove(index);
-        }
+        self.closures.collect_garbage();
 
         for (index, clazz) in self.classes.iter_mut() {
             if clazz.is_marked {
@@ -484,8 +457,6 @@ impl HeapAllocator {
 
         self.arrays.collect_garbage();
 
-        self.upvalue_overflow.collect_garbage();
-
         let new_allocated_bytes = self.total_allocated_bytes();
 
         self.bytes_until_gc = new_allocated_bytes * GC_HEAP_GROW_FACTOR;
@@ -502,26 +473,15 @@ impl HeapAllocator {
         while let Some(value) = gray_list.pop_front() {
             match value {
                 Value::Closure(handle) => {
-                    let closure = &mut self.closures[handle];
-
-                    if !closure.is_marked {
-                        debug_log!(self.is_debug, "Marking closure: {:?}", handle);
-                        closure.is_marked = true;
-                        debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
-
-                        for i in 0..closure.upvalue_count {
-                            if let UpvalueReference::Closed(handle) = closure.upvalues[i] {
-                                let upvalue = &mut self.upvalues[handle];
-
-                                if !upvalue.is_marked {
-                                    debug_log!(self.is_debug, "Marking upvalue: {:?}", handle);
-                                    upvalue.is_marked = true;
-                                    debug_log!(self.is_debug, "Blackening upvalue: {:?}", handle);
-                                    gray_list.push_back(upvalue.value);
-                                }
-                            }
+                    self.closures.trace_closure_references(handle, &mut |upvalue_handle| {
+                        let upvalue = &mut self.upvalues[upvalue_handle];
+                        if !upvalue.is_marked {
+                            debug_log!(self.is_debug, "Marking upvalue: {:?}", upvalue_handle);
+                            upvalue.is_marked = true;
+                            debug_log!(self.is_debug, "Blackening upvalue: {:?}", upvalue_handle);
+                            gray_list.push_back(upvalue.value);
                         }
-                    }
+                    });
                 }
                 Value::Class(handle) => {
                     let clazz = &mut self.classes[handle];

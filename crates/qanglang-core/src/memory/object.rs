@@ -1,41 +1,11 @@
 use crate::{
     ClassHandle, ClosureHandle, HashMapHandle, NativeFunctionError, Value, Vm,
     chunk::Chunk,
-    memory::{FunctionHandle, StringHandle, UpvalueHandle},
+    memory::StringHandle,
 };
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClosureObject {
-    pub function: FunctionHandle,
-    pub upvalue_count: usize,
-    pub upvalues: [UpvalueReference; 64],
-    pub is_marked: bool,
-}
-
-impl ClosureObject {
-    pub fn new(function: FunctionHandle, upvalue_count: usize) -> Self {
-        let upvalues = std::array::from_fn(|_| UpvalueReference::default());
-        Self {
-            function,
-            upvalues,
-            upvalue_count,
-            is_marked: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Copy)]
-#[repr(u8)]
-pub enum UpvalueReference {
-    Open(usize),
-    Closed(UpvalueHandle),
-}
-
-impl Default for UpvalueReference {
-    fn default() -> Self {
-        Self::Open(0)
-    }
-}
+// Re-export from closure_arena
+pub use crate::memory::closure_arena::{ClosureObject, UpvalueReference};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Upvalue {

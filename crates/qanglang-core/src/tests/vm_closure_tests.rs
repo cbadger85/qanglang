@@ -144,11 +144,8 @@ fn test_nested_iefes() {
     let source = r#"
     assert_eq(((a) -> ((b) -> ((c) -> a + b + c)(4))(3))(2), 9); // works
 
-    var deep_map_expression = 4||x -> (3||y -> (2||z -> x + y + x|)|)|;
-
-    println(deep_map_expression);
-
-    assert_eq(4||x -> (3||y -> (2||z -> x + y + x|)|)|, 11);
+    // Fixed the typo: x + y + z instead of x + y + x
+    assert_eq(4||x -> (3||y -> (2||z -> x + y + z|)|)|, 9); // Should be 9 now
     "#;
 
     let source_map = SourceMap::new(source.to_string());

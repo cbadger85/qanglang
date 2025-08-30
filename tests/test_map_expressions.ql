@@ -91,25 +91,9 @@ fn test_map_expression_closures() {
 
 // Nested map expressions (rewritten as IIFEs to test closure behavior)
 fn test_nested_map_expressions() {
-  // Map inside map: 5||outer -> (3||inner -> inner + outer|)|
-  // Rewritten as: ((outer) -> ((inner) -> inner + outer)(3))(5)
-  // assert_eq(((outer) -> ((inner) -> inner + outer)(3))(5), 8);
-  
-  // Multiple levels: 2||a -> (3||b -> (4||c -> a + b + c|)|)|
-  // Rewritten as: ((a) -> ((b) -> ((c) -> a + b + c)(4))(3))(2)
-  // Should be: 2 + 3 + 4 = 9, but closure capture bug causes it to be 10
   assert_eq(((a) -> ((b) -> ((c) -> a + b + c)(4))(3))(2), 9);
 
-  // var deep_map_expression = 4||x -> (3||y -> (2||z -> x + y + x|)|)|;
-
-  // println(deep_map_expression);
-
-  // assert_eq(deep_map_expression, 9);
-  
-  // Mixed with function calls: nums||arr -> (arr[0]||n -> n * 10|)|
-  // Rewritten as: ((arr) -> ((n) -> n * 10)(arr[0]))(nums)
-  var nums = [1, 2, 3];
-  // assert_eq(((arr) -> ((n) -> n * 10)(arr[0]))(nums), 10);
+  assert_eq(4||x -> (3||y -> (2||z -> x + y + z|)|)|, 9);
 }
 
 // Map expressions in different contexts

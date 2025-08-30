@@ -190,6 +190,15 @@ fn test_map_expression_performance_cases() {
   }};
   
   assert_eq(nested||obj -> obj.level1.level2.level3.value|, 999);
+  assert_eq(nested||obj -> obj.level1|.level2.level3.value, 999);
+  assert_eq(
+    nested
+      .level1
+      || lvl1 -> lvl1.level2|
+      .level3
+      .value, 
+    999
+  );
   
   // Large number operations
   assert_eq(1000000||n -> n / 1000|, 1000);

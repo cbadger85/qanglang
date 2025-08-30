@@ -29,6 +29,9 @@
       "include": "#objects"
     },
     {
+      "include": "#map-expressions"
+    },
+    {
       "include": "#lambdas"
     },
     {
@@ -85,6 +88,10 @@
         {
           "name": "support.function.builtin",
           "match": "\\b(print|println|assert|assert_eq|assert_throws|typeof|system_time|to_string)\\b"
+        },
+        {
+          "name": "support.function.intrinsic",
+          "match": "\\.(call|apply)\\b"
         }
       ]
     },
@@ -147,8 +154,8 @@
       "patterns": [
         {
           "name": "meta.object.literal.qanglang",
-          "begin": ":\\{",
-          "end": "\\}",
+          "begin": "\\{\\{",
+          "end": "\\}\\}",
           "beginCaptures": {
             "0": {
               "name": "punctuation.section.object.begin.qanglang"
@@ -277,11 +284,15 @@
       "patterns": [
         {
           "name": "keyword.operator.assignment.qanglang",
-          "match": "="
+          "match": "(\\+=|-=|\\*=|/=|%=|=)"
         },
         {
           "name": "keyword.operator.comparison.qanglang",
           "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.identity.qanglang",
+          "match": "\\bis\\b"
         },
         {
           "name": "keyword.operator.arithmetic.qanglang",
@@ -298,6 +309,14 @@
         {
           "name": "keyword.operator.pipe.qanglang",
           "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.map.qanglang",
+          "match": "\\|\\|"
+        },
+        {
+          "name": "keyword.operator.optional-map.qanglang",
+          "match": "\\?\\|"
         },
         {
           "name": "keyword.operator.optional-chaining.qanglang",
@@ -338,6 +357,78 @@
         {
           "name": "variable.other.qanglang",
           "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "map-expressions": {
+      "patterns": [
+        {
+          "name": "meta.map-expression.qanglang",
+          "begin": "\\|\\|",
+          "end": "\\|",
+          "beginCaptures": {
+            "0": {
+              "name": "keyword.operator.map.qanglang"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "keyword.operator.map.qanglang"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#map-parameters"
+            },
+            {
+              "include": "#map-arrow"
+            },
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.optional-map-expression.qanglang",
+          "begin": "\\?\\|",
+          "end": "\\|",
+          "beginCaptures": {
+            "0": {
+              "name": "keyword.operator.optional-map.qanglang"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "keyword.operator.optional-map.qanglang"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#map-parameters"
+            },
+            {
+              "include": "#map-arrow"
+            },
+            {
+              "include": "$self"
+            }
+          ]
+        }
+      ]
+    },
+    "map-parameters": {
+      "patterns": [
+        {
+          "name": "variable.parameter.qanglang",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b(?=\\s*->)"
+        }
+      ]
+    },
+    "map-arrow": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.qanglang",
+          "match": "->"
         }
       ]
     }

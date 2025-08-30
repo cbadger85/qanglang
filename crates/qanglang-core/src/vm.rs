@@ -480,7 +480,6 @@ impl Vm {
                     pop_value!(self);
                     push_value!(self, Value::BoundIntrinsic(handle))?;
                 } else if optional {
-                    // For optional access, return nil for other properties
                     pop_value!(self);
                     push_value!(self, Value::Nil)?;
                 } else {
@@ -1091,7 +1090,7 @@ impl Vm {
                     let index = pop_value!(self);
                     match (index, peek_value!(self, 0)) {
                         (Value::Number(index), Value::Array(handle)) => {
-                            let value = self.alloc.arrays.get(handle, index.trunc() as isize); // TODO verify this is an int instead of coercing it.
+                            let value = self.alloc.arrays.get(handle, index.trunc() as isize);
                             pop_value!(self);
                             push_value!(self, value)?;
                         }
@@ -1168,7 +1167,6 @@ impl Vm {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
 
-                    // Close upvalues for the current function's locals
                     self.close_upvalue(value_slot);
 
                     self.state.frame_count -= 1;
@@ -1180,7 +1178,6 @@ impl Vm {
                         return Ok(result);
                     }
 
-                    // Restore the previous function pointer
                     let previous_frame = &self.state.frames[self.state.frame_count - 1];
                     let previous_closure = self.alloc.get_closure(previous_frame.closure);
                     let previous_function = self.alloc.get_function(previous_closure.function);
@@ -1385,8 +1382,6 @@ impl Vm {
             Value::BoundMethod(handle) => {
                 let bound_method = self.alloc.get_bound_method(handle);
 
-                // Replace the method function with the receiver in the stack
-                // so that when the method is called, 'this' (slot 0) contains the receiver
                 self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.receiver;
                 self.call(bound_method.closure, arg_count)
             }
@@ -1498,7 +1493,6 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::progress!("before_call");
 
-        // Get closure and function, cache function pointer for fast access during execution
         let closure = self.alloc.get_closure(closure_handle);
         let function = self.alloc.get_function(closure.function);
 
@@ -1629,19 +1623,10 @@ impl Vm {
 
                 Ok(())
             }
-            IntrinsicMethod::Apply => self.handle_async_apply_intrinsic(receiver, arg_count),
-            IntrinsicMethod::Call => self.handle_async_call_intrinsic(receiver, arg_count),
-            IntrinsicMethod::NilSafeCall => {
+            IntrinsicMethod::Apply => self.handle_function_intrinsic_apply(receiver, arg_count),
+            IntrinsicMethod::Call => self.handle_function_intrinsic_call(receiver, arg_count),
+            IntrinsicMethod::NilSafeCall | IntrinsicMethod::NilSafeApply => {
                 // For nil-safe call, consume arguments and return nil
-                for _ in 0..arg_count {
-                    pop_value!(self);
-                }
-                pop_value!(self); // pop the bound method
-                push_value!(self, Value::Nil)?;
-                Ok(())
-            }
-            IntrinsicMethod::NilSafeApply => {
-                // For nil-safe apply, consume arguments and return nil
                 for _ in 0..arg_count {
                     pop_value!(self);
                 }
@@ -1756,7 +1741,7 @@ impl Vm {
         traces
     }
 
-    fn handle_async_call_intrinsic(
+    fn handle_function_intrinsic_call(
         &mut self,
         receiver: Value,
         arg_count: usize,
@@ -1766,10 +1751,7 @@ impl Vm {
             | Value::BoundIntrinsic(_)
             | Value::BoundMethod(_)
             | Value::NativeFunction(_) => {
-                // Replace the bound intrinsic on the stack with the actual function
-                // The bound intrinsic is at position (stack_top - arg_count - 1)
                 self.state.stack[self.state.stack_top - arg_count - 1] = receiver;
-                // Now call the function with the arguments
                 self.call_value(receiver, arg_count)
             }
             _ => Err(QangRuntimeError::new(
@@ -1779,7 +1761,7 @@ impl Vm {
         }
     }
 
-    fn handle_async_apply_intrinsic(
+    fn handle_function_intrinsic_apply(
         &mut self,
         receiver: Value,
         arg_count: usize,
@@ -1789,7 +1771,6 @@ impl Vm {
             | Value::BoundIntrinsic(_)
             | Value::BoundMethod(_)
             | Value::NativeFunction(_) => {
-                // For apply, we expect exactly 1 argument which should be an array
                 if arg_count != 1 {
                     return Err(QangRuntimeError::new(
                         "'apply' must be called with one argument and it must be an array."
@@ -1798,7 +1779,6 @@ impl Vm {
                     ));
                 }
 
-                // Get the array argument from the stack
                 let array_arg = peek_value!(self, 0);
                 match array_arg {
                     Value::Array(array_handle) => {
@@ -1808,13 +1788,11 @@ impl Vm {
                         // Replace the bound intrinsic on the stack with the actual function
                         self.state.stack[self.state.stack_top - 1] = receiver;
 
-                        // Push array elements as individual arguments
                         let array_length = self.alloc.arrays.length(array_handle);
                         for value in self.alloc.arrays.iter(array_handle) {
                             push_value!(self, value)?;
                         }
 
-                        // Call the function with the array elements as arguments
                         self.call_value(receiver, array_length)
                     }
                     _ => Err(QangRuntimeError::new(

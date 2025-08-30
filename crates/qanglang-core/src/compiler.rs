@@ -178,7 +178,6 @@ impl Compiler {
     ) -> Result<usize, QangSyntaxError> {
         let upvalue_count = self.function.upvalue_count;
 
-        // Check for existing upvalue to avoid duplicates
         for i in 0..upvalue_count {
             let upvalue = self.upvalues[i];
             if upvalue.index == index as u8 && upvalue.is_local == is_local {
@@ -715,70 +714,20 @@ impl<'a> CompilerVisitor<'a> {
         Ok(())
     }
 
-    fn compile_map_as_iife(
+    fn handle_map_expression(
         &mut self,
         callee: &ast::Expr,
         map_expr: &ast::MapExpr,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangSyntaxError> {
-        // Transform value||x -> x + 1| into (|x| -> x + 1)(value)
-
-        // Create a lambda expression: |x| -> x + 1
         let lambda_expr = ast::LambdaExpr {
             parameters: vec![map_expr.parameter.clone()],
             body: Box::new(ast::LambdaBody::Expr(map_expr.body.clone())),
             span: map_expr.span,
         };
-
-        // Compile the lambda (this creates a closure on the stack)
         self.visit_lambda_expression(&lambda_expr, errors)?;
-
-        // Compile the argument (the callee value)
         self.visit_expression(callee, errors)?;
-
-        // Call the lambda with 1 argument
         self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
-
-        Ok(())
-    }
-
-    fn compile_optional_map_as_iife(
-        &mut self,
-        callee: &ast::Expr,
-        map_expr: &ast::OptionalMapExpr,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), QangSyntaxError> {
-        // Transform value?|x -> x + 1| into value == nil ? nil : (|x| -> x + 1)(value)
-
-        // Compile the callee (value to check for nil)
-        self.visit_expression(callee, errors)?;
-
-        // Jump if nil - short circuit, leaving nil on stack
-        let nil_jump = self.emit_jump(OpCode::JumpIfNil, map_expr.span);
-
-        // Not nil path: JumpIfNil only peeks, so the value is still on stack
-        // We need to pop it before proceeding since we'll recompile the value for the function call
-        self.emit_opcode(OpCode::Pop, map_expr.span);
-
-        // Create a lambda expression: |x| -> x + 1
-        let lambda_expr = ast::LambdaExpr {
-            parameters: vec![map_expr.parameter.clone()],
-            body: Box::new(ast::LambdaBody::Expr(map_expr.body.clone())),
-            span: map_expr.span,
-        };
-
-        // Compile the lambda (this creates a closure on the stack)
-        self.visit_lambda_expression(&lambda_expr, errors)?;
-
-        // Compile the argument (the callee value)
-        self.visit_expression(callee, errors)?;
-
-        // Call the lambda with 1 argument
-        self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
-
-        // Patch the nil jump to here
-        self.patch_jump(nil_jump, map_expr.span)?;
-
         Ok(())
     }
 }
@@ -845,7 +794,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         super_expr: &ast::SuperExpr,
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        // Check if we're in a class with a superclass
         if !self.compiler.has_superclass {
             return Err(QangSyntaxError::new(
                 "Can't use 'super' in a class with no superclass.".to_string(),
@@ -853,7 +801,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ));
         }
 
-        // Check if we're in a method
         if !matches!(
             self.compiler.kind,
             CompilerKind::Method | CompilerKind::Initializer
@@ -864,13 +811,9 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ));
         }
 
-        // Load 'this' onto the stack
         self.handle_variable("this", super_expr.span, false)?;
-
-        // Load the superclass from the 'super' variable
         self.handle_variable("super", super_expr.span, false)?;
 
-        // Emit the super method access instruction
         let method_handle = self.allocator.strings.intern(&super_expr.method.name);
         let constant_index =
             self.make_constant(Value::String(method_handle), super_expr.method.span)?;
@@ -964,62 +907,43 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.emit_opcode(OpCode::SetArrayIndex, index.span);
                 }
             },
-            _ => {
-                match &assignment.target {
-                    ast::AssignmentTarget::Identifier(identifier) => {
-                        self.handle_variable(&identifier.name, identifier.span, false)?;
-                        self.visit_expression(&assignment.value, errors)?;
-                        self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
-                        self.handle_variable(&identifier.name, identifier.span, true)?;
-                    }
-                    ast::AssignmentTarget::Property(property) => {
-                        // First, put object on stack for SetProperty (it needs to be at the bottom)
-                        self.visit_expression(&property.object, errors)?;
-
-                        // Get current property value (this will consume the object and put the value on stack)
-                        self.visit_expression(&property.object, errors)?;
-                        let identifier_handle =
-                            self.allocator.strings.intern(&property.property.name);
-                        let byte = self.make_constant(
-                            Value::String(identifier_handle),
-                            property.property.span,
-                        )?;
-                        self.emit_opcode_and_byte(OpCode::GetProperty, byte, property.span);
-
-                        // Get the new value
-                        self.visit_expression(&assignment.value, errors)?;
-                        // Apply the operation - stack now has [object, result]
-                        self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
-
-                        // Stack now has [object, result] which is exactly what SetProperty expects
-                        let identifier_handle =
-                            self.allocator.strings.intern(&property.property.name);
-                        let byte = self.make_constant(
-                            Value::String(identifier_handle),
-                            property.property.span,
-                        )?;
-                        self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
-                    }
-                    ast::AssignmentTarget::Index(index) => {
-                        // Put array and index on stack for SetArrayIndex
-                        self.visit_expression(&index.object, errors)?;
-                        self.visit_expression(&index.index, errors)?;
-
-                        // Get current array element value
-                        self.visit_expression(&index.object, errors)?;
-                        self.visit_expression(&index.index, errors)?;
-                        self.emit_opcode(OpCode::GetArrayIndex, index.span);
-
-                        // Get the new value
-                        self.visit_expression(&assignment.value, errors)?;
-                        // Apply the operation
-                        self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
-
-                        // Stack now has [array, index, result] which is what SetArrayIndex expects
-                        self.emit_opcode(OpCode::SetArrayIndex, index.span);
-                    }
+            _ => match &assignment.target {
+                ast::AssignmentTarget::Identifier(identifier) => {
+                    self.handle_variable(&identifier.name, identifier.span, false)?;
+                    self.visit_expression(&assignment.value, errors)?;
+                    self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
+                    self.handle_variable(&identifier.name, identifier.span, true)?;
                 }
-            }
+                ast::AssignmentTarget::Property(property) => {
+                    self.visit_expression(&property.object, errors)?;
+                    self.visit_expression(&property.object, errors)?;
+                    let identifier_handle = self.allocator.strings.intern(&property.property.name);
+                    let byte = self
+                        .make_constant(Value::String(identifier_handle), property.property.span)?;
+                    self.emit_opcode_and_byte(OpCode::GetProperty, byte, property.span);
+
+                    self.visit_expression(&assignment.value, errors)?;
+                    self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
+
+                    let identifier_handle = self.allocator.strings.intern(&property.property.name);
+                    let byte = self
+                        .make_constant(Value::String(identifier_handle), property.property.span)?;
+                    self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
+                }
+                ast::AssignmentTarget::Index(index) => {
+                    self.visit_expression(&index.object, errors)?;
+                    self.visit_expression(&index.index, errors)?;
+
+                    self.visit_expression(&index.object, errors)?;
+                    self.visit_expression(&index.index, errors)?;
+                    self.emit_opcode(OpCode::GetArrayIndex, index.span);
+
+                    self.visit_expression(&assignment.value, errors)?;
+                    self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
+
+                    self.emit_opcode(OpCode::SetArrayIndex, index.span);
+                }
+            },
         }
 
         Ok(())
@@ -1202,7 +1126,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         while_stmt: &ast::WhileStmt,
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
-        // Push new loop context
         self.compiler.loop_contexts.push(LoopContext::default());
 
         let loop_start = self.current_chunk_mut().code.len();
@@ -1212,17 +1135,14 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.emit_opcode(OpCode::Pop, while_stmt.body.span());
         self.visit_statement(&while_stmt.body, errors)?;
 
-        // Pop loop context and handle continue jumps before emitting the main loop
         let loop_context = self
             .compiler
             .loop_contexts
             .pop()
             .expect("Loop context should exist");
 
-        // Emit continue jumps as Loop instructions going back to loop_start
         for continue_position in loop_context.continue_jumps {
-            // Calculate offset from the continue position back to loop_start
-            let jump_distance = continue_position - loop_start + 3; // +3 for the Loop instruction size
+            let jump_distance = continue_position - loop_start + 3;
 
             if jump_distance > u16::MAX as usize {
                 return Err(QangSyntaxError::new(
@@ -1231,7 +1151,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 ));
             }
 
-            // Insert Loop instruction at the continue position
             let chunk = self.current_chunk_mut();
             chunk.code.insert(continue_position, OpCode::Loop as u8);
             chunk
@@ -1247,7 +1166,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.patch_jump(exit_jump, while_stmt.body.span())?;
         self.emit_opcode(OpCode::Pop, while_stmt.span);
 
-        // Patch break jumps to exit the loop
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, while_stmt.span)?;
         }
@@ -1262,7 +1180,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         self.begin_scope();
 
-        // Push new loop context
         self.compiler.loop_contexts.push(LoopContext::default());
 
         if let Some(initializer) = &for_stmt.initializer {
@@ -1286,7 +1203,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             loop_start = self.current_chunk_mut().code.len();
             self.visit_statement(&for_stmt.body, errors)?;
 
-            // Mark the start of increment for continue jumps
             increment_start = Some(self.current_chunk_mut().code.len());
             if let Some(increment) = &for_stmt.increment {
                 self.visit_expression(increment, errors)?;
@@ -1301,7 +1217,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         } else {
             self.visit_statement(&for_stmt.body, errors)?;
 
-            // Mark the start of increment for continue jumps
             increment_start = Some(self.current_chunk_mut().code.len());
             if let Some(increment) = &for_stmt.increment {
                 self.visit_expression(increment, errors)?;
@@ -1311,18 +1226,15 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.emit_loop(loop_start, for_stmt.body.span())?;
         }
 
-        // Pop loop context and patch continue/break jumps
         let loop_context = self
             .compiler
             .loop_contexts
             .pop()
             .expect("Loop context should exist");
 
-        // Patch continue jumps to jump to increment (or loop start if no increment)
         let continue_target = increment_start.unwrap_or(loop_start);
         for continue_jump in loop_context.continue_jumps {
             if continue_target > continue_jump {
-                // Jump forward to increment
                 let jump_distance = continue_target - continue_jump - 3;
                 if jump_distance > u16::MAX as usize {
                     return Err(QangSyntaxError::new(
@@ -1334,7 +1246,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 chunk.code[continue_jump + 1] = ((jump_distance >> 8) & 0xff) as u8;
                 chunk.code[continue_jump + 2] = (jump_distance & 0xff) as u8;
             } else {
-                // Jump backward to increment (convert to loop)
                 let jump_distance = continue_jump - continue_target + 2;
                 if jump_distance > u16::MAX as usize {
                     return Err(QangSyntaxError::new(
@@ -1354,7 +1265,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             self.emit_opcode(OpCode::Pop, for_stmt.span);
         }
 
-        // Patch break jumps to exit the loop
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, for_stmt.span)?;
         }
@@ -1426,7 +1336,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         _errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         if !self.compiler.loop_contexts.is_empty() {
-            // Store the current position to calculate the backward jump later
             let continue_position = self.current_chunk_mut().code.len();
             if let Some(loop_context) = self.compiler.loop_contexts.last_mut() {
                 loop_context.continue_jumps.push(continue_position);
@@ -1559,13 +1468,9 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     ));
                 }
 
-                // Check if this is a super method call
                 if let ast::Expr::Primary(ast::PrimaryExpr::Super(super_expr)) =
                     call.callee.as_ref()
                 {
-                    // Handle super method invocation with SuperInvoke opcode
-
-                    // Check if we're in a class with a superclass
                     if !self.compiler.has_superclass {
                         return Err(QangSyntaxError::new(
                             "Can't use 'super' in a class with no superclass.".to_string(),
@@ -1573,7 +1478,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                         ));
                     }
 
-                    // Check if we're in a method
                     if !matches!(
                         self.compiler.kind,
                         CompilerKind::Method | CompilerKind::Initializer
@@ -1584,18 +1488,14 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                         ));
                     }
 
-                    // Load 'this' onto the stack first
                     self.handle_variable("this", super_expr.span, false)?;
 
-                    // Compile all arguments
                     for arg in args {
                         self.visit_expression(arg, errors)?;
                     }
 
-                    // Load the superclass
                     self.handle_variable("super", super_expr.span, false)?;
 
-                    // Emit super invoke instruction
                     let method_handle = self.allocator.strings.intern(&super_expr.method.name);
                     let method_constant =
                         self.make_constant(Value::String(method_handle), super_expr.method.span)?;
@@ -1606,7 +1506,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     return Ok(());
                 }
 
-                // Handle regular method invocation optimization
                 if let ast::Expr::Call(property_call) = call.callee.as_ref()
                     && let ast::CallOperation::Property(method_name) =
                         property_call.operation.as_ref()
@@ -1627,7 +1526,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     return Ok(());
                 }
 
-                // Regular function call
                 self.visit_expression(call.callee.as_ref(), errors)?;
 
                 for arg in args {
@@ -1660,12 +1558,15 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 Ok(())
             }
             ast::CallOperation::Map(map_expr) => {
-                // Transform value||x -> x + 1| into (|x| -> x + 1)(value)
-                self.compile_map_as_iife(call.callee.as_ref(), map_expr, errors)
+                self.handle_map_expression(call.callee.as_ref(), map_expr, errors)
             }
             ast::CallOperation::OptionalMap(map_expr) => {
-                // Transform value?|x -> x + 1| into value == nil ? nil : (|x| -> x + 1)(value)
-                self.compile_optional_map_as_iife(call.callee.as_ref(), map_expr, errors)
+                self.visit_expression(&call.callee, errors)?;
+                let nil_jump = self.emit_jump(OpCode::JumpIfNil, map_expr.span);
+                self.emit_opcode(OpCode::Pop, map_expr.span);
+                self.handle_map_expression(call.callee.as_ref(), &map_expr.clone().into(), errors)?;
+                self.patch_jump(nil_jump, map_expr.span)?;
+                Ok(())
             }
         }
     }
@@ -1677,60 +1578,13 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         if let Some(right) = &pipe.right {
             match right.as_ref() {
-                // Case 1: Right side is a function call - partial application
-                ast::Expr::Call(call_expr) => {
-                    match call_expr.operation.as_ref() {
-                        ast::CallOperation::Call(arguments) => {
-                            // Check if this is a special case: something.call(args...) if it is, drop the (args...) part and ignore it entirely. It should send the same thing vm something.call
-                            if let ast::Expr::Call(inner_call) = call_expr.callee.as_ref()
-                                && let ast::CallOperation::Property(method_name) =
-                                    inner_call.operation.as_ref()
-                                && method_name.name == "call".into()
-                            {
-                                self.visit_expression(&call_expr.callee, errors)?;
-                                self.visit_expression(&pipe.left, errors)?;
-                                let method_handle =
-                                    self.allocator.strings.intern(&method_name.name);
-                                let method_constant = self.make_constant(
-                                    Value::String(method_handle),
-                                    method_name.span,
-                                )?;
-                                self.emit_opcode_and_byte(
-                                    OpCode::Invoke,
-                                    method_constant,
-                                    pipe.span,
-                                );
-                                self.emit_byte(1, pipe.span);
-                            } else {
-                                // Regular function call with partial application
-                                // Visit the function (callee) - don't call it, just get the function value
-                                self.visit_expression(&call_expr.callee, errors)?;
-
-                                // Visit the piped value (becomes first argument)
-                                self.visit_expression(&pipe.left, errors)?;
-
-                                // Visit all the existing arguments
-                                for arg in arguments {
-                                    self.visit_expression(arg, errors)?;
-                                }
-
-                                // Call with 1 + existing args
-                                let total_args = 1 + arguments.len();
-                                if total_args > u8::MAX as usize {
-                                    return Err(QangSyntaxError::new(
-                                        "Functions may only take up to 256 arguments.".to_string(),
-                                        pipe.span,
-                                    ));
-                                }
-
-                                self.emit_opcode_and_byte(
-                                    OpCode::Call,
-                                    total_args as u8,
-                                    pipe.span,
-                                );
-                            }
-                        }
-                        ast::CallOperation::Property(method_name) => {
+                ast::Expr::Call(call_expr) => match call_expr.operation.as_ref() {
+                    ast::CallOperation::Call(arguments) => {
+                        if let ast::Expr::Call(inner_call) = call_expr.callee.as_ref()
+                            && let ast::CallOperation::Property(method_name) =
+                                inner_call.operation.as_ref()
+                            && method_name.name == "call".into()
+                        {
                             self.visit_expression(&call_expr.callee, errors)?;
                             self.visit_expression(&pipe.left, errors)?;
                             let method_handle = self.allocator.strings.intern(&method_name.name);
@@ -1738,26 +1592,48 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                                 self.make_constant(Value::String(method_handle), method_name.span)?;
                             self.emit_opcode_and_byte(OpCode::Invoke, method_constant, pipe.span);
                             self.emit_byte(1, pipe.span);
-                        }
-                        _ => {
-                            return Err(QangSyntaxError::new(
-                                "Pipe expression with non-call operation not supported."
-                                    .to_string(),
-                                call_expr.span,
-                            ));
+                        } else {
+                            self.visit_expression(&call_expr.callee, errors)?;
+
+                            self.visit_expression(&pipe.left, errors)?;
+
+                            for arg in arguments {
+                                self.visit_expression(arg, errors)?;
+                            }
+
+                            let total_args = 1 + arguments.len();
+                            if total_args > u8::MAX as usize {
+                                return Err(QangSyntaxError::new(
+                                    "Functions may only take up to 256 arguments.".to_string(),
+                                    pipe.span,
+                                ));
+                            }
+
+                            self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.span);
                         }
                     }
-                }
+                    ast::CallOperation::Property(method_name) => {
+                        self.visit_expression(&call_expr.callee, errors)?;
+                        self.visit_expression(&pipe.left, errors)?;
+                        let method_handle = self.allocator.strings.intern(&method_name.name);
+                        let method_constant =
+                            self.make_constant(Value::String(method_handle), method_name.span)?;
+                        self.emit_opcode_and_byte(OpCode::Invoke, method_constant, pipe.span);
+                        self.emit_byte(1, pipe.span);
+                    }
+                    _ => {
+                        return Err(QangSyntaxError::new(
+                            "Pipe expression with non-call operation not supported.".to_string(),
+                            call_expr.span,
+                        ));
+                    }
+                },
 
-                // Case 2: Right side is just an expression - current behavior
                 _ => {
-                    // Visit the function
                     self.visit_expression(right, errors)?;
 
-                    // Visit the piped value
                     self.visit_expression(&pipe.left, errors)?;
 
-                    // Call with 1 argument
                     self.emit_opcode_and_byte(OpCode::Call, 1, pipe.span);
                 }
             }
@@ -1782,7 +1658,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
         self.define_variable(Some(class_handle), class_decl.name.span)?;
 
-        // Put the class back on the stack for method definitions
         self.handle_variable(&class_decl.name.name, class_decl.name.span, false)?;
 
         if let Some(superclass) = &class_decl.superclass {

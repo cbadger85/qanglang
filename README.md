@@ -197,7 +197,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>call</td>
       <td>=</td>
-      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | "?." IDENTIFIER | "[" expression "]" | "||" IDENTIFIER "->" expression "|" | "?|" IDENTIFIER "->" expression "|" )*</td>
+      <td>primary ( "(" arguments? ")" | "." IDENTIFIER | "?." IDENTIFIER | "[" expression "]" | "||" primary "->" expression "|" | "?|" primary "->" expression "|" )*</td>
       <td>;</td>
     </tr>
     <tr>
@@ -241,10 +241,6 @@ An embedded scripting language written in Rust 🦀
 ```
 
 ## Roadmap
-
-[x] - add map operator (`outer.inner||inner -> nil|`).
-
-[x] - add map optional operator `var inner_times_two = outer?|inner -> inner * 2|;`
 
 [ ] - array destructuring for variable declaration `var (item1, item2, ..others) = [1, 2, 3, 4, 5];`
 

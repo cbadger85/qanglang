@@ -658,6 +658,16 @@ pub struct OptionalMapExpr {
     pub span: SourceSpan,
 }
 
+impl From<OptionalMapExpr> for MapExpr {
+    fn from(value: OptionalMapExpr) -> Self {
+        Self {
+            parameter: value.parameter,
+            body: value.body,
+            span: value.span,
+        }
+    }
+}
+
 /// Utility functions for working with the AST
 impl Program {
     pub fn new(decls: Vec<Decl>, span: SourceSpan) -> Self {

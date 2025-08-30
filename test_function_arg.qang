@@ -1,3 +1,0 @@
-var value = 42;
-assert(value||v -> v == 42|);
-print("Map expressions work in function arguments!");

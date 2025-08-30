@@ -1,2 +1,0 @@
-var value = 42;
-assert(value||v -> !v|);

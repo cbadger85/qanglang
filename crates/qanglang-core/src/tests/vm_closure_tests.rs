@@ -90,3 +90,89 @@ fn test_three_level_closure_capture_bug() {
         }
     }
 }
+
+#[test]
+fn test_simple_two_level_closure() {
+    // Simpler test to debug upvalue resolution
+    let source = r#"
+        var result = ((a) -> {
+            println("Level 1 - a = ");
+            println(a);
+            return ((b) -> {
+                println("Level 2 - b = ");
+                println(b);
+                println("Level 2 - captured a = ");
+                println(a);
+                return a + b;
+            })(3);
+        })(2);
+        
+        println("Final result:");
+        println(result);
+        println("Expected: 5 (2 + 3)");
+        assert_eq(result, 5);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_nested_iefes() {
+    let source = r#"
+    assert_eq(((a) -> ((b) -> ((c) -> a + b + c)(4))(3))(2), 9); // works
+
+    var deep_map_expression = 4||x -> (3||y -> (2||z -> x + y + x|)|)|;
+
+    println(deep_map_expression);
+
+    assert_eq(4||x -> (3||y -> (2||z -> x + y + x|)|)|, 11);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

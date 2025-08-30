@@ -151,17 +151,55 @@ impl Compiler {
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
         if let Some(enclosing) = self.enclosing.as_mut() {
+            // First check if it's a local variable in the immediately enclosing scope
             if let Some(local_index) = enclosing.resolve_local_variable(handle, span)? {
                 if let Some(local) = enclosing.locals.get_mut(local_index) {
                     local.is_captured = true;
                 }
-                return Ok(Some(local_index));
+                // Add as upvalue with is_local=true
+                return self.add_upvalue(local_index, true, span).map(Some);
             }
 
-            return enclosing.resolve_upvalue(handle, span);
+            // If not found as local, recursively check outer scopes
+            if let Some(upvalue_index) = enclosing.resolve_upvalue(handle, span)? {
+                // Add as upvalue with is_local=false (it's an upvalue in enclosing scope)
+                return self.add_upvalue(upvalue_index, false, span).map(Some);
+            }
         }
 
         Ok(None)
+    }
+
+    fn add_upvalue(
+        &mut self,
+        index: usize,
+        is_local: bool,
+        span: SourceSpan,
+    ) -> Result<usize, QangSyntaxError> {
+        let upvalue_count = self.function.upvalue_count;
+
+        // Check for existing upvalue to avoid duplicates
+        for i in 0..upvalue_count {
+            let upvalue = self.upvalues[i];
+            if upvalue.index == index as u8 && upvalue.is_local == is_local {
+                return Ok(i);
+            }
+        }
+
+        if upvalue_count == 64 {
+            return Err(QangSyntaxError::new(
+                "Can only close over up to 64 variables.".to_string(),
+                span,
+            ));
+        }
+
+        self.upvalues.push(Upvalue {
+            index: index as u8,
+            is_local,
+        });
+        self.function.upvalue_count += 1;
+
+        Ok(upvalue_count)
     }
 }
 
@@ -559,43 +597,7 @@ impl<'a> CompilerVisitor<'a> {
         name: &str,
         span: SourceSpan,
     ) -> Result<Option<usize>, QangSyntaxError> {
-        if let Some(local) = self.compiler.resolve_upvalue(name, span)? {
-            self.add_upvalue(local, true, span).map(Some)
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn add_upvalue(
-        &mut self,
-        index: usize,
-        is_local: bool,
-        span: SourceSpan,
-    ) -> Result<usize, QangSyntaxError> {
-        let upvalue_count = self.compiler.function.upvalue_count;
-
-        for i in 0..upvalue_count {
-            let upvalue = self.compiler.upvalues[i];
-
-            if upvalue.index == index as u8 && upvalue.is_local == is_local {
-                return Ok(i);
-            }
-        }
-
-        if upvalue_count == 64 {
-            return Err(QangSyntaxError::new(
-                "Can only close over up to 64 variables.".to_string(),
-                span,
-            ));
-        }
-
-        self.compiler.upvalues.push(Upvalue {
-            index: index as u8,
-            is_local,
-        });
-        self.compiler.function.upvalue_count += 1;
-
-        Ok(upvalue_count)
+        self.compiler.resolve_upvalue(name, span)
     }
 
     fn resolve_local_variable(

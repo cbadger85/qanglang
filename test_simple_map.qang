@@ -1,4 +1,0 @@
-var value = 42;
-var result = value||v -> !v|;
-print(result);
-print(typeof(result));

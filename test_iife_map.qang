@@ -1,9 +1,0 @@
-// Test IIFE-based map expressions
-var value = 42;
-
-// Test variable assignment (should work)  
-var result = value||v -> !v|;
-print("Variable assignment result: " + result);
-
-// Test function argument (should work now)
-assert(value||v -> v == 42|);

@@ -1,0 +1,12 @@
+// Debug step by step
+var step1 = 5||e -> 1 + 2 + 3 + 4 + e|;
+print(step1);  // Should be 15
+
+var step2 = 4||d -> (5||e -> 1 + 2 + 3 + d + e|)|;
+print(step2);  // Should be 15
+
+// Test the issue - is variable capture working correctly?
+var a = 1;
+var b = 2; 
+var test = 5||x -> a + b + x|;
+print(test);  // Should be 8

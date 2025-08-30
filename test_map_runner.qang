@@ -1,0 +1,25 @@
+// Simple test runner to verify map expressions work
+var value = 42;
+
+// Test basic map expression
+var result1 = value||v -> v + 1|;
+print("Basic map: " + result1);  // Should print 43
+
+// Test optional map with value
+var result2 = value?|v -> v * 2|;
+print("Optional map with value: " + result2);  // Should print 84
+
+// Test optional map with nil
+var nilValue = nil;
+var result3 = nilValue?|v -> v * 2|;
+print("Optional map with nil: " + result3);  // Should print nil
+
+// Test function argument
+assert(value||v -> v == 42|);
+print("Function argument test passed!");
+
+// Test nested map
+var nested_result = 5||outer -> (3||inner -> inner + outer|)|;
+print("Nested map: " + nested_result);  // Should print 8
+
+print("All basic tests passed!");

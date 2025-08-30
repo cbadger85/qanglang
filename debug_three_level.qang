@@ -1,0 +1,38 @@
+// Test 3-level deep nesting to match the failing case
+print("Testing 3-level nested closures:");
+
+// The exact pattern that was failing: 2||a -> (3||b -> (4||c -> a + b + c|)|)|
+// As IIFE: ((a) -> ((b) -> ((c) -> a + b + c)(4))(3))(2)
+print("Three level test:");
+var three_level = ((a) -> {
+  print("Level 1 - a =");
+  print(a);
+  return ((b) -> {
+    print("Level 2 - b =");
+    print(b);
+    print("Level 2 - a =");
+    print(a);
+    return ((c) -> {
+      print("Level 3 - c =");
+      print(c);
+      print("Level 3 - b =");
+      print(b);
+      print("Level 3 - a =");
+      print(a);
+      print("Computing a + b + c:");
+      var sum = a + b + c;
+      print(sum);
+      return sum;
+    })(4);
+  })(3);
+})(2);
+
+print("Final three-level result:");
+print(three_level);
+print("Expected: 9 (2+3+4)");
+
+// Let's also test with different initial values
+print("\nTesting with different values:");
+var alt_test = ((a) -> ((b) -> ((c) -> a + b + c)(6))(5))(1);
+print("Alt test (1+5+6 = 12):");
+print(alt_test);

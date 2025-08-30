@@ -1,0 +1,27 @@
+fn make_nested(a) {
+  print("make_nested called with a = ");
+  print(a);
+  return (b) -> {
+    print("Inner lambda called with b = ");
+    print(b);
+    return (c) -> {
+      print("Innermost lambda called with c = ");
+      print(c);
+      print("Computing a + b + c = ");
+      print(a);
+      print(" + ");
+      print(b);
+      print(" + ");
+      print(c);
+      var result = a + b + c;
+      print(" = ");
+      print(result);
+      return result;
+    };
+  };
+}
+
+var nested_lambda = make_nested(1)(2);
+var final_result = nested_lambda(3);
+print("Final result:");
+print(final_result);

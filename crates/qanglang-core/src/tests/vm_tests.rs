@@ -1649,7 +1649,7 @@ fn test_class_init() {
     }
 }
 
-// #[test]
+#[test]
 fn test_map_expression() {
     let source = r#"
         var number = 0;
@@ -1660,13 +1660,20 @@ fn test_map_expression() {
 
         fn test_map_expression_with_value() {
             var number = 0;
+            var one = 1;
+            var other_one = 1;
+            var other_other_other_one = 1;
+            var one_again = 1;
+            var yet_another_one = 1;
+            var last_one = 1;
 
-            var number_plus_one = number||n -> n + 1|;
-
-            assert_eq(number_plus_one, 1);
+            assert_eq(number||n -> n + one + other_one + other_other_other_one + one_again + yet_another_one|, 5);
         }
 
         test_map_expression_with_value();
+
+        var lazy_true = true|| x -> () -> x|;
+        assert(lazy_true());
 
         var value = false;
         assert(value||v -> !v|);

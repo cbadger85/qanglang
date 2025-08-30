@@ -1,0 +1,8 @@
+var value = 42;
+var nilValue = nil;
+
+var result1 = value?|v -> v + 1|;
+print(result1);
+
+var result2 = nilValue?|v -> v + 1|;
+print(result2);

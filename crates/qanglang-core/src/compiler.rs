@@ -712,6 +712,72 @@ impl<'a> CompilerVisitor<'a> {
         self.emit_opcode(opcode, span);
         Ok(())
     }
+
+    fn compile_map_as_iife(
+        &mut self,
+        callee: &ast::Expr,
+        map_expr: &ast::MapExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), QangSyntaxError> {
+        // Transform value||x -> x + 1| into (|x| -> x + 1)(value)
+
+        // Create a lambda expression: |x| -> x + 1
+        let lambda_expr = ast::LambdaExpr {
+            parameters: vec![map_expr.parameter.clone()],
+            body: Box::new(ast::LambdaBody::Expr(map_expr.body.clone())),
+            span: map_expr.span,
+        };
+
+        // Compile the lambda (this creates a closure on the stack)
+        self.visit_lambda_expression(&lambda_expr, errors)?;
+
+        // Compile the argument (the callee value)
+        self.visit_expression(callee, errors)?;
+
+        // Call the lambda with 1 argument
+        self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
+
+        Ok(())
+    }
+
+    fn compile_optional_map_as_iife(
+        &mut self,
+        callee: &ast::Expr,
+        map_expr: &ast::OptionalMapExpr,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), QangSyntaxError> {
+        // Transform value?|x -> x + 1| into value == nil ? nil : (|x| -> x + 1)(value)
+
+        // Compile the callee (value to check for nil)
+        self.visit_expression(callee, errors)?;
+
+        // Jump if nil - short circuit, leaving nil on stack
+        let nil_jump = self.emit_jump(OpCode::JumpIfNil, map_expr.span);
+
+        // Not nil path: the value was consumed by JumpIfNil test but not jumped
+        // So we need to recompile the value for the function call
+
+        // Create a lambda expression: |x| -> x + 1
+        let lambda_expr = ast::LambdaExpr {
+            parameters: vec![map_expr.parameter.clone()],
+            body: Box::new(ast::LambdaBody::Expr(map_expr.body.clone())),
+            span: map_expr.span,
+        };
+
+        // Compile the lambda (this creates a closure on the stack)
+        self.visit_lambda_expression(&lambda_expr, errors)?;
+
+        // Compile the argument (the callee value again)
+        self.visit_expression(callee, errors)?;
+
+        // Call the lambda with 1 argument
+        self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
+
+        // Patch the nil jump to here
+        self.patch_jump(nil_jump, map_expr.span)?;
+
+        Ok(())
+    }
 }
 
 impl<'a> AstVisitor for CompilerVisitor<'a> {
@@ -1591,19 +1657,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 Ok(())
             }
             ast::CallOperation::Map(map_expr) => {
-                self.visit_expression(call.callee.as_ref(), errors)?;
-                Ok(())
+                // Transform value||x -> x + 1| into (|x| -> x + 1)(value)
+                self.compile_map_as_iife(call.callee.as_ref(), map_expr, errors)
             }
             ast::CallOperation::OptionalMap(map_expr) => {
-                self.visit_expression(call.callee.as_ref(), errors)?;
-
-                // Jump if nil - short circuit, leaving nil on stack
-                let nil_jump = self.emit_jump(OpCode::JumpIfNil, call.span);
-
-                // Patch the nil jump to here
-                self.patch_jump(nil_jump, call.span)?;
-
-                Ok(())
+                // Transform value?|x -> x + 1| into value == nil ? nil : (|x| -> x + 1)(value)
+                self.compile_optional_map_as_iife(call.callee.as_ref(), map_expr, errors)
             }
         }
     }

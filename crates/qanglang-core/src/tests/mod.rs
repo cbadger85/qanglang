@@ -6,6 +6,7 @@ pub mod parse_statements;
 pub mod parser_errors;
 pub mod source_analysis_test;
 pub mod tokenizing;
+pub mod vm_closure_tests;
 pub mod vm_tests;
 
 pub fn parse_source(source_map: &crate::SourceMap) -> (crate::ast::Program, crate::ErrorReporter) {

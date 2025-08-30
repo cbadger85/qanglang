@@ -1,0 +1,11 @@
+// Test optional map expressions
+var value = 42;
+var nilValue = nil;
+
+// Should apply the map
+var result1 = value?|v -> v + 1|;
+print("Optional map with value: " + result1);
+
+// Should return nil
+var result2 = nilValue?|v -> v + 1|;
+print("Optional map with nil: " + result2);

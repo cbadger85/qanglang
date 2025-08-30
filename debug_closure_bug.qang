@@ -1,0 +1,43 @@
+// Simple test to isolate the closure capture bug
+print("Testing nested closure capture bug:");
+
+// Simple case - should work fine
+print("1. Simple closure (should work):");
+var outer_var = 10;
+var simple_closure = (x) -> x + outer_var;
+print("Result:");
+print(simple_closure(5));  // Should be 15
+
+// Nested case - this is where the bug likely occurs  
+print("2. Nested closures (bug likely here):");
+var result = ((a) -> {
+  print("Outer lambda - a =");
+  print(a);
+  return ((b) -> {
+    print("Inner lambda - b =");
+    print(b);
+    print("Inner lambda - a ="); 
+    print(a);
+    return a + b;
+  })(3);
+})(2);
+print("Final result:");
+print(result);  // Should be 5
+
+// Even simpler nested case
+print("3. Minimal nested case:");
+var minimal = ((x) -> ((y) -> x + y)(4))(1);
+print("Minimal result:");
+print(minimal);  // Should be 5
+
+// Test with different values to see pattern
+print("4. Pattern test:");
+var test1 = ((x) -> ((y) -> x + y)(10))(1);  // Should be 11
+var test2 = ((x) -> ((y) -> x + y)(20))(2);  // Should be 22  
+var test3 = ((x) -> ((y) -> x + y)(30))(3);  // Should be 33
+print("Test1 (1+10):");
+print(test1);
+print("Test2 (2+20):"); 
+print(test2);
+print("Test3 (3+30):");
+print(test3);

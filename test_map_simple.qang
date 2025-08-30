@@ -1,0 +1,29 @@
+// Simple map expression tests without string concatenation
+var value = 42;
+
+// Test basic map expression
+var result1 = value||v -> v + 1|;
+print(result1);  // Should print 43
+
+// Test boolean map
+var bool_result = false||b -> !b|;
+print(bool_result);  // Should print true
+
+// Test optional map with value
+var result2 = value?|v -> v * 2|;
+print(result2);  // Should print 84
+
+// Test optional map with nil
+var nilValue = nil;
+var result3 = nilValue?|v -> v * 2|;
+print(result3);  // Should print nil
+
+// Test function argument
+assert(value||v -> v == 42|);
+print("Function argument test passed!");
+
+// Test nested map
+var nested_result = 5||outer -> (3||inner -> inner + outer|)|;
+print(nested_result);  // Should print 8
+
+print("All tests passed!");

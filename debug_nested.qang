@@ -1,0 +1,10 @@
+// Debug the deeply nested expression
+var deep_result = 1||a -> 
+  (2||b -> 
+    (3||c -> 
+      (4||d -> 
+        (5||e -> a + b + c + d + e|)|)|)|)|;
+
+print("Deep result:");
+print(deep_result);
+print("Expected: 15");

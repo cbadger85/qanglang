@@ -1,0 +1,22 @@
+// Debug what values are being captured in nested closures
+print("Testing closure capture values:");
+
+var result = ((a) -> {
+  print("a ="); 
+  print(a);
+  return ((b) -> {
+    print("b ="); 
+    print(b);
+    return ((c) -> {
+      print("c ="); 
+      print(c);
+      print("a + b + c =");
+      var sum = a + b + c;
+      print(sum);
+      return sum;
+    })(4);
+  })(3);
+})(2);
+
+print("Final result:");
+print(result);

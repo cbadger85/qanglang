@@ -9,12 +9,12 @@ pub type OverflowHandle = Index;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]
-pub enum UpvalueReference {
+pub enum UpvalueSlot {
     Open(usize),
     Closed(UpvalueHandle),
 }
 
-impl Default for UpvalueReference {
+impl Default for UpvalueSlot {
     fn default() -> Self {
         Self::Open(0)
     }
@@ -22,7 +22,7 @@ impl Default for UpvalueReference {
 
 #[derive(Debug, Clone)]
 pub struct OverflowChunk {
-    pub entries: [UpvalueReference; OVERFLOW_CHUNK_SIZE],
+    pub entries: [UpvalueSlot; OVERFLOW_CHUNK_SIZE],
     pub count: usize,
     pub is_marked: bool,
 }
@@ -30,7 +30,7 @@ pub struct OverflowChunk {
 impl Default for OverflowChunk {
     fn default() -> Self {
         Self {
-            entries: [UpvalueReference::default(); OVERFLOW_CHUNK_SIZE],
+            entries: [UpvalueSlot::default(); OVERFLOW_CHUNK_SIZE],
             count: 0,
             is_marked: false,
         }
@@ -41,7 +41,7 @@ impl Default for OverflowChunk {
 pub struct ClosureObject {
     pub function: FunctionHandle,
     pub upvalue_count: usize,
-    pub inline_upvalues: [UpvalueReference; INLINE_UPVALUE_COUNT],
+    pub inline_upvalues: [UpvalueSlot; INLINE_UPVALUE_COUNT],
     pub overflow_handle: Option<OverflowHandle>,
     pub is_marked: bool,
 }
@@ -51,13 +51,13 @@ impl ClosureObject {
         Self {
             function,
             upvalue_count,
-            inline_upvalues: [UpvalueReference::default(); INLINE_UPVALUE_COUNT],
+            inline_upvalues: [UpvalueSlot::default(); INLINE_UPVALUE_COUNT],
             overflow_handle: None,
             is_marked: false,
         }
     }
 
-    pub fn get_upvalue(&self, index: usize, arena: &ClosureArena) -> Option<UpvalueReference> {
+    pub fn get_upvalue(&self, index: usize, arena: &ClosureArena) -> Option<UpvalueSlot> {
         if index >= self.upvalue_count {
             return None;
         }
@@ -78,7 +78,7 @@ impl ClosureObject {
         }
     }
 
-    pub fn set_upvalue(&mut self, index: usize, value: UpvalueReference, arena: &mut ClosureArena) -> bool {
+    pub fn set_upvalue(&mut self, index: usize, value: UpvalueSlot, arena: &mut ClosureArena) -> bool {
         if index >= self.upvalue_count {
             return false;
         }
@@ -161,11 +161,11 @@ impl ClosureArena {
         );
     }
 
-    pub fn get_upvalue(&self, closure_handle: ClosureHandle, index: usize) -> Option<UpvalueReference> {
+    pub fn get_upvalue(&self, closure_handle: ClosureHandle, index: usize) -> Option<UpvalueSlot> {
         self.closures.get(closure_handle)?.get_upvalue(index, self)
     }
 
-    pub fn set_upvalue(&mut self, closure_handle: ClosureHandle, index: usize, value: UpvalueReference) -> bool {
+    pub fn set_upvalue(&mut self, closure_handle: ClosureHandle, index: usize, value: UpvalueSlot) -> bool {
         if index >= INLINE_UPVALUE_COUNT {
             let overflow_index = index - INLINE_UPVALUE_COUNT;
             let overflow_handle = if let Some(closure) = self.closures.get(closure_handle) {
@@ -249,7 +249,7 @@ impl ClosureArena {
             debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
             
             for i in 0..upvalue_count {
-                if let Some(UpvalueReference::Closed(upvalue_handle)) = self.get_upvalue(handle, i) {
+                if let Some(UpvalueSlot::Closed(upvalue_handle)) = self.get_upvalue(handle, i) {
                     upvalue_tracer(upvalue_handle);
                 }
             }

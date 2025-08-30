@@ -5,7 +5,7 @@ use crate::{
 };
 
 // Re-export from closure_arena
-pub use crate::memory::closure_arena::{ClosureObject, UpvalueReference};
+pub use crate::memory::closure_arena::{ClosureObject, UpvalueSlot};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Upvalue {

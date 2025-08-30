@@ -5,13 +5,13 @@ pub type UpvalueOverflowHandle = Index;
 const INLINE_UPVALUE_CAPACITY: usize = 4;
 
 #[derive(Debug, Clone)]
-pub struct ClosureUpvalueReference {
+pub struct OpenUpvalueTracker {
     inline_entries: [(ClosureHandle, usize); INLINE_UPVALUE_CAPACITY],
     count: usize,
     overflow_handle: Option<UpvalueOverflowHandle>,
 }
 
-impl Default for ClosureUpvalueReference {
+impl Default for OpenUpvalueTracker {
     fn default() -> Self {
         Self {
             inline_entries: [(ClosureHandle::default(), 0); INLINE_UPVALUE_CAPACITY],
@@ -21,7 +21,7 @@ impl Default for ClosureUpvalueReference {
     }
 }
 
-impl ClosureUpvalueReference {
+impl OpenUpvalueTracker {
     pub fn new() -> Self {
         Self::default()
     }

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::Value;
-    use crate::memory::{ClosureObject, FunctionObject, HeapAllocator, UpvalueReference};
+    use crate::memory::{ClosureObject, FunctionObject, HeapAllocator, UpvalueSlot};
     use std::collections::VecDeque;
 
     fn create_test_function() -> FunctionObject {
@@ -259,13 +259,13 @@ mod tests {
         let closure_handle = allocator.allocate_closure(closure);
         
         // Set upvalue using the new API
-        allocator.closures.set_upvalue(closure_handle, 0, UpvalueReference::Closed(upvalue_handle));
+        allocator.closures.set_upvalue(closure_handle, 0, UpvalueSlot::Closed(upvalue_handle));
 
         // Test that we can access the closure and its upvalues
         let retrieved_closure = allocator.get_closure(closure_handle);
         assert_eq!(retrieved_closure.upvalue_count, 1);
 
-        if let Some(UpvalueReference::Closed(handle)) = allocator.closures.get_upvalue(closure_handle, 0) {
+        if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle, 0) {
             let upvalue_value = allocator.get_upvalue(handle);
             assert_eq!(*upvalue_value, Value::Number(42.0));
         } else {
@@ -287,7 +287,7 @@ mod tests {
         let closure_handle = allocator.allocate_closure(closure);
         
         // Set upvalue using the new API
-        allocator.closures.set_upvalue(closure_handle, 0, UpvalueReference::Closed(upvalue_handle));
+        allocator.closures.set_upvalue(closure_handle, 0, UpvalueSlot::Closed(upvalue_handle));
 
         // Make the closure a root - this should keep the upvalue alive too
         let mut roots = VecDeque::new();
@@ -296,7 +296,7 @@ mod tests {
         allocator.collect_garbage(roots);
 
         // Both closure and upvalue should still be accessible
-        if let Some(UpvalueReference::Closed(handle)) = allocator.closures.get_upvalue(closure_handle, 0) {
+        if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle, 0) {
             let upvalue_value = allocator.get_upvalue(handle);
             assert_eq!(*upvalue_value, Value::Number(42.0));
         }
@@ -378,7 +378,7 @@ mod tests {
         let closure2 = ClosureObject::new(function_handle2, 1);
         let closure_handle2 = allocator.allocate_closure(closure2);
         let upvalue1 = allocator.allocate_upvalue(Value::Closure(closure_handle1));
-        allocator.closures.set_upvalue(closure_handle2, 0, UpvalueReference::Closed(upvalue1));
+        allocator.closures.set_upvalue(closure_handle2, 0, UpvalueSlot::Closed(upvalue1));
 
         // Create third level - upvalue pointing to second closure
         let upvalue2 = allocator.allocate_upvalue(Value::Closure(closure_handle2));
@@ -388,7 +388,7 @@ mod tests {
         let function_handle3 = allocator.allocate_function(function3);
         let root_closure = ClosureObject::new(function_handle3, 1);
         let root_closure_handle = allocator.allocate_closure(root_closure);
-        allocator.closures.set_upvalue(root_closure_handle, 0, UpvalueReference::Closed(upvalue2));
+        allocator.closures.set_upvalue(root_closure_handle, 0, UpvalueSlot::Closed(upvalue2));
 
         let mut roots = VecDeque::new();
         roots.push_back(Value::Closure(root_closure_handle));
@@ -400,7 +400,7 @@ mod tests {
         if let Value::Closure(handle) = *retrieved_upvalue2 {
             assert_eq!(handle, closure_handle2);
             let retrieved_closure2 = allocator.get_closure(handle);
-            if let Some(UpvalueReference::Closed(upvalue_handle)) = allocator.closures.get_upvalue(handle, 0) {
+            if let Some(UpvalueSlot::Closed(upvalue_handle)) = allocator.closures.get_upvalue(handle, 0) {
                 let retrieved_upvalue1 = allocator.get_upvalue(upvalue_handle);
                 if let Value::Closure(inner_handle) = *retrieved_upvalue1 {
                     assert_eq!(inner_handle, closure_handle1);
@@ -525,10 +525,10 @@ mod tests {
 
         // Update closures to reference the upvalues
         allocator.get_closure_mut(closure_handle1).upvalue_count = 1;
-        allocator.closures.set_upvalue(closure_handle1, 0, UpvalueReference::Closed(upvalue1));
+        allocator.closures.set_upvalue(closure_handle1, 0, UpvalueSlot::Closed(upvalue1));
 
         allocator.get_closure_mut(closure_handle2).upvalue_count = 1;
-        allocator.closures.set_upvalue(closure_handle2, 0, UpvalueReference::Closed(upvalue2));
+        allocator.closures.set_upvalue(closure_handle2, 0, UpvalueSlot::Closed(upvalue2));
 
         // Root one of the closures - should keep the entire cycle alive
         let mut roots = VecDeque::new();
@@ -544,7 +544,7 @@ mod tests {
         assert_eq!(retrieved_closure2.function, function_handle2);
 
         // Verify the circular references are intact
-        if let Some(UpvalueReference::Closed(handle)) = allocator.closures.get_upvalue(closure_handle1, 0) {
+        if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle1, 0) {
             let upvalue_val = allocator.get_upvalue(handle);
             if let Value::Closure(closure_handle) = *upvalue_val {
                 assert_eq!(closure_handle, closure_handle2);
@@ -1001,11 +1001,11 @@ mod tests {
 
         // First upvalue points to base instance
         let upvalue1 = allocator.allocate_upvalue(Value::Instance(base_instance));
-        allocator.closures.set_upvalue(closure_handle1, 0, UpvalueReference::Closed(upvalue1));
+        allocator.closures.set_upvalue(closure_handle1, 0, UpvalueSlot::Closed(upvalue1));
 
         // Second upvalue points to derived instance
         let upvalue2 = allocator.allocate_upvalue(Value::Instance(derived_instance));
-        allocator.closures.set_upvalue(closure_handle1, 1, UpvalueReference::Closed(upvalue2));
+        allocator.closures.set_upvalue(closure_handle1, 1, UpvalueSlot::Closed(upvalue2));
 
         // Set fields on instances that reference each other and the closure
         let field_name1 = allocator.strings.intern("reference");
@@ -1070,12 +1070,12 @@ mod tests {
         let retrieved_closure = allocator.get_closure(closure_handle1);
         assert_eq!(retrieved_closure.upvalue_count, 2);
 
-        if let Some(UpvalueReference::Closed(handle)) = allocator.closures.get_upvalue(closure_handle1, 0) {
+        if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle1, 0) {
             let upvalue_val = allocator.get_upvalue(handle);
             assert_eq!(*upvalue_val, Value::Instance(base_instance));
         }
 
-        if let Some(UpvalueReference::Closed(handle)) = allocator.closures.get_upvalue(closure_handle1, 1) {
+        if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle1, 1) {
             let upvalue_val = allocator.get_upvalue(handle);
             assert_eq!(*upvalue_val, Value::Instance(derived_instance));
         }

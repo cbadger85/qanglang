@@ -16,7 +16,7 @@ use crate::{
     error::Trace,
     memory::{
         ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, StringHandle,
-        UpvalueReference,
+        UpvalueSlot,
     },
     qang_std::{
         qang_array_concat, qang_array_construct, qang_array_get, qang_array_length, qang_array_pop,
@@ -53,8 +53,8 @@ pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
 
 type StackSlot = usize;
 type UpvalueIndex = usize;
-use crate::memory::closure_upvalue_reference::ClosureUpvalueReference;
-type OpenUpvalueEntry = (StackSlot, ClosureUpvalueReference);
+use crate::memory::OpenUpvalueTracker;
+type OpenUpvalueEntry = (StackSlot, OpenUpvalueTracker);
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 #[repr(u8)]
@@ -902,14 +902,14 @@ impl Vm {
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
                     let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
-                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueReference::Open(0));
+                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueSlot::Open(0));
 
                     match upvalue {
-                        UpvalueReference::Open(stack_slot) => {
+                        UpvalueSlot::Open(stack_slot) => {
                             let value = self.state.stack[stack_slot];
                             push_value!(self, value)?;
                         }
-                        UpvalueReference::Closed(value_handle) => {
+                        UpvalueSlot::Closed(value_handle) => {
                             let value = *self.alloc.get_upvalue(value_handle);
                             push_value!(self, value)?;
                         }
@@ -921,12 +921,12 @@ impl Vm {
                     let current_closure_handle =
                         self.state.frames[self.state.frame_count - 1].closure;
 
-                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueReference::Open(0));
+                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueSlot::Open(0));
                     match upvalue {
-                        UpvalueReference::Open(stack_slot) => {
+                        UpvalueSlot::Open(stack_slot) => {
                             self.state.stack[stack_slot] = value;
                         }
-                        UpvalueReference::Closed(value_handle) => {
+                        UpvalueSlot::Closed(value_handle) => {
                             *self.alloc.get_upvalue_mut(value_handle) = value;
                         }
                     }
@@ -1297,7 +1297,7 @@ impl Vm {
 
                 // Update all closures that reference this upvalue
                 for (closure_handle, upvalue_index) in upvalue_ref.iter() {
-                    self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueReference::Closed(value_handle));
+                    self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueSlot::Closed(value_handle));
                 }
 
                 // Note: overflow entries are now handled by ClosureArena internally
@@ -1322,16 +1322,16 @@ impl Vm {
                     // Note: overflow storage is now handled by ClosureArena internally
                 }
 
-                self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueReference::Open(stack_slot));
+                self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueSlot::Open(stack_slot));
                 return;
             }
         }
 
         // Create a new open upvalue
-        let mut upvalue_ref = ClosureUpvalueReference::new();
+        let mut upvalue_ref = OpenUpvalueTracker::new();
         upvalue_ref.add_closure(closure_handle, upvalue_index);
 
-        self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueReference::Open(stack_slot));
+        self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueSlot::Open(stack_slot));
 
         self.state.open_upvalues.push((stack_slot, upvalue_ref));
     }

@@ -14,11 +14,11 @@ pub use alloc::{
 pub use arena::{Arena, Index};
 pub use array_arena::ArrayHandle;
 pub use closure_arena::{ClosureArena, ClosureHandle};
-pub use closure_upvalue_reference::ClosureUpvalueReference;
+pub use closure_upvalue_reference::OpenUpvalueTracker;
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
 pub use object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,
     InstanceObject, IntrinsicFn, IntrinsicKind, IntrinsicMethod, NativeFn, NativeFunctionObject,
-    Upvalue, UpvalueReference,
+    Upvalue, UpvalueSlot,
 };
 pub use string_interner::StringHandle;

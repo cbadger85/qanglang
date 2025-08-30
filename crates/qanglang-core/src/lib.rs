@@ -21,7 +21,7 @@ pub use memory::{
     BoundIntrinsicHandle, BoundIntrinsicObject, BoundMethodHandle, BoundMethodObject, ClassHandle,
     ClassObject, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle,
     HeapAllocator, InstanceHandle, InstanceObject, IntrinsicFn, NativeFn, NativeFunctionHandle,
-    NativeFunctionObject, StringHandle, Upvalue, UpvalueHandle, UpvalueReference,
+    NativeFunctionObject, StringHandle, Upvalue, UpvalueHandle, UpvalueSlot,
 };
 pub use parser::Parser;
 pub use source::SourceMap;

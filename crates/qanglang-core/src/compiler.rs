@@ -756,8 +756,9 @@ impl<'a> CompilerVisitor<'a> {
         // Jump if nil - short circuit, leaving nil on stack
         let nil_jump = self.emit_jump(OpCode::JumpIfNil, map_expr.span);
 
-        // Not nil path: the value was consumed by JumpIfNil test but not jumped
-        // So we need to recompile the value for the function call
+        // Not nil path: JumpIfNil only peeks, so the value is still on stack
+        // We need to pop it before proceeding since we'll recompile the value for the function call
+        self.emit_opcode(OpCode::Pop, map_expr.span);
 
         // Create a lambda expression: |x| -> x + 1
         let lambda_expr = ast::LambdaExpr {
@@ -769,7 +770,7 @@ impl<'a> CompilerVisitor<'a> {
         // Compile the lambda (this creates a closure on the stack)
         self.visit_lambda_expression(&lambda_expr, errors)?;
 
-        // Compile the argument (the callee value again)
+        // Compile the argument (the callee value)
         self.visit_expression(callee, errors)?;
 
         // Call the lambda with 1 argument

@@ -117,8 +117,6 @@ fn test_map_expressions_in_context() {
   assert_eq(condition, false);
 }
 
-// Optional map expressions (comprehensive) - COMMENTED OUT DUE TO BUGS
-/*
 fn test_optional_map_expressions() {
   // With non-nil values
   assert_eq(42?|n -> n + 1|, 43);
@@ -143,7 +141,6 @@ fn test_optional_map_expressions() {
   var nil_obj = nil;
   assert_eq(nil_obj?|o -> o.value|?|n -> n * 2|, nil);
 }
-*/
 
 // Edge cases and error conditions
 fn test_map_expression_edge_cases() {
@@ -176,7 +173,7 @@ fn test_map_expression_performance_cases() {
       (3||c -> 
         (4||d -> 
           (5||e -> a + b + c + d + e|)|)|)|)|;
-  assert_eq(deep_result, 21);  // TODO: Fix closure capture bug - should be 15
+  assert_eq(deep_result, 15);  
   
   // Complex arithmetic chains
   assert_eq(10||n -> ((n + 5) * 2) - 3|, 27);

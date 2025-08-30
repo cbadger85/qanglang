@@ -11,10 +11,9 @@ pub use alloc::{
     BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, ClosureHandle, FunctionHandle,
     HeapAllocator, InstanceHandle, NativeFunctionHandle, UpvalueHandle,
 };
-pub use closure_upvalue_reference::ClosureUpvalueReference;
-pub use upvalue_overflow_arena::UpvalueOverflowHandle;
 pub use arena::{Arena, Index};
 pub use array_arena::ArrayHandle;
+pub use closure_upvalue_reference::ClosureUpvalueReference;
 pub use hashmap_arena::{BucketChunkHandle, HashMapHandle};
 pub use object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,
@@ -22,3 +21,4 @@ pub use object::{
     Upvalue, UpvalueReference,
 };
 pub use string_interner::StringHandle;
+pub use upvalue_overflow_arena::UpvalueOverflowHandle;

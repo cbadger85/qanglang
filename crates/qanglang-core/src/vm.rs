@@ -54,7 +54,7 @@ pub type RuntimeResult<T> = Result<T, QangRuntimeError>;
 type StackSlot = usize;
 type UpvalueIndex = usize;
 use crate::memory::closure_upvalue_reference::ClosureUpvalueReference;
-type OpenUpvalueEntry = StackSlot;
+type OpenUpvalueEntry = (StackSlot, ClosureUpvalueReference);
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 #[repr(u8)]
@@ -145,7 +145,6 @@ struct VmState {
     globals: FxHashMap<StringHandle, Value>,
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
     open_upvalues: Vec<OpenUpvalueEntry>,
-    upvalue_references: Vec<ClosureUpvalueReference>,
     current_function_ptr: *const FunctionObject,
     keywords: FxHashMap<Keyword, StringHandle>,
 }
@@ -164,7 +163,6 @@ impl VmState {
             globals,
             intrinsics,
             open_upvalues: Vec::with_capacity(8),
-            upvalue_references: Vec::with_capacity(8),
             current_function_ptr: std::ptr::null(),
             keywords,
         }
@@ -1291,17 +1289,16 @@ impl Vm {
         let mut i = self.state.open_upvalues.len();
         while i > 0 {
             i -= 1;
-            let stack_slot = self.state.open_upvalues[i];
+            let (stack_slot, upvalue_ref) = &self.state.open_upvalues[i];
 
-            if stack_slot >= last_slot {
-                let value = self.state.stack[stack_slot];
+            if *stack_slot >= last_slot {
+                let value = self.state.stack[*stack_slot];
 
                 // Allocate upvalue without GC check to avoid collecting active closures
                 let value_handle = self.alloc.allocate_upvalue(value);
 
                 // Get the reference and update all closures
-                let upvalue_ref = &self.state.upvalue_references[i];
-                
+
                 // Update inline entries
                 for (closure_handle, upvalue_index) in upvalue_ref.iter() {
                     self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
@@ -1312,17 +1309,15 @@ impl Vm {
                 if let Some(overflow_handle) = upvalue_ref.overflow_handle() {
                     let overflow_chunk = self.alloc.upvalue_overflow.get_chunk(overflow_handle);
                     let (overflow_entries, count) = (overflow_chunk.entries, overflow_chunk.count);
-                    
-                    for i in 0..count {
-                        let (closure_handle, upvalue_index) = overflow_entries[i];
-                        self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
+
+                    for (closure_handle, upvalue_index) in overflow_entries.iter().take(count) {
+                        self.alloc.get_closure_mut(*closure_handle).upvalues[*upvalue_index] =
                             UpvalueReference::Closed(value_handle);
                     }
                 }
 
                 // Remove the upvalue entry
                 self.state.open_upvalues.remove(i);
-                self.state.upvalue_references.remove(i);
             }
         }
     }
@@ -1334,28 +1329,27 @@ impl Vm {
         upvalue_index: UpvalueIndex,
     ) {
         // Check if there's already an open upvalue for this stack slot
-        for (i, &open_slot) in self.state.open_upvalues.iter().enumerate() {
-            if open_slot == stack_slot {
-                let upvalue_ref = &mut self.state.upvalue_references[i];
-                
+        for (open_slot, upvalue_ref) in self.state.open_upvalues.iter_mut() {
+            if *open_slot == stack_slot {
                 // Try to add to inline array first
                 if !upvalue_ref.add_closure(closure_handle, upvalue_index) {
                     // Need overflow storage
                     let overflow_handle = if let Some(handle) = upvalue_ref.overflow_handle() {
                         handle
                     } else {
-                        let handle = self.with_gc_check(|alloc| alloc.upvalue_overflow.allocate_chunk());
+                        let handle = self.alloc.upvalue_overflow.allocate_chunk();
                         upvalue_ref.set_overflow_handle(handle);
                         handle
                     };
-                    
+
                     let overflow_chunk = self.alloc.upvalue_overflow.get_chunk_mut(overflow_handle);
                     if overflow_chunk.count < overflow_chunk.entries.len() {
-                        overflow_chunk.entries[overflow_chunk.count] = (closure_handle, upvalue_index);
+                        overflow_chunk.entries[overflow_chunk.count] =
+                            (closure_handle, upvalue_index);
                         overflow_chunk.count += 1;
                     }
                 }
-                
+
                 self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
                     UpvalueReference::Open(stack_slot);
                 return;
@@ -1365,12 +1359,11 @@ impl Vm {
         // Create a new open upvalue
         let mut upvalue_ref = ClosureUpvalueReference::new();
         upvalue_ref.add_closure(closure_handle, upvalue_index);
-        
+
         self.alloc.get_closure_mut(closure_handle).upvalues[upvalue_index] =
             UpvalueReference::Open(stack_slot);
-        
-        self.state.open_upvalues.push(stack_slot);
-        self.state.upvalue_references.push(upvalue_ref);
+
+        self.state.open_upvalues.push((stack_slot, upvalue_ref));
     }
 
     fn binary_operation<F>(&mut self, op: F) -> RuntimeResult<()>
@@ -1731,11 +1724,11 @@ impl Vm {
             closure_roots.push_back(Value::Closure(frame.closure));
         }
 
-        for upvalue_ref in &self.state.upvalue_references {
+        for (_, upvalue_ref) in &self.state.open_upvalues {
             for (closure_handle, _) in upvalue_ref.iter() {
                 closure_roots.push_back(Value::Closure(closure_handle));
             }
-            
+
             // Also add closures from overflow if it exists
             if let Some(overflow_handle) = upvalue_ref.overflow_handle() {
                 let overflow_chunk = self.alloc.upvalue_overflow.get_chunk(overflow_handle);
@@ -1751,14 +1744,14 @@ impl Vm {
 
     pub fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
-        
+
         // Mark overflow handles from open upvalues
-        for upvalue_ref in &mut self.state.upvalue_references {
+        for (_, upvalue_ref) in &mut self.state.open_upvalues {
             if let Some(overflow_handle) = upvalue_ref.overflow_handle() {
                 self.alloc.upvalue_overflow.mark_chunk(overflow_handle);
             }
         }
-        
+
         let roots = self.gather_roots();
         self.alloc.collect_garbage(roots);
         debug_log!(self.is_debug, "--gc end");

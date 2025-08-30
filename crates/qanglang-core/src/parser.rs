@@ -1140,10 +1140,7 @@ mod expression_parser {
         };
 
         parser.consume(TokenType::Arrow, "Expect '->' after parameters.")?;
-        let body = Box::new(expression_parser::parse(
-            parser,
-            Precedence::Ternary,
-        )?);
+        let body = Box::new(expression_parser::parse(parser, Precedence::Ternary)?);
         parser.consume(TokenType::Bar, "Expect '|' after map body.")?;
 
         let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
@@ -1175,10 +1172,7 @@ mod expression_parser {
 
         parser.consume(TokenType::Arrow, "Expect '->' after parameters.")?;
 
-        let body = Box::new(expression_parser::parse(
-            parser,
-            Precedence::Ternary,
-        )?);
+        let body = Box::new(expression_parser::parse(parser, Precedence::Ternary)?);
 
         parser.consume(TokenType::Bar, "Expect '|' after map body.")?;
 

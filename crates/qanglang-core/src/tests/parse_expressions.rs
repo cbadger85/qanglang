@@ -1,8 +1,5 @@
 use super::{assert_no_parse_errors, parse_source};
-use crate::{
-    SourceMap,
-    ast,
-};
+use crate::{SourceMap, ast};
 
 // Helper function to get the name from a VariableDecl target
 fn get_variable_name(var_decl: &ast::VariableDecl) -> &str {
@@ -2820,7 +2817,17 @@ fn test_map_expressions() {
     assert_eq!(program.decls.len(), 6);
 
     // Verify basic map expressions parse without errors
-    for (i, expected_name) in ["simple_map", "param_map", "single_param_map", "precedence_test", "comparison_test", "logical_test"].iter().enumerate() {
+    for (i, expected_name) in [
+        "simple_map",
+        "param_map",
+        "single_param_map",
+        "precedence_test",
+        "comparison_test",
+        "logical_test",
+    ]
+    .iter()
+    .enumerate()
+    {
         if let ast::Decl::Variable(var_decl) = &program.decls[i] {
             assert_eq!(get_variable_name(var_decl), *expected_name);
             if let Some(init_expr) = &var_decl.initializer {
@@ -2828,31 +2835,41 @@ fn test_map_expressions() {
                 match init_expr {
                     ast::Expr::Call(call_expr) => {
                         match call_expr.operation.as_ref() {
-                            ast::CallOperation::Map(_) => { /* Success - direct map expression */ },
+                            ast::CallOperation::Map(_) => { /* Success - direct map expression */ }
                             ast::CallOperation::Call(_) if *expected_name == "param_map" => {
                                 // For param_map: outer call (.floor()) contains inner property access
                                 if let ast::Expr::Call(property_call) = call_expr.callee.as_ref() {
                                     match property_call.operation.as_ref() {
                                         ast::CallOperation::Property(_) => {
                                             // Check that the callee of the property access is the map expression
-                                            if let ast::Expr::Call(map_call) = property_call.callee.as_ref() {
+                                            if let ast::Expr::Call(map_call) =
+                                                property_call.callee.as_ref()
+                                            {
                                                 match map_call.operation.as_ref() {
-                                                    ast::CallOperation::Map(_) => { /* Success */ },
-                                                    _ => panic!("Expected map operation for {}", expected_name),
+                                                    ast::CallOperation::Map(_) => { /* Success */ }
+                                                    _ => panic!(
+                                                        "Expected map operation for {}",
+                                                        expected_name
+                                                    ),
                                                 }
                                             } else {
                                                 panic!("Expected map call for {}", expected_name);
                                             }
-                                        },
-                                        _ => panic!("Expected property access for {}", expected_name),
+                                        }
+                                        _ => {
+                                            panic!("Expected property access for {}", expected_name)
+                                        }
                                     }
                                 } else {
                                     panic!("Expected property call for {}", expected_name);
                                 }
-                            },
-                            _ => panic!("Expected map operation or function call for {}", expected_name),
+                            }
+                            _ => panic!(
+                                "Expected map operation or function call for {}",
+                                expected_name
+                            ),
                         }
-                    },
+                    }
                     _ => panic!("Expected call expression for {}", expected_name),
                 }
             } else {
@@ -2916,13 +2933,16 @@ fn test_optional_map_expressions() {
     assert_eq!(program.decls.len(), 3);
 
     // Verify all optional map expressions parse correctly
-    for (i, expected_name) in ["optional_simple", "optional_precedence", "optional_logical"].iter().enumerate() {
+    for (i, expected_name) in ["optional_simple", "optional_precedence", "optional_logical"]
+        .iter()
+        .enumerate()
+    {
         if let ast::Decl::Variable(var_decl) = &program.decls[i] {
             assert_eq!(get_variable_name(var_decl), *expected_name);
             if let Some(ast::Expr::Call(call_expr)) = &var_decl.initializer {
                 // Verify it's an optional map operation
                 match call_expr.operation.as_ref() {
-                    ast::CallOperation::OptionalMap(_) => { /* Success */ },
+                    ast::CallOperation::OptionalMap(_) => { /* Success */ }
                     _ => panic!("Expected optional map operation for {}", expected_name),
                 }
             } else {
@@ -2945,7 +2965,9 @@ fn test_optional_map_expressions() {
                     if let ast::Expr::Factor(factor_expr) = term_expr.right.as_ref() {
                         assert_eq!(factor_expr.operator, ast::FactorOperator::Multiply);
                     } else {
-                        panic!("Expected multiplication to have higher precedence in optional map body");
+                        panic!(
+                            "Expected multiplication to have higher precedence in optional map body"
+                        );
                     }
                 } else {
                     panic!("Expected term expression for optional precedence test");

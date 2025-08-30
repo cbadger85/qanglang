@@ -139,3 +139,71 @@ fn test_map_expressions_with_nested_closures() {
   
   assert_eq(result, 9, "Expected nested map expressions to work like nested closures: 2 + 3 + 4 = 9.");
 }
+
+
+fn test_multiple_closures_capture_same_variable() {
+  var shared_var = 42;
+  
+  var closure1 = () -> {
+      return shared_var + 1;
+  };
+  
+  var closure2 = () -> {
+      return shared_var + 2;
+  };
+  
+  var closure3 = () -> {
+      return shared_var + 3;
+  };
+  
+  var closure4 = () -> {
+      return shared_var + 4;
+  };
+  
+  var closure5 = () -> {
+      return shared_var + 5;
+  };
+  
+  var closure6 = () -> {
+      return shared_var + 6;
+  };
+  
+  var result1 = closure1();
+  var result2 = closure2();
+  var result3 = closure3();
+  var result4 = closure4();
+  var result5 = closure5();
+  var result6 = closure6();
+  
+  assert_eq(result1, 43); // 42 + 1
+  assert_eq(result2, 44); // 42 + 2
+  assert_eq(result3, 45); // 42 + 3
+  assert_eq(result4, 46); // 42 + 4
+  assert_eq(result5, 47); // 42 + 5
+  assert_eq(result6, 48); // 42 + 6
+}
+
+fn test_stress_many_closures_same_variable() {
+  var shared = 99;
+  
+  // Create 10 closures that all capture 'shared' - definitely exceeds inline capacity
+  var closures = [
+      () -> shared * 1,
+      () -> shared * 2, 
+      () -> shared * 3,
+      () -> shared * 4,
+      () -> shared * 5,
+      () -> shared * 6,
+      () -> shared * 7,
+      () -> shared * 8,
+      () -> shared * 9,
+      () -> shared * 10
+  ];
+  
+  // Call each closure and verify correct results
+  for (var i = 0; i < closures.length(); i += 1) {
+      var expected = 99 * (i + 1);
+      var actual = closures[i]();
+      assert_eq(actual, expected);
+  }
+}

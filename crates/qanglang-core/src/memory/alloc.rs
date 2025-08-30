@@ -1,6 +1,7 @@
 use crate::memory::arena::{Arena, Index};
 use crate::memory::array_arena::ArrayArena;
 use crate::memory::hashmap_arena::HashMapArena;
+use crate::memory::upvalue_overflow_arena::UpvalueOverflowArena;
 use crate::memory::object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, InstanceObject, NativeFunctionObject,
 };
@@ -40,6 +41,7 @@ pub struct HeapAllocator {
     bound_intrinsics: Arena<BoundIntrinsicObject>,
     pub tables: HashMapArena,
     pub arrays: ArrayArena,
+    pub upvalue_overflow: UpvalueOverflowArena,
     is_debug: bool,
     bytes_until_gc: usize,
 }
@@ -62,6 +64,7 @@ impl HeapAllocator {
             bound_intrinsics: Arena::with_capacity(initial_capacity),
             instances: Arena::with_capacity(initial_capacity),
             arrays: ArrayArena::with_capacity(initial_capacity),
+            upvalue_overflow: UpvalueOverflowArena::with_capacity(initial_capacity),
             is_debug: false,
             bytes_until_gc: 1024 * 1024,
         }
@@ -376,6 +379,7 @@ impl HeapAllocator {
         let intrinsic_bytes =
             self.bound_intrinsics.len() * std::mem::size_of::<BoundIntrinsicObject>();
         let array_bytes = self.arrays.get_allocated_bytes();
+        let upvalue_overflow_bytes = self.upvalue_overflow.get_allocated_bytes();
 
         string_bytes
             + closure_bytes
@@ -388,6 +392,7 @@ impl HeapAllocator {
             + method_bytes
             + intrinsic_bytes
             + array_bytes
+            + upvalue_overflow_bytes
     }
 
     pub fn collect_garbage(&mut self, roots: VecDeque<Value>) {
@@ -478,6 +483,8 @@ impl HeapAllocator {
         }
 
         self.arrays.collect_garbage();
+
+        self.upvalue_overflow.collect_garbage();
 
         let new_allocated_bytes = self.total_allocated_bytes();
 

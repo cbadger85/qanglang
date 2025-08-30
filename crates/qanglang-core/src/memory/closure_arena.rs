@@ -1,7 +1,10 @@
-use crate::memory::{FunctionHandle, UpvalueHandle, arena::{Arena, Index}};
-use crate::debug_log;
+use crate::memory::{
+    UpvalueHandle,
+    arena::{Arena, Index},
+};
+use crate::{ClosureObject, debug_log};
 
-const INLINE_UPVALUE_COUNT: usize = 4;
+pub const INLINE_UPVALUE_COUNT: usize = 4;
 const OVERFLOW_CHUNK_SIZE: usize = 8;
 
 pub type ClosureHandle = Index;
@@ -33,76 +36,6 @@ impl Default for OverflowChunk {
             entries: [UpvalueSlot::default(); OVERFLOW_CHUNK_SIZE],
             count: 0,
             is_marked: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClosureObject {
-    pub function: FunctionHandle,
-    pub upvalue_count: usize,
-    pub inline_upvalues: [UpvalueSlot; INLINE_UPVALUE_COUNT],
-    pub overflow_handle: Option<OverflowHandle>,
-    pub is_marked: bool,
-}
-
-impl ClosureObject {
-    pub fn new(function: FunctionHandle, upvalue_count: usize) -> Self {
-        Self {
-            function,
-            upvalue_count,
-            inline_upvalues: [UpvalueSlot::default(); INLINE_UPVALUE_COUNT],
-            overflow_handle: None,
-            is_marked: false,
-        }
-    }
-
-    pub fn get_upvalue(&self, index: usize, arena: &ClosureArena) -> Option<UpvalueSlot> {
-        if index >= self.upvalue_count {
-            return None;
-        }
-
-        if index < INLINE_UPVALUE_COUNT {
-            Some(self.inline_upvalues[index])
-        } else {
-            let overflow_index = index - INLINE_UPVALUE_COUNT;
-            self.overflow_handle
-                .and_then(|handle| arena.get_overflow_chunk(handle))
-                .and_then(|chunk| {
-                    if overflow_index < chunk.count {
-                        Some(chunk.entries[overflow_index])
-                    } else {
-                        None
-                    }
-                })
-        }
-    }
-
-    pub fn set_upvalue(&mut self, index: usize, value: UpvalueSlot, arena: &mut ClosureArena) -> bool {
-        if index >= self.upvalue_count {
-            return false;
-        }
-
-        if index < INLINE_UPVALUE_COUNT {
-            self.inline_upvalues[index] = value;
-            true
-        } else {
-            let overflow_index = index - INLINE_UPVALUE_COUNT;
-            
-            if self.overflow_handle.is_none() {
-                self.overflow_handle = Some(arena.allocate_overflow_chunk());
-            }
-
-            if let Some(handle) = self.overflow_handle {
-                if let Some(chunk) = arena.get_overflow_chunk_mut(handle) {
-                    if overflow_index < OVERFLOW_CHUNK_SIZE {
-                        chunk.entries[overflow_index] = value;
-                        chunk.count = chunk.count.max(overflow_index + 1);
-                        return true;
-                    }
-                }
-            }
-            false
         }
     }
 }
@@ -162,12 +95,57 @@ impl ClosureArena {
     }
 
     pub fn get_upvalue(&self, closure_handle: ClosureHandle, index: usize) -> Option<UpvalueSlot> {
-        self.closures.get(closure_handle)?.get_upvalue(index, self)
+        let closure = self.closures.get(closure_handle)?;
+
+        if index >= closure.upvalue_count {
+            return None;
+        }
+
+        if index < INLINE_UPVALUE_COUNT {
+            Some(closure.inline_upvalues[index])
+        } else {
+            let overflow_index = index - INLINE_UPVALUE_COUNT;
+            closure
+                .overflow_handle
+                .and_then(|handle| self.get_overflow_chunk(handle))
+                .and_then(|chunk| {
+                    if overflow_index < chunk.count {
+                        Some(chunk.entries[overflow_index])
+                    } else {
+                        None
+                    }
+                })
+        }
     }
 
-    pub fn set_upvalue(&mut self, closure_handle: ClosureHandle, index: usize, value: UpvalueSlot) -> bool {
-        if index >= INLINE_UPVALUE_COUNT {
+    pub fn set_upvalue(
+        &mut self,
+        closure_handle: ClosureHandle,
+        index: usize,
+        value: UpvalueSlot,
+    ) -> bool {
+        // Check bounds and get upvalue count first
+        let upvalue_count = if let Some(closure) = self.closures.get(closure_handle) {
+            closure.upvalue_count
+        } else {
+            return false;
+        };
+
+        if index >= upvalue_count {
+            return false;
+        }
+
+        if index < INLINE_UPVALUE_COUNT {
+            if let Some(closure) = self.closures.get_mut(closure_handle) {
+                closure.inline_upvalues[index] = value;
+                true
+            } else {
+                false
+            }
+        } else {
             let overflow_index = index - INLINE_UPVALUE_COUNT;
+
+            // Allocate overflow chunk if needed
             let overflow_handle = if let Some(closure) = self.closures.get(closure_handle) {
                 if let Some(handle) = closure.overflow_handle {
                     handle
@@ -181,24 +159,18 @@ impl ClosureArena {
             } else {
                 return false;
             };
-            
+
             if let Some(chunk) = self.get_overflow_chunk_mut(overflow_handle) {
                 if overflow_index < OVERFLOW_CHUNK_SIZE {
                     chunk.entries[overflow_index] = value;
                     chunk.count = chunk.count.max(overflow_index + 1);
-                    return true;
+                    true
+                } else {
+                    false
                 }
-            }
-            false
-        } else if let Some(closure) = self.closures.get_mut(closure_handle) {
-            if index < closure.upvalue_count {
-                closure.inline_upvalues[index] = value;
-                true
             } else {
                 false
             }
-        } else {
-            false
         }
     }
 
@@ -229,25 +201,34 @@ impl ClosureArena {
         }
     }
 
-    pub fn trace_closure_references(&mut self, handle: ClosureHandle, upvalue_tracer: &mut dyn FnMut(UpvalueHandle)) {
-        let (should_mark, overflow_handle, upvalue_count) = if let Some(closure) = self.closures.get(handle) {
-            (!closure.is_marked, closure.overflow_handle, closure.upvalue_count)
-        } else {
-            return;
-        };
-        
+    pub fn trace_closure_references(
+        &mut self,
+        handle: ClosureHandle,
+        upvalue_tracer: &mut dyn FnMut(UpvalueHandle),
+    ) {
+        let (should_mark, overflow_handle, upvalue_count) =
+            if let Some(closure) = self.closures.get(handle) {
+                (
+                    !closure.is_marked,
+                    closure.overflow_handle,
+                    closure.upvalue_count,
+                )
+            } else {
+                return;
+            };
+
         if should_mark {
             debug_log!(self.is_debug, "Marking closure: {:?}", handle);
             if let Some(closure) = self.closures.get_mut(handle) {
                 closure.is_marked = true;
             }
-            
+
             if let Some(overflow_handle) = overflow_handle {
                 self.mark_overflow_chunk(overflow_handle);
             }
-            
+
             debug_log!(self.is_debug, "Blackening closure: {:?}", handle);
-            
+
             for i in 0..upvalue_count {
                 if let Some(UpvalueSlot::Closed(upvalue_handle)) = self.get_upvalue(handle, i) {
                     upvalue_tracer(upvalue_handle);
@@ -273,7 +254,7 @@ impl ClosureArena {
         }
 
         handles_to_remove.clear();
-        
+
         for (handle, chunk) in self.overflow_chunks.iter_mut() {
             if chunk.is_marked {
                 chunk.is_marked = false;
@@ -295,6 +276,10 @@ impl ClosureArena {
 
     pub fn len(&self) -> usize {
         self.closures.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.closures.is_empty()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (ClosureHandle, &ClosureObject)> {

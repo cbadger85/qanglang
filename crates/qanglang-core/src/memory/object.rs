@@ -1,11 +1,14 @@
 use crate::{
-    ClassHandle, ClosureHandle, HashMapHandle, NativeFunctionError, Value, Vm,
+    ClassHandle, ClosureHandle, FunctionHandle, HashMapHandle, NativeFunctionError, Value, Vm,
     chunk::Chunk,
-    memory::StringHandle,
+    memory::{
+        StringHandle,
+        closure_arena::{INLINE_UPVALUE_COUNT, OverflowHandle},
+    },
 };
 
 // Re-export from closure_arena
-pub use crate::memory::closure_arena::{ClosureObject, UpvalueSlot};
+pub use crate::memory::closure_arena::UpvalueSlot;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Upvalue {
@@ -28,6 +31,27 @@ impl FunctionObject {
             arity,
             chunk: Chunk::new(),
             upvalue_count: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosureObject {
+    pub function: FunctionHandle,
+    pub upvalue_count: usize,
+    pub inline_upvalues: [UpvalueSlot; INLINE_UPVALUE_COUNT],
+    pub overflow_handle: Option<OverflowHandle>,
+    pub is_marked: bool,
+}
+
+impl ClosureObject {
+    pub fn new(function: FunctionHandle, upvalue_count: usize) -> Self {
+        Self {
+            function,
+            upvalue_count,
+            inline_upvalues: [UpvalueSlot::default(); INLINE_UPVALUE_COUNT],
+            overflow_handle: None,
+            is_marked: false,
         }
     }
 }

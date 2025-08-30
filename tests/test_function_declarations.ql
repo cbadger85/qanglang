@@ -118,3 +118,24 @@ fn test_function_local_variables() {
   var result = local_vars_test();
   assert_eq(result, "local 42", "Expected function to handle local variables correctly.");
 }
+
+fn test_three_level_nested_closures() {
+  // Test for deeply nested closures with proper upvalue resolution
+  // This ensures variables are correctly captured through multiple closure levels
+  var result = ((a) -> {
+    return ((b) -> {
+      return ((c) -> {
+        return a + b + c;
+      })(4);
+    })(3);
+  })(2);
+  
+  assert_eq(result, 9, "Expected three-level closure to correctly capture variables: 2 + 3 + 4 = 9.");
+}
+
+fn test_map_expressions_with_nested_closures() {
+  // Test that map expressions (which compile to IIFEs) also work with nested closures
+  var result = 2||a -> (3||b -> (4||c -> a + b + c|)|)|;
+  
+  assert_eq(result, 9, "Expected nested map expressions to work like nested closures: 2 + 3 + 4 = 9.");
+}

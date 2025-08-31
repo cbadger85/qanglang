@@ -1092,8 +1092,12 @@ impl Vm {
                     self.define_method(identifier_handle)?;
                 }
                 OpCode::InitField => {
-                    // TODO does this need a 16 bit version?
                     let identifier_handle = read_identifier!(self);
+                    let value = pop_value!(self);
+                    self.init_field(identifier_handle, value)?;
+                }
+                OpCode::InitField16 => {
+                    let identifier_handle = read_identifier_16!(self);
                     let value = pop_value!(self);
                     self.init_field(identifier_handle, value)?;
                 }

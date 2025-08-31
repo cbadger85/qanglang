@@ -1750,9 +1750,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     let initializer = field.initializer.as_ref().unwrap_or(&default);
                     self.visit_expression(initializer, errors)?;
                     let handle_identifier = self.allocator.strings.intern(&field.name.name);
-                    let field_name =
-                        self.make_string_constant(handle_identifier, field.name.span)?;
-                    self.emit_opcode_and_byte(OpCode::InitField, field_name, field.name.span);
+                    self.emit_string_constant_opcode(OpCode::InitField, OpCode::InitField16, handle_identifier, field.name.span)?;
                 }
             }
         }

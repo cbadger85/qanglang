@@ -476,126 +476,6 @@ impl Vm {
         Ok(())
     }
 
-    fn get_property_value(
-        &mut self,
-        object: Value,
-        optional: bool,
-        identifier: StringHandle,
-    ) -> RuntimeResult<()> {
-        match object {
-            Value::Nil => {
-                let call_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Call)
-                    .expect("Expected identifier.");
-                let apply_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Apply)
-                    .expect("Expected identifier.");
-
-                if identifier == call_handle || identifier == apply_handle {
-                    let method = if identifier == call_handle {
-                        IntrinsicMethod::NilSafeCall
-                    } else {
-                        IntrinsicMethod::NilSafeApply
-                    };
-                    let bound = BoundIntrinsicObject::new(object, method, identifier);
-                    let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
-                    pop_value!(self);
-                    push_value!(self, Value::BoundIntrinsic(handle))?;
-                } else if optional {
-                    pop_value!(self);
-                    push_value!(self, Value::Nil)?;
-                } else {
-                    return Err(QangRuntimeError::new(
-                        format!("Cannot access properties from {}.", object.to_type_string()),
-                        self.state.get_previous_loc(),
-                    ));
-                }
-            }
-            Value::Instance(instance_handle) => {
-                let instance = self.alloc.get_instance(instance_handle);
-                let key = Value::String(identifier);
-
-                if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
-                    pop_value!(self);
-                    push_value!(self, value)?;
-                } else {
-                    self.bind_method(instance.clazz, key)?;
-                }
-            }
-            Value::ObjectLiteral(obj_handle) => {
-                let key = Value::String(identifier);
-                let value = self
-                    .alloc
-                    .tables
-                    .get(obj_handle, &key)
-                    .unwrap_or(Value::Nil);
-                pop_value!(self);
-                push_value!(self, value)?;
-            }
-            Value::String(_) => {
-                self.bind_intrinsic_method(identifier, IntrinsicKind::String(identifier), object)?;
-            }
-            Value::Array(_) => {
-                self.bind_intrinsic_method(identifier, IntrinsicKind::Array(identifier), object)?;
-            }
-            Value::Closure(_) | Value::BoundMethod(_) => {
-                self.bind_intrinsic_method(
-                    identifier,
-                    IntrinsicKind::Function(identifier),
-                    object,
-                )?;
-            }
-            _ => {
-                if optional {
-                    pop_value!(self);
-                    push_value!(self, Value::Nil)?;
-                } else {
-                    return Err(QangRuntimeError::new(
-                        format!("Cannot access properties from {}.", object.to_type_string()),
-                        self.state.get_previous_loc(),
-                    ));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn set_property(&mut self, identifier: StringHandle) -> RuntimeResult<()> {
-        let instance = peek_value!(self, 1);
-        match instance {
-            Value::Instance(instance_handle) => {
-                let instance_table = self.alloc.get_instance(instance_handle).table;
-                let constant = Value::String(identifier);
-                let value = peek_value!(self, 0);
-                self.with_gc_check(|alloc| {
-                    alloc.set_instance_field(instance_table, constant, value)
-                });
-                let value = pop_value!(self); // value to assign
-                pop_value!(self); // instance
-                push_value!(self, value)?; // push assigned value to top of stack
-            }
-            Value::ObjectLiteral(obj_handle) => {
-                let constant = Value::String(identifier);
-                let value = peek_value!(self, 0);
-                self.with_gc_check(|alloc| alloc.tables.insert(obj_handle, constant, value));
-                let value = pop_value!(self); // value to assign
-                pop_value!(self); // obj
-                push_value!(self, value)?; // push assigned value to top of stack
-            }
-            _ => {
-                return Err(QangRuntimeError::new(
-                    format!("Cannot access properties on {}.", instance.to_type_string()),
-                    self.state.get_previous_loc(),
-                ));
-            }
-        }
-        Ok(())
-    }
-
     fn run(&mut self) -> RuntimeResult<Value> {
         loop {
             #[cfg(feature = "profiler")]
@@ -1113,81 +993,19 @@ impl Vm {
                 }
                 OpCode::GetSuper => {
                     let property_handle = read_identifier!(self);
-                    let superclass = pop_value!(self);
-
-                    if let Value::Class(superclass_handle) = superclass {
-                        let superclass_obj = self.alloc.get_class(superclass_handle);
-
-                        if let Some(field_value) = self.alloc.get_class_method(
-                            superclass_obj.value_table,
-                            Value::String(property_handle),
-                        ) {
-                            self.state.stack[self.state.stack_top - 1] = field_value; // replace 'this' with the value of the field.
-                        } else if !self
-                            .bind_super_method(superclass_obj.method_table, property_handle)?
-                        {
-                            pop_value!(self); // Pop 'this'
-                            push_value!(self, Value::Nil)?;
-                        }
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            "Super class must be a class.".to_string(),
-                            self.state.get_previous_loc(),
-                        ));
-                    }
+                    self.get_super(property_handle)?;
                 }
                 OpCode::GetSuper16 => {
                     let property_handle = read_identifier_16!(self);
-                    let superclass = pop_value!(self);
-
-                    if let Value::Class(superclass_handle) = superclass {
-                        let superclass_obj = self.alloc.get_class(superclass_handle);
-
-                        if let Some(field_value) = self.alloc.get_class_method(
-                            superclass_obj.value_table,
-                            Value::String(property_handle),
-                        ) {
-                            self.state.stack[self.state.stack_top - 1] = field_value;
-                        } else if !self
-                            .bind_super_method(superclass_obj.method_table, property_handle)?
-                        {
-                            pop_value!(self);
-                            push_value!(self, Value::Nil)?;
-                        }
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            "Super class must be a class.".to_string(),
-                            self.state.get_previous_loc(),
-                        ));
-                    }
+                    self.get_super(property_handle)?;
                 }
                 OpCode::SuperInvoke => {
                     let method_handle = read_identifier!(self);
-                    let arg_count = self.state.read_byte() as usize;
-                    let superclass = pop_value!(self);
-
-                    if let Value::Class(superclass_handle) = superclass {
-                        self.invoke_from_class(superclass_handle, method_handle, arg_count)?;
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            "Super class must be a class.".to_string(),
-                            self.state.get_previous_loc(),
-                        ));
-                    }
+                    self.invoke_super(method_handle)?;
                 }
                 OpCode::SuperInvoke16 => {
                     let method_handle = read_identifier_16!(self);
-                    let arg_count = self.state.read_byte() as usize;
-                    let superclass = pop_value!(self);
-
-                    if let Value::Class(superclass_handle) = superclass {
-                        self.invoke_from_class(superclass_handle, method_handle, arg_count)?;
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            "Super class must be a class.".to_string(),
-                            self.state.get_previous_loc(),
-                        ));
-                    }
+                    self.invoke_super(method_handle)?;
                 }
                 OpCode::Inherit => {
                     let superclass = peek_value!(self, 0);
@@ -1844,6 +1662,165 @@ impl Vm {
                     self.state.get_previous_loc(),
                 ))
             }
+        }
+    }
+
+    fn get_property_value(
+        &mut self,
+        object: Value,
+        optional: bool,
+        identifier: StringHandle,
+    ) -> RuntimeResult<()> {
+        match object {
+            Value::Nil => {
+                let call_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Call)
+                    .expect("Expected identifier.");
+                let apply_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Apply)
+                    .expect("Expected identifier.");
+
+                if identifier == call_handle || identifier == apply_handle {
+                    let method = if identifier == call_handle {
+                        IntrinsicMethod::NilSafeCall
+                    } else {
+                        IntrinsicMethod::NilSafeApply
+                    };
+                    let bound = BoundIntrinsicObject::new(object, method, identifier);
+                    let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
+                    pop_value!(self);
+                    push_value!(self, Value::BoundIntrinsic(handle))?;
+                } else if optional {
+                    pop_value!(self);
+                    push_value!(self, Value::Nil)?;
+                } else {
+                    return Err(QangRuntimeError::new(
+                        format!("Cannot access properties from {}.", object.to_type_string()),
+                        self.state.get_previous_loc(),
+                    ));
+                }
+            }
+            Value::Instance(instance_handle) => {
+                let instance = self.alloc.get_instance(instance_handle);
+                let key = Value::String(identifier);
+
+                if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
+                    pop_value!(self);
+                    push_value!(self, value)?;
+                } else {
+                    self.bind_method(instance.clazz, key)?;
+                }
+            }
+            Value::ObjectLiteral(obj_handle) => {
+                let key = Value::String(identifier);
+                let value = self
+                    .alloc
+                    .tables
+                    .get(obj_handle, &key)
+                    .unwrap_or(Value::Nil);
+                pop_value!(self);
+                push_value!(self, value)?;
+            }
+            Value::String(_) => {
+                self.bind_intrinsic_method(identifier, IntrinsicKind::String(identifier), object)?;
+            }
+            Value::Array(_) => {
+                self.bind_intrinsic_method(identifier, IntrinsicKind::Array(identifier), object)?;
+            }
+            Value::Closure(_) | Value::BoundMethod(_) => {
+                self.bind_intrinsic_method(
+                    identifier,
+                    IntrinsicKind::Function(identifier),
+                    object,
+                )?;
+            }
+            _ => {
+                if optional {
+                    pop_value!(self);
+                    push_value!(self, Value::Nil)?;
+                } else {
+                    return Err(QangRuntimeError::new(
+                        format!("Cannot access properties from {}.", object.to_type_string()),
+                        self.state.get_previous_loc(),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn set_property(&mut self, identifier: StringHandle) -> RuntimeResult<()> {
+        let instance = peek_value!(self, 1);
+        match instance {
+            Value::Instance(instance_handle) => {
+                let instance_table = self.alloc.get_instance(instance_handle).table;
+                let constant = Value::String(identifier);
+                let value = peek_value!(self, 0);
+                self.with_gc_check(|alloc| {
+                    alloc.set_instance_field(instance_table, constant, value)
+                });
+                let value = pop_value!(self); // value to assign
+                pop_value!(self); // instance
+                push_value!(self, value)?; // push assigned value to top of stack
+            }
+            Value::ObjectLiteral(obj_handle) => {
+                let constant = Value::String(identifier);
+                let value = peek_value!(self, 0);
+                self.with_gc_check(|alloc| alloc.tables.insert(obj_handle, constant, value));
+                let value = pop_value!(self); // value to assign
+                pop_value!(self); // obj
+                push_value!(self, value)?; // push assigned value to top of stack
+            }
+            _ => {
+                return Err(QangRuntimeError::new(
+                    format!("Cannot access properties on {}.", instance.to_type_string()),
+                    self.state.get_previous_loc(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn invoke_super(&mut self, method_handle: StringHandle) -> RuntimeResult<()> {
+        let arg_count = self.state.read_byte() as usize;
+        let superclass = pop_value!(self);
+
+        if let Value::Class(superclass_handle) = superclass {
+            self.invoke_from_class(superclass_handle, method_handle, arg_count)
+        } else {
+            Err(QangRuntimeError::new(
+                "Super class must be a class.".to_string(),
+                self.state.get_previous_loc(),
+            ))
+        }
+    }
+
+    fn get_super(&mut self, property_handle: StringHandle) -> RuntimeResult<()> {
+        let superclass = pop_value!(self);
+
+        if let Value::Class(superclass_handle) = superclass {
+            let superclass_obj = self.alloc.get_class(superclass_handle);
+
+            if let Some(field_value) = self
+                .alloc
+                .get_class_method(superclass_obj.value_table, Value::String(property_handle))
+            {
+                self.state.stack[self.state.stack_top - 1] = field_value; // replace 'this' with the value of the field.
+            } else if !self.bind_super_method(superclass_obj.method_table, property_handle)? {
+                pop_value!(self); // Pop 'this'
+                push_value!(self, Value::Nil)?;
+            }
+
+            Ok(())
+        } else {
+            Err(QangRuntimeError::new(
+                "Super class must be a class.".to_string(),
+                self.state.get_previous_loc(),
+            ))
         }
     }
 

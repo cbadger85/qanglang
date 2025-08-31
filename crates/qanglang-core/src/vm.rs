@@ -1083,14 +1083,54 @@ impl Vm {
                     let identifier = read_identifier_16!(self);
                     self.get_property_value(object, true, identifier)?;
                 }
+                OpCode::Method => {
+                    let identifier_handle = read_identifier!(self);
+                    self.define_method(identifier_handle)?;
+                }
                 OpCode::Method16 => {
                     let identifier_handle = read_identifier_16!(self);
                     self.define_method(identifier_handle)?;
+                }
+                OpCode::InitField => {
+                    // TODO does this need a 16 bit version?
+                    let identifier_handle = read_identifier!(self);
+                    let value = pop_value!(self);
+                    self.init_field(identifier_handle, value)?;
+                }
+                OpCode::Invoke => {
+                    let method_handle = read_identifier!(self);
+                    let arg_count = self.state.read_byte();
+                    self.invoke(method_handle, arg_count as usize)?;
                 }
                 OpCode::Invoke16 => {
                     let method_handle = read_identifier_16!(self);
                     let arg_count = self.state.read_byte();
                     self.invoke(method_handle, arg_count as usize)?;
+                }
+                OpCode::GetSuper => {
+                    let property_handle = read_identifier!(self);
+                    let superclass = pop_value!(self);
+
+                    if let Value::Class(superclass_handle) = superclass {
+                        let superclass_obj = self.alloc.get_class(superclass_handle);
+
+                        if let Some(field_value) = self.alloc.get_class_method(
+                            superclass_obj.value_table,
+                            Value::String(property_handle),
+                        ) {
+                            self.state.stack[self.state.stack_top - 1] = field_value; // replace 'this' with the value of the field.
+                        } else if !self
+                            .bind_super_method(superclass_obj.method_table, property_handle)?
+                        {
+                            pop_value!(self); // Pop 'this'
+                            push_value!(self, Value::Nil)?;
+                        }
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            "Super class must be a class.".to_string(),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
                 }
                 OpCode::GetSuper16 => {
                     let property_handle = read_identifier_16!(self);
@@ -1117,6 +1157,20 @@ impl Vm {
                         ));
                     }
                 }
+                OpCode::SuperInvoke => {
+                    let method_handle = read_identifier!(self);
+                    let arg_count = self.state.read_byte() as usize;
+                    let superclass = pop_value!(self);
+
+                    if let Value::Class(superclass_handle) = superclass {
+                        self.invoke_from_class(superclass_handle, method_handle, arg_count)?;
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            "Super class must be a class.".to_string(),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
+                }
                 OpCode::SuperInvoke16 => {
                     let method_handle = read_identifier_16!(self);
                     let arg_count = self.state.read_byte() as usize;
@@ -1130,20 +1184,6 @@ impl Vm {
                             self.state.get_previous_loc(),
                         ));
                     }
-                }
-                OpCode::Method => {
-                    let identifier_handle = read_identifier!(self);
-                    self.define_method(identifier_handle)?;
-                }
-                OpCode::InitField => {
-                    let identifier_handle = read_identifier!(self);
-                    let value = pop_value!(self);
-                    self.init_field(identifier_handle, value)?;
-                }
-                OpCode::Invoke => {
-                    let method_handle = read_identifier!(self);
-                    let arg_count = self.state.read_byte();
-                    self.invoke(method_handle, arg_count as usize)?;
                 }
                 OpCode::Inherit => {
                     let superclass = peek_value!(self, 0);
@@ -1181,45 +1221,6 @@ impl Vm {
                             self.state.get_previous_loc(),
                         )),
                     }?
-                }
-                OpCode::GetSuper => {
-                    let property_handle = read_identifier!(self);
-                    let superclass = pop_value!(self);
-
-                    if let Value::Class(superclass_handle) = superclass {
-                        let superclass_obj = self.alloc.get_class(superclass_handle);
-
-                        if let Some(field_value) = self.alloc.get_class_method(
-                            superclass_obj.value_table,
-                            Value::String(property_handle),
-                        ) {
-                            self.state.stack[self.state.stack_top - 1] = field_value; // replace 'this' with the value of the field.
-                        } else if !self
-                            .bind_super_method(superclass_obj.method_table, property_handle)?
-                        {
-                            pop_value!(self); // Pop 'this'
-                            push_value!(self, Value::Nil)?;
-                        }
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            "Super class must be a class.".to_string(),
-                            self.state.get_previous_loc(),
-                        ));
-                    }
-                }
-                OpCode::SuperInvoke => {
-                    let method_handle = read_identifier!(self);
-                    let arg_count = self.state.read_byte() as usize;
-                    let superclass = pop_value!(self);
-
-                    if let Value::Class(superclass_handle) = superclass {
-                        self.invoke_from_class(superclass_handle, method_handle, arg_count)?;
-                    } else {
-                        return Err(QangRuntimeError::new(
-                            "Super class must be a class.".to_string(),
-                            self.state.get_previous_loc(),
-                        ));
-                    }
                 }
                 OpCode::ArrayLiteral => {
                     let length = self.state.read_byte() as usize;

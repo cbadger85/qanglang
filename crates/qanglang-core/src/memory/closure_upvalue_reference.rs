@@ -79,30 +79,11 @@ impl OpenUpvalueTracker {
         self.inline_entries[..self.count].iter().copied()
     }
 
-    // TODO WTF THIS CANNOT RETURN A VECTOR WE ARE ELIMINATING VECTORS NO VECTORS ALLOWED AT ALL DURING UPVALUE OPERATIONS PERIOD END OF DISCUSSION
-    pub fn collect_all_entries(
-        &self,
-        overflow_arena: &crate::memory::UpvalueOverflowArena,
-    ) -> Vec<(ClosureHandle, usize)> {
-        let mut entries = Vec::new();
-
-        // Add inline entries
-        entries.extend_from_slice(&self.inline_entries[..self.count]);
-
-        // Add all overflow entries by traversing the chain
-        if let Some(mut current_handle) = self.overflow_handle {
-            loop {
-                let chunk = overflow_arena.get_chunk(current_handle);
-                entries.extend_from_slice(&chunk.entries[..chunk.count]);
-                if let Some(next_handle) = chunk.next {
-                    current_handle = next_handle;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        entries
+    pub fn iter_all_entries<'a>(
+        &'a self,
+        overflow_arena: &'a crate::memory::UpvalueOverflowArena,
+    ) -> impl Iterator<Item = (ClosureHandle, usize)> + 'a {
+        UpvalueEntryIterator::new(self, overflow_arena)
     }
 
     pub fn overflow_handle(&self) -> Option<UpvalueOverflowHandle> {
@@ -147,5 +128,58 @@ impl OpenUpvalueTracker {
                 }
             }
         }
+    }
+}
+
+struct UpvalueEntryIterator<'a> {
+    tracker: &'a OpenUpvalueTracker,
+    overflow_arena: &'a crate::memory::UpvalueOverflowArena,
+    inline_index: usize,
+    current_chunk: Option<UpvalueOverflowHandle>,
+    chunk_index: usize,
+}
+
+impl<'a> UpvalueEntryIterator<'a> {
+    fn new(
+        tracker: &'a OpenUpvalueTracker,
+        overflow_arena: &'a crate::memory::UpvalueOverflowArena,
+    ) -> Self {
+        Self {
+            tracker,
+            overflow_arena,
+            inline_index: 0,
+            current_chunk: tracker.overflow_handle,
+            chunk_index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for UpvalueEntryIterator<'a> {
+    type Item = (ClosureHandle, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // First, iterate through inline entries
+        if self.inline_index < self.tracker.count {
+            let entry = self.tracker.inline_entries[self.inline_index];
+            self.inline_index += 1;
+            return Some(entry);
+        }
+
+        // Then iterate through overflow chunks
+        while let Some(chunk_handle) = self.current_chunk {
+            let chunk = self.overflow_arena.get_chunk(chunk_handle);
+            
+            if self.chunk_index < chunk.count {
+                let entry = chunk.entries[self.chunk_index];
+                self.chunk_index += 1;
+                return Some(entry);
+            }
+            
+            // Move to next chunk
+            self.current_chunk = chunk.next;
+            self.chunk_index = 0;
+        }
+
+        None
     }
 }

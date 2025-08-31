@@ -1261,7 +1261,7 @@ impl Vm {
 
                 // Update all closures that reference this upvalue (inline + overflow)
                 for (closure_handle, upvalue_index) in
-                    upvalue_ref.collect_all_entries(&self.alloc.upvalue_overflow)
+                    upvalue_ref.iter_all_entries(&self.alloc.upvalue_overflow)
                 {
                     self.alloc.closures.set_upvalue(
                         closure_handle,

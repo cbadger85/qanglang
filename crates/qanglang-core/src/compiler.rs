@@ -185,9 +185,9 @@ impl Compiler {
             }
         }
 
-        if upvalue_count == 64 {
+        if upvalue_count == u8::MAX as usize {
             return Err(QangSyntaxError::new(
-                "Can only close over up to 64 variables.".to_string(),
+                "Can only close over up to 256 variables.".to_string(),
                 span,
             ));
         }

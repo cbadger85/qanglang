@@ -115,18 +115,16 @@ macro_rules! peek_value {
     };
 }
 
-macro_rules! read_string {
-    ($vm:expr) => {
-        match $vm.state.read_constant() {
-            Value::String(handle) => handle,
-            _ => {
-                return Err(QangRuntimeError::new(
-                    "Expected identifier.".to_string(),
-                    $vm.state.get_previous_loc(),
-                ));
-            }
-        }
-    };
+macro_rules! read_identifier {
+    ($vm:expr) => {{
+        let index = $vm.state.read_byte() as usize;
+        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.string_constants };
+        debug_assert!(
+            index < constants.len(),
+            "String constant index out of bounds"
+        );
+        constants[index]
+    }};
 }
 
 #[derive(Debug, Clone, Default)]
@@ -470,7 +468,7 @@ impl Vm {
         match object {
             Value::Nil => {
                 // Handle call and apply specially for nil
-                let property_name = read_string!(self);
+                let property_name = read_identifier!(self);
                 let call_handle = *self
                     .state
                     .keywords
@@ -504,7 +502,7 @@ impl Vm {
             }
             Value::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);
-                let key = Value::String(read_string!(self));
+                let key = Value::String(read_identifier!(self));
 
                 if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
                     pop_value!(self);
@@ -514,7 +512,7 @@ impl Vm {
                 }
             }
             Value::ObjectLiteral(obj_handle) => {
-                let key = Value::String(read_string!(self));
+                let key = Value::String(read_identifier!(self));
                 let value = self
                     .alloc
                     .tables
@@ -524,21 +522,21 @@ impl Vm {
                 push_value!(self, value)?;
             }
             Value::String(_) => {
-                let identifer = read_string!(self);
+                let identifer = read_identifier!(self);
                 self.bind_intrinsic_method(identifer, IntrinsicKind::String(identifer), object)?;
             }
             Value::Array(_) => {
-                let identifer = read_string!(self);
+                let identifer = read_identifier!(self);
                 self.bind_intrinsic_method(identifer, IntrinsicKind::Array(identifer), object)?;
             }
             Value::Closure(_) | Value::BoundMethod(_) => {
-                let identifer = read_string!(self);
+                let identifer = read_identifier!(self);
                 self.bind_intrinsic_method(identifer, IntrinsicKind::Function(identifer), object)?;
             }
             _ => {
                 if optional {
                     // For optional property access, return nil instead of throwing an error
-                    let _ = read_string!(self); // consume the property name from bytecode
+                    let _ = read_identifier!(self); // consume the property name from bytecode
                     pop_value!(self);
                     push_value!(self, Value::Nil)?;
                 } else {
@@ -806,12 +804,12 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
-                    let identifier_handle = read_string!(self);
+                    let identifier_handle = read_identifier!(self);
                     let value = pop_value!(self);
                     self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
-                    let identifier_handle = read_string!(self);
+                    let identifier_handle = read_identifier!(self);
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
                         let identifier_name = self.alloc.strings.get_string(identifier_handle);
@@ -823,7 +821,7 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
-                    let identifier_handle = read_string!(self);
+                    let identifier_handle = read_identifier!(self);
 
                     if !self.state.globals.contains_key(&identifier_handle) {
                         let identifier_name = self.alloc.strings.get_string(identifier_handle);
@@ -975,7 +973,7 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::Class => {
-                    let identifier_handle = read_string!(self);
+                    let identifier_handle = read_identifier!(self);
                     let class_handle =
                         self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
                     push_value!(self, Value::Class(class_handle))?
@@ -985,7 +983,7 @@ impl Vm {
                     match instance {
                         Value::Instance(instance_handle) => {
                             let instance_table = self.alloc.get_instance(instance_handle).table;
-                            let constant = Value::String(read_string!(self));
+                            let constant = Value::String(read_identifier!(self));
                             let value = peek_value!(self, 0);
                             self.with_gc_check(|alloc| {
                                 alloc.set_instance_field(instance_table, constant, value)
@@ -995,7 +993,7 @@ impl Vm {
                             push_value!(self, value)?; // push assigned value to top of stack
                         }
                         Value::ObjectLiteral(obj_handle) => {
-                            let constant = Value::String(read_string!(self));
+                            let constant = Value::String(read_identifier!(self));
                             let value = peek_value!(self, 0);
                             self.with_gc_check(|alloc| {
                                 alloc.tables.insert(obj_handle, constant, value)
@@ -1024,16 +1022,16 @@ impl Vm {
                     self.get_property_value(object, true)?;
                 }
                 OpCode::Method => {
-                    let identifier_handle = read_string!(self);
+                    let identifier_handle = read_identifier!(self);
                     self.define_method(identifier_handle)?;
                 }
                 OpCode::InitField => {
-                    let identifier_handle = read_string!(self);
+                    let identifier_handle = read_identifier!(self);
                     let value = pop_value!(self);
                     self.init_field(identifier_handle, value)?;
                 }
                 OpCode::Invoke => {
-                    let method_handle = read_string!(self);
+                    let method_handle = read_identifier!(self);
                     let arg_count = self.state.read_byte();
                     self.invoke(method_handle, arg_count as usize)?;
                 }
@@ -1075,7 +1073,7 @@ impl Vm {
                     }?
                 }
                 OpCode::GetSuper => {
-                    let property_handle = read_string!(self);
+                    let property_handle = read_identifier!(self);
                     let superclass = pop_value!(self);
 
                     if let Value::Class(superclass_handle) = superclass {
@@ -1100,7 +1098,7 @@ impl Vm {
                     }
                 }
                 OpCode::SuperInvoke => {
-                    let method_handle = read_string!(self);
+                    let method_handle = read_identifier!(self);
                     let arg_count = self.state.read_byte() as usize;
                     let superclass = pop_value!(self);
 

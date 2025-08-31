@@ -424,54 +424,21 @@ impl<'a> CompilerVisitor<'a> {
                 span,
             ));
         }
-
+        
         Ok(())
     }
 
-    fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangSyntaxError> {
-        let index = if matches!(value, Value::String(_)) {
-            self.make_string_constant(value, span)?
-        } else {
-            self.current_chunk_mut().add_constant(value)
-        };
+    fn make_string_constant(&mut self, handle: StringHandle, span: SourceSpan) -> Result<u8, QangSyntaxError> {
+        let index = self.current_chunk_mut().add_string_constant(handle);
         
         if index > u8::MAX as usize {
             Err(QangSyntaxError::new(
-                "Constant index out of range for 8-bit access".to_string(),
+                "Too many string constants in function (max 256)".to_string(),
                 span,
             ))
         } else {
             Ok(index as u8)
         }
-    }
-
-    fn make_string_constant(&mut self, value: Value, span: SourceSpan) -> Result<usize, QangSyntaxError> {
-        if !matches!(value, Value::String(_)) {
-            return Err(QangSyntaxError::new(
-                "Expected string constant".to_string(),
-                span,
-            ));
-        }
-        
-        let chunk = self.current_chunk_mut();
-        
-        // Check if string already exists in first 256 constants
-        for (i, existing) in chunk.constants.iter().enumerate().take(256) {
-            if *existing == value {
-                return Ok(i);
-            }
-        }
-        
-        // Add new string constant, ensuring it goes in first 256 slots
-        if chunk.constants.len() >= 256 {
-            return Err(QangSyntaxError::new(
-                "Too many string constants (max 256)".to_string(),
-                span,
-            ));
-        }
-        
-        chunk.constants.push(value);
-        Ok(chunk.constants.len() - 1)
     }
 
     fn emit_return(&mut self, span: SourceSpan) {
@@ -580,7 +547,7 @@ impl<'a> CompilerVisitor<'a> {
         }
         let handle = handle.expect("Expected an object handle when defining global variables.");
 
-        let index = self.make_constant(Value::String(handle), span)?;
+        let index = self.make_string_constant(handle, span)?;
         self.emit_opcode_and_byte(OpCode::DefineGlobal, index, span);
 
         Ok(())
@@ -625,7 +592,7 @@ impl<'a> CompilerVisitor<'a> {
                 (index as u8, OpCode::GetUpvalue, OpCode::SetUpvalue)
             } else {
                 let handle = self.allocator.strings.intern(handle);
-                let index = self.make_constant(Value::String(handle), span)?;
+                let index = self.make_string_constant(handle, span)?;
                 (index, OpCode::GetGlobal, OpCode::SetGlobal)
             }
         };
@@ -723,9 +690,12 @@ impl<'a> CompilerVisitor<'a> {
         let upvalue_count = function.upvalue_count;
 
         let function_handle = self.allocator.allocate_function(function);
-        let constant_index =
-            self.make_constant(Value::FunctionDecl(function_handle), func_expr.name.span)?;
-        self.emit_opcode_and_byte(OpCode::Closure, constant_index, func_expr.name.span);
+        let constant_index = self.current_chunk_mut().add_constant(Value::FunctionDecl(function_handle));
+        if constant_index <= u8::MAX as usize {
+            self.emit_opcode_and_byte(OpCode::Closure, constant_index as u8, func_expr.name.span);
+        } else {
+            return Err(QangSyntaxError::new("Function constant index too large".to_string(), func_expr.name.span));
+        }
 
         for i in 0..upvalue_count {
             let upvalue = compiler.upvalues[i];
@@ -861,7 +831,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
         let method_handle = self.allocator.strings.intern(&super_expr.method.name);
         let constant_index =
-            self.make_constant(Value::String(method_handle), super_expr.method.span)?;
+            self.make_string_constant(method_handle, super_expr.method.span)?;
 
         self.emit_opcode_and_byte(OpCode::GetSuper, constant_index, super_expr.span);
 
@@ -941,7 +911,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(&property.object, errors)?;
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
                     let byte = self
-                        .make_constant(Value::String(identifier_handle), property.property.span)?;
+                        .make_string_constant(identifier_handle, property.property.span)?;
                     self.visit_expression(&assignment.value, errors)?;
                     self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
                 }
@@ -964,7 +934,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(&property.object, errors)?;
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
                     let byte = self
-                        .make_constant(Value::String(identifier_handle), property.property.span)?;
+                        .make_string_constant(identifier_handle, property.property.span)?;
                     self.emit_opcode_and_byte(OpCode::GetProperty, byte, property.span);
 
                     self.visit_expression(&assignment.value, errors)?;
@@ -972,7 +942,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
                     let byte = self
-                        .make_constant(Value::String(identifier_handle), property.property.span)?;
+                        .make_string_constant(identifier_handle, property.property.span)?;
                     self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
                 }
                 ast::AssignmentTarget::Index(index) => {
@@ -1484,9 +1454,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         let upvalue_count = function.upvalue_count;
 
         let function_handle = self.allocator.allocate_function(function);
-        let constant_index =
-            self.make_constant(Value::FunctionDecl(function_handle), lambda_expr.span)?;
-        self.emit_opcode_and_byte(OpCode::Closure, constant_index, lambda_expr.span);
+        let constant_index = self.current_chunk_mut().add_constant(Value::FunctionDecl(function_handle));
+        if constant_index <= u8::MAX as usize {
+            self.emit_opcode_and_byte(OpCode::Closure, constant_index as u8, lambda_expr.span);
+        } else {
+            return Err(QangSyntaxError::new("Function constant index too large".to_string(), lambda_expr.span));
+        }
 
         for i in 0..upvalue_count {
             let upvalue = compiler.upvalues[i];
@@ -1543,7 +1516,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
                     let method_handle = self.allocator.strings.intern(&super_expr.method.name);
                     let method_constant =
-                        self.make_constant(Value::String(method_handle), super_expr.method.span)?;
+                        self.make_string_constant(method_handle, super_expr.method.span)?;
 
                     self.emit_opcode_and_byte(OpCode::SuperInvoke, method_constant, call.span);
                     self.emit_byte(args.len() as u8, call.span);
@@ -1559,7 +1532,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
 
                     let method_handle = self.allocator.strings.intern(&method_name.name);
                     let method_constant =
-                        self.make_constant(Value::String(method_handle), method_name.span)?;
+                        self.make_string_constant(method_handle, method_name.span)?;
 
                     for arg in args {
                         self.visit_expression(arg, errors)?;
@@ -1584,7 +1557,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ast::CallOperation::Property(identifier) => {
                 self.visit_expression(call.callee.as_ref(), errors)?;
                 let identifier_handle = self.allocator.strings.intern(&identifier.name);
-                let byte = self.make_constant(Value::String(identifier_handle), identifier.span)?;
+                let byte = self.make_string_constant(identifier_handle, identifier.span)?;
                 self.emit_opcode_and_byte(OpCode::GetProperty, byte, call.span);
                 Ok(())
             }
@@ -1598,7 +1571,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ast::CallOperation::OptionalProperty(identifier) => {
                 self.visit_expression(call.callee.as_ref(), errors)?;
                 let identifier_handle = self.allocator.strings.intern(&identifier.name);
-                let byte = self.make_constant(Value::String(identifier_handle), identifier.span)?;
+                let byte = self.make_string_constant(identifier_handle, identifier.span)?;
                 self.emit_opcode_and_byte(OpCode::GetOptionalProperty, byte, call.span);
                 Ok(())
             }
@@ -1634,7 +1607,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                             self.visit_expression(&pipe.left, errors)?;
                             let method_handle = self.allocator.strings.intern(&method_name.name);
                             let method_constant =
-                                self.make_constant(Value::String(method_handle), method_name.span)?;
+                                self.make_string_constant(method_handle, method_name.span)?;
                             self.emit_opcode_and_byte(OpCode::Invoke, method_constant, pipe.span);
                             self.emit_byte(1, pipe.span);
                         } else {
@@ -1662,7 +1635,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                         self.visit_expression(&pipe.left, errors)?;
                         let method_handle = self.allocator.strings.intern(&method_name.name);
                         let method_constant =
-                            self.make_constant(Value::String(method_handle), method_name.span)?;
+                            self.make_string_constant(method_handle, method_name.span)?;
                         self.emit_opcode_and_byte(OpCode::Invoke, method_constant, pipe.span);
                         self.emit_byte(1, pipe.span);
                     }
@@ -1699,7 +1672,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         self.declare_variable(&class_decl.name.name, class_decl.name.span)?;
         let class_handle = self.allocator.strings.intern(&class_decl.name.name);
-        let byte = self.make_constant(Value::String(class_handle), class_decl.name.span)?;
+        let byte = self.make_string_constant(class_handle, class_decl.name.span)?;
         self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
         self.define_variable(Some(class_handle), class_decl.name.span)?;
 
@@ -1738,7 +1711,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     };
                     let handle_identifier = self.allocator.strings.intern(&function.name.name);
                     let constant =
-                        self.make_constant(Value::String(handle_identifier), function.name.span)?;
+                        self.make_string_constant(handle_identifier, function.name.span)?;
 
                     self.handle_function(
                         compiler_kind,
@@ -1756,7 +1729,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(initializer, errors)?;
                     let handle_identifier = self.allocator.strings.intern(&field.name.name);
                     let field_name =
-                        self.make_constant(Value::String(handle_identifier), field.name.span)?;
+                        self.make_string_constant(handle_identifier, field.name.span)?;
                     self.emit_opcode_and_byte(OpCode::InitField, field_name, field.name.span);
                 }
             }
@@ -1826,3 +1799,4 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         Ok(())
     }
 }
+

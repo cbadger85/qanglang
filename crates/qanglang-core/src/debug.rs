@@ -46,9 +46,9 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::LessEqual => simple_instruction("OP_LESS_EQUAL", offset),
         OpCode::Modulo => simple_instruction("OP_MODULO", offset),
         OpCode::Pop => simple_instruction("OP_POP", offset),
-        OpCode::DefineGlobal => constant_instruction("OP_DEFINE_GLOBAL", chunk, allocator, offset),
-        OpCode::GetGlobal => constant_instruction("OP_GET_GLOBAL", chunk, allocator, offset),
-        OpCode::SetGlobal => constant_instruction("OP_SET_GLOBAL", chunk, allocator, offset),
+        OpCode::DefineGlobal => string_constant_instruction("OP_DEFINE_GLOBAL", chunk, allocator, offset),
+        OpCode::GetGlobal => string_constant_instruction("OP_GET_GLOBAL", chunk, allocator, offset),
+        OpCode::SetGlobal => string_constant_instruction("OP_SET_GLOBAL", chunk, allocator, offset),
         OpCode::GetLocal => byte_instruction("OP_GET_LOCAL", chunk, offset),
         OpCode::SetLocal => byte_instruction("OP_SET_LOCAL", chunk, offset),
         OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
@@ -91,12 +91,12 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::GetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
         OpCode::SetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
         OpCode::Class => constant_instruction("OP_CLASS", chunk, allocator, offset),
-        OpCode::GetProperty => constant_instruction("OP_GET_PROPERTY", chunk, allocator, offset),
-        OpCode::SetProperty => constant_instruction("OP_SET_PROPERTY", chunk, allocator, offset),
-        OpCode::Method => constant_instruction("OP_METHOD", chunk, allocator, offset),
+        OpCode::GetProperty => string_constant_instruction("OP_GET_PROPERTY", chunk, allocator, offset),
+        OpCode::SetProperty => string_constant_instruction("OP_SET_PROPERTY", chunk, allocator, offset),
+        OpCode::Method => string_constant_instruction("OP_METHOD", chunk, allocator, offset),
         OpCode::Invoke => invoke_instruction("OP_INVOKE", chunk, allocator, offset),
         OpCode::Inherit => simple_instruction("OP_INHERIT", offset),
-        OpCode::GetSuper => constant_instruction("OP_SUPER_INVOKE", chunk, allocator, offset),
+        OpCode::GetSuper => string_constant_instruction("OP_GET_SUPER", chunk, allocator, offset),
         OpCode::SuperInvoke => invoke_instruction("OP_SUPER_INVOKE", chunk, allocator, offset),
         OpCode::InitField => constant_instruction("OP_INIT_FIELD", chunk, allocator, offset),
         OpCode::ArrayLiteral => byte_instruction("OP_ARRAY_LITERAL", chunk, offset),
@@ -126,6 +126,26 @@ fn constant_instruction(
         .copied()
         .unwrap_or_default()
         .print(allocator);
+
+    println!("'");
+    offset + 2
+}
+
+fn string_constant_instruction(
+    name: &str,
+    chunk: &Chunk,
+    allocator: &HeapAllocator,
+    offset: usize,
+) -> usize {
+    let constant = chunk.code[offset + 1] as usize;
+    print!("{:<16} {:4} '", name, constant);
+
+    if let Some(handle) = chunk.string_constants.get(constant) {
+        let string_value = allocator.strings.get_string(*handle);
+        print!("{}", string_value);
+    } else {
+        print!("<invalid string index>");
+    }
 
     println!("'");
     offset + 2
@@ -181,12 +201,12 @@ fn invoke_instruction(
     let arg_count = chunk.code[offset + 2];
     print!("{:<16} ({} args) {:4} '", name, arg_count, constant);
 
-    chunk
-        .constants
-        .get(constant as usize)
-        .copied()
-        .unwrap_or_default()
-        .print(allocator);
+    if let Some(handle) = chunk.string_constants.get(constant as usize) {
+        let string_value = allocator.strings.get_string(*handle);
+        print!("{}", string_value);
+    } else {
+        print!("<invalid string index>");
+    }
 
     println!("'");
     offset + 3

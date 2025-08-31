@@ -1319,16 +1319,14 @@ impl Vm {
 
                 // Get the reference and update all closures
 
-                // Update all closures that reference this upvalue
-                for (closure_handle, upvalue_index) in upvalue_ref.iter() {
+                // Update all closures that reference this upvalue (inline + overflow)
+                for (closure_handle, upvalue_index) in upvalue_ref.collect_all_entries(&self.alloc.upvalue_overflow) {
                     self.alloc.closures.set_upvalue(
                         closure_handle,
                         upvalue_index,
                         UpvalueSlot::Closed(value_handle),
                     );
                 }
-
-                // Note: overflow entries are now handled by ClosureArena internally
 
                 // Remove the upvalue entry
                 self.state.open_upvalues.remove(i);
@@ -1345,9 +1343,10 @@ impl Vm {
         // Check if there's already an open upvalue for this stack slot
         for (open_slot, upvalue_ref) in self.state.open_upvalues.iter_mut() {
             if *open_slot == stack_slot {
-                // Try to add to inline array first
-                if !upvalue_ref.add_closure(closure_handle, upvalue_index) {
-                    // Note: overflow storage is now handled by ClosureArena internally
+                // Try to add to inline array first, or use overflow
+                if !upvalue_ref.add_closure_overflow(closure_handle, upvalue_index, &mut self.alloc.upvalue_overflow) {
+                    // This should never happen with reasonable limits, but handle gracefully
+                    panic!("Failed to add closure to upvalue tracker - overflow capacity exceeded");
                 }
 
                 self.alloc.closures.set_upvalue(
@@ -1361,7 +1360,10 @@ impl Vm {
 
         // Create a new open upvalue
         let mut upvalue_ref = OpenUpvalueTracker::new();
-        upvalue_ref.add_closure(closure_handle, upvalue_index);
+        if !upvalue_ref.add_closure_overflow(closure_handle, upvalue_index, &mut self.alloc.upvalue_overflow) {
+            // This should never happen with reasonable limits, but handle gracefully  
+            panic!("Failed to add closure to new upvalue tracker - overflow capacity exceeded");
+        }
 
         self.alloc.closures.set_upvalue(
             closure_handle,

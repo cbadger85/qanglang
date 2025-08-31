@@ -6,6 +6,7 @@ pub mod closure_upvalue_reference;
 mod hashmap_arena;
 mod object;
 mod string_interner;
+mod upvalue_overflow_arena;
 
 pub use alloc::{
     BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, FunctionHandle,
@@ -22,3 +23,4 @@ pub use object::{
     Upvalue, UpvalueSlot,
 };
 pub use string_interner::StringHandle;
+pub use upvalue_overflow_arena::UpvalueOverflowArena;

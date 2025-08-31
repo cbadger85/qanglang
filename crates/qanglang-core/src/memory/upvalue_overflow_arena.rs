@@ -1,7 +1,7 @@
 use crate::memory::ClosureHandle;
 use crate::memory::arena::{Arena, Index};
 
-const OVERFLOW_CHUNK_SIZE: usize = 8;
+pub const OVERFLOW_CHUNK_SIZE: usize = 8;
 
 pub type UpvalueOverflowHandle = Index;
 

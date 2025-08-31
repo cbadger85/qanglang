@@ -1257,8 +1257,6 @@ impl Vm {
                 // Allocate upvalue without GC check to avoid collecting active closures
                 let value_handle = self.alloc.allocate_upvalue(value);
 
-                // Get the reference and update all closures
-
                 // Update all closures that reference this upvalue (inline + overflow)
                 for (closure_handle, upvalue_index) in
                     upvalue_ref.iter_all_entries(&self.alloc.upvalue_overflow)

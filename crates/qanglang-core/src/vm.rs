@@ -127,6 +127,18 @@ macro_rules! read_identifier {
     }};
 }
 
+macro_rules! read_identifier_16 {
+    ($vm:expr) => {{
+        let index = $vm.state.read_short();
+        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.string_constants };
+        debug_assert!(
+            index < constants.len(),
+            "String constant index out of bounds"
+        );
+        constants[index]
+    }};
+}
+
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
     closure: ClosureHandle,
@@ -461,6 +473,90 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::progress!("execution_complete");
 
+        Ok(())
+    }
+
+    fn get_property_value_16(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
+        match object {
+            Value::Nil => {
+                let property_name = read_identifier_16!(self);
+                let call_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Call)
+                    .expect("Expected identifier.");
+                let apply_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Apply)
+                    .expect("Expected identifier.");
+
+                if property_name == call_handle || property_name == apply_handle {
+                    let method = if property_name == call_handle {
+                        IntrinsicMethod::NilSafeCall
+                    } else {
+                        IntrinsicMethod::NilSafeApply
+                    };
+                    let bound = BoundIntrinsicObject::new(object, method, property_name);
+                    let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
+                    pop_value!(self);
+                    push_value!(self, Value::BoundIntrinsic(handle))?;
+                } else if optional {
+                    pop_value!(self);
+                    push_value!(self, Value::Nil)?;
+                } else {
+                    return Err(QangRuntimeError::new(
+                        format!("Cannot access properties from {}.", object.to_type_string()),
+                        self.state.get_previous_loc(),
+                    ));
+                }
+            }
+            Value::Instance(instance_handle) => {
+                let instance = self.alloc.get_instance(instance_handle);
+                let key = Value::String(read_identifier_16!(self));
+
+                if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
+                    pop_value!(self);
+                    push_value!(self, value)?;
+                } else {
+                    self.bind_method(instance.clazz, key)?;
+                }
+            }
+            Value::ObjectLiteral(obj_handle) => {
+                let key = Value::String(read_identifier_16!(self));
+                let value = self
+                    .alloc
+                    .tables
+                    .get(obj_handle, &key)
+                    .unwrap_or(Value::Nil);
+                pop_value!(self);
+                push_value!(self, value)?;
+            }
+            Value::String(_) => {
+                let identifer = read_identifier_16!(self);
+                self.bind_intrinsic_method(identifer, IntrinsicKind::String(identifer), object)?;
+            }
+            Value::Array(_) => {
+                let identifer = read_identifier_16!(self);
+                self.bind_intrinsic_method(identifer, IntrinsicKind::Array(identifer), object)?;
+            }
+            Value::Closure(_) | Value::BoundMethod(_) => {
+                let identifer = read_identifier_16!(self);
+                self.bind_intrinsic_method(identifer, IntrinsicKind::Function(identifer), object)?;
+            }
+            _ => {
+                if optional {
+                    let _ = read_identifier_16!(self);
+                    pop_value!(self);
+                    push_value!(self, Value::Nil)?;
+                } else {
+                    return Err(QangRuntimeError::new(
+                        format!("Cannot access properties from {}.", object.to_type_string()),
+                        self.state.get_previous_loc(),
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -834,6 +930,37 @@ impl Vm {
                     let value = peek_value!(self, 0);
                     self.state.globals.insert(identifier_handle, value);
                 }
+                OpCode::DefineGlobal16 => {
+                    let identifier_handle = read_identifier_16!(self);
+                    let value = pop_value!(self);
+                    self.state.globals.insert(identifier_handle, value);
+                }
+                OpCode::GetGlobal16 => {
+                    let identifier_handle = read_identifier_16!(self);
+                    let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
+                        let loc = self.state.get_previous_loc();
+                        let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                        QangRuntimeError::new(
+                            format!("Undefined variable: {}.", identifier_name),
+                            loc,
+                        )
+                    })?;
+                    push_value!(self, value)?;
+                }
+                OpCode::SetGlobal16 => {
+                    let identifier_handle = read_identifier_16!(self);
+
+                    if !self.state.globals.contains_key(&identifier_handle) {
+                        let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                        let loc = self.state.get_previous_loc();
+                        return Err(QangRuntimeError::new(
+                            format!("Undefined variable: {}.", identifier_name).to_string(),
+                            loc,
+                        ));
+                    }
+                    let value = peek_value!(self, 0);
+                    self.state.globals.insert(identifier_handle, value);
+                }
                 OpCode::GetLocal => {
                     let slot = self.state.read_byte();
                     let absolute_slot =
@@ -1017,9 +1144,102 @@ impl Vm {
                     let object = peek_value!(self, 0);
                     self.get_property_value(object, false)?;
                 }
+                OpCode::GetProperty16 => {
+                    let object = peek_value!(self, 0);
+                    self.get_property_value_16(object, false)?;
+                }
+                OpCode::SetProperty16 => {
+                    let index = self.state.read_short();
+                    let property_name = self.state.get_current_function().chunk.string_constants[index];
+                    let value = peek_value!(self, 0);
+                    let object = peek_value!(self, 1);
+
+                    match object {
+                        Value::Instance(instance_handle) => {
+                            let instance = self.alloc.get_instance(instance_handle);
+                            self.alloc.set_instance_field(
+                                instance.table,
+                                Value::String(property_name),
+                                value,
+                            );
+                            pop_value!(self);
+                            pop_value!(self);
+                            push_value!(self, value)?;
+                        }
+                        Value::ObjectLiteral(obj_handle) => {
+                            self.alloc
+                                .tables
+                                .insert(obj_handle, Value::String(property_name), value);
+                            pop_value!(self);
+                            pop_value!(self);
+                            push_value!(self, value)?;
+                        }
+                        _ => {
+                            return Err(QangRuntimeError::new(
+                                format!(
+                                    "Cannot set properties on {}.",
+                                    object.to_type_string()
+                                ),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    }
+                }
                 OpCode::GetOptionalProperty => {
                     let object = peek_value!(self, 0);
                     self.get_property_value(object, true)?;
+                }
+                OpCode::GetOptionalProperty16 => {
+                    let object = peek_value!(self, 0);
+                    self.get_property_value_16(object, true)?;
+                }
+                OpCode::Method16 => {
+                    let identifier_handle = read_identifier_16!(self);
+                    self.define_method(identifier_handle)?;
+                }
+                OpCode::Invoke16 => {
+                    let method_handle = read_identifier_16!(self);
+                    let arg_count = self.state.read_byte();
+                    self.invoke(method_handle, arg_count as usize)?;
+                }
+                OpCode::GetSuper16 => {
+                    let property_handle = read_identifier_16!(self);
+                    let superclass = pop_value!(self);
+
+                    if let Value::Class(superclass_handle) = superclass {
+                        let superclass_obj = self.alloc.get_class(superclass_handle);
+
+                        if let Some(field_value) = self.alloc.get_class_method(
+                            superclass_obj.value_table,
+                            Value::String(property_handle),
+                        ) {
+                            self.state.stack[self.state.stack_top - 1] = field_value;
+                        } else if !self
+                            .bind_super_method(superclass_obj.method_table, property_handle)?
+                        {
+                            pop_value!(self);
+                            push_value!(self, Value::Nil)?;
+                        }
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            "Super class must be a class.".to_string(),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
+                }
+                OpCode::SuperInvoke16 => {
+                    let method_handle = read_identifier_16!(self);
+                    let arg_count = self.state.read_byte() as usize;
+                    let superclass = pop_value!(self);
+
+                    if let Value::Class(superclass_handle) = superclass {
+                        self.invoke_from_class(superclass_handle, method_handle, arg_count)?;
+                    } else {
+                        return Err(QangRuntimeError::new(
+                            "Super class must be a class.".to_string(),
+                            self.state.get_previous_loc(),
+                        ));
+                    }
                 }
                 OpCode::Method => {
                     let identifier_handle = read_identifier!(self);

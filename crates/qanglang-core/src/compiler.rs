@@ -428,6 +428,25 @@ impl<'a> CompilerVisitor<'a> {
         Ok(())
     }
 
+    fn emit_string_constant_opcode(&mut self, opcode_8: OpCode, opcode_16: OpCode, handle: StringHandle, span: SourceSpan) -> Result<(), QangSyntaxError> {
+        let index = self.current_chunk_mut().add_string_constant(handle);
+        
+        if index <= u8::MAX as usize {
+            self.emit_opcode_and_byte(opcode_8, index as u8, span);
+        } else if index <= u16::MAX as usize {
+            self.emit_opcode(opcode_16, span);
+            self.emit_byte((index >> 8) as u8, span);
+            self.emit_byte((index & 0xff) as u8, span);
+        } else {
+            return Err(QangSyntaxError::new(
+                "Too many string constants in function (max 65536)".to_string(),
+                span,
+            ));
+        }
+        
+        Ok(())
+    }
+
     fn make_string_constant(&mut self, handle: StringHandle, span: SourceSpan) -> Result<u8, QangSyntaxError> {
         let index = self.current_chunk_mut().add_string_constant(handle);
         
@@ -547,8 +566,7 @@ impl<'a> CompilerVisitor<'a> {
         }
         let handle = handle.expect("Expected an object handle when defining global variables.");
 
-        let index = self.make_string_constant(handle, span)?;
-        self.emit_opcode_and_byte(OpCode::DefineGlobal, index, span);
+        self.emit_string_constant_opcode(OpCode::DefineGlobal, OpCode::DefineGlobal16, handle, span)?;
 
         Ok(())
     }
@@ -591,9 +609,14 @@ impl<'a> CompilerVisitor<'a> {
             } else if let Some(index) = self.resolve_upvalue(handle, span)? {
                 (index as u8, OpCode::GetUpvalue, OpCode::SetUpvalue)
             } else {
-                let handle = self.allocator.strings.intern(handle);
-                let index = self.make_string_constant(handle, span)?;
-                (index, OpCode::GetGlobal, OpCode::SetGlobal)
+                let string_handle = self.allocator.strings.intern(handle);
+                let index = self.current_chunk_mut().add_string_constant(string_handle);
+                if index <= u8::MAX as usize {
+                    (index as u8, OpCode::GetGlobal, OpCode::SetGlobal)
+                } else {
+                    // For 16-bit indices, we'll handle this differently
+                    return self.emit_global_variable_access(string_handle, is_assignment, span);
+                }
             }
         };
 
@@ -601,6 +624,14 @@ impl<'a> CompilerVisitor<'a> {
         self.emit_opcode_and_byte(op, index, span);
 
         Ok(())
+    }
+
+    fn emit_global_variable_access(&mut self, handle: StringHandle, is_assignment: bool, span: SourceSpan) -> Result<(), QangSyntaxError> {
+        if is_assignment {
+            self.emit_string_constant_opcode(OpCode::SetGlobal, OpCode::SetGlobal16, handle, span)
+        } else {
+            self.emit_string_constant_opcode(OpCode::GetGlobal, OpCode::GetGlobal16, handle, span)
+        }
     }
 
     fn resolve_upvalue(
@@ -830,10 +861,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.handle_variable("super", super_expr.span, false)?;
 
         let method_handle = self.allocator.strings.intern(&super_expr.method.name);
-        let constant_index =
-            self.make_string_constant(method_handle, super_expr.method.span)?;
-
-        self.emit_opcode_and_byte(OpCode::GetSuper, constant_index, super_expr.span);
+        self.emit_string_constant_opcode(OpCode::GetSuper, OpCode::GetSuper16, method_handle, super_expr.span)?;
 
         Ok(())
     }
@@ -910,10 +938,8 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 ast::AssignmentTarget::Property(property) => {
                     self.visit_expression(&property.object, errors)?;
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
-                    let byte = self
-                        .make_string_constant(identifier_handle, property.property.span)?;
                     self.visit_expression(&assignment.value, errors)?;
-                    self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
+                    self.emit_string_constant_opcode(OpCode::SetProperty, OpCode::SetProperty16, identifier_handle, property.span)?;
                 }
                 ast::AssignmentTarget::Index(index) => {
                     self.visit_expression(&index.object, errors)?;
@@ -933,17 +959,13 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(&property.object, errors)?;
                     self.visit_expression(&property.object, errors)?;
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
-                    let byte = self
-                        .make_string_constant(identifier_handle, property.property.span)?;
-                    self.emit_opcode_and_byte(OpCode::GetProperty, byte, property.span);
+                    self.emit_string_constant_opcode(OpCode::GetProperty, OpCode::GetProperty16, identifier_handle, property.span)?;
 
                     self.visit_expression(&assignment.value, errors)?;
                     self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
 
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
-                    let byte = self
-                        .make_string_constant(identifier_handle, property.property.span)?;
-                    self.emit_opcode_and_byte(OpCode::SetProperty, byte, property.span);
+                    self.emit_string_constant_opcode(OpCode::SetProperty, OpCode::SetProperty16, identifier_handle, property.span)?;
                 }
                 ast::AssignmentTarget::Index(index) => {
                     self.visit_expression(&index.object, errors)?;

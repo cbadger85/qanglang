@@ -49,6 +49,9 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::DefineGlobal => string_constant_instruction("OP_DEFINE_GLOBAL", chunk, allocator, offset),
         OpCode::GetGlobal => string_constant_instruction("OP_GET_GLOBAL", chunk, allocator, offset),
         OpCode::SetGlobal => string_constant_instruction("OP_SET_GLOBAL", chunk, allocator, offset),
+        OpCode::DefineGlobal16 => string_constant_16_instruction("OP_DEFINE_GLOBAL16", chunk, allocator, offset),
+        OpCode::GetGlobal16 => string_constant_16_instruction("OP_GET_GLOBAL16", chunk, allocator, offset),
+        OpCode::SetGlobal16 => string_constant_16_instruction("OP_SET_GLOBAL16", chunk, allocator, offset),
         OpCode::GetLocal => byte_instruction("OP_GET_LOCAL", chunk, offset),
         OpCode::SetLocal => byte_instruction("OP_SET_LOCAL", chunk, offset),
         OpCode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
@@ -94,10 +97,16 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::GetProperty => string_constant_instruction("OP_GET_PROPERTY", chunk, allocator, offset),
         OpCode::SetProperty => string_constant_instruction("OP_SET_PROPERTY", chunk, allocator, offset),
         OpCode::Method => string_constant_instruction("OP_METHOD", chunk, allocator, offset),
+        OpCode::GetProperty16 => string_constant_16_instruction("OP_GET_PROPERTY16", chunk, allocator, offset),
+        OpCode::SetProperty16 => string_constant_16_instruction("OP_SET_PROPERTY16", chunk, allocator, offset),
+        OpCode::Method16 => string_constant_16_instruction("OP_METHOD16", chunk, allocator, offset),
         OpCode::Invoke => invoke_instruction("OP_INVOKE", chunk, allocator, offset),
+        OpCode::Invoke16 => invoke_16_instruction("OP_INVOKE16", chunk, allocator, offset),
         OpCode::Inherit => simple_instruction("OP_INHERIT", offset),
         OpCode::GetSuper => string_constant_instruction("OP_GET_SUPER", chunk, allocator, offset),
+        OpCode::GetSuper16 => string_constant_16_instruction("OP_GET_SUPER16", chunk, allocator, offset),
         OpCode::SuperInvoke => invoke_instruction("OP_SUPER_INVOKE", chunk, allocator, offset),
+        OpCode::SuperInvoke16 => invoke_16_instruction("OP_SUPER_INVOKE16", chunk, allocator, offset),
         OpCode::InitField => constant_instruction("OP_INIT_FIELD", chunk, allocator, offset),
         OpCode::ArrayLiteral => byte_instruction("OP_ARRAY_LITERAL", chunk, offset),
         OpCode::GetArrayIndex => simple_instruction("OP_GET_ARRAY_INDEX", offset),
@@ -105,7 +114,10 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         OpCode::ObjectLiteral => byte_instruction("OP_OBJECT_LITERAL", chunk, offset),
         OpCode::Is => simple_instruction("OP_IS", offset),
         OpCode::GetOptionalProperty => {
-            constant_instruction("OP_GET_OPTIONAL_PROPERTY", chunk, allocator, offset)
+            string_constant_instruction("OP_GET_OPTIONAL_PROPERTY", chunk, allocator, offset)
+        }
+        OpCode::GetOptionalProperty16 => {
+            string_constant_16_instruction("OP_GET_OPTIONAL_PROPERTY16", chunk, allocator, offset)
         }
         OpCode::JumpIfNil => jump_instruction("OP_JUMP_IF_NIL", 1, chunk, offset),
     }
@@ -210,6 +222,51 @@ fn invoke_instruction(
 
     println!("'");
     offset + 3
+}
+
+fn string_constant_16_instruction(
+    name: &str,
+    chunk: &Chunk,
+    allocator: &HeapAllocator,
+    offset: usize,
+) -> usize {
+    let high_byte = chunk.code[offset + 1] as usize;
+    let low_byte = chunk.code[offset + 2] as usize;
+    let constant = (high_byte << 8) | low_byte;
+    print!("{:<16} {:4} '", name, constant);
+
+    if let Some(handle) = chunk.string_constants.get(constant) {
+        let string_value = allocator.strings.get_string(*handle);
+        print!("{}", string_value);
+    } else {
+        print!("<invalid string index>");
+    }
+
+    println!("'");
+    offset + 3
+}
+
+fn invoke_16_instruction(
+    name: &str,
+    chunk: &Chunk,
+    allocator: &HeapAllocator,
+    offset: usize,
+) -> usize {
+    let high_byte = chunk.code[offset + 1] as usize;
+    let low_byte = chunk.code[offset + 2] as usize;
+    let constant = (high_byte << 8) | low_byte;
+    let arg_count = chunk.code[offset + 3];
+    print!("{:<16} ({} args) {:4} '", name, arg_count, constant);
+
+    if let Some(handle) = chunk.string_constants.get(constant) {
+        let string_value = allocator.strings.get_string(*handle);
+        print!("{}", string_value);
+    } else {
+        print!("<invalid string index>");
+    }
+
+    println!("'");
+    offset + 4
 }
 
 #[allow(dead_code)]

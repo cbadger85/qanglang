@@ -476,10 +476,9 @@ impl Vm {
         Ok(())
     }
 
-    fn get_property_value_16(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
+    fn get_property_value_impl(&mut self, object: Value, optional: bool, identifier: StringHandle) -> RuntimeResult<()> {
         match object {
             Value::Nil => {
-                let property_name = read_identifier_16!(self);
                 let call_handle = *self
                     .state
                     .keywords
@@ -491,13 +490,13 @@ impl Vm {
                     .get(&Keyword::Apply)
                     .expect("Expected identifier.");
 
-                if property_name == call_handle || property_name == apply_handle {
-                    let method = if property_name == call_handle {
+                if identifier == call_handle || identifier == apply_handle {
+                    let method = if identifier == call_handle {
                         IntrinsicMethod::NilSafeCall
                     } else {
                         IntrinsicMethod::NilSafeApply
                     };
-                    let bound = BoundIntrinsicObject::new(object, method, property_name);
+                    let bound = BoundIntrinsicObject::new(object, method, identifier);
                     let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
                     pop_value!(self);
                     push_value!(self, Value::BoundIntrinsic(handle))?;
@@ -513,7 +512,7 @@ impl Vm {
             }
             Value::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);
-                let key = Value::String(read_identifier_16!(self));
+                let key = Value::String(identifier);
 
                 if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
                     pop_value!(self);
@@ -523,7 +522,7 @@ impl Vm {
                 }
             }
             Value::ObjectLiteral(obj_handle) => {
-                let key = Value::String(read_identifier_16!(self));
+                let key = Value::String(identifier);
                 let value = self
                     .alloc
                     .tables
@@ -533,20 +532,16 @@ impl Vm {
                 push_value!(self, value)?;
             }
             Value::String(_) => {
-                let identifer = read_identifier_16!(self);
-                self.bind_intrinsic_method(identifer, IntrinsicKind::String(identifer), object)?;
+                self.bind_intrinsic_method(identifier, IntrinsicKind::String(identifier), object)?;
             }
             Value::Array(_) => {
-                let identifer = read_identifier_16!(self);
-                self.bind_intrinsic_method(identifer, IntrinsicKind::Array(identifer), object)?;
+                self.bind_intrinsic_method(identifier, IntrinsicKind::Array(identifier), object)?;
             }
             Value::Closure(_) | Value::BoundMethod(_) => {
-                let identifer = read_identifier_16!(self);
-                self.bind_intrinsic_method(identifer, IntrinsicKind::Function(identifer), object)?;
+                self.bind_intrinsic_method(identifier, IntrinsicKind::Function(identifier), object)?;
             }
             _ => {
                 if optional {
-                    let _ = read_identifier_16!(self);
                     pop_value!(self);
                     push_value!(self, Value::Nil)?;
                 } else {
@@ -560,90 +555,14 @@ impl Vm {
         Ok(())
     }
 
+    fn get_property_value_16(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
+        let identifier = read_identifier_16!(self);
+        self.get_property_value_impl(object, optional, identifier)
+    }
+
     fn get_property_value(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
-        match object {
-            Value::Nil => {
-                // Handle call and apply specially for nil
-                let property_name = read_identifier!(self);
-                let call_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Call)
-                    .expect("Expected identifier.");
-                let apply_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Apply)
-                    .expect("Expected identifier.");
-
-                if property_name == call_handle || property_name == apply_handle {
-                    let method = if property_name == call_handle {
-                        IntrinsicMethod::NilSafeCall
-                    } else {
-                        IntrinsicMethod::NilSafeApply
-                    };
-                    let bound = BoundIntrinsicObject::new(object, method, property_name);
-                    let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
-                    pop_value!(self);
-                    push_value!(self, Value::BoundIntrinsic(handle))?;
-                } else if optional {
-                    pop_value!(self);
-                    push_value!(self, Value::Nil)?;
-                } else {
-                    return Err(QangRuntimeError::new(
-                        format!("Cannot access properties from {}.", object.to_type_string()),
-                        self.state.get_previous_loc(),
-                    ));
-                }
-            }
-            Value::Instance(instance_handle) => {
-                let instance = self.alloc.get_instance(instance_handle);
-                let key = Value::String(read_identifier!(self));
-
-                if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
-                    pop_value!(self);
-                    push_value!(self, value)?;
-                } else {
-                    self.bind_method(instance.clazz, key)?;
-                }
-            }
-            Value::ObjectLiteral(obj_handle) => {
-                let key = Value::String(read_identifier!(self));
-                let value = self
-                    .alloc
-                    .tables
-                    .get(obj_handle, &key)
-                    .unwrap_or(Value::Nil);
-                pop_value!(self);
-                push_value!(self, value)?;
-            }
-            Value::String(_) => {
-                let identifer = read_identifier!(self);
-                self.bind_intrinsic_method(identifer, IntrinsicKind::String(identifer), object)?;
-            }
-            Value::Array(_) => {
-                let identifer = read_identifier!(self);
-                self.bind_intrinsic_method(identifer, IntrinsicKind::Array(identifer), object)?;
-            }
-            Value::Closure(_) | Value::BoundMethod(_) => {
-                let identifer = read_identifier!(self);
-                self.bind_intrinsic_method(identifer, IntrinsicKind::Function(identifer), object)?;
-            }
-            _ => {
-                if optional {
-                    // For optional property access, return nil instead of throwing an error
-                    let _ = read_identifier!(self); // consume the property name from bytecode
-                    pop_value!(self);
-                    push_value!(self, Value::Nil)?;
-                } else {
-                    return Err(QangRuntimeError::new(
-                        format!("Cannot access properties from {}.", object.to_type_string()),
-                        self.state.get_previous_loc(),
-                    ));
-                }
-            }
-        }
-        Ok(())
+        let identifier = read_identifier!(self);
+        self.get_property_value_impl(object, optional, identifier)
     }
 
     fn run(&mut self) -> RuntimeResult<Value> {

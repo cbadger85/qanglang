@@ -118,7 +118,7 @@ macro_rules! peek_value {
 macro_rules! read_identifier {
     ($vm:expr) => {{
         let index = $vm.state.read_byte() as usize;
-        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.string_constants };
+        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.identifier_constants };
         debug_assert!(
             index < constants.len(),
             "String constant index out of bounds"
@@ -130,7 +130,7 @@ macro_rules! read_identifier {
 macro_rules! read_identifier_16 {
     ($vm:expr) => {{
         let index = $vm.state.read_short();
-        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.string_constants };
+        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.identifier_constants };
         debug_assert!(
             index < constants.len(),
             "String constant index out of bounds"

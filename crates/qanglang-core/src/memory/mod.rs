@@ -9,8 +9,8 @@ mod string_interner;
 mod upvalue_overflow_arena;
 
 pub use alloc::{
-    BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, FunctionHandle,
-    HeapAllocator, InstanceHandle, NativeFunctionHandle, UpvalueHandle,
+    BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, FunctionHandle, HeapAllocator,
+    InstanceHandle, NativeFunctionHandle, UpvalueHandle,
 };
 pub use arena::{Arena, Index};
 pub use array_arena::ArrayHandle;

@@ -476,7 +476,12 @@ impl Vm {
         Ok(())
     }
 
-    fn get_property_value_impl(&mut self, object: Value, optional: bool, identifier: StringHandle) -> RuntimeResult<()> {
+    fn get_property_value(
+        &mut self,
+        object: Value,
+        optional: bool,
+        identifier: StringHandle,
+    ) -> RuntimeResult<()> {
         match object {
             Value::Nil => {
                 let call_handle = *self
@@ -538,7 +543,11 @@ impl Vm {
                 self.bind_intrinsic_method(identifier, IntrinsicKind::Array(identifier), object)?;
             }
             Value::Closure(_) | Value::BoundMethod(_) => {
-                self.bind_intrinsic_method(identifier, IntrinsicKind::Function(identifier), object)?;
+                self.bind_intrinsic_method(
+                    identifier,
+                    IntrinsicKind::Function(identifier),
+                    object,
+                )?;
             }
             _ => {
                 if optional {
@@ -555,14 +564,36 @@ impl Vm {
         Ok(())
     }
 
-    fn get_property_value_16(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
-        let identifier = read_identifier_16!(self);
-        self.get_property_value_impl(object, optional, identifier)
-    }
-
-    fn get_property_value(&mut self, object: Value, optional: bool) -> RuntimeResult<()> {
-        let identifier = read_identifier!(self);
-        self.get_property_value_impl(object, optional, identifier)
+    fn set_property(&mut self, identifier: StringHandle) -> RuntimeResult<()> {
+        let instance = peek_value!(self, 1);
+        match instance {
+            Value::Instance(instance_handle) => {
+                let instance_table = self.alloc.get_instance(instance_handle).table;
+                let constant = Value::String(identifier);
+                let value = peek_value!(self, 0);
+                self.with_gc_check(|alloc| {
+                    alloc.set_instance_field(instance_table, constant, value)
+                });
+                let value = pop_value!(self); // value to assign
+                pop_value!(self); // instance
+                push_value!(self, value)?; // push assigned value to top of stack
+            }
+            Value::ObjectLiteral(obj_handle) => {
+                let constant = Value::String(identifier);
+                let value = peek_value!(self, 0);
+                self.with_gc_check(|alloc| alloc.tables.insert(obj_handle, constant, value));
+                let value = pop_value!(self); // value to assign
+                pop_value!(self); // obj
+                push_value!(self, value)?; // push assigned value to top of stack
+            }
+            _ => {
+                return Err(QangRuntimeError::new(
+                    format!("Cannot access properties on {}.", instance.to_type_string()),
+                    self.state.get_previous_loc(),
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn run(&mut self) -> RuntimeResult<Value> {
@@ -1024,93 +1055,33 @@ impl Vm {
                         self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
                     push_value!(self, Value::Class(class_handle))?
                 }
-                OpCode::SetProperty => {
-                    let instance = peek_value!(self, 1);
-                    match instance {
-                        Value::Instance(instance_handle) => {
-                            let instance_table = self.alloc.get_instance(instance_handle).table;
-                            let constant = Value::String(read_identifier!(self));
-                            let value = peek_value!(self, 0);
-                            self.with_gc_check(|alloc| {
-                                alloc.set_instance_field(instance_table, constant, value)
-                            });
-                            let value = pop_value!(self); // value to assign
-                            pop_value!(self); // instance
-                            push_value!(self, value)?; // push assigned value to top of stack
-                        }
-                        Value::ObjectLiteral(obj_handle) => {
-                            let constant = Value::String(read_identifier!(self));
-                            let value = peek_value!(self, 0);
-                            self.with_gc_check(|alloc| {
-                                alloc.tables.insert(obj_handle, constant, value)
-                            });
-                            let value = pop_value!(self); // value to assign
-                            pop_value!(self); // obj
-                            push_value!(self, value)?; // push assigned value to top of stack
-                        }
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                format!(
-                                    "Cannot access properties on {}.",
-                                    instance.to_type_string()
-                                ),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    }
-                }
                 OpCode::GetProperty => {
                     let object = peek_value!(self, 0);
-                    self.get_property_value(object, false)?;
+                    let identifier = read_identifier!(self);
+                    self.get_property_value(object, false, identifier)?;
                 }
                 OpCode::GetProperty16 => {
                     let object = peek_value!(self, 0);
-                    self.get_property_value_16(object, false)?;
+                    let identifier = read_identifier_16!(self);
+                    self.get_property_value(object, false, identifier)?;
+                }
+                OpCode::SetProperty => {
+                    let identifier = read_identifier!(self);
+                    self.set_property(identifier)?
                 }
                 OpCode::SetProperty16 => {
-                    let index = self.state.read_short();
-                    let property_name = self.state.get_current_function().chunk.string_constants[index];
-                    let value = peek_value!(self, 0);
-                    let object = peek_value!(self, 1);
-
-                    match object {
-                        Value::Instance(instance_handle) => {
-                            let instance = self.alloc.get_instance(instance_handle);
-                            self.alloc.set_instance_field(
-                                instance.table,
-                                Value::String(property_name),
-                                value,
-                            );
-                            pop_value!(self);
-                            pop_value!(self);
-                            push_value!(self, value)?;
-                        }
-                        Value::ObjectLiteral(obj_handle) => {
-                            self.alloc
-                                .tables
-                                .insert(obj_handle, Value::String(property_name), value);
-                            pop_value!(self);
-                            pop_value!(self);
-                            push_value!(self, value)?;
-                        }
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                format!(
-                                    "Cannot set properties on {}.",
-                                    object.to_type_string()
-                                ),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    }
+                    let identifier = read_identifier_16!(self);
+                    self.set_property(identifier)?
                 }
                 OpCode::GetOptionalProperty => {
                     let object = peek_value!(self, 0);
-                    self.get_property_value(object, true)?;
+                    let identifier = read_identifier!(self);
+                    self.get_property_value(object, true, identifier)?;
                 }
                 OpCode::GetOptionalProperty16 => {
                     let object = peek_value!(self, 0);
-                    self.get_property_value_16(object, true)?;
+                    let identifier = read_identifier_16!(self);
+                    self.get_property_value(object, true, identifier)?;
                 }
                 OpCode::Method16 => {
                     let identifier_handle = read_identifier_16!(self);

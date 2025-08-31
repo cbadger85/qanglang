@@ -159,6 +159,11 @@ class DerivedClass : BaseClass {
   derivedMethod003() { return super.baseMethod003(); }
   derivedMethod004() { return super.baseMethod004(); }
   derivedMethod005() { return super.baseMethod005(); }
+  derivedMethod006() { return super.baseMethod006(); }
+  derivedMethod007() { return super.baseMethod007(); }
+  derivedMethod008() { return super.baseMethod008(); }
+  derivedMethod009() { return super.baseMethod009(); }
+  derivedMethod010() { return super.baseMethod010(); }
 }
 
 fn test_super_calls_many_methods() {
@@ -170,4 +175,9 @@ fn test_super_calls_many_methods() {
   assert_eq(obj.derivedMethod003(), "base3");
   assert_eq(obj.derivedMethod004(), "base4");
   assert_eq(obj.derivedMethod005(), "base5");
+  assert_eq(obj.derivedMethod006(), "base6");
+  assert_eq(obj.derivedMethod007(), "base7");
+  assert_eq(obj.derivedMethod008(), "base8");
+  assert_eq(obj.derivedMethod009(), "base9");
+  assert_eq(obj.derivedMethod010(), "base10");
 }

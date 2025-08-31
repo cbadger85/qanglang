@@ -207,3 +207,48 @@ fn test_stress_many_closures_same_variable() {
       assert_eq(actual, expected);
   }
 }
+
+fn test_upvalue_overflow() {
+  // Create a function that captures many upvalues (more than 4 inline capacity)
+  var v1 = 1; var v2 = 2; var v3 = 3; var v4 = 4; var v5 = 5;
+  var v6 = 6; var v7 = 7; var v8 = 8; var v9 = 9; var v10 = 10;
+  var v11 = 11; var v12 = 12; var v13 = 13; var v14 = 14; var v15 = 15;
+  
+  // This closure captures 15 upvalues - should trigger overflow chunks
+  var closure = () -> {
+    return v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15;
+  };
+  
+  assert_eq(closure(), 120, "Expected closure with 15 upvalues to return sum of 1-15 = 120.");
+}
+
+fn test_multiple_overflow_chunks() {
+  // Test creating multiple closures that each need overflow chunks
+  var shared1 = 100; var shared2 = 200; var shared3 = 300;
+  var a1 = 1; var a2 = 2; var a3 = 3; var a4 = 4; var a5 = 5;
+  var b1 = 10; var b2 = 20; var b3 = 30; var b4 = 40; var b5 = 50;
+  
+  var closure1 = () -> shared1 + a1 + a2 + a3 + a4 + a5;
+  var closure2 = () -> shared2 + b1 + b2 + b3 + b4 + b5;
+  var closure3 = () -> shared3 + shared1 + shared2;
+  
+  assert_eq(closure1(), 115, "Expected closure1 to return 100 + 15 = 115.");
+  assert_eq(closure2(), 350, "Expected closure2 to return 200 + 150 = 350.");
+  assert_eq(closure3(), 600, "Expected closure3 to return 300 + 100 + 200 = 600.");
+}
+
+fn test_upvalue_chain_linking() {
+  // Test that overflow chunks properly link together
+  var v1 = 1; var v2 = 2; var v3 = 3; var v4 = 4; var v5 = 5;
+  var v6 = 6; var v7 = 7; var v8 = 8; var v9 = 9; var v10 = 10;
+  var v11 = 11; var v12 = 12; var v13 = 13; var v14 = 14; var v15 = 15;
+  var v16 = 16; var v17 = 17; var v18 = 18; var v19 = 19; var v20 = 20;
+  
+  // This closure captures 20 upvalues - needs multiple overflow chunks
+  var closure = () -> {
+    return v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 +
+           v11 + v12 + v13 + v14 + v15 + v16 + v17 + v18 + v19 + v20;
+  };
+  
+  assert_eq(closure(), 210, "Expected closure with 20 upvalues to return sum of 1-20 = 210.");
+}

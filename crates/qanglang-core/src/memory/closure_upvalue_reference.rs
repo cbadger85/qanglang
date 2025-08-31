@@ -40,25 +40,38 @@ impl OpenUpvalueTracker {
 
         // Need overflow storage
         if self.overflow_handle.is_none() {
-            // Allocate new overflow chunk
             let handle = overflow_arena.allocate_chunk();
             self.overflow_handle = Some(handle);
         }
 
-        // Add to overflow chunk
-        if let Some(overflow_handle) = self.overflow_handle {
-            let chunk = overflow_arena.get_chunk_mut(overflow_handle);
-            if chunk.count < crate::memory::upvalue_overflow_arena::OVERFLOW_CHUNK_SIZE {
-                chunk.entries[chunk.count] = (closure_handle, upvalue_index);
-                chunk.count += 1;
-                true
-            } else {
-                // Overflow chunk is full - this shouldn't happen with reasonable limits
-                // TODO verify veracity of above statement. shouldn't we make another chunk if the previous one is full?
-                false
+        // Find the last chunk in the chain
+        let mut current_handle = self.overflow_handle.unwrap();
+        loop {
+            {
+                let chunk = overflow_arena.get_chunk_mut(current_handle);
+                if chunk.count < crate::memory::upvalue_overflow_arena::OVERFLOW_CHUNK_SIZE {
+                    chunk.entries[chunk.count] = (closure_handle, upvalue_index);
+                    chunk.count += 1;
+                    return true;
+                }
             }
-        } else {
-            false
+
+            let next_handle = {
+                let chunk = overflow_arena.get_chunk(current_handle);
+                chunk.next
+            };
+
+            if let Some(next) = next_handle {
+                current_handle = next;
+            } else {
+                // Last chunk is full, create a new one
+                let new_handle = overflow_arena.allocate_chunk();
+                overflow_arena.get_chunk_mut(current_handle).next = Some(new_handle);
+                let new_chunk = overflow_arena.get_chunk_mut(new_handle);
+                new_chunk.entries[0] = (closure_handle, upvalue_index);
+                new_chunk.count = 1;
+                return true;
+            }
         }
     }
 
@@ -66,6 +79,7 @@ impl OpenUpvalueTracker {
         self.inline_entries[..self.count].iter().copied()
     }
 
+    // TODO WTF THIS CANNOT RETURN A VECTOR WE ARE ELIMINATING VECTORS NO VECTORS ALLOWED AT ALL DURING UPVALUE OPERATIONS PERIOD END OF DISCUSSION
     pub fn collect_all_entries(
         &self,
         overflow_arena: &crate::memory::UpvalueOverflowArena,
@@ -75,10 +89,17 @@ impl OpenUpvalueTracker {
         // Add inline entries
         entries.extend_from_slice(&self.inline_entries[..self.count]);
 
-        // Add overflow entries if they exist
-        if let Some(overflow_handle) = self.overflow_handle {
-            let chunk = overflow_arena.get_chunk(overflow_handle);
-            entries.extend_from_slice(&chunk.entries[..chunk.count]);
+        // Add all overflow entries by traversing the chain
+        if let Some(mut current_handle) = self.overflow_handle {
+            loop {
+                let chunk = overflow_arena.get_chunk(current_handle);
+                entries.extend_from_slice(&chunk.entries[..chunk.count]);
+                if let Some(next_handle) = chunk.next {
+                    current_handle = next_handle;
+                } else {
+                    break;
+                }
+            }
         }
 
         entries
@@ -92,11 +113,39 @@ impl OpenUpvalueTracker {
         self.overflow_handle = Some(handle);
     }
 
-    pub fn len(&self) -> usize {
-        self.count
+    pub fn len(&self, overflow_arena: &crate::memory::UpvalueOverflowArena) -> usize {
+        let mut total = self.count;
+
+        if let Some(mut current_handle) = self.overflow_handle {
+            loop {
+                let chunk = overflow_arena.get_chunk(current_handle);
+                total += chunk.count;
+                if let Some(next_handle) = chunk.next {
+                    current_handle = next_handle;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        total
     }
 
     pub fn is_empty(&self) -> bool {
         self.count == 0
+    }
+
+    pub fn mark_overflow_chunks(&self, overflow_arena: &mut crate::memory::UpvalueOverflowArena) {
+        if let Some(mut current_handle) = self.overflow_handle {
+            loop {
+                overflow_arena.mark_chunk(current_handle);
+                let chunk = overflow_arena.get_chunk(current_handle);
+                if let Some(next_handle) = chunk.next {
+                    current_handle = next_handle;
+                } else {
+                    break;
+                }
+            }
+        }
     }
 }

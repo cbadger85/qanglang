@@ -10,6 +10,7 @@ pub struct UpvalueOverflowChunk {
     pub entries: [(ClosureHandle, usize); OVERFLOW_CHUNK_SIZE],
     pub count: usize,
     pub is_marked: bool,
+    pub next: Option<UpvalueOverflowHandle>,
 }
 
 impl Default for UpvalueOverflowChunk {
@@ -18,6 +19,7 @@ impl Default for UpvalueOverflowChunk {
             entries: [(ClosureHandle::default(), 0); OVERFLOW_CHUNK_SIZE],
             count: 0,
             is_marked: false,
+            next: None,
         }
     }
 }

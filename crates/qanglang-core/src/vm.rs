@@ -846,6 +846,9 @@ impl Vm {
                             .closures
                             .allocate_closure(ClosureObject::new(handle, upvalue_count))
                     });
+                    
+                    // Push closure to stack immediately to ensure GC can see it as reachable
+                    push_value!(self, Value::Closure(closure_handle))?;
 
                     for i in 0..self
                         .alloc
@@ -874,7 +877,6 @@ impl Vm {
                             }
                         }
                     }
-                    push_value!(self, Value::Closure(closure_handle))?;
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
@@ -1853,7 +1855,10 @@ impl Vm {
     pub fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
 
-        // Note: overflow marking is now handled by ClosureArena internally
+        // Mark overflow chunks referenced by open upvalues before GC
+        for (_, upvalue_ref) in &self.state.open_upvalues {
+            upvalue_ref.mark_overflow_chunks(&mut self.alloc.upvalue_overflow);
+        }
 
         let roots = self.gather_roots();
         self.alloc.collect_garbage(roots);

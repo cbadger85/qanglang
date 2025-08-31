@@ -26,24 +26,15 @@ impl OpenUpvalueTracker {
         Self::default()
     }
 
-    pub fn add_closure(&mut self, closure_handle: ClosureHandle, upvalue_index: usize) -> bool {
-        if self.count < INLINE_UPVALUE_CAPACITY {
-            self.inline_entries[self.count] = (closure_handle, upvalue_index);
-            self.count += 1;
-            true
-        } else {
-            false // Need overflow allocation - caller must handle this
-        }
-    }
-
-    pub fn add_closure_overflow(
+    pub fn add_closure(
         &mut self,
         closure_handle: ClosureHandle,
         upvalue_index: usize,
         overflow_arena: &mut crate::memory::UpvalueOverflowArena,
     ) -> bool {
-        // First try inline
-        if self.add_closure(closure_handle, upvalue_index) {
+        if self.count < INLINE_UPVALUE_CAPACITY {
+            self.inline_entries[self.count] = (closure_handle, upvalue_index);
+            self.count += 1;
             return true;
         }
 
@@ -63,6 +54,7 @@ impl OpenUpvalueTracker {
                 true
             } else {
                 // Overflow chunk is full - this shouldn't happen with reasonable limits
+                // TODO verify veracity of above statement. shouldn't we make another chunk if the previous one is full?
                 false
             }
         } else {
@@ -79,16 +71,16 @@ impl OpenUpvalueTracker {
         overflow_arena: &crate::memory::UpvalueOverflowArena,
     ) -> Vec<(ClosureHandle, usize)> {
         let mut entries = Vec::new();
-        
+
         // Add inline entries
         entries.extend_from_slice(&self.inline_entries[..self.count]);
-        
+
         // Add overflow entries if they exist
         if let Some(overflow_handle) = self.overflow_handle {
             let chunk = overflow_arena.get_chunk(overflow_handle);
             entries.extend_from_slice(&chunk.entries[..chunk.count]);
         }
-        
+
         entries
     }
 

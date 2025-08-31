@@ -466,7 +466,6 @@ impl<'a> CompilerVisitor<'a> {
         Ok(())
     }
 
-
     fn emit_return(&mut self, span: SourceSpan) {
         if matches!(self.compiler.kind, CompilerKind::Initializer) {
             self.emit_opcode_and_byte(OpCode::GetLocal, 0, span);
@@ -647,9 +646,19 @@ impl<'a> CompilerVisitor<'a> {
         span: SourceSpan,
     ) -> Result<(), QangSyntaxError> {
         if is_assignment {
-            self.emit_constant_opcode(OpCode::SetGlobal, OpCode::SetGlobal16, Value::String(handle), span)
+            self.emit_constant_opcode(
+                OpCode::SetGlobal,
+                OpCode::SetGlobal16,
+                Value::String(handle),
+                span,
+            )
         } else {
-            self.emit_constant_opcode(OpCode::GetGlobal, OpCode::GetGlobal16, Value::String(handle), span)
+            self.emit_constant_opcode(
+                OpCode::GetGlobal,
+                OpCode::GetGlobal16,
+                Value::String(handle),
+                span,
+            )
         }
     }
 
@@ -1604,7 +1613,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(&property_call.callee, errors)?;
 
                     let method_handle = self.allocator.strings.intern(&method_name.name);
-                    
+
                     for arg in args {
                         self.visit_expression(arg, errors)?;
                     }

@@ -1772,16 +1772,23 @@ fn test_inheritance_with_n_methods(n: usize) -> Result<(), String> {
     // Create base class with n methods
     let mut base_methods = String::new();
     for i in 1..=n {
-        base_methods.push_str(&format!("        baseMethod{:03}() {{ return \"base{}\"; }}\n", i, i));
+        base_methods.push_str(&format!(
+            "        baseMethod{:03}() {{ return \"base{}\"; }}\n",
+            i, i
+        ));
     }
-    
+
     // Create derived class that calls super methods
     let mut derived_methods = String::new();
     for i in 1..=n {
-        derived_methods.push_str(&format!("        derivedMethod{:03}() {{ return super.baseMethod{:03}(); }}\n", i, i));
+        derived_methods.push_str(&format!(
+            "        derivedMethod{:03}() {{ return super.baseMethod{:03}(); }}\n",
+            i, i
+        ));
     }
-    
-    let source = format!(r#"
+
+    let source = format!(
+        r#"
         class BaseClass {{
 {}
         }}
@@ -1793,7 +1800,9 @@ fn test_inheritance_with_n_methods(n: usize) -> Result<(), String> {
         var obj = DerivedClass();
         assert_eq(obj.derivedMethod001(), "base1");
         assert_eq(obj.derivedMethod{:03}(), "base{}");
-    "#, base_methods, derived_methods, n, n);
+    "#,
+        base_methods, derived_methods, n, n
+    );
 
     let source_map = SourceMap::new(source);
     let mut allocator = HeapAllocator::new();
@@ -1803,12 +1812,18 @@ fn test_inheritance_with_n_methods(n: usize) -> Result<(), String> {
             let mut vm = Vm::new(allocator).set_gc_status(false).set_debug(false);
             match vm.interpret(program) {
                 Ok(_) => Ok(()),
-                Err(error) => Err(format!("Runtime error with {} methods: {}", n, error.message))
+                Err(error) => Err(format!(
+                    "Runtime error with {} methods: {}",
+                    n, error.message
+                )),
             }
         }
         Err(errors) => {
             let error_msgs: Vec<String> = errors.all().iter().map(|e| e.message.clone()).collect();
-            Err(format!("Compiler error with {} methods: {:?}", n, error_msgs))
+            Err(format!(
+                "Compiler error with {} methods: {:?}",
+                n, error_msgs
+            ))
         }
     }
 }
@@ -1816,7 +1831,7 @@ fn test_inheritance_with_n_methods(n: usize) -> Result<(), String> {
 #[test]
 fn test_inheritance_threshold() {
     println!("Testing inheritance threshold...");
-    
+
     // Test with different numbers of methods to find the exact threshold
     for n in [3, 4, 5] {
         match test_inheritance_with_n_methods(n) {

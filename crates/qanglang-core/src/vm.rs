@@ -115,7 +115,6 @@ macro_rules! peek_value {
     };
 }
 
-
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
     closure: ClosureHandle,
@@ -1259,7 +1258,9 @@ impl Vm {
                 // Get the reference and update all closures
 
                 // Update all closures that reference this upvalue (inline + overflow)
-                for (closure_handle, upvalue_index) in upvalue_ref.collect_all_entries(&self.alloc.upvalue_overflow) {
+                for (closure_handle, upvalue_index) in
+                    upvalue_ref.collect_all_entries(&self.alloc.upvalue_overflow)
+                {
                     self.alloc.closures.set_upvalue(
                         closure_handle,
                         upvalue_index,
@@ -1283,7 +1284,11 @@ impl Vm {
         for (open_slot, upvalue_ref) in self.state.open_upvalues.iter_mut() {
             if *open_slot == stack_slot {
                 // Try to add to inline array first, or use overflow
-                if !upvalue_ref.add_closure_overflow(closure_handle, upvalue_index, &mut self.alloc.upvalue_overflow) {
+                if !upvalue_ref.add_closure(
+                    closure_handle,
+                    upvalue_index,
+                    &mut self.alloc.upvalue_overflow,
+                ) {
                     // This should never happen with reasonable limits, but handle gracefully
                     panic!("Failed to add closure to upvalue tracker - overflow capacity exceeded");
                 }
@@ -1299,8 +1304,12 @@ impl Vm {
 
         // Create a new open upvalue
         let mut upvalue_ref = OpenUpvalueTracker::new();
-        if !upvalue_ref.add_closure_overflow(closure_handle, upvalue_index, &mut self.alloc.upvalue_overflow) {
-            // This should never happen with reasonable limits, but handle gracefully  
+        if !upvalue_ref.add_closure(
+            closure_handle,
+            upvalue_index,
+            &mut self.alloc.upvalue_overflow,
+        ) {
+            // This should never happen with reasonable limits, but handle gracefully
             panic!("Failed to add closure to new upvalue tracker - overflow capacity exceeded");
         }
 

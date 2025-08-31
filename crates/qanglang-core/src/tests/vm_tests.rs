@@ -1608,7 +1608,7 @@ fn test_optional_calling_of_methods() {
     }
 }
 
-// #[test]
+#[test]
 fn test_class_init() {
     let source = r#"
         class Foo {

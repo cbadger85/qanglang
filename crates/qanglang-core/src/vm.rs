@@ -1180,6 +1180,20 @@ impl Vm {
     }
 
     fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
+        // Prevent binding init method to instances
+        if let Value::String(method_handle) = method_name {
+            let init_handle = *self
+                .state
+                .keywords
+                .get(&Keyword::Init)
+                .expect("Expected keyword.");
+            if method_handle == init_handle {
+                pop_value!(self);
+                push_value!(self, Value::Nil)?;
+                return Ok(());
+            }
+        }
+        
         let clazz = self.alloc.get_class(clazz_handle);
         if let Some(Value::Closure(closure)) =
             self.alloc.get_class_method(clazz.method_table, method_name)
@@ -1407,6 +1421,19 @@ impl Vm {
                 {
                     self.state.stack[self.state.stack_top - arg_count - 1] = value;
                     return self.call_value(value, arg_count);
+                }
+
+                // Prevent calling init method directly on instances
+                let init_handle = *self
+                    .state
+                    .keywords
+                    .get(&Keyword::Init)
+                    .expect("Expected keyword.");
+                if method_handle == init_handle {
+                    return Err(QangRuntimeError::new(
+                        "Cannot call constructor 'init' on an instance.".to_string(),
+                        self.state.get_previous_loc(),
+                    ));
                 }
 
                 self.invoke_from_class(instance.clazz, method_handle, arg_count)

@@ -407,3 +407,48 @@ fn test_isolated_upvalue_overflow_scenario() {
         }
     }
 }
+
+#[test]
+fn test_nested_closures() {
+    let source = r#"
+        fn test_three_level_nested_closures() {
+            // Test for deeply nested closures with proper upvalue resolution
+            // This ensures variables are correctly captured through multiple closure levels
+            var result = ((a) -> {
+                return ((b) -> {
+                return ((c) -> {
+                    return a + b + c;
+                })(4);
+                })(3);
+            })(2);
+            
+            assert_eq(result, 9, "Expected three-level closure to correctly capture variables: 2 + 3 + 4 = 9.");
+        }
+        test_three_level_nested_closures();
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.");
+        }
+    }
+}

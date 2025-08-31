@@ -3,8 +3,8 @@ use crate::{Value, ast};
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum OpCode {
-    // Constant16, to support encoding constants in two bytes
     Constant,
+    Constant16,
     Return,
     Negate,
     Add,
@@ -57,52 +57,53 @@ impl From<u8> for OpCode {
     fn from(byte: u8) -> Self {
         match byte {
             0 => OpCode::Constant,
-            1 => OpCode::Return,
-            2 => OpCode::Negate,
-            3 => OpCode::Add,
-            4 => OpCode::Subtract,
-            5 => OpCode::Multiply,
-            6 => OpCode::Divide,
-            7 => OpCode::Nil,
-            8 => OpCode::True,
-            9 => OpCode::False,
-            10 => OpCode::Not,
-            11 => OpCode::Equal,
-            12 => OpCode::Greater,
-            13 => OpCode::Less,
-            14 => OpCode::GreaterEqual,
-            15 => OpCode::LessEqual,
-            16 => OpCode::Modulo,
-            17 => OpCode::Pop,
-            18 => OpCode::DefineGlobal,
-            19 => OpCode::GetGlobal,
-            20 => OpCode::SetGlobal,
-            21 => OpCode::GetLocal,
-            22 => OpCode::SetLocal,
-            23 => OpCode::JumpIfFalse,
-            24 => OpCode::Jump,
-            25 => OpCode::Loop,
-            26 => OpCode::Call,
-            27 => OpCode::Closure,
-            28 => OpCode::GetUpvalue,
-            29 => OpCode::SetUpvalue,
-            30 => OpCode::CloseUpvalue,
-            31 => OpCode::Class,
-            32 => OpCode::GetProperty,
-            33 => OpCode::SetProperty,
-            34 => OpCode::Method,
-            35 => OpCode::Invoke,
-            36 => OpCode::Inherit,
-            37 => OpCode::GetSuper,
-            38 => OpCode::SuperInvoke,
-            39 => OpCode::InitField,
-            40 => OpCode::ArrayLiteral,
-            41 => OpCode::GetArrayIndex,
-            42 => OpCode::SetArrayIndex,
-            43 => OpCode::ObjectLiteral,
-            44 => OpCode::Is,
-            45 => OpCode::GetOptionalProperty,
-            46 => OpCode::JumpIfNil,
+            1 => OpCode::Constant16,
+            2 => OpCode::Return,
+            3 => OpCode::Negate,
+            4 => OpCode::Add,
+            5 => OpCode::Subtract,
+            6 => OpCode::Multiply,
+            7 => OpCode::Divide,
+            8 => OpCode::Nil,
+            9 => OpCode::True,
+            10 => OpCode::False,
+            11 => OpCode::Not,
+            12 => OpCode::Equal,
+            13 => OpCode::Greater,
+            14 => OpCode::Less,
+            15 => OpCode::GreaterEqual,
+            16 => OpCode::LessEqual,
+            17 => OpCode::Modulo,
+            18 => OpCode::Pop,
+            19 => OpCode::DefineGlobal,
+            20 => OpCode::GetGlobal,
+            21 => OpCode::SetGlobal,
+            22 => OpCode::GetLocal,
+            23 => OpCode::SetLocal,
+            24 => OpCode::JumpIfFalse,
+            25 => OpCode::Jump,
+            26 => OpCode::Loop,
+            27 => OpCode::Call,
+            28 => OpCode::Closure,
+            29 => OpCode::GetUpvalue,
+            30 => OpCode::SetUpvalue,
+            31 => OpCode::CloseUpvalue,
+            32 => OpCode::Class,
+            33 => OpCode::GetProperty,
+            34 => OpCode::SetProperty,
+            35 => OpCode::Method,
+            36 => OpCode::Invoke,
+            37 => OpCode::Inherit,
+            38 => OpCode::GetSuper,
+            39 => OpCode::SuperInvoke,
+            40 => OpCode::InitField,
+            41 => OpCode::ArrayLiteral,
+            42 => OpCode::GetArrayIndex,
+            43 => OpCode::SetArrayIndex,
+            44 => OpCode::ObjectLiteral,
+            45 => OpCode::Is,
+            46 => OpCode::GetOptionalProperty,
+            47 => OpCode::JumpIfNil,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }
@@ -192,7 +193,7 @@ impl Chunk {
         Self {
             code: Vec::new(),
             locs: Vec::new(),
-            constants: Vec::new(),
+            constants: Vec::with_capacity(256), // Reserve space for strings
         }
     }
 
@@ -206,6 +207,14 @@ impl Chunk {
     }
 
     pub fn add_constant(&mut self, value: Value) -> usize {
+        // Check if constant already exists
+        for (i, existing) in self.constants.iter().enumerate() {
+            if *existing == value {
+                return i;
+            }
+        }
+        
+        // Add new constant
         self.constants.push(value);
         self.constants.len() - 1
     }

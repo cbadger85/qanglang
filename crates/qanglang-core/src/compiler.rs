@@ -410,23 +410,68 @@ impl<'a> CompilerVisitor<'a> {
     }
 
     fn emit_constant(&mut self, value: Value, span: SourceSpan) -> Result<(), QangSyntaxError> {
-        let constant = self.make_constant(value, span)?;
-        self.emit_opcode_and_byte(OpCode::Constant, constant, span);
+        let index = self.current_chunk_mut().add_constant(value);
+        
+        if index <= u8::MAX as usize {
+            self.emit_opcode_and_byte(OpCode::Constant, index as u8, span);
+        } else if index <= u16::MAX as usize {
+            self.emit_opcode(OpCode::Constant16, span);
+            self.emit_byte((index >> 8) as u8, span);
+            self.emit_byte((index & 0xff) as u8, span);
+        } else {
+            return Err(QangSyntaxError::new(
+                "Too many constants in function".to_string(),
+                span,
+            ));
+        }
 
         Ok(())
     }
 
     fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangSyntaxError> {
-        let index = self.current_chunk_mut().add_constant(value);
-
+        let index = if matches!(value, Value::String(_)) {
+            self.make_string_constant(value, span)?
+        } else {
+            self.current_chunk_mut().add_constant(value)
+        };
+        
         if index > u8::MAX as usize {
             Err(QangSyntaxError::new(
-                "Constant index out of range".to_string(),
+                "Constant index out of range for 8-bit access".to_string(),
                 span,
             ))
         } else {
             Ok(index as u8)
         }
+    }
+
+    fn make_string_constant(&mut self, value: Value, span: SourceSpan) -> Result<usize, QangSyntaxError> {
+        if !matches!(value, Value::String(_)) {
+            return Err(QangSyntaxError::new(
+                "Expected string constant".to_string(),
+                span,
+            ));
+        }
+        
+        let chunk = self.current_chunk_mut();
+        
+        // Check if string already exists in first 256 constants
+        for (i, existing) in chunk.constants.iter().enumerate().take(256) {
+            if *existing == value {
+                return Ok(i);
+            }
+        }
+        
+        // Add new string constant, ensuring it goes in first 256 slots
+        if chunk.constants.len() >= 256 {
+            return Err(QangSyntaxError::new(
+                "Too many string constants (max 256)".to_string(),
+                span,
+            ));
+        }
+        
+        chunk.constants.push(value);
+        Ok(chunk.constants.len() - 1)
     }
 
     fn emit_return(&mut self, span: SourceSpan) {

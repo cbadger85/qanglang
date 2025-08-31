@@ -222,6 +222,17 @@ impl VmState {
         constants[index]
     }
 
+    fn read_constant_16(&mut self) -> Value {
+        let index = self.read_short();
+        debug_assert!(
+            !self.current_function_ptr.is_null(),
+            "Function pointer is null"
+        );
+        let constants = unsafe { &(*self.current_function_ptr).chunk.constants };
+        debug_assert!(index < constants.len(), "Constant index out of bounds");
+        constants[index]
+    }
+
     fn read_short(&mut self) -> usize {
         let high_byte = self.read_byte() as usize;
         let low_byte = self.read_byte() as usize;
@@ -558,6 +569,10 @@ impl Vm {
             match opcode {
                 OpCode::Constant => {
                     let constant = self.state.read_constant();
+                    push_value!(self, constant)?;
+                }
+                OpCode::Constant16 => {
+                    let constant = self.state.read_constant_16();
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {

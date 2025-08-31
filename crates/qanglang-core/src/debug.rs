@@ -28,6 +28,7 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
 
     match opcode {
         OpCode::Constant => constant_instruction("OP_CONSTANT", chunk, allocator, offset),
+        OpCode::Constant16 => constant16_instruction("OP_CONSTANT16", chunk, allocator, offset),
         OpCode::Return => simple_instruction("OP_RETURN", offset),
         OpCode::Negate => simple_instruction("OP_NEGATE", offset),
         OpCode::Add => simple_instruction("OP_ADD", offset),
@@ -145,6 +146,28 @@ fn jump_instruction(name: &str, sign: i32, chunk: &Chunk, offset: usize) -> usiz
     let jump = ((chunk.code[offset + 1] as u16) << 8) | (chunk.code[offset + 2] as u16);
     let target = offset as i32 + 3 + sign * (jump as i32);
     println!("{:<16} {:4} -> {}", name, offset, target);
+    offset + 3
+}
+
+fn constant16_instruction(
+    name: &str,
+    chunk: &Chunk,
+    allocator: &HeapAllocator,
+    offset: usize,
+) -> usize {
+    let high_byte = chunk.code[offset + 1] as usize;
+    let low_byte = chunk.code[offset + 2] as usize;
+    let constant = (high_byte << 8) | low_byte;
+    print!("{:<16} {:4} '", name, constant);
+
+    chunk
+        .constants
+        .get(constant)
+        .copied()
+        .unwrap_or_default()
+        .print(allocator);
+
+    println!("'");
     offset + 3
 }
 

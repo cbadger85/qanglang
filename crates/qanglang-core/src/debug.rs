@@ -143,6 +143,7 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
             string_constant_16_instruction("OP_GET_OPTIONAL_PROPERTY16", chunk, allocator, offset)
         }
         OpCode::JumpIfNil => jump_instruction("OP_JUMP_IF_NIL", 1, chunk, offset),
+        OpCode::TailCall => byte_instruction("OP_TAIL_CALL", chunk, offset),
     }
 }
 

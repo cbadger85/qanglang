@@ -478,6 +478,14 @@ impl<'a> CompilerVisitor<'a> {
         self.emit_opcode(OpCode::Return, span);
     }
 
+    fn is_tail_call(&self, expr: &ast::Expr) -> bool {
+        matches!(expr, ast::Expr::Call(_))
+    }
+
+    fn emit_tail_call(&mut self, arg_count: u8, span: SourceSpan) {
+        self.emit_opcode_and_byte(OpCode::TailCall, arg_count, span);
+    }
+
     fn begin_scope(&mut self) {
         self.compiler.scope_depth += 1;
     }
@@ -812,10 +820,44 @@ impl<'a> CompilerVisitor<'a> {
         self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
         Ok(())
     }
+
 }
 
 impl<'a> AstVisitor for CompilerVisitor<'a> {
     type Error = QangSyntaxError;
+
+    fn visit_return_statement(
+        &mut self,
+        return_stmt: &ast::ReturnStmt,
+        errors: &mut ErrorReporter,
+    ) -> Result<(), Self::Error> {
+        if let Some(expr) = &return_stmt.value {
+            // Check if this is a tail call
+            if self.is_tail_call(expr) {
+                if let ast::Expr::Call(call_expr) = expr {
+                    // Handle call operation to get arguments
+                    if let ast::CallOperation::Call(args) = &*call_expr.operation {
+                        // Emit callee first (like regular calls)
+                        self.visit_expression(&call_expr.callee, errors)?;
+                        // Then emit arguments
+                        for arg in args {
+                            self.visit_expression(arg, errors)?;
+                        }
+                        // Emit tail call instead of regular call + return
+                        self.emit_tail_call(args.len() as u8, call_expr.span);
+                        return Ok(());
+                    }
+                }
+            }
+            
+            self.visit_expression(expr, errors)?;
+        } else {
+            self.emit_opcode(OpCode::Nil, return_stmt.span);
+        }
+        
+        self.emit_opcode(OpCode::Return, return_stmt.span);
+        Ok(())
+    }
 
     fn visit_number_literal(
         &mut self,
@@ -1375,34 +1417,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.handle_function(CompilerKind::Function, &func_decl.function, false, errors)
     }
 
-    fn visit_return_statement(
-        &mut self,
-        return_stmt: &ast::ReturnStmt,
-        errors: &mut ErrorReporter,
-    ) -> Result<(), Self::Error> {
-        if self.compiler.kind == CompilerKind::Script {
-            return Err(QangSyntaxError::new(
-                "Cannot return from top-level code.".to_string(),
-                return_stmt.span,
-            ));
-        }
 
-        if matches!(self.compiler.kind, CompilerKind::Initializer) {
-            return Err(QangSyntaxError::new(
-                "Cannot return from an initializer.".to_string(),
-                return_stmt.span,
-            ));
-        }
-
-        if let Some(value) = &return_stmt.value {
-            self.visit_expression(value, errors)?;
-        } else {
-            self.emit_opcode(OpCode::Nil, return_stmt.span);
-        }
-
-        self.emit_opcode(OpCode::Return, return_stmt.span);
-        Ok(())
-    }
 
     fn visit_break_statement(
         &mut self,

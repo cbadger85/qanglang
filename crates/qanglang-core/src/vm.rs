@@ -837,6 +837,11 @@ impl Vm {
                     let function_value = peek_value!(self, arg_count);
                     self.call_value(function_value, arg_count)?;
                 }
+                OpCode::TailCall => {
+                    let arg_count = self.state.read_byte() as usize;
+                    let function_value = peek_value!(self, arg_count);
+                    self.tail_call_value(function_value, arg_count)?;
+                }
                 OpCode::Closure => {
                     let constant = self.state.read_constant();
                     let handle = match constant {
@@ -1558,6 +1563,82 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");
 
+        Ok(())
+    }
+
+    fn tail_call_value(&mut self, callee: Value, arg_count: usize) -> RuntimeResult<()> {
+        match callee {
+            Value::Closure(closure_handle) => {
+                self.tail_call(closure_handle, arg_count)
+            }
+            Value::NativeFunction(handle) => {
+                // Native functions can't be tail-optimized, fall back to regular call
+                self.call_native_function(handle, arg_count)
+            }
+            Value::Class(_handle) => {
+                // Classes can't be tail-optimized (they create instances), fall back to regular call
+                self.call_value(callee, arg_count)
+            }
+            Value::BoundMethod(handle) => {
+                let bound_method = self.alloc.get_bound_method(handle);
+                self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.receiver;
+                self.tail_call(bound_method.closure, arg_count)
+            }
+            Value::BoundIntrinsic(handle) => {
+                // Intrinsic methods can't be tail-optimized, fall back to regular call
+                let bound_intrinsic = self.alloc.get_bound_intrinsic(handle);
+                self.call_intrinsic_method(
+                    bound_intrinsic.receiver,
+                    bound_intrinsic.method,
+                    arg_count,
+                )
+            }
+            _ => {
+                let value_str = callee.to_display_string(&self.alloc);
+                Err(QangRuntimeError::new(
+                    format!("Identifier '{}' not callable.", value_str).to_string(),
+                    self.state.get_previous_loc(),
+                ))
+            }
+        }
+    }
+
+    fn tail_call(&mut self, closure_handle: ClosureHandle, arg_count: usize) -> RuntimeResult<()> {
+        let closure = self.alloc.closures.get_closure(closure_handle);
+        let function = self.alloc.get_function(closure.function);
+        
+        // Pad arguments if needed
+        let final_arg_count = if arg_count < function.arity {
+            for _ in arg_count..function.arity {
+                push_value!(self, Value::Nil)?;
+            }
+            function.arity
+        } else {
+            arg_count
+        };
+
+        // Get current frame info
+        let current_frame = &self.state.frames[self.state.frame_count - 1];
+        let current_value_slot = current_frame.value_slot;
+        
+        // New function and args are at top of stack
+        // [... current frame locals] [new_func] [new_arg1] [new_arg2] <- stack_top
+        let new_func_pos = self.state.stack_top - final_arg_count - 1;
+        
+        // Move new function + args to current frame's position
+        for i in 0..=final_arg_count {  // Include function itself
+            self.state.stack[current_value_slot + i] = self.state.stack[new_func_pos + i];
+        }
+        
+        // Reset stack_top to just after the new arguments
+        self.state.stack_top = current_value_slot + final_arg_count + 1;
+        
+        // Update current frame (don't increment frame_count!)
+        let current_frame = &mut self.state.frames[self.state.frame_count - 1];
+        current_frame.closure = closure_handle;
+        current_frame.ip = 0;
+        self.state.current_function_ptr = function as *const FunctionObject;
+        
         Ok(())
     }
 

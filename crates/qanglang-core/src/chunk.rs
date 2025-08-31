@@ -62,6 +62,7 @@ pub enum OpCode {
     GetOptionalProperty,
     GetOptionalProperty16,
     JumpIfNil,
+    TailCall,
 }
 
 impl From<u8> for OpCode {
@@ -126,6 +127,7 @@ impl From<u8> for OpCode {
             56 => OpCode::GetOptionalProperty,
             57 => OpCode::GetOptionalProperty16,
             58 => OpCode::JumpIfNil,
+            59 => OpCode::TailCall,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

@@ -422,7 +422,7 @@ fn test_nested_closures() {
                 })(3);
             })(2);
             
-            assert_eq(result, 9, "Expected three-level closure to correctly capture variables: 2 + 3 + 4 = 9.");
+            assert_eq(result, 9, "Expected three-level closure to correctly capture variables: 2 + 3 + 4 = 9, but received " + to_string(result));
         }
         test_three_level_nested_closures();
     "#;

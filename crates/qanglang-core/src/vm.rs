@@ -1605,14 +1605,15 @@ impl Vm {
 
     fn tail_call(&mut self, closure_handle: ClosureHandle, arg_count: usize) -> RuntimeResult<()> {
         let closure = self.alloc.closures.get_closure(closure_handle);
-        let function = self.alloc.get_function(closure.function);
+        let function_handle = closure.function;
+        let function_arity = self.alloc.get_function(function_handle).arity;
         
         // Pad arguments if needed
-        let final_arg_count = if arg_count < function.arity {
-            for _ in arg_count..function.arity {
+        let final_arg_count = if arg_count < function_arity {
+            for _ in arg_count..function_arity {
                 push_value!(self, Value::Nil)?;
             }
-            function.arity
+            function_arity
         } else {
             arg_count
         };
@@ -1620,6 +1621,11 @@ impl Vm {
         // Get current frame info
         let current_frame = &self.state.frames[self.state.frame_count - 1];
         let current_value_slot = current_frame.value_slot;
+        
+        // Close upvalues that might be affected by the tail call
+        // This ensures that any upvalues pointing to the current frame's locals
+        // are properly closed before we reuse the frame
+        self.close_upvalue(current_value_slot + 1);
         
         // New function and args are at top of stack
         // [... current frame locals] [new_func] [new_arg1] [new_arg2] <- stack_top
@@ -1637,6 +1643,9 @@ impl Vm {
         let current_frame = &mut self.state.frames[self.state.frame_count - 1];
         current_frame.closure = closure_handle;
         current_frame.ip = 0;
+        
+        // Get function pointer after all mutations are done
+        let function = self.alloc.get_function(function_handle);
         self.state.current_function_ptr = function as *const FunctionObject;
         
         Ok(())

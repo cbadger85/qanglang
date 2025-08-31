@@ -852,7 +852,11 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             
             self.visit_expression(expr, errors)?;
         } else {
-            self.emit_opcode(OpCode::Nil, return_stmt.span);
+            if matches!(self.compiler.kind, CompilerKind::Initializer) {
+                self.emit_opcode_and_byte(OpCode::GetLocal, 0, return_stmt.span);
+            } else {
+                self.emit_opcode(OpCode::Nil, return_stmt.span);
+            }
         }
         
         self.emit_opcode(OpCode::Return, return_stmt.span);

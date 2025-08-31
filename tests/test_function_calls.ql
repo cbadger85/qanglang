@@ -174,36 +174,37 @@ fn test_simple_tail_recursion() {
   assert_eq(result, 120);
 }
 
+fn even(n) {
+    if (n == 0) {
+      return true;
+    } else {
+      return odd(n - 1);
+    }
+}
+
+fn odd(n) {
+  if (n == 0) {
+    return false;
+  } else {
+    return even(n - 1);
+  }
+}
+
+
 fn test_tail_call_different_function() {
-  fn even(n) {
-      if (n == 0) {
-        return true;
-      } else {
-        return odd(n - 1);
-      }
-  }
-  
-  fn odd(n) {
-      if (n == 0) {
-        return false;
-      } else {
-        return even(n - 1);
-      }
-  }
-  
   assert_eq(even(100), true);
   assert_eq(odd(99), true);
 }
 
+fn helper(a, b, c) {
+  return a + b + c;
+}
+
+fn caller(x) {
+  return helper(x, x * 2, x * 3);
+}
+
 fn test_tail_call_with_different_arity() {
-  fn helper(a, b, c) {
-    return a + b + c;
-  }
-  
-  fn caller(x) {
-    return helper(x, x * 2, x * 3);
-  }
-  
   var result = caller(10);
   assert_eq(result, 60); // 10 + 20 + 30
 }

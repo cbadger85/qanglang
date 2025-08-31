@@ -2183,6 +2183,7 @@ fn test_op_constant_16() {
             var total_is_number = total is NUMBER;
             assert(total_is_number);
             assert_eq(total, 47895);
+        }
     "#;
 
     let source_map = SourceMap::new(source.to_string());

@@ -175,11 +175,18 @@ fn string_constant_instruction(
     let constant = chunk.code[offset + 1] as usize;
     print!("{:<16} {:4} '", name, constant);
 
-    if let Some(handle) = chunk.identifier_constants.get(constant) {
-        let string_value = allocator.strings.get_string(*handle);
-        print!("{}", string_value);
+    if let Some(value) = chunk.constants.get(constant) {
+        match value {
+            Value::String(handle) => {
+                let string_value = allocator.strings.get_string(*handle);
+                print!("{}", string_value);
+            }
+            _ => {
+                print!("<not a string constant>");
+            }
+        }
     } else {
-        print!("<invalid string index>");
+        print!("<invalid constant index>");
     }
 
     println!("'");
@@ -236,11 +243,18 @@ fn invoke_instruction(
     let arg_count = chunk.code[offset + 2];
     print!("{:<16} ({} args) {:4} '", name, arg_count, constant);
 
-    if let Some(handle) = chunk.identifier_constants.get(constant as usize) {
-        let string_value = allocator.strings.get_string(*handle);
-        print!("{}", string_value);
+    if let Some(value) = chunk.constants.get(constant as usize) {
+        match value {
+            Value::String(handle) => {
+                let string_value = allocator.strings.get_string(*handle);
+                print!("{}", string_value);
+            }
+            _ => {
+                print!("<not a string constant>");
+            }
+        }
     } else {
-        print!("<invalid string index>");
+        print!("<invalid constant index>");
     }
 
     println!("'");
@@ -258,11 +272,18 @@ fn string_constant_16_instruction(
     let constant = (high_byte << 8) | low_byte;
     print!("{:<16} {:4} '", name, constant);
 
-    if let Some(handle) = chunk.identifier_constants.get(constant) {
-        let string_value = allocator.strings.get_string(*handle);
-        print!("{}", string_value);
+    if let Some(value) = chunk.constants.get(constant) {
+        match value {
+            Value::String(handle) => {
+                let string_value = allocator.strings.get_string(*handle);
+                print!("{}", string_value);
+            }
+            _ => {
+                print!("<not a string constant>");
+            }
+        }
     } else {
-        print!("<invalid string index>");
+        print!("<invalid constant index>");
     }
 
     println!("'");
@@ -281,11 +302,18 @@ fn invoke_16_instruction(
     let arg_count = chunk.code[offset + 3];
     print!("{:<16} ({} args) {:4} '", name, arg_count, constant);
 
-    if let Some(handle) = chunk.identifier_constants.get(constant) {
-        let string_value = allocator.strings.get_string(*handle);
-        print!("{}", string_value);
+    if let Some(value) = chunk.constants.get(constant) {
+        match value {
+            Value::String(handle) => {
+                let string_value = allocator.strings.get_string(*handle);
+                print!("{}", string_value);
+            }
+            _ => {
+                print!("<not a string constant>");
+            }
+        }
     } else {
-        print!("<invalid string index>");
+        print!("<invalid constant index>");
     }
 
     println!("'");

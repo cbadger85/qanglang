@@ -1768,6 +1768,268 @@ fn test_map_expression_with_boolean() {
     }
 }
 
+fn test_inheritance_with_n_methods(n: usize) -> Result<(), String> {
+    // Create base class with n methods
+    let mut base_methods = String::new();
+    for i in 1..=n {
+        base_methods.push_str(&format!("        baseMethod{:03}() {{ return \"base{}\"; }}\n", i, i));
+    }
+    
+    // Create derived class that calls super methods
+    let mut derived_methods = String::new();
+    for i in 1..=n {
+        derived_methods.push_str(&format!("        derivedMethod{:03}() {{ return super.baseMethod{:03}(); }}\n", i, i));
+    }
+    
+    let source = format!(r#"
+        class BaseClass {{
+{}
+        }}
+
+        class DerivedClass : BaseClass {{
+{}
+        }}
+
+        var obj = DerivedClass();
+        assert_eq(obj.derivedMethod001(), "base1");
+        assert_eq(obj.derivedMethod{:03}(), "base{}");
+    "#, base_methods, derived_methods, n, n);
+
+    let source_map = SourceMap::new(source);
+    let mut allocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            let mut vm = Vm::new(allocator).set_gc_status(false).set_debug(false);
+            match vm.interpret(program) {
+                Ok(_) => Ok(()),
+                Err(error) => Err(format!("Runtime error with {} methods: {}", n, error.message))
+            }
+        }
+        Err(errors) => {
+            let error_msgs: Vec<String> = errors.all().iter().map(|e| e.message.clone()).collect();
+            Err(format!("Compiler error with {} methods: {:?}", n, error_msgs))
+        }
+    }
+}
+
+#[test]
+fn test_inheritance_threshold() {
+    println!("Testing inheritance threshold...");
+    
+    // Test with different numbers of methods to find the exact threshold
+    for n in [3, 4, 5] {
+        match test_inheritance_with_n_methods(n) {
+            Ok(_) => println!("✓ {} methods: PASS", n),
+            Err(e) => println!("✗ {} methods: FAIL - {}", n, e),
+        }
+    }
+}
+
+#[test]
+fn test_class_without_methods() {
+    let source = r#"
+        class TestClass {}
+        println("Creating class instance...");
+        var obj = TestClass();
+        println("Class created successfully");
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => println!("✓ Empty class test passed"),
+                Err(error) => {
+                    println!("✗ Empty class test failed: {}", error.message);
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.");
+        }
+    }
+}
+
+#[test]
+fn test_identifier_constant_corruption() {
+    let source = r#"
+        class TestClass {
+            method1() { return 1; }
+            method2() { return 2; }
+            method3() { return 3; }
+            method4() { return 4; }
+            method5() { return 5; }
+        }
+        
+        println("Creating class instance...");
+        var obj = TestClass();
+        println("Class created successfully");
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // Enable disassembly to see the bytecode
+            disassemble_program(&allocator);
+
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false) // Disable debug output for cleaner view
+                .interpret(program)
+            {
+                Ok(_) => println!("✓ Test passed - no identifier corruption"),
+                Err(error) => {
+                    println!("✗ Test failed: {}", error.message);
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.");
+        }
+    }
+}
+
+#[test]
+fn test_fifth_method_debug() {
+    let source = r#"
+        class BaseClass {
+            baseMethod001() { return "base1"; }
+            baseMethod002() { return "base2"; }
+            baseMethod003() { return "base3"; }
+            baseMethod004() { return "base4"; }
+            baseMethod005() { return "base5"; }
+        }
+
+        class DerivedClass : BaseClass {
+            derivedMethod001() { return super.baseMethod001(); }
+            derivedMethod002() { return super.baseMethod002(); }
+            derivedMethod003() { return super.baseMethod003(); }
+            derivedMethod004() { return super.baseMethod004(); }
+            derivedMethod005() { return super.baseMethod005(); }
+        }
+
+        // Test each method individually
+        var obj = DerivedClass();
+        println("Testing method 1...");
+        assert_eq(obj.derivedMethod001(), "base1");
+        println("Testing method 2...");
+        assert_eq(obj.derivedMethod002(), "base2");
+        println("Testing method 3...");
+        assert_eq(obj.derivedMethod003(), "base3");
+        println("Testing method 4...");
+        assert_eq(obj.derivedMethod004(), "base4");
+        println("Testing method 5...");
+        assert_eq(obj.derivedMethod005(), "base5");
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // Enable disassembly to see the bytecode
+            disassemble_program(&allocator);
+
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true) // Enable debug output
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.");
+        }
+    }
+}
+
+#[test]
+fn test_debug_16bit_identifiers() {
+    let source = r#"
+        class BaseClass {
+        baseMethod001() { return "base1"; }
+        baseMethod002() { return "base2"; }
+        baseMethod003() { return "base3"; }
+        baseMethod004() { return "base4"; }
+        baseMethod005() { return "base5"; }
+        baseMethod006() { return "base6"; }
+        baseMethod007() { return "base7"; }
+        baseMethod008() { return "base8"; }
+        baseMethod009() { return "base9"; }
+        baseMethod010() { return "base10"; }
+        }
+
+        class DerivedClass : BaseClass {
+        derivedMethod001() { return super.baseMethod001(); }
+        derivedMethod002() { return super.baseMethod002(); }
+        derivedMethod003() { return super.baseMethod003(); }
+        derivedMethod004() { return super.baseMethod004(); }
+        derivedMethod005() { return super.baseMethod005(); }
+        }
+
+        // Test super method calls with many identifiers (GetSuper16/SuperInvoke16)
+        var obj = DerivedClass();
+
+        assert_eq(obj.derivedMethod001(), "base1");
+        assert_eq(obj.derivedMethod002(), "base2");
+        assert_eq(obj.derivedMethod003(), "base3");
+        assert_eq(obj.derivedMethod004(), "base4");
+        assert_eq(obj.derivedMethod005(), "base5");
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            // Enable disassembly to see the bytecode
+            disassemble_program(&allocator);
+
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true) // Enable debug output
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
 #[test]
 fn test_map_optional_expression() {
     let source = r#"
@@ -1804,6 +2066,52 @@ fn test_map_optional_expression() {
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_simple_16bit_super_call() {
+    let source = r#"
+        class BaseClass {
+            method001() { return "base1"; }
+            method002() { return "base2"; }
+            method003() { return "base3"; }
+            method004() { return "base4"; }
+            method005() { return "base5"; }
+        }
+
+        class DerivedClass : BaseClass {
+            derivedMethod() { return super.method005(); }
+        }
+
+        var obj = DerivedClass();
+        assert_eq(obj.derivedMethod(), "base5");
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
                 .interpret(program)
             {
                 Ok(_) => (),

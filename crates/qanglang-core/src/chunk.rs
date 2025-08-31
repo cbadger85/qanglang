@@ -1,4 +1,4 @@
-use crate::{Value, ast, memory::StringHandle};
+use crate::{Value, ast};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
@@ -207,7 +207,6 @@ impl SourceLocation {
 pub struct Chunk {
     pub code: Vec<u8>,
     pub locs: Vec<SourceLocation>,
-    pub identifier_constants: Vec<StringHandle>,
     pub constants: Vec<Value>,
 }
 
@@ -216,7 +215,6 @@ impl Chunk {
         Self {
             code: Vec::new(),
             locs: Vec::new(),
-            identifier_constants: Vec::new(),
             constants: Vec::new(),
         }
     }
@@ -241,18 +239,5 @@ impl Chunk {
         // Add new constant
         self.constants.push(value);
         self.constants.len() - 1
-    }
-
-    pub fn add_identifier_constant(&mut self, handle: StringHandle) -> usize {
-        // Check if string constant already exists
-        for (i, existing) in self.identifier_constants.iter().enumerate() {
-            if *existing == handle {
-                return i;
-            }
-        }
-
-        // Add new string constant
-        self.identifier_constants.push(handle);
-        self.identifier_constants.len() - 1
     }
 }

@@ -115,29 +115,6 @@ macro_rules! peek_value {
     };
 }
 
-macro_rules! read_identifier {
-    ($vm:expr) => {{
-        let index = $vm.state.read_byte() as usize;
-        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.identifier_constants };
-        debug_assert!(
-            index < constants.len(),
-            "String constant index out of bounds"
-        );
-        constants[index]
-    }};
-}
-
-macro_rules! read_identifier_16 {
-    ($vm:expr) => {{
-        let index = $vm.state.read_short();
-        let constants = unsafe { &(*$vm.state.current_function_ptr).chunk.identifier_constants };
-        debug_assert!(
-            index < constants.len(),
-            "String constant index out of bounds"
-        );
-        constants[index]
-    }};
-}
 
 #[derive(Debug, Clone, Default)]
 struct CallFrame {
@@ -264,6 +241,22 @@ impl Vm {
             self.collect_garbage();
         }
         op(&mut self.alloc)
+    }
+
+    fn read_string_constant(&mut self) -> StringHandle {
+        let constant = self.state.read_constant();
+        match constant {
+            Value::String(handle) => handle,
+            _ => panic!("Expected string constant"),
+        }
+    }
+
+    fn read_string_constant_16(&mut self) -> StringHandle {
+        let constant = self.state.read_constant_16();
+        match constant {
+            Value::String(handle) => handle,
+            _ => panic!("Expected string constant"),
+        }
     }
 
     pub fn new(mut alloc: HeapAllocator) -> Self {
@@ -730,12 +723,12 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::DefineGlobal => {
-                    let identifier_handle = read_identifier!(self);
+                    let identifier_handle = self.read_string_constant();
                     let value = pop_value!(self);
                     self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal => {
-                    let identifier_handle = read_identifier!(self);
+                    let identifier_handle = self.read_string_constant();
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
                         let identifier_name = self.alloc.strings.get_string(identifier_handle);
@@ -747,7 +740,7 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal => {
-                    let identifier_handle = read_identifier!(self);
+                    let identifier_handle = self.read_string_constant();
 
                     if !self.state.globals.contains_key(&identifier_handle) {
                         let identifier_name = self.alloc.strings.get_string(identifier_handle);
@@ -761,12 +754,12 @@ impl Vm {
                     self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::DefineGlobal16 => {
-                    let identifier_handle = read_identifier_16!(self);
+                    let identifier_handle = self.read_string_constant_16();
                     let value = pop_value!(self);
                     self.state.globals.insert(identifier_handle, value);
                 }
                 OpCode::GetGlobal16 => {
-                    let identifier_handle = read_identifier_16!(self);
+                    let identifier_handle = self.read_string_constant_16();
                     let value = *self.state.globals.get(&identifier_handle).ok_or_else(|| {
                         let loc = self.state.get_previous_loc();
                         let identifier_name = self.alloc.strings.get_string(identifier_handle);
@@ -778,7 +771,7 @@ impl Vm {
                     push_value!(self, value)?;
                 }
                 OpCode::SetGlobal16 => {
-                    let identifier_handle = read_identifier_16!(self);
+                    let identifier_handle = self.read_string_constant_16();
 
                     if !self.state.globals.contains_key(&identifier_handle) {
                         let identifier_name = self.alloc.strings.get_string(identifier_handle);
@@ -930,81 +923,81 @@ impl Vm {
                     pop_value!(self);
                 }
                 OpCode::Class => {
-                    let identifier_handle = read_identifier!(self);
+                    let identifier_handle = self.read_string_constant();
                     let class_handle =
                         self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
                     push_value!(self, Value::Class(class_handle))?
                 }
                 OpCode::GetProperty => {
                     let object = peek_value!(self, 0);
-                    let identifier = read_identifier!(self);
+                    let identifier = self.read_string_constant();
                     self.get_property_value(object, false, identifier)?;
                 }
                 OpCode::GetProperty16 => {
                     let object = peek_value!(self, 0);
-                    let identifier = read_identifier_16!(self);
+                    let identifier = self.read_string_constant_16();
                     self.get_property_value(object, false, identifier)?;
                 }
                 OpCode::SetProperty => {
-                    let identifier = read_identifier!(self);
+                    let identifier = self.read_string_constant();
                     self.set_property(identifier)?
                 }
                 OpCode::SetProperty16 => {
-                    let identifier = read_identifier_16!(self);
+                    let identifier = self.read_string_constant_16();
                     self.set_property(identifier)?
                 }
                 OpCode::GetOptionalProperty => {
                     let object = peek_value!(self, 0);
-                    let identifier = read_identifier!(self);
+                    let identifier = self.read_string_constant();
                     self.get_property_value(object, true, identifier)?;
                 }
                 OpCode::GetOptionalProperty16 => {
                     let object = peek_value!(self, 0);
-                    let identifier = read_identifier_16!(self);
+                    let identifier = self.read_string_constant_16();
                     self.get_property_value(object, true, identifier)?;
                 }
                 OpCode::Method => {
-                    let identifier_handle = read_identifier!(self);
+                    let identifier_handle = self.read_string_constant();
                     self.define_method(identifier_handle)?;
                 }
                 OpCode::Method16 => {
-                    let identifier_handle = read_identifier_16!(self);
+                    let identifier_handle = self.read_string_constant_16();
                     self.define_method(identifier_handle)?;
                 }
                 OpCode::InitField => {
-                    let identifier_handle = read_identifier!(self);
+                    let identifier_handle = self.read_string_constant();
                     let value = pop_value!(self);
                     self.init_field(identifier_handle, value)?;
                 }
                 OpCode::InitField16 => {
-                    let identifier_handle = read_identifier_16!(self);
+                    let identifier_handle = self.read_string_constant_16();
                     let value = pop_value!(self);
                     self.init_field(identifier_handle, value)?;
                 }
                 OpCode::Invoke => {
-                    let method_handle = read_identifier!(self);
+                    let method_handle = self.read_string_constant();
                     let arg_count = self.state.read_byte();
                     self.invoke(method_handle, arg_count as usize)?;
                 }
                 OpCode::Invoke16 => {
-                    let method_handle = read_identifier_16!(self);
+                    let method_handle = self.read_string_constant_16();
                     let arg_count = self.state.read_byte();
                     self.invoke(method_handle, arg_count as usize)?;
                 }
                 OpCode::GetSuper => {
-                    let property_handle = read_identifier!(self);
+                    let property_handle = self.read_string_constant();
                     self.get_super(property_handle)?;
                 }
                 OpCode::GetSuper16 => {
-                    let property_handle = read_identifier_16!(self);
+                    let property_handle = self.read_string_constant_16();
                     self.get_super(property_handle)?;
                 }
                 OpCode::SuperInvoke => {
-                    let method_handle = read_identifier!(self);
+                    let method_handle = self.read_string_constant();
                     self.invoke_super(method_handle)?;
                 }
                 OpCode::SuperInvoke16 => {
-                    let method_handle = read_identifier_16!(self);
+                    let method_handle = self.read_string_constant_16();
                     self.invoke_super(method_handle)?;
                 }
                 OpCode::Inherit => {

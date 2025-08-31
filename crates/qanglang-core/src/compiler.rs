@@ -428,14 +428,27 @@ impl<'a> CompilerVisitor<'a> {
         Ok(())
     }
 
-    fn emit_string_constant_opcode(
+    fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangSyntaxError> {
+        let index = self.current_chunk_mut().add_constant(value);
+
+        if index > u8::MAX as usize {
+            Err(QangSyntaxError::new(
+                "Too many constants in function (max 256)".to_string(),
+                span,
+            ))
+        } else {
+            Ok(index as u8)
+        }
+    }
+
+    fn emit_constant_opcode(
         &mut self,
         opcode_8: OpCode,
         opcode_16: OpCode,
-        handle: StringHandle,
+        value: Value,
         span: SourceSpan,
     ) -> Result<(), QangSyntaxError> {
-        let index = self.current_chunk_mut().add_identifier_constant(handle);
+        let index = self.current_chunk_mut().add_constant(value);
 
         if index <= u8::MAX as usize {
             self.emit_opcode_and_byte(opcode_8, index as u8, span);
@@ -445,7 +458,7 @@ impl<'a> CompilerVisitor<'a> {
             self.emit_byte((index & 0xff) as u8, span);
         } else {
             return Err(QangSyntaxError::new(
-                "Too many string constants in function (max 65536)".to_string(),
+                "Too many constants in function (max 65536)".to_string(),
                 span,
             ));
         }
@@ -453,22 +466,6 @@ impl<'a> CompilerVisitor<'a> {
         Ok(())
     }
 
-    fn make_string_constant(
-        &mut self,
-        handle: StringHandle,
-        span: SourceSpan,
-    ) -> Result<u8, QangSyntaxError> {
-        let index = self.current_chunk_mut().add_identifier_constant(handle);
-
-        if index > u8::MAX as usize {
-            Err(QangSyntaxError::new(
-                "Too many string constants in function (max 256)".to_string(),
-                span,
-            ))
-        } else {
-            Ok(index as u8)
-        }
-    }
 
     fn emit_return(&mut self, span: SourceSpan) {
         if matches!(self.compiler.kind, CompilerKind::Initializer) {
@@ -576,10 +573,10 @@ impl<'a> CompilerVisitor<'a> {
         }
         let handle = handle.expect("Expected an object handle when defining global variables.");
 
-        self.emit_string_constant_opcode(
+        self.emit_constant_opcode(
             OpCode::DefineGlobal,
             OpCode::DefineGlobal16,
-            handle,
+            Value::String(handle),
             span,
         )?;
 
@@ -627,7 +624,7 @@ impl<'a> CompilerVisitor<'a> {
                 let string_handle = self.allocator.strings.intern(handle);
                 let index = self
                     .current_chunk_mut()
-                    .add_identifier_constant(string_handle);
+                    .add_constant(Value::String(string_handle));
                 if index <= u8::MAX as usize {
                     (index as u8, OpCode::GetGlobal, OpCode::SetGlobal)
                 } else {
@@ -650,9 +647,9 @@ impl<'a> CompilerVisitor<'a> {
         span: SourceSpan,
     ) -> Result<(), QangSyntaxError> {
         if is_assignment {
-            self.emit_string_constant_opcode(OpCode::SetGlobal, OpCode::SetGlobal16, handle, span)
+            self.emit_constant_opcode(OpCode::SetGlobal, OpCode::SetGlobal16, Value::String(handle), span)
         } else {
-            self.emit_string_constant_opcode(OpCode::GetGlobal, OpCode::GetGlobal16, handle, span)
+            self.emit_constant_opcode(OpCode::GetGlobal, OpCode::GetGlobal16, Value::String(handle), span)
         }
     }
 
@@ -888,10 +885,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         self.handle_variable("super", super_expr.span, false)?;
 
         let method_handle = self.allocator.strings.intern(&super_expr.method.name);
-        self.emit_string_constant_opcode(
+        self.emit_constant_opcode(
             OpCode::GetSuper,
             OpCode::GetSuper16,
-            method_handle,
+            Value::String(method_handle),
             super_expr.span,
         )?;
 
@@ -971,10 +968,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(&property.object, errors)?;
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
                     self.visit_expression(&assignment.value, errors)?;
-                    self.emit_string_constant_opcode(
+                    self.emit_constant_opcode(
                         OpCode::SetProperty,
                         OpCode::SetProperty16,
-                        identifier_handle,
+                        Value::String(identifier_handle),
                         property.span,
                     )?;
                 }
@@ -996,10 +993,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(&property.object, errors)?;
                     self.visit_expression(&property.object, errors)?;
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
-                    self.emit_string_constant_opcode(
+                    self.emit_constant_opcode(
                         OpCode::GetProperty,
                         OpCode::GetProperty16,
-                        identifier_handle,
+                        Value::String(identifier_handle),
                         property.span,
                     )?;
 
@@ -1007,10 +1004,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.emit_compound_assignment_op(assignment.operator, assignment.span)?;
 
                     let identifier_handle = self.allocator.strings.intern(&property.property.name);
-                    self.emit_string_constant_opcode(
+                    self.emit_constant_opcode(
                         OpCode::SetProperty,
                         OpCode::SetProperty16,
-                        identifier_handle,
+                        Value::String(identifier_handle),
                         property.span,
                     )?;
                 }
@@ -1589,10 +1586,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.handle_variable("super", super_expr.span, false)?;
 
                     let method_handle = self.allocator.strings.intern(&super_expr.method.name);
-                    let method_constant =
-                        self.make_string_constant(method_handle, super_expr.method.span)?;
-
-                    self.emit_opcode_and_byte(OpCode::SuperInvoke, method_constant, call.span);
+                    self.emit_constant_opcode(
+                        OpCode::SuperInvoke,
+                        OpCode::SuperInvoke16,
+                        Value::String(method_handle),
+                        call.span,
+                    )?;
                     self.emit_byte(args.len() as u8, call.span);
 
                     return Ok(());
@@ -1605,14 +1604,17 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     self.visit_expression(&property_call.callee, errors)?;
 
                     let method_handle = self.allocator.strings.intern(&method_name.name);
-                    let method_constant =
-                        self.make_string_constant(method_handle, method_name.span)?;
-
+                    
                     for arg in args {
                         self.visit_expression(arg, errors)?;
                     }
 
-                    self.emit_opcode_and_byte(OpCode::Invoke, method_constant, call.span);
+                    self.emit_constant_opcode(
+                        OpCode::Invoke,
+                        OpCode::Invoke16,
+                        Value::String(method_handle),
+                        call.span,
+                    )?;
                     self.emit_byte(args.len() as u8, call.span);
 
                     return Ok(());
@@ -1631,8 +1633,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ast::CallOperation::Property(identifier) => {
                 self.visit_expression(call.callee.as_ref(), errors)?;
                 let identifier_handle = self.allocator.strings.intern(&identifier.name);
-                let byte = self.make_string_constant(identifier_handle, identifier.span)?;
-                self.emit_opcode_and_byte(OpCode::GetProperty, byte, call.span);
+                self.emit_constant_opcode(
+                    OpCode::GetProperty,
+                    OpCode::GetProperty16,
+                    Value::String(identifier_handle),
+                    call.span,
+                )?;
                 Ok(())
             }
             ast::CallOperation::Index(expr) => {
@@ -1645,8 +1651,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
             ast::CallOperation::OptionalProperty(identifier) => {
                 self.visit_expression(call.callee.as_ref(), errors)?;
                 let identifier_handle = self.allocator.strings.intern(&identifier.name);
-                let byte = self.make_string_constant(identifier_handle, identifier.span)?;
-                self.emit_opcode_and_byte(OpCode::GetOptionalProperty, byte, call.span);
+                self.emit_constant_opcode(
+                    OpCode::GetOptionalProperty,
+                    OpCode::GetOptionalProperty16,
+                    Value::String(identifier_handle),
+                    call.span,
+                )?;
                 Ok(())
             }
             ast::CallOperation::Map(map_expr) => {
@@ -1680,9 +1690,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                             self.visit_expression(&call_expr.callee, errors)?;
                             self.visit_expression(&pipe.left, errors)?;
                             let method_handle = self.allocator.strings.intern(&method_name.name);
-                            let method_constant =
-                                self.make_string_constant(method_handle, method_name.span)?;
-                            self.emit_opcode_and_byte(OpCode::Invoke, method_constant, pipe.span);
+                            self.emit_constant_opcode(
+                                OpCode::Invoke,
+                                OpCode::Invoke16,
+                                Value::String(method_handle),
+                                pipe.span,
+                            )?;
                             self.emit_byte(1, pipe.span);
                         } else {
                             self.visit_expression(&call_expr.callee, errors)?;
@@ -1708,9 +1721,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                         self.visit_expression(&call_expr.callee, errors)?;
                         self.visit_expression(&pipe.left, errors)?;
                         let method_handle = self.allocator.strings.intern(&method_name.name);
-                        let method_constant =
-                            self.make_string_constant(method_handle, method_name.span)?;
-                        self.emit_opcode_and_byte(OpCode::Invoke, method_constant, pipe.span);
+                        self.emit_constant_opcode(
+                            OpCode::Invoke,
+                            OpCode::Invoke16,
+                            Value::String(method_handle),
+                            pipe.span,
+                        )?;
                         self.emit_byte(1, pipe.span);
                     }
                     _ => {
@@ -1746,7 +1762,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         self.declare_variable(&class_decl.name.name, class_decl.name.span)?;
         let class_handle = self.allocator.strings.intern(&class_decl.name.name);
-        let byte = self.make_string_constant(class_handle, class_decl.name.span)?;
+        let byte = self.make_constant(Value::String(class_handle), class_decl.name.span)?;
         self.emit_opcode_and_byte(OpCode::Class, byte, class_decl.name.span);
         self.define_variable(Some(class_handle), class_decl.name.span)?;
 
@@ -1784,8 +1800,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                         CompilerKind::Method
                     };
                     let handle_identifier = self.allocator.strings.intern(&function.name.name);
-                    let constant =
-                        self.make_string_constant(handle_identifier, function.name.span)?;
 
                     self.handle_function(
                         compiler_kind,
@@ -1794,7 +1808,12 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                         errors,
                     )?;
 
-                    self.emit_opcode_and_byte(OpCode::Method, constant, function.span);
+                    self.emit_constant_opcode(
+                        OpCode::Method,
+                        OpCode::Method16,
+                        Value::String(handle_identifier),
+                        function.span,
+                    )?;
                 }
                 ast::ClassMember::Field(field) => {
                     let default =
@@ -1802,10 +1821,10 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     let initializer = field.initializer.as_ref().unwrap_or(&default);
                     self.visit_expression(initializer, errors)?;
                     let handle_identifier = self.allocator.strings.intern(&field.name.name);
-                    self.emit_string_constant_opcode(
+                    self.emit_constant_opcode(
                         OpCode::InitField,
                         OpCode::InitField16,
-                        handle_identifier,
+                        Value::String(handle_identifier),
                         field.name.span,
                     )?;
                 }

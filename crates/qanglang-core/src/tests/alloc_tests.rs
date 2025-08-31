@@ -67,9 +67,9 @@ mod tests {
         let function_handle = allocator.allocate_function(function);
         let closure = create_test_closure(function_handle);
 
-        let handle = allocator.allocate_closure(closure);
+        let handle = allocator.closures.allocate_closure(closure);
 
-        let retrieved = allocator.get_closure(handle);
+        let retrieved = allocator.closures.get_closure(handle);
         assert_eq!(retrieved.function, function_handle);
         assert!(!retrieved.is_marked);
     }
@@ -81,8 +81,8 @@ mod tests {
         let function_handle = allocator.allocate_function(function);
         let closure = create_test_closure(function_handle);
 
-        let handle = allocator.allocate_closure(closure);
-        allocator.free_closure(handle);
+        let handle = allocator.closures.allocate_closure(closure);
+        allocator.closures.free_closure(handle);
 
         // After freeing, attempting to access should panic in debug mode
         // or return invalid data in release mode, so we don't test access here
@@ -203,7 +203,7 @@ mod tests {
         let function = create_test_function();
         let function_handle = allocator.allocate_function(function);
         let closure = create_test_closure(function_handle);
-        let _closure_handle = allocator.allocate_closure(closure);
+        let _closure_handle = allocator.closures.allocate_closure(closure);
 
         let value = Value::Number(42.0);
         let _upvalue_handle = allocator.allocate_upvalue(value);
@@ -228,7 +228,7 @@ mod tests {
         let function = create_test_function();
         let function_handle = allocator.allocate_function(function);
         let closure = create_test_closure(function_handle);
-        let closure_handle = allocator.allocate_closure(closure);
+        let closure_handle = allocator.closures.allocate_closure(closure);
 
         // Create an upvalue that should be collected
         let value = Value::Number(42.0);
@@ -241,7 +241,7 @@ mod tests {
         allocator.collect_garbage(roots);
 
         // The closure should still be accessible
-        let retrieved_closure = allocator.get_closure(closure_handle);
+        let retrieved_closure = allocator.closures.get_closure(closure_handle);
         assert_eq!(retrieved_closure.function, function_handle);
     }
 
@@ -256,7 +256,7 @@ mod tests {
         let upvalue_handle = allocator.allocate_upvalue(upvalue);
 
         let closure = ClosureObject::new(function_handle, 1);
-        let closure_handle = allocator.allocate_closure(closure);
+        let closure_handle = allocator.closures.allocate_closure(closure);
 
         // Set upvalue using the new API
         allocator
@@ -264,7 +264,7 @@ mod tests {
             .set_upvalue(closure_handle, 0, UpvalueSlot::Closed(upvalue_handle));
 
         // Test that we can access the closure and its upvalues
-        let retrieved_closure = allocator.get_closure(closure_handle);
+        let retrieved_closure = allocator.closures.get_closure(closure_handle);
         assert_eq!(retrieved_closure.upvalue_count, 1);
 
         if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle, 0)
@@ -287,7 +287,7 @@ mod tests {
         let upvalue_handle = allocator.allocate_upvalue(upvalue);
 
         let closure = ClosureObject::new(function_handle, 1);
-        let closure_handle = allocator.allocate_closure(closure);
+        let closure_handle = allocator.closures.allocate_closure(closure);
 
         // Set upvalue using the new API
         allocator
@@ -378,11 +378,11 @@ mod tests {
 
         // Create first closure
         let closure1 = create_test_closure(function_handle1);
-        let closure_handle1 = allocator.allocate_closure(closure1);
+        let closure_handle1 = allocator.closures.allocate_closure(closure1);
 
         // Create second closure
         let closure2 = ClosureObject::new(function_handle2, 1);
-        let closure_handle2 = allocator.allocate_closure(closure2);
+        let closure_handle2 = allocator.closures.allocate_closure(closure2);
         let upvalue1 = allocator.allocate_upvalue(Value::Closure(closure_handle1));
         allocator
             .closures
@@ -395,7 +395,7 @@ mod tests {
         let function3 = create_test_function();
         let function_handle3 = allocator.allocate_function(function3);
         let root_closure = ClosureObject::new(function_handle3, 1);
-        let root_closure_handle = allocator.allocate_closure(root_closure);
+        let root_closure_handle = allocator.closures.allocate_closure(root_closure);
         allocator
             .closures
             .set_upvalue(root_closure_handle, 0, UpvalueSlot::Closed(upvalue2));
@@ -428,7 +428,7 @@ mod tests {
         let function = create_test_function();
         let function_handle = allocator.allocate_function(function);
         let closure = create_test_closure(function_handle);
-        let _orphaned_closure = allocator.allocate_closure(closure);
+        let _orphaned_closure = allocator.closures.allocate_closure(closure);
 
         let _orphaned_upvalue = allocator.allocate_upvalue(Value::Number(42.0));
 
@@ -440,7 +440,7 @@ mod tests {
         let root_function = create_test_function();
         let root_function_handle = allocator.allocate_function(root_function);
         let root_closure = create_test_closure(root_function_handle);
-        let root_closure_handle = allocator.allocate_closure(root_closure);
+        let root_closure_handle = allocator.closures.allocate_closure(root_closure);
 
         let bytes_before = allocator.total_allocated_bytes();
 
@@ -456,7 +456,7 @@ mod tests {
         assert!(bytes_after < bytes_before);
 
         // Root closure should still be accessible
-        let retrieved = allocator.get_closure(root_closure_handle);
+        let retrieved = allocator.closures.get_closure(root_closure_handle);
         assert_eq!(retrieved.function, root_function_handle);
     }
 
@@ -474,14 +474,14 @@ mod tests {
         let method_function = create_test_function();
         let _method_function_handle = allocator.allocate_function(method_function);
         let method_closure = create_test_closure(_method_function_handle);
-        let _method_closure_handle = allocator.allocate_closure(method_closure);
+        let _method_closure_handle = allocator.closures.allocate_closure(method_closure);
 
         // Create instance with field pointing to another object
         let instance_handle = allocator.allocate_instance(class_handle);
         let field_value_function = create_test_function();
         let field_value_function_handle = allocator.allocate_function(field_value_function);
         let field_value_closure = create_test_closure(field_value_function_handle);
-        let field_value_closure_handle = allocator.allocate_closure(field_value_closure);
+        let field_value_closure_handle = allocator.closures.allocate_closure(field_value_closure);
 
         let field_name = allocator.strings.intern("field");
         allocator.set_instance_field(
@@ -523,24 +523,30 @@ mod tests {
         let function1 = create_test_function();
         let function_handle1 = allocator.allocate_function(function1);
         let closure1 = create_test_closure(function_handle1);
-        let closure_handle1 = allocator.allocate_closure(closure1);
+        let closure_handle1 = allocator.closures.allocate_closure(closure1);
 
         let function2 = create_test_function();
         let function_handle2 = allocator.allocate_function(function2);
         let closure2 = create_test_closure(function_handle2);
-        let closure_handle2 = allocator.allocate_closure(closure2);
+        let closure_handle2 = allocator.closures.allocate_closure(closure2);
 
         // Create upvalues that create circular reference
         let upvalue1 = allocator.allocate_upvalue(Value::Closure(closure_handle2));
         let upvalue2 = allocator.allocate_upvalue(Value::Closure(closure_handle1));
 
         // Update closures to reference the upvalues
-        allocator.get_closure_mut(closure_handle1).upvalue_count = 1;
+        allocator
+            .closures
+            .get_closure_mut(closure_handle1)
+            .upvalue_count = 1;
         allocator
             .closures
             .set_upvalue(closure_handle1, 0, UpvalueSlot::Closed(upvalue1));
 
-        allocator.get_closure_mut(closure_handle2).upvalue_count = 1;
+        allocator
+            .closures
+            .get_closure_mut(closure_handle2)
+            .upvalue_count = 1;
         allocator
             .closures
             .set_upvalue(closure_handle2, 0, UpvalueSlot::Closed(upvalue2));
@@ -552,10 +558,10 @@ mod tests {
         allocator.collect_garbage(roots);
 
         // All objects in the cycle should still be accessible
-        let retrieved_closure1 = allocator.get_closure(closure_handle1);
+        let retrieved_closure1 = allocator.closures.get_closure(closure_handle1);
         assert_eq!(retrieved_closure1.function, function_handle1);
 
-        let retrieved_closure2 = allocator.get_closure(closure_handle2);
+        let retrieved_closure2 = allocator.closures.get_closure(closure_handle2);
         assert_eq!(retrieved_closure2.function, function_handle2);
 
         // Verify the circular references are intact
@@ -577,14 +583,14 @@ mod tests {
         let persistent_function = create_test_function();
         let persistent_function_handle = allocator.allocate_function(persistent_function);
         let persistent_closure = create_test_closure(persistent_function_handle);
-        let persistent_closure_handle = allocator.allocate_closure(persistent_closure);
+        let persistent_closure_handle = allocator.closures.allocate_closure(persistent_closure);
 
         for i in 0..5 {
             // Create temporary objects in each iteration
             let temp_function = create_test_function();
             let temp_function_handle = allocator.allocate_function(temp_function);
             let temp_closure = create_test_closure(temp_function_handle);
-            let _temp_closure_handle = allocator.allocate_closure(temp_closure);
+            let _temp_closure_handle = allocator.closures.allocate_closure(temp_closure);
 
             let _temp_upvalue = allocator.allocate_upvalue(Value::Number(i as f64));
 
@@ -599,7 +605,7 @@ mod tests {
             allocator.collect_garbage(roots);
 
             // Persistent closure should always be accessible
-            let retrieved = allocator.get_closure(persistent_closure_handle);
+            let retrieved = allocator.closures.get_closure(persistent_closure_handle);
             assert_eq!(retrieved.function, persistent_function_handle);
         }
     }
@@ -621,7 +627,7 @@ mod tests {
 
         // Create mortal objects that reference immortals
         let closure = create_test_closure(function_handle1);
-        let _closure_handle = allocator.allocate_closure(closure);
+        let _closure_handle = allocator.closures.allocate_closure(closure);
 
         let _upvalue_handle = allocator.allocate_upvalue(Value::String(string1));
 
@@ -694,7 +700,7 @@ mod tests {
         let function = create_test_function();
         let function_handle = allocator.allocate_function(function);
         let closure = create_test_closure(function_handle);
-        let closure_handle = allocator.allocate_closure(closure);
+        let closure_handle = allocator.closures.allocate_closure(closure);
 
         let _bytes_before_gc = allocator.total_allocated_bytes();
 
@@ -707,7 +713,7 @@ mod tests {
         let _bytes_after_gc = allocator.total_allocated_bytes();
 
         // The closure should still be accessible after GC
-        let retrieved = allocator.get_closure(closure_handle);
+        let retrieved = allocator.closures.get_closure(closure_handle);
         assert_eq!(retrieved.function, function_handle);
 
         // Verify the GC worked correctly by checking the closure is still valid
@@ -726,12 +732,12 @@ mod tests {
         let method1_function = create_test_function();
         let method1_function_handle = allocator.allocate_function(method1_function);
         let method1_closure = create_test_closure(method1_function_handle);
-        let method1_closure_handle = allocator.allocate_closure(method1_closure);
+        let method1_closure_handle = allocator.closures.allocate_closure(method1_closure);
 
         let method2_function = create_test_function();
         let method2_function_handle = allocator.allocate_function(method2_function);
         let method2_closure = create_test_closure(method2_function_handle);
-        let method2_closure_handle = allocator.allocate_closure(method2_closure);
+        let method2_closure_handle = allocator.closures.allocate_closure(method2_closure);
 
         // Create instances with fields pointing to objects
         let instance1_handle = allocator.allocate_instance(class_handle);
@@ -767,7 +773,7 @@ mod tests {
         let orphaned_function = create_test_function();
         let orphaned_function_handle = allocator.allocate_function(orphaned_function);
         let orphaned_closure = create_test_closure(orphaned_function_handle);
-        let _orphaned_closure_handle = allocator.allocate_closure(orphaned_closure);
+        let _orphaned_closure_handle = allocator.closures.allocate_closure(orphaned_closure);
 
         let orphaned_class_name = allocator.strings.intern("OrphanedClass");
         let orphaned_class_handle = allocator.allocate_class(orphaned_class_name);
@@ -824,10 +830,10 @@ mod tests {
         assert_eq!(reverse_sibling, Some(Value::Instance(instance1_handle)));
 
         // Referenced closures should still be accessible (kept alive by table references)
-        let retrieved_method1 = allocator.get_closure(method1_closure_handle);
+        let retrieved_method1 = allocator.closures.get_closure(method1_closure_handle);
         assert_eq!(retrieved_method1.function, method1_function_handle);
 
-        let retrieved_method2 = allocator.get_closure(method2_closure_handle);
+        let retrieved_method2 = allocator.closures.get_closure(method2_closure_handle);
         assert_eq!(retrieved_method2.function, method2_function_handle);
     }
 
@@ -846,7 +852,7 @@ mod tests {
             let function = create_test_function();
             let function_handle = allocator.allocate_function(function);
             let closure = create_test_closure(function_handle);
-            let closure_handle = allocator.allocate_closure(closure);
+            let closure_handle = allocator.closures.allocate_closure(closure);
             closure_handles.push(closure_handle);
 
             let field_name = allocator.strings.intern(&format!("closure_{}", i));
@@ -903,7 +909,7 @@ mod tests {
         let target_function = create_test_function();
         let target_function_handle = allocator.allocate_function(target_function);
         let target_closure = create_test_closure(target_function_handle);
-        let target_closure_handle = allocator.allocate_closure(target_closure);
+        let target_closure_handle = allocator.closures.allocate_closure(target_closure);
 
         let target_class_name = allocator.strings.intern("TargetClass");
         let target_class_handle = allocator.allocate_class(target_class_name);
@@ -934,7 +940,7 @@ mod tests {
         let orphaned_function = create_test_function();
         let orphaned_function_handle = allocator.allocate_function(orphaned_function);
         let orphaned_closure = create_test_closure(orphaned_function_handle);
-        let _orphaned_closure_handle = allocator.allocate_closure(orphaned_closure);
+        let _orphaned_closure_handle = allocator.closures.allocate_closure(orphaned_closure);
 
         let bytes_before = allocator.total_allocated_bytes();
 
@@ -980,7 +986,7 @@ mod tests {
         );
 
         // The actual objects should be directly accessible (proving they weren't collected)
-        let retrieved_closure = allocator.get_closure(target_closure_handle);
+        let retrieved_closure = allocator.closures.get_closure(target_closure_handle);
         assert_eq!(retrieved_closure.function, target_function_handle);
         assert!(!retrieved_closure.is_marked); // Should be unmarked after GC
 
@@ -1014,7 +1020,7 @@ mod tests {
         let function1 = create_test_function();
         let function_handle1 = allocator.allocate_function(function1);
         let closure1 = ClosureObject::new(function_handle1, 2);
-        let closure_handle1 = allocator.allocate_closure(closure1);
+        let closure_handle1 = allocator.closures.allocate_closure(closure1);
 
         // First upvalue points to base instance
         let upvalue1 = allocator.allocate_upvalue(Value::Instance(base_instance));
@@ -1052,7 +1058,7 @@ mod tests {
         let orphaned_function = create_test_function();
         let orphaned_function_handle = allocator.allocate_function(orphaned_function);
         let orphaned_closure = create_test_closure(orphaned_function_handle);
-        let _orphaned_closure_handle = allocator.allocate_closure(orphaned_closure);
+        let _orphaned_closure_handle = allocator.closures.allocate_closure(orphaned_closure);
 
         let _orphaned_upvalue = allocator.allocate_upvalue(Value::Number(999.0));
 
@@ -1088,7 +1094,7 @@ mod tests {
         assert_eq!(method_ref, Some(Value::Closure(closure_handle1)));
 
         // Closure and its upvalues should be accessible
-        let retrieved_closure = allocator.get_closure(closure_handle1);
+        let retrieved_closure = allocator.closures.get_closure(closure_handle1);
         assert_eq!(retrieved_closure.upvalue_count, 2);
 
         if let Some(UpvalueSlot::Closed(handle)) =

@@ -437,6 +437,7 @@ impl Vm {
 
         let handle = self
             .alloc
+            .closures
             .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
         push_value!(self, Value::Closure(handle))?;
         self.call(handle, 0)?;
@@ -879,10 +880,17 @@ impl Vm {
                     };
                     let upvalue_count = self.alloc.get_function(handle).upvalue_count;
                     let closure_handle = self.with_gc_check(|alloc| {
-                        alloc.allocate_closure(ClosureObject::new(handle, upvalue_count))
+                        alloc
+                            .closures
+                            .allocate_closure(ClosureObject::new(handle, upvalue_count))
                     });
 
-                    for i in 0..self.alloc.get_closure(closure_handle).upvalue_count {
+                    for i in 0..self
+                        .alloc
+                        .closures
+                        .get_closure(closure_handle)
+                        .upvalue_count
+                    {
                         let is_local = self.state.read_byte() != 0;
                         let index = self.state.read_byte() as usize;
 
@@ -891,9 +899,16 @@ impl Vm {
                                 self.state.frames[self.state.frame_count - 1].value_slot + index;
                             self.capture_upvalue(stack_slot, closure_handle, i);
                         } else {
-                            let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
-                            if let Some(current_upvalue) = self.alloc.closures.get_upvalue(current_closure_handle, index) {
-                                self.alloc.closures.set_upvalue(closure_handle, i, current_upvalue);
+                            let current_closure_handle =
+                                self.state.frames[self.state.frame_count - 1].closure;
+                            if let Some(current_upvalue) = self
+                                .alloc
+                                .closures
+                                .get_upvalue(current_closure_handle, index)
+                            {
+                                self.alloc
+                                    .closures
+                                    .set_upvalue(closure_handle, i, current_upvalue);
                             }
                         }
                     }
@@ -901,8 +916,13 @@ impl Vm {
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
-                    let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
-                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueSlot::Open(0));
+                    let current_closure_handle =
+                        self.state.frames[self.state.frame_count - 1].closure;
+                    let upvalue = self
+                        .alloc
+                        .closures
+                        .get_upvalue(current_closure_handle, slot)
+                        .unwrap_or(UpvalueSlot::Open(0));
 
                     match upvalue {
                         UpvalueSlot::Open(stack_slot) => {
@@ -921,7 +941,11 @@ impl Vm {
                     let current_closure_handle =
                         self.state.frames[self.state.frame_count - 1].closure;
 
-                    let upvalue = self.alloc.closures.get_upvalue(current_closure_handle, slot).unwrap_or(UpvalueSlot::Open(0));
+                    let upvalue = self
+                        .alloc
+                        .closures
+                        .get_upvalue(current_closure_handle, slot)
+                        .unwrap_or(UpvalueSlot::Open(0));
                     match upvalue {
                         UpvalueSlot::Open(stack_slot) => {
                             self.state.stack[stack_slot] = value;
@@ -1176,7 +1200,7 @@ impl Vm {
                     }
 
                     let previous_frame = &self.state.frames[self.state.frame_count - 1];
-                    let previous_closure = self.alloc.get_closure(previous_frame.closure);
+                    let previous_closure = self.alloc.closures.get_closure(previous_frame.closure);
                     let previous_function = self.alloc.get_function(previous_closure.function);
                     self.state.current_function_ptr = previous_function as *const FunctionObject;
 
@@ -1297,7 +1321,11 @@ impl Vm {
 
                 // Update all closures that reference this upvalue
                 for (closure_handle, upvalue_index) in upvalue_ref.iter() {
-                    self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueSlot::Closed(value_handle));
+                    self.alloc.closures.set_upvalue(
+                        closure_handle,
+                        upvalue_index,
+                        UpvalueSlot::Closed(value_handle),
+                    );
                 }
 
                 // Note: overflow entries are now handled by ClosureArena internally
@@ -1322,7 +1350,11 @@ impl Vm {
                     // Note: overflow storage is now handled by ClosureArena internally
                 }
 
-                self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueSlot::Open(stack_slot));
+                self.alloc.closures.set_upvalue(
+                    closure_handle,
+                    upvalue_index,
+                    UpvalueSlot::Open(stack_slot),
+                );
                 return;
             }
         }
@@ -1331,7 +1363,11 @@ impl Vm {
         let mut upvalue_ref = OpenUpvalueTracker::new();
         upvalue_ref.add_closure(closure_handle, upvalue_index);
 
-        self.alloc.closures.set_upvalue(closure_handle, upvalue_index, UpvalueSlot::Open(stack_slot));
+        self.alloc.closures.set_upvalue(
+            closure_handle,
+            upvalue_index,
+            UpvalueSlot::Open(stack_slot),
+        );
 
         self.state.open_upvalues.push((stack_slot, upvalue_ref));
     }
@@ -1497,7 +1533,7 @@ impl Vm {
         #[cfg(feature = "profiler")]
         coz::progress!("before_call");
 
-        let closure = self.alloc.get_closure(closure_handle);
+        let closure = self.alloc.closures.get_closure(closure_handle);
         let function = self.alloc.get_function(closure.function);
 
         let final_arg_count = {
@@ -1728,7 +1764,7 @@ impl Vm {
 
         for frame_idx in frame_id_range {
             let frame = &self.state.frames[frame_idx];
-            let closure = self.alloc.get_closure(frame.closure);
+            let closure = self.alloc.closures.get_closure(frame.closure);
             let function = self.alloc.get_function(closure.function);
 
             let name = self.alloc.strings.get_string(function.name);

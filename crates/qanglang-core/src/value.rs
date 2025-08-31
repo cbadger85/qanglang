@@ -52,7 +52,7 @@ impl Value {
                 format!("{}<function>", identifier)
             }
             Value::Closure(handle) => {
-                let closure = allocator.get_closure(*handle);
+                let closure = allocator.closures.get_closure(*handle);
                 let function = allocator.get_function(closure.function);
                 let identifier = allocator.strings.get_string(function.name);
                 format!("{}<function>", identifier)

@@ -1,13 +1,13 @@
+use crate::StringHandle;
 use crate::memory::arena::{Arena, Index};
 use crate::memory::array_arena::ArrayArena;
+use crate::memory::closure_arena::ClosureArena;
 use crate::memory::hashmap_arena::HashMapArena;
 use crate::memory::object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, InstanceObject, NativeFunctionObject,
 };
 use crate::memory::string_interner::StringInterner;
-use crate::memory::closure_arena::ClosureArena;
 use crate::{FunctionObject, Upvalue, Value, debug_log};
-use crate::StringHandle;
 use std::collections::VecDeque;
 
 pub type UpvalueHandle = Index;
@@ -75,23 +75,6 @@ impl HeapAllocator {
     pub fn set_bytes_until_gc(mut self, bytes: usize) -> Self {
         self.bytes_until_gc = bytes;
         self
-    }
-
-    // Closure methods delegated to ClosureArena
-    pub fn allocate_closure(&mut self, closure: crate::memory::ClosureObject) -> crate::memory::ClosureHandle {
-        self.closures.allocate_closure(closure)
-    }
-
-    pub fn get_closure(&self, handle: crate::memory::ClosureHandle) -> &crate::memory::ClosureObject {
-        self.closures.get_closure(handle)
-    }
-
-    pub fn get_closure_mut(&mut self, handle: crate::memory::ClosureHandle) -> &mut crate::memory::ClosureObject {
-        self.closures.get_closure_mut(handle)
-    }
-
-    pub fn free_closure(&mut self, handle: crate::memory::ClosureHandle) {
-        self.closures.free_closure(handle)
     }
 
     pub fn allocate_upvalue(&mut self, value: Value) -> UpvalueHandle {
@@ -473,15 +456,20 @@ impl HeapAllocator {
         while let Some(value) = gray_list.pop_front() {
             match value {
                 Value::Closure(handle) => {
-                    self.closures.trace_closure_references(handle, &mut |upvalue_handle| {
-                        let upvalue = &mut self.upvalues[upvalue_handle];
-                        if !upvalue.is_marked {
-                            debug_log!(self.is_debug, "Marking upvalue: {:?}", upvalue_handle);
-                            upvalue.is_marked = true;
-                            debug_log!(self.is_debug, "Blackening upvalue: {:?}", upvalue_handle);
-                            gray_list.push_back(upvalue.value);
-                        }
-                    });
+                    self.closures
+                        .trace_closure_references(handle, &mut |upvalue_handle| {
+                            let upvalue = &mut self.upvalues[upvalue_handle];
+                            if !upvalue.is_marked {
+                                debug_log!(self.is_debug, "Marking upvalue: {:?}", upvalue_handle);
+                                upvalue.is_marked = true;
+                                debug_log!(
+                                    self.is_debug,
+                                    "Blackening upvalue: {:?}",
+                                    upvalue_handle
+                                );
+                                gray_list.push_back(upvalue.value);
+                            }
+                        });
                 }
                 Value::Class(handle) => {
                     let clazz = &mut self.classes[handle];

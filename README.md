@@ -249,7 +249,3 @@ An embedded scripting language written in Rust 🦀
 [ ] - array destructuring for map operator and map optional operator `var first = maybe_array?|(first) -> first|;`
 
 [ ] - tail call optimization
-
-## Bugs
-
-[ ] - `init` should not be callable from an instance of a class.

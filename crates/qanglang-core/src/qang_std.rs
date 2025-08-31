@@ -1,4 +1,7 @@
-use crate::{NativeFunctionError, Value, Vm};
+use crate::{
+    CompilerPipeline, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap, Value, Vm,
+    compiler::STACK_MAX, peek_value, pop_value, push_value, vm::RuntimeResult,
+};
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
     let assertion = args
@@ -328,5 +331,113 @@ pub fn qang_hash(args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFu
     match value {
         None => Err("No value provided to hash.".into()),
         Some(value) => Ok(Some(value.hash().into())),
+    }
+}
+
+impl Vm {
+    pub fn with_stdlib(mut self) -> Self {
+        if let Err(_) = self.load_stdlib() {
+            // If stdlib fails to load, continue without it
+            // In production, you might want to handle this differently
+        }
+        self
+    }
+
+    fn load_stdlib(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let stdlib_source = include_str!("stdlib.ql");
+        let source_map = SourceMap::from_source("<stdlib>", stdlib_source.to_owned());
+
+        let program = CompilerPipeline::new(source_map, &mut self.alloc)
+            .run()
+            .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
+
+        // Execute stdlib to populate globals
+        self.execute_stdlib(program)?;
+
+        Ok(())
+    }
+
+    fn execute_stdlib(&mut self, program: QangProgram) -> Result<(), Box<dyn std::error::Error>> {
+        // Save current VM state
+        let saved_stack_top = self.state.stack_top;
+        let saved_frame_count = self.state.frame_count;
+
+        // Execute stdlib program
+        self.interpret(program)
+            .map_err(|e| format!("Stdlib execution failed: {:?}", e))?;
+
+        // Restore VM state (stdlib execution shouldn't affect main program state)
+        self.state.stack_top = saved_stack_top;
+        self.state.frame_count = saved_frame_count;
+
+        Ok(())
+    }
+
+    pub(crate) fn handle_function_intrinsic_call(
+        &mut self,
+        receiver: Value,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
+        match receiver {
+            Value::Closure(_)
+            | Value::BoundIntrinsic(_)
+            | Value::BoundMethod(_)
+            | Value::NativeFunction(_) => {
+                self.state.stack[self.state.stack_top - arg_count - 1] = receiver;
+                self.call_value(receiver, arg_count)
+            }
+            _ => Err(QangRuntimeError::new(
+                "'call' can only be used on functions.".to_string(),
+                self.state.get_previous_loc(),
+            )),
+        }
+    }
+
+    pub(crate) fn handle_function_intrinsic_apply(
+        &mut self,
+        receiver: Value,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
+        match receiver {
+            Value::Closure(_)
+            | Value::BoundIntrinsic(_)
+            | Value::BoundMethod(_)
+            | Value::NativeFunction(_) => {
+                if arg_count != 1 {
+                    return Err(QangRuntimeError::new(
+                        "'apply' must be called with one argument and it must be an array."
+                            .to_string(),
+                        self.state.get_previous_loc(),
+                    ));
+                }
+
+                let array_arg = peek_value!(self, 0);
+                match array_arg {
+                    Value::Array(array_handle) => {
+                        // Pop the array argument
+                        pop_value!(self);
+
+                        // Replace the bound intrinsic on the stack with the actual function
+                        self.state.stack[self.state.stack_top - 1] = receiver;
+
+                        let array_length = self.alloc.arrays.length(array_handle);
+                        for value in self.alloc.arrays.iter(array_handle) {
+                            push_value!(self, value)?;
+                        }
+
+                        self.call_value(receiver, array_length)
+                    }
+                    _ => Err(QangRuntimeError::new(
+                        "'apply' must be called with one argument and it must be an array."
+                            .to_string(),
+                        self.state.get_previous_loc(),
+                    )),
+                }
+            }
+            _ => Err(QangRuntimeError::new(
+                "'apply' can only be used on functions.".to_string(),
+                self.state.get_previous_loc(),
+            )),
+        }
     }
 }

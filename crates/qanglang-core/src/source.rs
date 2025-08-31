@@ -1,12 +1,17 @@
 // TODO add script filename to source map. default to (script) otherwise.
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
+    pub name: String,
     source: Vec<char>,
     line_indices: Vec<usize>,
 }
 
 impl SourceMap {
     pub fn new(source: String) -> Self {
+        Self::from_source("(script)", source)
+    }
+
+    pub fn from_source(name: &str, source: String) -> Self {
         let chars: Vec<char> = source.chars().collect();
         let mut line_indices = Vec::new();
         let mut in_string = false;
@@ -37,6 +42,7 @@ impl SourceMap {
         }
 
         Self {
+            name: name.to_string(),
             source: chars,
             line_indices,
         }
@@ -116,7 +122,9 @@ impl SourceMap {
     }
 }
 
-pub static DEFALT_SOURCE_MAP: SourceMap = SourceMap {
-    line_indices: Vec::new(),
-    source: Vec::new(),
-};
+pub static DEFALT_SOURCE_MAP: std::sync::LazyLock<SourceMap> =
+    std::sync::LazyLock::new(|| SourceMap {
+        line_indices: Vec::new(),
+        source: Vec::new(),
+        name: String::from("(script)"),
+    });

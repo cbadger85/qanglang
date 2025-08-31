@@ -2212,3 +2212,40 @@ fn test_op_constant_16() {
         }
     }
 }
+
+#[test]
+fn test_stdlib_call() {
+    let source = r#"
+        var one = 1;
+
+        var three = one |> transform((x) -> x + 2);
+
+        assert_eq(three, 3);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            disassemble_program(&allocator);
+
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

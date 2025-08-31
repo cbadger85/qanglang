@@ -58,7 +58,7 @@ type OpenUpvalueEntry = (StackSlot, OpenUpvalueTracker);
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 #[repr(u8)]
-enum Keyword {
+pub enum Keyword {
     Number,
     String,
     Nil,
@@ -72,6 +72,7 @@ enum Keyword {
     Apply,
 }
 
+#[macro_export]
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {
         if $vm.state.stack_top >= STACK_MAX {
@@ -90,6 +91,7 @@ macro_rules! push_value {
     };
 }
 
+#[macro_export]
 macro_rules! pop_value {
     ($vm:expr) => {{
         debug_assert!(
@@ -101,6 +103,7 @@ macro_rules! pop_value {
     }};
 }
 
+#[macro_export]
 macro_rules! peek_value {
     ($vm:expr, $distance:expr) => {
         if $vm.state.stack_top > $distance {
@@ -115,6 +118,7 @@ macro_rules! peek_value {
     };
 }
 
+#[macro_export]
 macro_rules! read_string {
     ($vm:expr) => {
         match $vm.state.read_constant() {
@@ -124,6 +128,7 @@ macro_rules! read_string {
     };
 }
 
+#[macro_export]
 macro_rules! read_string_16 {
     ($vm:expr) => {
         match $vm.state.read_constant_16() {
@@ -141,10 +146,10 @@ struct CallFrame {
 }
 
 #[derive(Clone)]
-struct VmState {
-    stack_top: usize,
-    frame_count: usize,
-    stack: Vec<Value>,
+pub(crate) struct VmState {
+    pub stack_top: usize,
+    pub frame_count: usize,
+    pub stack: Vec<Value>,
     frames: [CallFrame; FRAME_MAX],
     globals: FxHashMap<StringHandle, Value>,
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
@@ -248,7 +253,7 @@ impl VmState {
 pub struct Vm {
     pub is_debug: bool,
     pub is_gc_enabled: bool,
-    state: VmState,
+    pub(crate) state: VmState,
     pub alloc: HeapAllocator,
 }
 
@@ -418,6 +423,7 @@ impl Vm {
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("hash", 1, qang_hash)
             .add_native_function("Array", 2, qang_array_construct)
+            .with_stdlib()
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -1193,7 +1199,7 @@ impl Vm {
                 return Ok(());
             }
         }
-        
+
         let clazz = self.alloc.get_class(clazz_handle);
         if let Some(Value::Closure(closure)) =
             self.alloc.get_class_method(clazz.method_table, method_name)
@@ -1925,74 +1931,6 @@ impl Vm {
         }
 
         traces
-    }
-
-    fn handle_function_intrinsic_call(
-        &mut self,
-        receiver: Value,
-        arg_count: usize,
-    ) -> RuntimeResult<()> {
-        match receiver {
-            Value::Closure(_)
-            | Value::BoundIntrinsic(_)
-            | Value::BoundMethod(_)
-            | Value::NativeFunction(_) => {
-                self.state.stack[self.state.stack_top - arg_count - 1] = receiver;
-                self.call_value(receiver, arg_count)
-            }
-            _ => Err(QangRuntimeError::new(
-                "'call' can only be used on functions.".to_string(),
-                self.state.get_previous_loc(),
-            )),
-        }
-    }
-
-    fn handle_function_intrinsic_apply(
-        &mut self,
-        receiver: Value,
-        arg_count: usize,
-    ) -> RuntimeResult<()> {
-        match receiver {
-            Value::Closure(_)
-            | Value::BoundIntrinsic(_)
-            | Value::BoundMethod(_)
-            | Value::NativeFunction(_) => {
-                if arg_count != 1 {
-                    return Err(QangRuntimeError::new(
-                        "'apply' must be called with one argument and it must be an array."
-                            .to_string(),
-                        self.state.get_previous_loc(),
-                    ));
-                }
-
-                let array_arg = peek_value!(self, 0);
-                match array_arg {
-                    Value::Array(array_handle) => {
-                        // Pop the array argument
-                        pop_value!(self);
-
-                        // Replace the bound intrinsic on the stack with the actual function
-                        self.state.stack[self.state.stack_top - 1] = receiver;
-
-                        let array_length = self.alloc.arrays.length(array_handle);
-                        for value in self.alloc.arrays.iter(array_handle) {
-                            push_value!(self, value)?;
-                        }
-
-                        self.call_value(receiver, array_length)
-                    }
-                    _ => Err(QangRuntimeError::new(
-                        "'apply' must be called with one argument and it must be an array."
-                            .to_string(),
-                        self.state.get_previous_loc(),
-                    )),
-                }
-            }
-            _ => Err(QangRuntimeError::new(
-                "'apply' can only be used on functions.".to_string(),
-                self.state.get_previous_loc(),
-            )),
-        }
     }
 
     #[cfg(debug_assertions)]

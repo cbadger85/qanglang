@@ -18,6 +18,7 @@ pub enum ErrorMessageFormat {
     Minimal,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompilerError(Vec<QangSyntaxError>);
 
 impl CompilerError {
@@ -334,6 +335,8 @@ impl<'a> CompilerVisitor<'a> {
         mut errors: ErrorReporter,
     ) -> Result<FunctionObject, CompilerError> {
         self.source_map = source_map;
+        let handle = self.allocator.strings.intern(&source_map.name);
+        self.compiler = Compiler::new(handle);
 
         self.visit_program(&program, &mut errors)
             .map_err(|err| CompilerError(vec![err]))?;

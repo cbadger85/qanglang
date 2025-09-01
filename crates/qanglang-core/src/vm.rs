@@ -76,7 +76,7 @@ pub enum Keyword {
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {
         if $vm.state.stack_top >= STACK_MAX {
-            Err(crate::QangRuntimeError::new(
+            Err($crate::QangRuntimeError::new(
                 format!(
                     "Stack overflow: maximum stack size of {} exceeded",
                     STACK_MAX

@@ -336,7 +336,8 @@ pub fn qang_hash(args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFu
 
 impl Vm {
     pub fn with_stdlib(mut self) -> Self {
-        if let Err(_) = self.load_stdlib() {
+        if self.load_stdlib().is_err() {
+            // TODO
             // If stdlib fails to load, continue without it
             // In production, you might want to handle this differently
         }

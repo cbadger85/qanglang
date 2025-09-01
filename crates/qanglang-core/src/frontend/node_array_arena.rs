@@ -1,35 +1,10 @@
 use crate::{
     arena::{Arena, Index},
-    frontend::nodes::AstNode,
+    frontend::typed_node_arena::NodeId,
 };
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct NodeId(Index);
-
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct NodeArrayId(Index);
-
-pub struct NodeArena {
-    pub node_id_arrays: NodeArrayArena,
-    nodes: Arena<AstNode>,
-}
-
-impl NodeArena {
-    pub fn new() -> Self {
-        Self {
-            nodes: Arena::new(),
-            node_id_arrays: NodeArrayArena::new(),
-        }
-    }
-
-    pub fn insert_node(&mut self, node: AstNode) -> NodeId {
-        NodeId(self.nodes.insert(node))
-    }
-
-    pub fn get_node(&self, node_id: NodeId) -> &AstNode {
-        &self.nodes[node_id.0]
-    }
-}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 struct NodeArrayChunk {
@@ -37,18 +12,18 @@ struct NodeArrayChunk {
     size: usize,
     next_chunk: Option<NodeArrayId>,
 }
-struct NodeArrayArena {
+pub struct NodeArrayArena {
     node_ids: Arena<NodeArrayChunk>,
 }
 
 impl NodeArrayArena {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             node_ids: Arena::new(),
         }
     }
 
-    fn create(&mut self) -> NodeArrayId {
+    pub fn create(&mut self) -> NodeArrayId {
         let index = self.node_ids.insert(NodeArrayChunk {
             ids: std::array::from_fn(|_| NodeId::default()),
             size: 0,
@@ -58,7 +33,7 @@ impl NodeArrayArena {
         NodeArrayId(index)
     }
 
-    fn insert_id(&mut self, array_id: NodeArrayId, node_id: NodeId) {
+    pub fn insert_id(&mut self, array_id: NodeArrayId, node_id: NodeId) {
         let mut current_id = array_id;
 
         loop {
@@ -87,7 +62,7 @@ impl NodeArrayArena {
         }
     }
 
-    fn iter(&self, array_id: NodeArrayId) -> NodeArrayIterator<'_> {
+    pub fn iter(&self, array_id: NodeArrayId) -> NodeArrayIterator<'_> {
         NodeArrayIterator {
             arena: self,
             current_chunk: Some(array_id),

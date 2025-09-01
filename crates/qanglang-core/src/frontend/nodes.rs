@@ -4,7 +4,7 @@ use crate::{
         AssignmentOperator, ComparisonOperator, EqualityOperator, FactorOperator, SourceSpan,
         TermOperator, UnaryOperator,
     },
-    frontend::node_arena::{NodeArrayId, NodeId},
+    frontend::{node_array_arena::NodeArrayId, typed_node_arena::NodeId},
 };
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -29,36 +29,39 @@ pub enum AstNode {
     LogicalAndExpr(LogicalAndExprNode),
     EqualityExpr(EqualityExprNode),
     ComparisonExpr(ComparisonExprNode),
-    TermExprNode(TermExprNode),
+    TermExpr(TermExprNode),
     FactorExpr(FactorExprNode),
     UnaryExpr(UnaryExprNode),
     CallExpr(CallExprNode),
     CallOperation(CallNode),
     PropertyAccess(PropertyNode),
+    PropertyAssignment(PropertyAssignmentNode),
     OptionalPropertyAccess(OptionalPropertyNode),
     IndexAccess(IndexNode),
-    ArrayExpr(ArrayLiteralExprNode),
+    IndexAssignment(IndexAssignmentNode),
+    ArrayLiteralExpr(ArrayLiteralExprNode),
     ObjectLiteralExpr(ObjectLiteralExprNode),
     ObjectEntry(ObjectEntryNode),
     MapExpr(MapExprNode),
     OptionalMapExpr(OptionalMapExprNode),
     ExprStmt(ExprStmtNode),
+    GroupingExpr(GroupingExprNode),
     LambdaDecl(LambdaDeclNode),
     LambdaExpr(LambdaExprNode),
-    Return(ReturnStmtNode),
-    Break(BreakStmtNode),
-    Continue(ContinueStmtNode),
+    ReturnStmt(ReturnStmtNode),
+    BreakStmt(BreakStmtNode),
+    ContinueStmt(ContinueStmtNode),
     BlockStmt(BlockStmtNode),
-    If(IfStmtNode),
-    While(WhileStmtNode),
-    For(ForStmtNode),
+    IfStmt(IfStmtNode),
+    WhileStmt(WhileStmtNode),
+    ForStmt(ForStmtNode),
     VariableDecl(VariableDeclNode),
 }
 
 /// Root AST node representing a complete program
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ProgramNode {
-    pub decls: NodeArrayId, // [ClassDeclNode | FunctionDeclNode | LambdaDeclNode | VariableDeclNode | ExprStmtNode | BlockStmtNode | IfStmtNode | WhileStmtNode | ForStmtNode | BreakStmtNode | ContinueStmtNode | ReturnStmtNode]
+    pub decls: NodeArrayId, // [DeclNode]
     pub span: SourceSpan,
 }
 
@@ -109,16 +112,16 @@ pub struct SuperExprNode {
 }
 
 /// Grouping expression: ( expression )
-#[derive(Debug, Clone, PartialEq)]
-pub struct GroupingExpr {
-    pub expr: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct GroupingExprNode {
+    pub expr: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Array literal: [ ( expression ( , expression )* )? ]
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ArrayLiteralExprNode {
-    pub elements: NodeArrayId, // [AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode]
+    pub elements: NodeArrayId, // [ExprNode]
     pub span: SourceSpan,
 }
 
@@ -131,7 +134,7 @@ pub struct ObjectLiteralExprNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ObjectEntryNode {
     pub key: NodeId,   // IdentifierNode
-    pub value: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub value: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
@@ -148,7 +151,7 @@ pub struct ClassDeclNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct FieldDeclNode {
     pub name: NodeId,                // IdentifierNode
-    pub initializer: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub initializer: Option<NodeId>, // ExprNode
     pub span: SourceSpan,
 }
 
@@ -164,137 +167,137 @@ pub struct FunctionDeclNode {
 pub struct FunctionExprNode {
     pub name: NodeId,            // IdentifierNode,
     pub parameters: NodeArrayId, // [IdentifierNode]
-    pub body: NodeId,            // BlockstmtNode
+    pub body: NodeId,            // BlockStmtNode
     pub span: SourceSpan,
 }
 
 /// Assignment expression: ( call . IDENTIFIER | IDENTIFIER ) ( = | += | -= | *= | /= | %= ) assignment | pipe
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct AssignmentExprNode {
-    pub target: NodeId, // IdentiferNode | PropertyAccessNode | IndexAccessNode
+    pub target: NodeId, // AssignmentTargetNode
     pub operator: AssignmentOperator,
-    pub value: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub value: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Property access for assignment: call . IDENTIFIER
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub struct PropertyAccessNode {
-    pub object: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+pub struct PropertyAssignmentNode {
+    pub object: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Index access for assignment: call [ expression ]
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub struct IndexAccessNode {
-    pub object: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub index: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+pub struct IndexAssignmentNode {
+    pub object: NodeId, // ExprNode
+    pub index: NodeId,  // ExprNode
     pub span: SourceSpan,
 }
 
 /// Pipe expression: ternary ( |> pipe )?
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PipeExprNode {
-    pub left: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub right: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub left: NodeId,          // ExprNode
+    pub right: Option<NodeId>, //ExprNode
     pub span: SourceSpan,
 }
 
 /// Ternary expression: logicOr ( ? expression : ternary )?
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct TernaryExprNode {
-    pub condition: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub then_expr: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub else_expr: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub condition: NodeId,         // ExprNode
+    pub then_expr: Option<NodeId>, // ExprNode
+    pub else_expr: Option<NodeId>, //ExprNode
     pub span: SourceSpan,
 }
 
 /// Logical OR expression: logicAnd ( or logicAnd )*
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct LogicalOrExprNode {
-    pub left: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub right: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub left: NodeId,  // ExprNode
+    pub right: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Logical AND expression: equality ( and equality )*
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct LogicalAndExprNode {
-    pub left: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub right: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub left: NodeId,  // ExprNode
+    pub right: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Equality expression: comparison ( ( != | == ) comparison )*
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct EqualityExprNode {
-    pub left: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub left: NodeId, // ExprNode
     pub operator: EqualityOperator,
-    pub right: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub right: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Comparison expression: term ( ( > | >= | < | <= ) term )*
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ComparisonExprNode {
-    pub left: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub left: NodeId, // ExprNode
     pub operator: ComparisonOperator,
-    pub right: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub right: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct TermExprNode {
-    pub left: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub left: NodeId, // ExprNode
     pub operator: TermOperator,
-    pub right: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub right: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct FactorExprNode {
-    pub left: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub left: NodeId, // ExprNode
     pub operator: FactorOperator,
-    pub right: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub right: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct UnaryExprNode {
     pub operator: UnaryOperator,
-    pub operand: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub operand: NodeId, //ExprNode
     pub span: SourceSpan,
 }
 
 /// Call expression: primary ( ( arguments? ) | . IDENTIFIER | .? IDENTIFIER | [ expression ] )*
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct CallExprNode {
-    pub callee: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub operation: NodeId, // CallNode | PropertyNode | OptionalPropertyNode | IndexNode
+    pub callee: NodeId,    // ExprNode
+    pub operation: NodeId, // CallOperationNode
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct CallNode {
-    pub args: NodeArrayId, // [AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode]
+    pub args: NodeArrayId, // [ExprNode]
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PropertyNode {
-    pub args: NodeId, // IdentifierNode
+    pub identifier: NodeId, // IdentifierNode
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct OptionalPropertyNode {
-    pub args: NodeId, // IdentifierNode
+    pub identifier: NodeId, // IdentifierNode
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct IndexNode {
-    pub args: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub index: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
@@ -302,7 +305,7 @@ pub struct IndexNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct MapExprNode {
     pub parameter: NodeId, // IdentifierNode
-    pub body: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub body: NodeId,      // ExprNode
     pub span: SourceSpan,
 }
 
@@ -310,7 +313,7 @@ pub struct MapExprNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct OptionalMapExprNode {
     pub parameter: NodeId, // IdentifierNode
-    pub body: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub body: NodeId,      //ExprNode
     pub span: SourceSpan,
 }
 
@@ -326,7 +329,7 @@ pub struct LambdaDeclNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct LambdaExprNode {
     pub parameters: NodeArrayId, // [IdentifierNode]
-    pub body: NodeId, // BlockStmtNode | AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub body: NodeId,            // BlockStmtNode | ExprNode
     pub span: SourceSpan,
 }
 
@@ -334,48 +337,48 @@ pub struct LambdaExprNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct VariableDeclNode {
     pub target: NodeId,              // IdentifierNode
-    pub initializer: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub initializer: Option<NodeId>, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Expression statement: expression ;
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ExprStmtNode {
-    pub expr: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub expr: NodeId, // ExprNode
     pub span: SourceSpan,
 }
 
 /// Block statement: { declaration* }
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct BlockStmtNode {
-    pub decls: NodeArrayId, // [ClassDeclNode | FunctionDeclNode | LambdaDeclNode | VariableDeclNode | ExprStmtNode | BlockStmtNode | IfStmtNode | WhileStmtNode | ForStmtNode | BreakStmtNode | ContinueStmtNode | ReturnStmtNode ]
+    pub decls: NodeArrayId, // [DeclNode]
     pub span: SourceSpan,
 }
 
 /// If statement: if ( expression ) statement ( else statement )?
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct IfStmtNode {
-    pub condition: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub then_branch: NodeId, // ClassDeclNode | FunctionDeclNode | LambdaDeclNode | VariableDeclNode | ExprStmtNode | BlockStmtNode | IfStmtNode | WhileStmtNode | ForStmtNode | BreakStmtNode | ContinueStmtNode | ReturnStmtNode
-    pub else_branch: Option<NodeId>, // ClassDeclNode | FunctionDeclNode | LambdaDeclNode | VariableDeclNode | ExprStmtNode | BlockStmtNode | IfStmtNode | WhileStmtNode | ForStmtNode | BreakStmtNode | ContinueStmtNode | ReturnStmtNode
+    pub condition: NodeId,           // ExprNode
+    pub then_branch: NodeId,         // StmtNode
+    pub else_branch: Option<NodeId>, // StmtNode
     pub span: SourceSpan,
 }
 
 /// While statement: while ( expression ) statement
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct WhileStmtNode {
-    pub condition: NodeId, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub body: NodeId, // ClassDeclNode | FunctionDeclNode | LambdaDeclNode | VariableDeclNode | ExprStmtNode | BlockStmtNode | IfStmtNode | WhileStmtNode | ForStmtNode | BreakStmtNode | ContinueStmtNode | ReturnStmtNode
+    pub condition: NodeId, // ExprNode
+    pub body: NodeId,      // StmtNode
     pub span: SourceSpan,
 }
 
 /// For statement: for ( ( varDecl | exprStmt | ; ) expression? ; expression? ) statement
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ForStmtNode {
-    pub initializer: Option<NodeId>, // VariableDeclNode | AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub condition: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub increment: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
-    pub body: NodeId, // ClassDeclNode | FunctionDeclNode | LambdaDeclNode | VariableDeclNode | ExprStmtNode | BlockStmtNode | IfStmtNode | WhileStmtNode | ForStmtNode | BreakStmtNode | ContinueStmtNode | ReturnStmtNode
+    pub initializer: Option<NodeId>, // VariableDeclNode | ExprNode
+    pub condition: Option<NodeId>,   // ExprNode
+    pub increment: Option<NodeId>,   // ExprNode
+    pub body: NodeId,                // StmtNode
     pub span: SourceSpan,
 }
 
@@ -394,6 +397,6 @@ pub struct ContinueStmtNode {
 /// Return statement: return expression? ;
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ReturnStmtNode {
-    pub value: Option<NodeId>, // AssignmentExprNode | PipeExprNode | TernaryExprNode | LogicalOrExprNode | LogicalAndExprNode | EqualityExprNode, ComparisonExprNode, TermExprNode, FactorExprNode, UnaryExprNode, CallExprNode, NumberLiteralNode | StringLiteralNode | BooleanLitrealNode | NilLiteralNode | ThisExpr | SuperExpr | IdentfierNode | GroupingExprNode | LambdaExprNode | ArrayLiteralExprNode | ObjectLiteralExprNode
+    pub value: Option<NodeId>, // ExprNode
     pub span: SourceSpan,
 }

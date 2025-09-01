@@ -831,23 +831,24 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
         errors: &mut ErrorReporter,
     ) -> Result<(), Self::Error> {
         if let Some(expr) = &return_stmt.value {
-            // Check if this is a tail call
-            if self.is_tail_call(expr)
-                && let ast::Expr::Call(call_expr) = expr
-            {
-                // Handle call operation to get arguments
-                if let ast::CallOperation::Call(args) = &*call_expr.operation {
-                    // Emit callee first (like regular calls)
-                    self.visit_expression(&call_expr.callee, errors)?;
-                    // Then emit arguments
-                    for arg in args {
-                        self.visit_expression(arg, errors)?;
-                    }
-                    // Emit tail call instead of regular call + return
-                    self.emit_tail_call(args.len() as u8, call_expr.span);
-                    return Ok(());
-                }
-            }
+            // TODO: Tail call optimization disabled until static analysis is implemented
+            // to avoid issues with class instantiation
+            // if self.is_tail_call(expr)
+            //     && let ast::Expr::Call(call_expr) = expr
+            // {
+            //     // Handle call operation to get arguments
+            //     if let ast::CallOperation::Call(args) = &*call_expr.operation {
+            //         // Emit callee first (like regular calls)
+            //         self.visit_expression(&call_expr.callee, errors)?;
+            //         // Then emit arguments
+            //         for arg in args {
+            //             self.visit_expression(arg, errors)?;
+            //         }
+            //         // Emit tail call instead of regular call + return
+            //         self.emit_tail_call(args.len() as u8, call_expr.span);
+            //         return Ok(());
+            //     }
+            // }
 
             self.visit_expression(expr, errors)?;
         } else if matches!(self.compiler.kind, CompilerKind::Initializer) {

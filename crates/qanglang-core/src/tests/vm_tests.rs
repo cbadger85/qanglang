@@ -2249,3 +2249,89 @@ fn test_stdlib_call() {
         }
     }
 }
+
+#[test]
+fn test_class_instance_inside_function() {
+    let source = r#"
+        class Iterator {
+            has_next() {}
+
+            next() {}
+        }
+
+        class ArrayIterator : Iterator {
+            index = 0;
+
+            init(arr) {
+                this.arr = arr;
+            }
+
+            has_next() {
+                return this.index < this.arr.length();
+            }
+
+            next() {
+                if (!this.has_next()) {
+                return nil;
+                }
+
+                var value = this.arr[this.index];
+                this.index += 1;
+
+                return value;
+            }
+        }
+
+        fn iter_array(arr) { // This works
+            var iter = ArrayIterator(arr);
+
+            println(iter); // prints "instanceof ArrayIterator"
+
+            return iter;
+        }
+
+        fn iter_array2(arr) { // This doesn't
+            return ArrayIterator(arr);
+        }
+        
+        fn test() {
+            return "test";
+        }
+
+        fn test2() {
+            return test(); // Also works
+        }
+
+        println(test2()); // prints "test"
+
+
+        println(iter_array2([1, 2, 3, 4])); // prints "nil"
+
+        var value = iter_array([1, 2, 3, 4]).next();
+        var value2 = iter_array2([1, 2, 3, 4]).next();
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match CompilerPipeline::new(source_map, &mut allocator).run() {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

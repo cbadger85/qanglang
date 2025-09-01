@@ -1393,6 +1393,11 @@ impl Vm {
                     .get_class_method(clazz_method_table, Value::String(constructor_handle))
                 {
                     self.call(constructor, arg_count)?;
+                } else {
+                    // No constructor found, pop the arguments from the stack
+                    for _ in 0..arg_count {
+                        pop_value!(self);
+                    }
                 }
                 Ok(())
             }
@@ -1574,8 +1579,7 @@ impl Vm {
                 self.call_native_function(handle, arg_count)
             }
             Value::Class(_handle) => {
-                // Classes can't be tail-optimized (they create instances), fall back to regular call
-                self.call_value(callee, arg_count)
+                panic!("Cannot tail call optimize class instancing.")
             }
             Value::BoundMethod(handle) => {
                 let bound_method = self.alloc.get_bound_method(handle);

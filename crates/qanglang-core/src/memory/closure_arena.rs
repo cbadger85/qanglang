@@ -108,7 +108,7 @@ impl ClosureArena {
         } else {
             let mut overflow_index = index - INLINE_UPVALUE_COUNT;
             let mut current_handle = closure.overflow_handle?;
-            
+
             loop {
                 let chunk = self.get_overflow_chunk(current_handle)?;
                 if overflow_index < chunk.count {
@@ -145,7 +145,7 @@ impl ClosureArena {
             }
         } else {
             let mut overflow_index = index - INLINE_UPVALUE_COUNT;
-            
+
             // Ensure overflow chain exists
             let first_handle = if let Some(closure) = self.closures.get(closure_handle) {
                 if let Some(handle) = closure.overflow_handle {
@@ -172,9 +172,9 @@ impl ClosureArena {
                         return false;
                     }
                 }
-                
+
                 overflow_index -= OVERFLOW_CHUNK_SIZE;
-                
+
                 let next_handle = if let Some(chunk) = self.get_overflow_chunk(current_handle) {
                     if let Some(next) = chunk.next {
                         next
@@ -188,7 +188,7 @@ impl ClosureArena {
                 } else {
                     return false;
                 };
-                
+
                 current_handle = next_handle;
             }
         }

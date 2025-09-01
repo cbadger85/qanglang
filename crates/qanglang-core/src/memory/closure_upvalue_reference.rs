@@ -168,13 +168,13 @@ impl<'a> Iterator for UpvalueEntryIterator<'a> {
         // Then iterate through overflow chunks
         while let Some(chunk_handle) = self.current_chunk {
             let chunk = self.overflow_arena.get_chunk(chunk_handle);
-            
+
             if self.chunk_index < chunk.count {
                 let entry = chunk.entries[self.chunk_index];
                 self.chunk_index += 1;
                 return Some(entry);
             }
-            
+
             // Move to next chunk
             self.current_chunk = chunk.next;
             self.chunk_index = 0;

@@ -820,7 +820,6 @@ impl<'a> CompilerVisitor<'a> {
         self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
         Ok(())
     }
-
 }
 
 impl<'a> AstVisitor for CompilerVisitor<'a> {
@@ -849,7 +848,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                     }
                 }
             }
-            
+
             self.visit_expression(expr, errors)?;
         } else {
             if matches!(self.compiler.kind, CompilerKind::Initializer) {
@@ -858,7 +857,7 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
                 self.emit_opcode(OpCode::Nil, return_stmt.span);
             }
         }
-        
+
         self.emit_opcode(OpCode::Return, return_stmt.span);
         Ok(())
     }
@@ -1420,8 +1419,6 @@ impl<'a> AstVisitor for CompilerVisitor<'a> {
     ) -> Result<(), Self::Error> {
         self.handle_function(CompilerKind::Function, &func_decl.function, false, errors)
     }
-
-
 
     fn visit_break_statement(
         &mut self,

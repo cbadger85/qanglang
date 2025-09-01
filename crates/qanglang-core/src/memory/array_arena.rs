@@ -1,6 +1,6 @@
 use crate::{
     Value,
-    memory::{Arena, Index},
+    arena::{Arena, Index},
 };
 
 const CHUNK_SIZE: usize = 32;

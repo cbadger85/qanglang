@@ -193,7 +193,7 @@ impl Default for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::Index;
+    use crate::arena::Index;
 
     #[test]
     fn test_hash_different_variants_have_different_hashes() {

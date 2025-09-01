@@ -1,8 +1,8 @@
-use crate::memory::{
-    UpvalueHandle,
-    arena::{Arena, Index},
-};
 use crate::{ClosureObject, debug_log};
+use crate::{
+    arena::{Arena, Index},
+    memory::UpvalueHandle,
+};
 
 pub const INLINE_UPVALUE_COUNT: usize = 4;
 const OVERFLOW_CHUNK_SIZE: usize = 8;

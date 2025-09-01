@@ -1,4 +1,4 @@
-use crate::memory::{ClosureHandle, arena::Index};
+use crate::{arena::Index, memory::ClosureHandle};
 
 pub type UpvalueOverflowHandle = Index;
 

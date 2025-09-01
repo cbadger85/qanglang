@@ -1,8 +1,10 @@
+mod arena;
 pub mod ast;
 mod chunk;
 mod compiler;
 mod debug;
 mod error;
+mod frontend;
 pub mod memory;
 mod parser;
 mod qang_std;

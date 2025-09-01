@@ -1,5 +1,5 @@
 use crate::Value;
-use crate::memory::arena::{Arena, Index};
+use crate::arena::{Arena, Index};
 
 const CHUNK_SIZE: usize = 8; // Buckets per chunk
 const DEFAULT_CAPACITY: usize = 16;

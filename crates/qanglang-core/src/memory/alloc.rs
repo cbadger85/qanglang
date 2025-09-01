@@ -1,6 +1,6 @@
 use crate::StringHandle;
+use crate::arena::{Arena, Index};
 use crate::memory::UpvalueOverflowArena;
-use crate::memory::arena::{Arena, Index};
 use crate::memory::array_arena::ArrayArena;
 use crate::memory::closure_arena::ClosureArena;
 use crate::memory::hashmap_arena::HashMapArena;

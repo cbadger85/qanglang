@@ -1,5 +1,5 @@
+use crate::arena::{Arena, Index};
 use crate::memory::ClosureHandle;
-use crate::memory::arena::{Arena, Index};
 
 pub const OVERFLOW_CHUNK_SIZE: usize = 8;
 

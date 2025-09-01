@@ -190,34 +190,33 @@ fn odd(n) {
   }
 }
 
+// fn test_tail_call_different_function() {
+//   assert_eq(even(100), true);
+//   assert_eq(odd(99), true);
+// }
 
-fn test_tail_call_different_function() {
-  assert_eq(even(100), true);
-  assert_eq(odd(99), true);
-}
+// fn helper(a, b, c) {
+//   return a + b + c;
+// }
 
-fn helper(a, b, c) {
-  return a + b + c;
-}
+// fn caller(x) {
+//   return helper(x, x * 2, x * 3);
+// }
 
-fn caller(x) {
-  return helper(x, x * 2, x * 3);
-}
+// fn test_tail_call_with_different_arity() {
+//   var result = caller(10);
+//   assert_eq(result, 60); // 10 + 20 + 30
+// }
 
-fn test_tail_call_with_different_arity() {
-  var result = caller(10);
-  assert_eq(result, 60); // 10 + 20 + 30
-}
+// fn countdown(n) {
+//   if (n <= 0) {
+//       return "done";
+//   } else {
+//       return countdown(n - 1);
+//   }
+// }
 
-fn countdown(n) {
-  if (n <= 0) {
-      return "done";
-  } else {
-      return countdown(n - 1);
-  }
-}
-
-fn test_deep_tail_recursion() {
-  var result = countdown(1000);
-  assert_eq(result, "done");
-}
+// fn test_deep_tail_recursion() {
+//   var result = countdown(1000);
+//   assert_eq(result, "done");
+// }

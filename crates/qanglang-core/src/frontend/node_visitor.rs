@@ -4,11 +4,22 @@ use crate::{
         nodes::*,
         typed_node_arena::{
             AssignmentTargetNode, CallOperationNode, ClassMember, DeclNode, ExprNode,
-            ForInitializerNode, LambdaBodyNode, NodeId, PrimaryNode, StmtNode, TypedNodeArena,
+            ForInitializerNode, LambdaBodyNode, PrimaryNode, StmtNode, TypedNodeArena,
             TypedNodeRef,
         },
     },
 };
+
+pub struct VisitorContext<'a> {
+    pub arena: &'a TypedNodeArena,
+    pub errors: &'a mut ErrorReporter,
+}
+
+impl<'a> VisitorContext<'a> {
+    pub fn new(arena: &'a TypedNodeArena, errors: &'a mut ErrorReporter) -> Self {
+        Self { arena, errors }
+    }
+}
 
 pub trait NodeVisitor {
     type Error;
@@ -16,11 +27,10 @@ pub trait NodeVisitor {
     fn visit_program(
         &mut self,
         program: TypedNodeRef<ProgramNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        for decl in arena.iter_decl_nodes(program.node.decls) {
-            self.visit_declaration(decl, arena, errors)?;
+        for decl in ctx.arena.iter_decl_nodes(program.node.decls) {
+            self.visit_declaration(decl, ctx)?;
         }
         Ok(())
     }
@@ -28,50 +38,38 @@ pub trait NodeVisitor {
     fn visit_declaration(
         &mut self,
         decl: TypedNodeRef<DeclNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match decl.node {
             DeclNode::Class(class_decl) => {
-                self.visit_class_declaration(TypedNodeRef::new(decl.id, class_decl), arena, errors)
+                self.visit_class_declaration(TypedNodeRef::new(decl.id, class_decl), ctx)
             }
-            DeclNode::Function(func_decl) => self.visit_function_declaration(
-                TypedNodeRef::new(decl.id, func_decl),
-                arena,
-                errors,
-            ),
-            DeclNode::Lambda(lambda_decl) => self.visit_lambda_declaration(
-                TypedNodeRef::new(decl.id, lambda_decl),
-                arena,
-                errors,
-            ),
+            DeclNode::Function(func_decl) => {
+                self.visit_function_declaration(TypedNodeRef::new(decl.id, func_decl), ctx)
+            }
+            DeclNode::Lambda(lambda_decl) => {
+                self.visit_lambda_declaration(TypedNodeRef::new(decl.id, lambda_decl), ctx)
+            }
             DeclNode::Variable(var_decl) => {
-                self.visit_variable_declaration(TypedNodeRef::new(decl.id, var_decl), arena, errors)
+                self.visit_variable_declaration(TypedNodeRef::new(decl.id, var_decl), ctx)
             }
-            DeclNode::Stmt(stmt) => {
-                self.visit_statement(TypedNodeRef::new(decl.id, stmt), arena, errors)
-            }
+            DeclNode::Stmt(stmt) => self.visit_statement(TypedNodeRef::new(decl.id, stmt), ctx),
         }
     }
 
     fn visit_class_declaration(
         &mut self,
         class_decl: TypedNodeRef<ClassDeclNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(
-            arena.get_identifier_node(class_decl.node.name),
-            arena,
-            errors,
-        )?;
+        self.visit_identifier(ctx.arena.get_identifier_node(class_decl.node.name), ctx)?;
 
         if let Some(superclass_id) = class_decl.node.superclass {
-            self.visit_identifier(arena.get_identifier_node(superclass_id), arena, errors)?;
+            self.visit_identifier(ctx.arena.get_identifier_node(superclass_id), ctx)?;
         }
 
-        for member in arena.iter_class_member_nodes(class_decl.node.members) {
-            self.visit_class_member(member, arena, errors)?;
+        for member in ctx.arena.iter_class_member_nodes(class_decl.node.members) {
+            self.visit_class_member(member, ctx)?;
         }
 
         Ok(())
@@ -80,15 +78,14 @@ pub trait NodeVisitor {
     fn visit_class_member(
         &mut self,
         member: TypedNodeRef<ClassMember>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match member.node {
             ClassMember::Method(method) => {
-                self.visit_function_expression(TypedNodeRef::new(member.id, method), arena, errors)
+                self.visit_function_expression(TypedNodeRef::new(member.id, method), ctx)
             }
             ClassMember::Field(field) => {
-                self.visit_field_declaration(TypedNodeRef::new(member.id, field), arena, errors)
+                self.visit_field_declaration(TypedNodeRef::new(member.id, field), ctx)
             }
         }
     }
@@ -96,17 +93,12 @@ pub trait NodeVisitor {
     fn visit_field_declaration(
         &mut self,
         field_decl: TypedNodeRef<FieldDeclNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(
-            arena.get_identifier_node(field_decl.node.name),
-            arena,
-            errors,
-        )?;
+        self.visit_identifier(ctx.arena.get_identifier_node(field_decl.node.name), ctx)?;
 
         if let Some(initializer_id) = field_decl.node.initializer {
-            self.visit_expression(arena.get_expr_node(initializer_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(initializer_id), ctx)?;
         }
 
         Ok(())
@@ -115,86 +107,57 @@ pub trait NodeVisitor {
     fn visit_function_declaration(
         &mut self,
         func_decl: TypedNodeRef<FunctionDeclNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_function_expression(
-            arena.get_func_expr_node(func_decl.node.function),
-            arena,
-            errors,
-        )
+        self.visit_function_expression(ctx.arena.get_func_expr_node(func_decl.node.function), ctx)
     }
 
     fn visit_function_expression(
         &mut self,
         func_expr: TypedNodeRef<FunctionExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(
-            arena.get_identifier_node(func_expr.node.name),
-            arena,
-            errors,
-        )?;
+        self.visit_identifier(ctx.arena.get_identifier_node(func_expr.node.name), ctx)?;
 
-        for param in arena.iter_identifier_nodes(func_expr.node.parameters) {
-            self.visit_identifier(param, arena, errors)?;
+        for param in ctx.arena.iter_identifier_nodes(func_expr.node.parameters) {
+            self.visit_identifier(param, ctx)?;
         }
 
-        self.visit_block_statement(
-            arena.get_block_stmt_node(func_expr.node.body),
-            arena,
-            errors,
-        )
+        self.visit_block_statement(ctx.arena.get_block_stmt_node(func_expr.node.body), ctx)
     }
 
     fn visit_lambda_declaration(
         &mut self,
         lambda_decl: TypedNodeRef<LambdaDeclNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(
-            arena.get_identifier_node(lambda_decl.node.name),
-            arena,
-            errors,
-        )?;
-        self.visit_lambda_expression(
-            arena.get_lambda_expr_node(lambda_decl.node.lambda),
-            arena,
-            errors,
-        )
+        self.visit_identifier(ctx.arena.get_identifier_node(lambda_decl.node.name), ctx)?;
+        self.visit_lambda_expression(ctx.arena.get_lambda_expr_node(lambda_decl.node.lambda), ctx)
     }
 
     fn visit_lambda_expression(
         &mut self,
         lambda_expr: TypedNodeRef<LambdaExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        for param in arena.iter_identifier_nodes(lambda_expr.node.parameters) {
-            self.visit_identifier(param, arena, errors)?;
+        for param in ctx.arena.iter_identifier_nodes(lambda_expr.node.parameters) {
+            self.visit_identifier(param, ctx)?;
         }
 
-        self.visit_lambda_body(
-            arena.get_lambda_body_node(lambda_expr.node.body),
-            arena,
-            errors,
-        )
+        self.visit_lambda_body(ctx.arena.get_lambda_body_node(lambda_expr.node.body), ctx)
     }
 
     fn visit_lambda_body(
         &mut self,
         body: TypedNodeRef<LambdaBodyNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match body.node {
             LambdaBodyNode::Block(block) => {
-                self.visit_block_statement(TypedNodeRef::new(body.id, block), arena, errors)
+                self.visit_block_statement(TypedNodeRef::new(body.id, block), ctx)
             }
             LambdaBodyNode::Expr(expr) => {
-                self.visit_expression(TypedNodeRef::new(body.id, expr), arena, errors)
+                self.visit_expression(TypedNodeRef::new(body.id, expr), ctx)
             }
         }
     }
@@ -202,17 +165,12 @@ pub trait NodeVisitor {
     fn visit_variable_declaration(
         &mut self,
         var_decl: TypedNodeRef<VariableDeclNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(
-            arena.get_identifier_node(var_decl.node.target),
-            arena,
-            errors,
-        )?;
+        self.visit_identifier(ctx.arena.get_identifier_node(var_decl.node.target), ctx)?;
 
         if let Some(initializer_id) = var_decl.node.initializer {
-            self.visit_expression(arena.get_expr_node(initializer_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(initializer_id), ctx)?;
         }
 
         Ok(())
@@ -221,37 +179,32 @@ pub trait NodeVisitor {
     fn visit_statement(
         &mut self,
         stmt: TypedNodeRef<StmtNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match stmt.node {
-            StmtNode::Expr(expr_stmt) => self.visit_expression_statement(
-                TypedNodeRef::new(stmt.id, expr_stmt),
-                arena,
-                errors,
-            ),
+            StmtNode::Expr(expr_stmt) => {
+                self.visit_expression_statement(TypedNodeRef::new(stmt.id, expr_stmt), ctx)
+            }
             StmtNode::Block(block_stmt) => {
-                self.visit_block_statement(TypedNodeRef::new(stmt.id, block_stmt), arena, errors)
+                self.visit_block_statement(TypedNodeRef::new(stmt.id, block_stmt), ctx)
             }
             StmtNode::If(if_stmt) => {
-                self.visit_if_statement(TypedNodeRef::new(stmt.id, if_stmt), arena, errors)
+                self.visit_if_statement(TypedNodeRef::new(stmt.id, if_stmt), ctx)
             }
             StmtNode::While(while_stmt) => {
-                self.visit_while_statement(TypedNodeRef::new(stmt.id, while_stmt), arena, errors)
+                self.visit_while_statement(TypedNodeRef::new(stmt.id, while_stmt), ctx)
             }
             StmtNode::For(for_stmt) => {
-                self.visit_for_statement(TypedNodeRef::new(stmt.id, for_stmt), arena, errors)
+                self.visit_for_statement(TypedNodeRef::new(stmt.id, for_stmt), ctx)
             }
             StmtNode::Break(break_stmt) => {
-                self.visit_break_statement(TypedNodeRef::new(stmt.id, break_stmt), arena, errors)
+                self.visit_break_statement(TypedNodeRef::new(stmt.id, break_stmt), ctx)
             }
-            StmtNode::Continue(continue_stmt) => self.visit_continue_statement(
-                TypedNodeRef::new(stmt.id, continue_stmt),
-                arena,
-                errors,
-            ),
+            StmtNode::Continue(continue_stmt) => {
+                self.visit_continue_statement(TypedNodeRef::new(stmt.id, continue_stmt), ctx)
+            }
             StmtNode::Return(return_stmt) => {
-                self.visit_return_statement(TypedNodeRef::new(stmt.id, return_stmt), arena, errors)
+                self.visit_return_statement(TypedNodeRef::new(stmt.id, return_stmt), ctx)
             }
         }
     }
@@ -259,20 +212,18 @@ pub trait NodeVisitor {
     fn visit_expression_statement(
         &mut self,
         expr_stmt: TypedNodeRef<ExprStmtNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(expr_stmt.node.expr), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(expr_stmt.node.expr), ctx)
     }
 
     fn visit_block_statement(
         &mut self,
         block_stmt: TypedNodeRef<BlockStmtNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        for decl in arena.iter_decl_nodes(block_stmt.node.decls) {
-            self.visit_declaration(decl, arena, errors)?;
+        for decl in ctx.arena.iter_decl_nodes(block_stmt.node.decls) {
+            self.visit_declaration(decl, ctx)?;
         }
         Ok(())
     }
@@ -280,14 +231,13 @@ pub trait NodeVisitor {
     fn visit_if_statement(
         &mut self,
         if_stmt: TypedNodeRef<IfStmtNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(if_stmt.node.condition), arena, errors)?;
-        self.visit_statement(arena.get_stmt_node(if_stmt.node.then_branch), arena, errors)?;
+        self.visit_expression(ctx.arena.get_expr_node(if_stmt.node.condition), ctx)?;
+        self.visit_statement(ctx.arena.get_stmt_node(if_stmt.node.then_branch), ctx)?;
 
         if let Some(else_branch_id) = if_stmt.node.else_branch {
-            self.visit_statement(arena.get_stmt_node(else_branch_id), arena, errors)?;
+            self.visit_statement(ctx.arena.get_stmt_node(else_branch_id), ctx)?;
         }
 
         Ok(())
@@ -296,56 +246,43 @@ pub trait NodeVisitor {
     fn visit_while_statement(
         &mut self,
         while_stmt: TypedNodeRef<WhileStmtNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(
-            arena.get_expr_node(while_stmt.node.condition),
-            arena,
-            errors,
-        )?;
-        self.visit_statement(arena.get_stmt_node(while_stmt.node.body), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(while_stmt.node.condition), ctx)?;
+        self.visit_statement(ctx.arena.get_stmt_node(while_stmt.node.body), ctx)
     }
 
     fn visit_for_statement(
         &mut self,
         for_stmt: TypedNodeRef<ForStmtNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if let Some(initializer_id) = for_stmt.node.initializer {
-            self.visit_for_initializer(
-                arena.get_for_initializer_node(initializer_id),
-                arena,
-                errors,
-            )?;
+            self.visit_for_initializer(ctx.arena.get_for_initializer_node(initializer_id), ctx)?;
         }
 
         if let Some(condition_id) = for_stmt.node.condition {
-            self.visit_expression(arena.get_expr_node(condition_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(condition_id), ctx)?;
         }
 
         if let Some(increment_id) = for_stmt.node.increment {
-            self.visit_expression(arena.get_expr_node(increment_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(increment_id), ctx)?;
         }
 
-        self.visit_statement(arena.get_stmt_node(for_stmt.node.body), arena, errors)
+        self.visit_statement(ctx.arena.get_stmt_node(for_stmt.node.body), ctx)
     }
 
     fn visit_for_initializer(
         &mut self,
         initializer: TypedNodeRef<ForInitializerNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match initializer.node {
-            ForInitializerNode::VarDecl(var_decl) => self.visit_variable_declaration(
-                TypedNodeRef::new(initializer.id, var_decl),
-                arena,
-                errors,
-            ),
+            ForInitializerNode::VarDecl(var_decl) => {
+                self.visit_variable_declaration(TypedNodeRef::new(initializer.id, var_decl), ctx)
+            }
             ForInitializerNode::Expr(expr) => {
-                self.visit_expression(TypedNodeRef::new(initializer.id, expr), arena, errors)
+                self.visit_expression(TypedNodeRef::new(initializer.id, expr), ctx)
             }
         }
     }
@@ -353,8 +290,7 @@ pub trait NodeVisitor {
     fn visit_break_statement(
         &mut self,
         _break_stmt: TypedNodeRef<BreakStmtNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -362,8 +298,7 @@ pub trait NodeVisitor {
     fn visit_continue_statement(
         &mut self,
         _continue_stmt: TypedNodeRef<ContinueStmtNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -371,11 +306,10 @@ pub trait NodeVisitor {
     fn visit_return_statement(
         &mut self,
         return_stmt: TypedNodeRef<ReturnStmtNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if let Some(value_id) = return_stmt.node.value {
-            self.visit_expression(arena.get_expr_node(value_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(value_id), ctx)?;
         }
         Ok(())
     }
@@ -383,53 +317,44 @@ pub trait NodeVisitor {
     fn visit_expression(
         &mut self,
         expr: TypedNodeRef<ExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match expr.node {
-            ExprNode::Assignment(assignment) => self.visit_assignment_expression(
-                TypedNodeRef::new(expr.id, assignment),
-                arena,
-                errors,
-            ),
+            ExprNode::Assignment(assignment) => {
+                self.visit_assignment_expression(TypedNodeRef::new(expr.id, assignment), ctx)
+            }
             ExprNode::Pipe(pipe) => {
-                self.visit_pipe_expression(TypedNodeRef::new(expr.id, pipe), arena, errors)
+                self.visit_pipe_expression(TypedNodeRef::new(expr.id, pipe), ctx)
             }
             ExprNode::Ternary(ternary) => {
-                self.visit_ternary_expression(TypedNodeRef::new(expr.id, ternary), arena, errors)
+                self.visit_ternary_expression(TypedNodeRef::new(expr.id, ternary), ctx)
             }
-            ExprNode::LogicalOr(logical_or) => self.visit_logical_or_expression(
-                TypedNodeRef::new(expr.id, logical_or),
-                arena,
-                errors,
-            ),
-            ExprNode::LogicalAnd(logical_and) => self.visit_logical_and_expression(
-                TypedNodeRef::new(expr.id, logical_and),
-                arena,
-                errors,
-            ),
+            ExprNode::LogicalOr(logical_or) => {
+                self.visit_logical_or_expression(TypedNodeRef::new(expr.id, logical_or), ctx)
+            }
+            ExprNode::LogicalAnd(logical_and) => {
+                self.visit_logical_and_expression(TypedNodeRef::new(expr.id, logical_and), ctx)
+            }
             ExprNode::Equality(equality) => {
-                self.visit_equality_expression(TypedNodeRef::new(expr.id, equality), arena, errors)
+                self.visit_equality_expression(TypedNodeRef::new(expr.id, equality), ctx)
             }
-            ExprNode::Comparison(comparison) => self.visit_comparison_expression(
-                TypedNodeRef::new(expr.id, comparison),
-                arena,
-                errors,
-            ),
+            ExprNode::Comparison(comparison) => {
+                self.visit_comparison_expression(TypedNodeRef::new(expr.id, comparison), ctx)
+            }
             ExprNode::Term(term) => {
-                self.visit_term_expression(TypedNodeRef::new(expr.id, term), arena, errors)
+                self.visit_term_expression(TypedNodeRef::new(expr.id, term), ctx)
             }
             ExprNode::Factor(factor) => {
-                self.visit_factor_expression(TypedNodeRef::new(expr.id, factor), arena, errors)
+                self.visit_factor_expression(TypedNodeRef::new(expr.id, factor), ctx)
             }
             ExprNode::Unary(unary) => {
-                self.visit_unary_expression(TypedNodeRef::new(expr.id, unary), arena, errors)
+                self.visit_unary_expression(TypedNodeRef::new(expr.id, unary), ctx)
             }
             ExprNode::Call(call) => {
-                self.visit_call_expression(TypedNodeRef::new(expr.id, call), arena, errors)
+                self.visit_call_expression(TypedNodeRef::new(expr.id, call), ctx)
             }
             ExprNode::Primary(primary) => {
-                self.visit_primary_expression(TypedNodeRef::new(expr.id, primary), arena, errors)
+                self.visit_primary_expression(TypedNodeRef::new(expr.id, primary), ctx)
             }
         }
     }
@@ -437,34 +362,29 @@ pub trait NodeVisitor {
     fn visit_assignment_expression(
         &mut self,
         assignment: TypedNodeRef<AssignmentExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         self.visit_assignment_target(
-            arena.get_assignment_target_node(assignment.node.target),
-            arena,
-            errors,
+            ctx.arena.get_assignment_target_node(assignment.node.target),
+            ctx,
         )?;
-        self.visit_expression(arena.get_expr_node(assignment.node.value), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(assignment.node.value), ctx)
     }
 
     fn visit_assignment_target(
         &mut self,
         target: TypedNodeRef<AssignmentTargetNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match target.node {
             AssignmentTargetNode::Identifier(identifier) => {
-                self.visit_identifier(TypedNodeRef::new(target.id, identifier), arena, errors)
+                self.visit_identifier(TypedNodeRef::new(target.id, identifier), ctx)
             }
-            AssignmentTargetNode::Property(property) => self.visit_property_assignment(
-                TypedNodeRef::new(target.id, property),
-                arena,
-                errors,
-            ),
+            AssignmentTargetNode::Property(property) => {
+                self.visit_property_assignment(TypedNodeRef::new(target.id, property), ctx)
+            }
             AssignmentTargetNode::Index(index) => {
-                self.visit_index_assignment(TypedNodeRef::new(target.id, index), arena, errors)
+                self.visit_index_assignment(TypedNodeRef::new(target.id, index), ctx)
             }
         }
     }
@@ -472,32 +392,29 @@ pub trait NodeVisitor {
     fn visit_property_assignment(
         &mut self,
         property: TypedNodeRef<PropertyAssignmentNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(property.node.object), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(property.node.object), ctx)
     }
 
     fn visit_index_assignment(
         &mut self,
         index: TypedNodeRef<IndexAssignmentNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(index.node.object), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(index.node.index), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(index.node.object), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(index.node.index), ctx)
     }
 
     fn visit_pipe_expression(
         &mut self,
         pipe: TypedNodeRef<PipeExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(pipe.node.left), arena, errors)?;
+        self.visit_expression(ctx.arena.get_expr_node(pipe.node.left), ctx)?;
 
         if let Some(right_id) = pipe.node.right {
-            self.visit_expression(arena.get_expr_node(right_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(right_id), ctx)?;
         }
 
         Ok(())
@@ -506,17 +423,16 @@ pub trait NodeVisitor {
     fn visit_ternary_expression(
         &mut self,
         ternary: TypedNodeRef<TernaryExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(ternary.node.condition), arena, errors)?;
+        self.visit_expression(ctx.arena.get_expr_node(ternary.node.condition), ctx)?;
 
         if let Some(then_expr_id) = ternary.node.then_expr {
-            self.visit_expression(arena.get_expr_node(then_expr_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(then_expr_id), ctx)?;
         }
 
         if let Some(else_expr_id) = ternary.node.else_expr {
-            self.visit_expression(arena.get_expr_node(else_expr_id), arena, errors)?;
+            self.visit_expression(ctx.arena.get_expr_node(else_expr_id), ctx)?;
         }
 
         Ok(())
@@ -525,166 +441,143 @@ pub trait NodeVisitor {
     fn visit_logical_or_expression(
         &mut self,
         logical_or: TypedNodeRef<LogicalOrExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(logical_or.node.left), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(logical_or.node.right), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(logical_or.node.left), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(logical_or.node.right), ctx)
     }
 
     fn visit_logical_and_expression(
         &mut self,
         logical_and: TypedNodeRef<LogicalAndExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(logical_and.node.left), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(logical_and.node.right), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(logical_and.node.left), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(logical_and.node.right), ctx)
     }
 
     fn visit_equality_expression(
         &mut self,
         equality: TypedNodeRef<EqualityExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(equality.node.left), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(equality.node.right), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(equality.node.left), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(equality.node.right), ctx)
     }
 
     fn visit_comparison_expression(
         &mut self,
         comparison: TypedNodeRef<ComparisonExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(comparison.node.left), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(comparison.node.right), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(comparison.node.left), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(comparison.node.right), ctx)
     }
 
     fn visit_term_expression(
         &mut self,
         term: TypedNodeRef<TermExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(term.node.left), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(term.node.right), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(term.node.left), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(term.node.right), ctx)
     }
 
     fn visit_factor_expression(
         &mut self,
         factor: TypedNodeRef<FactorExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(factor.node.left), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(factor.node.right), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(factor.node.left), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(factor.node.right), ctx)
     }
 
     fn visit_unary_expression(
         &mut self,
         unary: TypedNodeRef<UnaryExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(unary.node.operand), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(unary.node.operand), ctx)
     }
 
     fn visit_call_expression(
         &mut self,
         call: TypedNodeRef<CallExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(call.node.callee), arena, errors)?;
-        self.visit_call_operation(
-            arena.get_call_operation_node(call.node.operation),
-            arena,
-            errors,
-        )
+        self.visit_expression(ctx.arena.get_expr_node(call.node.callee), ctx)?;
+        self.visit_call_operation(ctx.arena.get_call_operation_node(call.node.operation), ctx)
     }
 
     fn visit_call_operation(
         &mut self,
         operation: TypedNodeRef<CallOperationNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match operation.node {
             CallOperationNode::Call(call) => {
-                for arg in arena.iter_expr_nodes(call.args) {
-                    self.visit_expression(arg, arena, errors)?;
+                for arg in ctx.arena.iter_expr_nodes(call.args) {
+                    self.visit_expression(arg, ctx)?;
                 }
                 Ok(())
             }
-            CallOperationNode::Property(property) => self.visit_identifier(
-                arena.get_identifier_node(property.identifier),
-                arena,
-                errors,
-            ),
+            CallOperationNode::Property(property) => {
+                self.visit_identifier(ctx.arena.get_identifier_node(property.identifier), ctx)
+            }
             CallOperationNode::OptionalProperty(optional_property) => self.visit_identifier(
-                arena.get_identifier_node(optional_property.identifier),
-                arena,
-                errors,
+                ctx.arena.get_identifier_node(optional_property.identifier),
+                ctx,
             ),
             CallOperationNode::Index(index) => {
-                self.visit_expression(arena.get_expr_node(index.index), arena, errors)
+                self.visit_expression(ctx.arena.get_expr_node(index.index), ctx)
             }
             CallOperationNode::Map(map) => {
-                self.visit_map_expression(TypedNodeRef::new(operation.id, map), arena, errors)
+                self.visit_map_expression(TypedNodeRef::new(operation.id, map), ctx)
             }
-            CallOperationNode::OptionalMap(map) => self.visit_optional_map_expression(
-                TypedNodeRef::new(operation.id, map),
-                arena,
-                errors,
-            ),
+            CallOperationNode::OptionalMap(map) => {
+                self.visit_optional_map_expression(TypedNodeRef::new(operation.id, map), ctx)
+            }
         }
     }
 
     fn visit_primary_expression(
         &mut self,
         primary: TypedNodeRef<PrimaryNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         match primary.node {
             PrimaryNode::Number(number) => {
-                self.visit_number_literal(TypedNodeRef::new(primary.id, number), arena, errors)
+                self.visit_number_literal(TypedNodeRef::new(primary.id, number), ctx)
             }
             PrimaryNode::String(string) => {
-                self.visit_string_literal(TypedNodeRef::new(primary.id, string), arena, errors)
+                self.visit_string_literal(TypedNodeRef::new(primary.id, string), ctx)
             }
             PrimaryNode::Boolean(boolean) => {
-                self.visit_boolean_literal(TypedNodeRef::new(primary.id, boolean), arena, errors)
+                self.visit_boolean_literal(TypedNodeRef::new(primary.id, boolean), ctx)
             }
             PrimaryNode::Nil(nil) => {
-                self.visit_nil_literal(TypedNodeRef::new(primary.id, nil), arena, errors)
+                self.visit_nil_literal(TypedNodeRef::new(primary.id, nil), ctx)
             }
             PrimaryNode::This(this_expr) => {
-                self.visit_this_expression(TypedNodeRef::new(primary.id, this_expr), arena, errors)
+                self.visit_this_expression(TypedNodeRef::new(primary.id, this_expr), ctx)
             }
-            PrimaryNode::Super(super_expr) => self.visit_super_expression(
-                TypedNodeRef::new(primary.id, super_expr),
-                arena,
-                errors,
-            ),
+            PrimaryNode::Super(super_expr) => {
+                self.visit_super_expression(TypedNodeRef::new(primary.id, super_expr), ctx)
+            }
             PrimaryNode::Identifier(identifier) => {
-                self.visit_identifier(TypedNodeRef::new(primary.id, identifier), arena, errors)
+                self.visit_identifier(TypedNodeRef::new(primary.id, identifier), ctx)
             }
-            PrimaryNode::Grouping(grouping) => self.visit_grouping_expression(
-                TypedNodeRef::new(primary.id, grouping),
-                arena,
-                errors,
-            ),
+            PrimaryNode::Grouping(grouping) => {
+                self.visit_grouping_expression(TypedNodeRef::new(primary.id, grouping), ctx)
+            }
             PrimaryNode::Lambda(lambda) => {
-                self.visit_lambda_expression(TypedNodeRef::new(primary.id, lambda), arena, errors)
+                self.visit_lambda_expression(TypedNodeRef::new(primary.id, lambda), ctx)
             }
             PrimaryNode::Array(array) => {
-                self.visit_array_literal(TypedNodeRef::new(primary.id, array), arena, errors)
+                self.visit_array_literal(TypedNodeRef::new(primary.id, array), ctx)
             }
             PrimaryNode::Object(object) => {
-                self.visit_object_literal(TypedNodeRef::new(primary.id, object), arena, errors)
+                self.visit_object_literal(TypedNodeRef::new(primary.id, object), ctx)
             }
         }
     }
@@ -692,8 +585,7 @@ pub trait NodeVisitor {
     fn visit_number_literal(
         &mut self,
         _number: TypedNodeRef<NumberLiteralNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -701,8 +593,7 @@ pub trait NodeVisitor {
     fn visit_string_literal(
         &mut self,
         _string: TypedNodeRef<StringLiteralNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -710,8 +601,7 @@ pub trait NodeVisitor {
     fn visit_boolean_literal(
         &mut self,
         _boolean: TypedNodeRef<BooleanLiteralNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -719,8 +609,7 @@ pub trait NodeVisitor {
     fn visit_nil_literal(
         &mut self,
         _nil: TypedNodeRef<NilLiteralNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -728,8 +617,7 @@ pub trait NodeVisitor {
     fn visit_this_expression(
         &mut self,
         _this_expr: TypedNodeRef<ThisExprNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -737,21 +625,15 @@ pub trait NodeVisitor {
     fn visit_super_expression(
         &mut self,
         super_expr: TypedNodeRef<SuperExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(
-            arena.get_identifier_node(super_expr.node.method),
-            arena,
-            errors,
-        )
+        self.visit_identifier(ctx.arena.get_identifier_node(super_expr.node.method), ctx)
     }
 
     fn visit_identifier(
         &mut self,
         _identifier: TypedNodeRef<IdentifierNode>,
-        _arena: &TypedNodeArena,
-        _errors: &mut ErrorReporter,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -759,20 +641,18 @@ pub trait NodeVisitor {
     fn visit_grouping_expression(
         &mut self,
         grouping: TypedNodeRef<GroupingExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_expression(arena.get_expr_node(grouping.node.expr), arena, errors)
+        self.visit_expression(ctx.arena.get_expr_node(grouping.node.expr), ctx)
     }
 
     fn visit_array_literal(
         &mut self,
         array: TypedNodeRef<ArrayLiteralExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        for element in arena.iter_expr_nodes(array.node.elements) {
-            self.visit_expression(element, arena, errors)?;
+        for element in ctx.arena.iter_expr_nodes(array.node.elements) {
+            self.visit_expression(element, ctx)?;
         }
         Ok(())
     }
@@ -780,11 +660,10 @@ pub trait NodeVisitor {
     fn visit_object_literal(
         &mut self,
         object: TypedNodeRef<ObjectLiteralExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        for entry in arena.iter_object_entry_nodes(object.node.entries) {
-            self.visit_object_entry(entry, arena, errors)?;
+        for entry in ctx.arena.iter_object_entry_nodes(object.node.entries) {
+            self.visit_object_entry(entry, ctx)?;
         }
         Ok(())
     }
@@ -792,31 +671,28 @@ pub trait NodeVisitor {
     fn visit_object_entry(
         &mut self,
         entry: TypedNodeRef<ObjectEntryNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(arena.get_identifier_node(entry.node.key), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(entry.node.value), arena, errors)
+        self.visit_identifier(ctx.arena.get_identifier_node(entry.node.key), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(entry.node.value), ctx)
     }
 
     fn visit_map_expression(
         &mut self,
         map: TypedNodeRef<MapExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(arena.get_identifier_node(map.node.parameter), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(map.node.body), arena, errors)
+        self.visit_identifier(ctx.arena.get_identifier_node(map.node.parameter), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(map.node.body), ctx)
     }
 
     fn visit_optional_map_expression(
         &mut self,
         map: TypedNodeRef<OptionalMapExprNode>,
-        arena: &TypedNodeArena,
-        errors: &mut ErrorReporter,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(arena.get_identifier_node(map.node.parameter), arena, errors)?;
-        self.visit_expression(arena.get_expr_node(map.node.body), arena, errors)
+        self.visit_identifier(ctx.arena.get_identifier_node(map.node.parameter), ctx)?;
+        self.visit_expression(ctx.arena.get_expr_node(map.node.body), ctx)
     }
 }
 
@@ -841,8 +717,7 @@ mod tests {
         fn visit_identifier(
             &mut self,
             _identifier: TypedNodeRef<IdentifierNode>,
-            _arena: &TypedNodeArena,
-            _errors: &mut ErrorReporter,
+            _ctx: &mut VisitorContext,
         ) -> Result<(), Self::Error> {
             self.count += 1;
             Ok(())
@@ -852,20 +727,18 @@ mod tests {
     #[test]
     fn test_node_visitor() {
         let mut arena = TypedNodeArena::new();
-        let mut counter = IdentifierCounter::new();
-        let mut errors = ErrorReporter::new();
-
-        // Create a simple identifier node
         let identifier = IdentifierNode {
             name: 0,
             span: SourceSpan::new(0, 4),
         };
         let id = arena.insert_node(AstNode::Identifier(identifier));
+        let mut counter = IdentifierCounter::new();
+        let mut errors = ErrorReporter::new();
+        let mut ctx = VisitorContext::new(&arena, &mut errors);
+
         let typed_ref = arena.get_identifier_node(id);
 
-        counter
-            .visit_identifier(typed_ref, &arena, &mut errors)
-            .unwrap();
+        counter.visit_identifier(typed_ref, &mut ctx).unwrap();
         assert_eq!(counter.count, 1);
     }
 }

@@ -62,6 +62,19 @@ impl NodeArrayArena {
         }
     }
 
+    pub fn size(&self, array_id: NodeArrayId) -> usize {
+        let mut total_size = 0;
+        let mut current_id = Some(array_id);
+
+        while let Some(chunk_id) = current_id {
+            let chunk = &self.node_ids[chunk_id.0];
+            total_size += chunk.size;
+            current_id = chunk.next_chunk;
+        }
+
+        total_size
+    }
+
     pub fn iter(&self, array_id: NodeArrayId) -> NodeArrayIterator<'_> {
         NodeArrayIterator {
             arena: self,

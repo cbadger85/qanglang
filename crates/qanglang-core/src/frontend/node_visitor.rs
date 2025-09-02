@@ -413,9 +413,7 @@ pub trait NodeVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_expression(ctx.arena.get_expr_node(pipe.node.left), ctx)?;
 
-        if let Some(right_id) = pipe.node.right {
-            self.visit_expression(ctx.arena.get_expr_node(right_id), ctx)?;
-        }
+        self.visit_expression(ctx.arena.get_expr_node(pipe.node.right), ctx)?;
 
         Ok(())
     }
@@ -427,13 +425,9 @@ pub trait NodeVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_expression(ctx.arena.get_expr_node(ternary.node.condition), ctx)?;
 
-        if let Some(then_expr_id) = ternary.node.then_expr {
-            self.visit_expression(ctx.arena.get_expr_node(then_expr_id), ctx)?;
-        }
+        self.visit_expression(ctx.arena.get_expr_node(ternary.node.then_expr), ctx)?;
 
-        if let Some(else_expr_id) = ternary.node.else_expr {
-            self.visit_expression(ctx.arena.get_expr_node(else_expr_id), ctx)?;
-        }
+        self.visit_expression(ctx.arena.get_expr_node(ternary.node.else_expr), ctx)?;
 
         Ok(())
     }
@@ -731,7 +725,7 @@ mod tests {
             name: 0,
             span: SourceSpan::new(0, 4),
         };
-        let id = arena.insert_node(AstNode::Identifier(identifier));
+        let id = arena.create_node(AstNode::Identifier(identifier));
         let mut counter = IdentifierCounter::new();
         let mut errors = ErrorReporter::new();
         let mut ctx = VisitorContext::new(&arena, &mut errors);

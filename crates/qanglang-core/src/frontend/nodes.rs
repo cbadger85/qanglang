@@ -58,6 +58,60 @@ pub enum AstNode {
     VariableDecl(VariableDeclNode),
 }
 
+impl AstNode {
+    pub fn span(&self) -> SourceSpan {
+        match self {
+            AstNode::Program(node) => node.span,
+            AstNode::Class(node) => node.span,
+            AstNode::Function(node) => node.span,
+            AstNode::Identifier(node) => node.span,
+            AstNode::FieldDecl(node) => node.span,
+            AstNode::FunctionDecl(node) => node.span,
+            AstNode::FunctionExpr(node) => node.span,
+            AstNode::NumberLiteral(node) => node.span,
+            AstNode::StringLiteral(node) => node.span,
+            AstNode::BooleanLiteral(node) => node.span,
+            AstNode::NilLiteral(node) => node.span,
+            AstNode::ThisExpr(node) => node.span,
+            AstNode::SuperExpr(node) => node.span,
+            AstNode::AssignmentExpr(node) => node.span,
+            AstNode::PipeExpr(node) => node.span,
+            AstNode::TernaryExpr(node) => node.span,
+            AstNode::LogicalOrExpr(node) => node.span,
+            AstNode::LogicalAndExpr(node) => node.span,
+            AstNode::EqualityExpr(node) => node.span,
+            AstNode::ComparisonExpr(node) => node.span,
+            AstNode::TermExpr(node) => node.span,
+            AstNode::FactorExpr(node) => node.span,
+            AstNode::UnaryExpr(node) => node.span,
+            AstNode::CallExpr(node) => node.span,
+            AstNode::CallOperation(node) => node.span,
+            AstNode::PropertyAccess(node) => node.span,
+            AstNode::PropertyAssignment(node) => node.span,
+            AstNode::OptionalPropertyAccess(node) => node.span,
+            AstNode::IndexAccess(node) => node.span,
+            AstNode::IndexAssignment(node) => node.span,
+            AstNode::ArrayLiteralExpr(node) => node.span,
+            AstNode::ObjectLiteralExpr(node) => node.span,
+            AstNode::ObjectEntry(node) => node.span,
+            AstNode::MapExpr(node) => node.span,
+            AstNode::OptionalMapExpr(node) => node.span,
+            AstNode::ExprStmt(node) => node.span,
+            AstNode::GroupingExpr(node) => node.span,
+            AstNode::LambdaDecl(node) => node.span,
+            AstNode::LambdaExpr(node) => node.span,
+            AstNode::ReturnStmt(node) => node.span,
+            AstNode::BreakStmt(node) => node.span,
+            AstNode::ContinueStmt(node) => node.span,
+            AstNode::BlockStmt(node) => node.span,
+            AstNode::IfStmt(node) => node.span,
+            AstNode::WhileStmt(node) => node.span,
+            AstNode::ForStmt(node) => node.span,
+            AstNode::VariableDecl(node) => node.span,
+        }
+    }
+}
+
 /// Root AST node representing a complete program
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ProgramNode {
@@ -198,17 +252,17 @@ pub struct IndexAssignmentNode {
 /// Pipe expression: ternary ( |> pipe )?
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PipeExprNode {
-    pub left: NodeId,          // ExprNode
-    pub right: Option<NodeId>, //ExprNode
+    pub left: NodeId,  // ExprNode
+    pub right: NodeId, //ExprNode
     pub span: SourceSpan,
 }
 
 /// Ternary expression: logicOr ( ? expression : ternary )?
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct TernaryExprNode {
-    pub condition: NodeId,         // ExprNode
-    pub then_expr: Option<NodeId>, // ExprNode
-    pub else_expr: Option<NodeId>, //ExprNode
+    pub condition: NodeId, // ExprNode
+    pub then_expr: NodeId, // ExprNode
+    pub else_expr: NodeId, //ExprNode
     pub span: SourceSpan,
 }
 

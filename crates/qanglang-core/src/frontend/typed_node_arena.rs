@@ -395,18 +395,18 @@ impl<T> TypedNodeRef<T> {
 
 pub struct TypedNodeArena {
     nodes: Arena<AstNode>,
-    node_array: NodeArrayArena,
+    pub array: NodeArrayArena,
 }
 
 impl TypedNodeArena {
     pub fn new() -> Self {
         Self {
             nodes: Arena::new(),
-            node_array: NodeArrayArena::new(),
+            array: NodeArrayArena::new(),
         }
     }
 
-    pub fn insert_node(&mut self, node: AstNode) -> NodeId {
+    pub fn create_node(&mut self, node: AstNode) -> NodeId {
         NodeId::new(self.nodes.insert(node))
     }
 
@@ -440,6 +440,12 @@ impl TypedNodeArena {
     ) -> TypedNodeRef<AssignmentTargetNode> {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())
+    }
+
+    pub fn check_assignment_target_node(&self, node_id: NodeId) -> bool {
+        let node = self.nodes[node_id.get()];
+        let target_node: Result<AssignmentTargetNode, _> = node.try_into();
+        target_node.is_ok()
     }
 
     pub fn get_primary_node(&self, node_id: NodeId) -> TypedNodeRef<PrimaryNode> {
@@ -514,7 +520,7 @@ impl TypedNodeArena {
         &self,
         array_id: NodeArrayId,
     ) -> impl Iterator<Item = TypedNodeRef<DeclNode>> + '_ {
-        self.node_array
+        self.array
             .iter(array_id)
             .map(|node_id| self.get_decl_node(node_id))
     }
@@ -523,7 +529,7 @@ impl TypedNodeArena {
         &self,
         array_id: NodeArrayId,
     ) -> impl Iterator<Item = TypedNodeRef<ExprNode>> + '_ {
-        self.node_array
+        self.array
             .iter(array_id)
             .map(|node_id| self.get_expr_node(node_id))
     }
@@ -532,7 +538,7 @@ impl TypedNodeArena {
         &self,
         array_id: NodeArrayId,
     ) -> impl Iterator<Item = TypedNodeRef<ObjectEntryNode>> + '_ {
-        self.node_array.iter(array_id).map(|node_id| {
+        self.array.iter(array_id).map(|node_id| {
             let node = self.nodes[node_id.get()];
             match node {
                 AstNode::ObjectEntry(entry) => TypedNodeRef::new(node_id, entry),
@@ -545,7 +551,7 @@ impl TypedNodeArena {
         &self,
         array_id: NodeArrayId,
     ) -> impl Iterator<Item = TypedNodeRef<ClassMember>> + '_ {
-        self.node_array.iter(array_id).map(|node_id| {
+        self.array.iter(array_id).map(|node_id| {
             let node = self.nodes[node_id.get()];
             TypedNodeRef::new(node_id, ClassMember::try_from(node).unwrap())
         })
@@ -555,7 +561,7 @@ impl TypedNodeArena {
         &self,
         array_id: NodeArrayId,
     ) -> impl Iterator<Item = TypedNodeRef<IdentifierNode>> + '_ {
-        self.node_array
+        self.array
             .iter(array_id)
             .map(|node_id| self.get_identifier_node(node_id))
     }

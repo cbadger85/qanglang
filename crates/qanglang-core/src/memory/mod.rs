@@ -20,5 +20,5 @@ pub use object::{
     InstanceObject, IntrinsicFn, IntrinsicKind, IntrinsicMethod, NativeFn, NativeFunctionObject,
     Upvalue, UpvalueSlot,
 };
-pub use string_interner::StringHandle;
+pub use string_interner::{StringHandle, StringInterner};
 pub use upvalue_overflow_arena::UpvalueOverflowArena;

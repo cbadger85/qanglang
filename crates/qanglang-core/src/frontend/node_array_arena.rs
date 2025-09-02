@@ -33,7 +33,7 @@ impl NodeArrayArena {
         NodeArrayId(index)
     }
 
-    pub fn insert_id(&mut self, array_id: NodeArrayId, node_id: NodeId) {
+    pub fn push(&mut self, array_id: NodeArrayId, node_id: NodeId) {
         let mut current_id = array_id;
 
         loop {

@@ -847,52 +847,11 @@ impl Vm {
                 }
                 OpCode::Closure => {
                     let constant = self.state.read_constant();
-                    let handle = match constant {
-                        Value::FunctionDecl(handle) => handle,
-                        _ => {
-                            return Err(QangRuntimeError::new(
-                                "Expected function.".to_string(),
-                                self.state.get_previous_loc(),
-                            ));
-                        }
-                    };
-                    let upvalue_count = self.alloc.get_function(handle).upvalue_count;
-                    let closure_handle = self.with_gc_check(|alloc| {
-                        alloc
-                            .closures
-                            .allocate_closure(ClosureObject::new(handle, upvalue_count))
-                    });
-
-                    // Push closure to stack immediately to ensure GC can see it as reachable
-                    push_value!(self, Value::Closure(closure_handle))?;
-
-                    for i in 0..self
-                        .alloc
-                        .closures
-                        .get_closure(closure_handle)
-                        .upvalue_count
-                    {
-                        let is_local = self.state.read_byte() != 0;
-                        let index = self.state.read_byte() as usize;
-
-                        if is_local {
-                            let stack_slot =
-                                self.state.frames[self.state.frame_count - 1].value_slot + index;
-                            self.capture_upvalue(stack_slot, closure_handle, i);
-                        } else {
-                            let current_closure_handle =
-                                self.state.frames[self.state.frame_count - 1].closure;
-                            if let Some(current_upvalue) = self
-                                .alloc
-                                .closures
-                                .get_upvalue(current_closure_handle, index)
-                            {
-                                self.alloc
-                                    .closures
-                                    .set_upvalue(closure_handle, i, current_upvalue);
-                            }
-                        }
-                    }
+                    self.create_closure(constant)?;
+                }
+                OpCode::Closure16 => {
+                    let constant = self.state.read_constant_16();
+                    self.create_closure(constant)?;
                 }
                 OpCode::GetUpvalue => {
                     let slot = self.state.read_byte() as usize;
@@ -941,7 +900,13 @@ impl Vm {
                 }
                 OpCode::Class => {
                     let identifier_handle = read_string!(self);
-                    let class_handle =
+                    let class_handle: crate::arena::Index =
+                        self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
+                    push_value!(self, Value::Class(class_handle))?
+                }
+                OpCode::Class16 => {
+                    let identifier_handle = read_string_16!(self);
+                    let class_handle: crate::arena::Index =
                         self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
                     push_value!(self, Value::Class(class_handle))?
                 }
@@ -1165,6 +1130,55 @@ impl Vm {
                 }
             };
         }
+    }
+
+    fn create_closure(&mut self, constant: Value) -> RuntimeResult<()> {
+        let handle = match constant {
+            Value::FunctionDecl(handle) => handle,
+            _ => {
+                return Err(QangRuntimeError::new(
+                    "Expected function.".to_string(),
+                    self.state.get_previous_loc(),
+                ));
+            }
+        };
+        let upvalue_count = self.alloc.get_function(handle).upvalue_count;
+        let closure_handle = self.with_gc_check(|alloc| {
+            alloc
+                .closures
+                .allocate_closure(ClosureObject::new(handle, upvalue_count))
+        });
+
+        // Push closure to stack immediately to ensure GC can see it as reachable
+        push_value!(self, Value::Closure(closure_handle))?;
+
+        for i in 0..self
+            .alloc
+            .closures
+            .get_closure(closure_handle)
+            .upvalue_count
+        {
+            let is_local = self.state.read_byte() != 0;
+            let index = self.state.read_byte() as usize;
+
+            if is_local {
+                let stack_slot = self.state.frames[self.state.frame_count - 1].value_slot + index;
+                self.capture_upvalue(stack_slot, closure_handle, i);
+            } else {
+                let current_closure_handle = self.state.frames[self.state.frame_count - 1].closure;
+                if let Some(current_upvalue) = self
+                    .alloc
+                    .closures
+                    .get_upvalue(current_closure_handle, index)
+                {
+                    self.alloc
+                        .closures
+                        .set_upvalue(closure_handle, i, current_upvalue);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn define_method(&mut self, name: StringHandle) -> RuntimeResult<()> {

@@ -737,7 +737,10 @@ impl<'a> Assembler<'a> {
         self.visit_block_statement(body_node, ctx)?;
         self.emit_return(func_expr.span);
 
-        let compiler = self.state.pop().expect("Unexpected end of artifact stack.");
+        let compiler = self
+            .state
+            .pop()
+            .expect("Expected AssemblerState stack to not be empty.");
         let function = compiler.function;
         let upvalue_count = function.upvalue_count;
 
@@ -1909,6 +1912,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             .map(|superclass| ctx.nodes.get_identifier_node(superclass));
         self.declare_variable(name.node.name, name.node.span)?;
         let class_handle = name.node.name;
+        // TODO this needs a Class16 variant as well
         let byte = self.make_constant(Value::String(class_handle), name.node.span)?;
         self.emit_opcode_and_byte(OpCode::Class, byte, name.node.span);
         self.define_variable(Some(class_handle), name.node.span)?;

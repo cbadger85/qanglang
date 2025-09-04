@@ -99,9 +99,45 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
 
             offset
         }
+        OpCode::Closure16 => {
+            let mut offset = offset;
+            offset += 1; // Skip the opcode itself
+            let high_byte = chunk.code[offset] as usize;
+            offset += 1;
+            let low_byte = chunk.code[offset] as usize;
+            offset += 1;
+            let constant = (high_byte << 8) | low_byte;
+
+            print!("{:<16} {:4} '", "OP_CLOSURE16", constant);
+            let value = chunk.constants[constant];
+            println!("{}'", value.to_display_string(allocator));
+            let function_obj = match value {
+                Value::FunctionDecl(handle) => Some(allocator.get_function(handle)),
+                _ => None,
+            };
+
+            if let Some(function) = function_obj {
+                for _j in 0..function.upvalue_count {
+                    let is_local = chunk.code[offset];
+                    offset += 1;
+                    let index = chunk.code[offset];
+                    offset += 1;
+
+                    println!(
+                        "{:04}      |                     {} {}",
+                        offset - 2,
+                        if is_local != 0 { "local" } else { "upvalue" },
+                        index
+                    );
+                }
+            }
+
+            offset
+        }
         OpCode::GetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
         OpCode::SetUpvalue => byte_instruction("OP_GET_UPVALUE", chunk, offset),
         OpCode::Class => constant_instruction("OP_CLASS", chunk, allocator, offset),
+        OpCode::Class16 => constant16_instruction("OP_CLASS16", chunk, allocator, offset),
         OpCode::GetProperty => {
             string_constant_instruction("OP_GET_PROPERTY", chunk, allocator, offset)
         }

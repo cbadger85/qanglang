@@ -237,7 +237,8 @@ pub struct AssignmentExprNode {
 /// Property access for assignment: call . IDENTIFIER
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PropertyAssignmentNode {
-    pub object: NodeId, // ExprNode
+    pub property: NodeId, // IdentifierNode
+    pub object: NodeId,   // ExprNode
     pub span: SourceSpan,
 }
 

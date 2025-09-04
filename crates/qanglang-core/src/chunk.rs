@@ -35,9 +35,11 @@ pub enum OpCode {
     Loop,
     Call,
     Closure,
+    // TODO Closure16
     GetUpvalue,
     SetUpvalue,
     CloseUpvalue,
+    // TODO Class16
     Class,
     GetProperty,
     SetProperty,

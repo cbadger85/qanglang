@@ -22,6 +22,10 @@ pub enum ErrorMessageFormat {
 pub struct CompilerError(Vec<QangSyntaxError>);
 
 impl CompilerError {
+    pub fn new(errors: Vec<QangSyntaxError>) -> Self {
+        Self(errors)
+    }
+
     pub fn all(&self) -> &[QangSyntaxError] {
         &self.0
     }
@@ -478,13 +482,13 @@ impl<'a> CompilerVisitor<'a> {
         self.emit_opcode(OpCode::Return, span);
     }
 
-    fn is_tail_call(&self, expr: &ast::Expr) -> bool {
-        matches!(expr, ast::Expr::Call(_))
-    }
+    // fn is_tail_call(&self, expr: &ast::Expr) -> bool {
+    //     matches!(expr, ast::Expr::Call(_))
+    // }
 
-    fn emit_tail_call(&mut self, arg_count: u8, span: SourceSpan) {
-        self.emit_opcode_and_byte(OpCode::TailCall, arg_count, span);
-    }
+    // fn emit_tail_call(&mut self, arg_count: u8, span: SourceSpan) {
+    //     self.emit_opcode_and_byte(OpCode::TailCall, arg_count, span);
+    // }
 
     fn begin_scope(&mut self) {
         self.compiler.scope_depth += 1;

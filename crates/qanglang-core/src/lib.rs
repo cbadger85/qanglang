@@ -1,5 +1,6 @@
 mod arena;
 pub mod ast;
+mod backend;
 mod chunk;
 mod compiler;
 mod debug;

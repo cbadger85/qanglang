@@ -109,6 +109,7 @@ impl TryFrom<AstNode> for StmtNode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ExprNode {
     Assignment(AssignmentExprNode),
     Pipe(PipeExprNode),
@@ -302,12 +303,13 @@ impl TryFrom<AstNode> for PrimaryNode {
     }
 }
 
-pub enum ClassMember {
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ClassMemberNode {
     Method(FunctionExprNode),
     Field(FieldDeclNode),
 }
 
-impl ClassMember {
+impl ClassMemberNode {
     pub fn span(&self) -> SourceSpan {
         match self {
             Self::Method(method) => method.span,
@@ -316,13 +318,13 @@ impl ClassMember {
     }
 }
 
-impl TryFrom<AstNode> for ClassMember {
+impl TryFrom<AstNode> for ClassMemberNode {
     type Error = NodeConversionError;
 
     fn try_from(value: AstNode) -> Result<Self, Self::Error> {
         match value {
-            AstNode::FieldDecl(field) => Ok(ClassMember::Field(field)),
-            AstNode::FunctionExpr(method) => Ok(ClassMember::Method(method)),
+            AstNode::FieldDecl(field) => Ok(ClassMemberNode::Field(field)),
+            AstNode::FunctionExpr(method) => Ok(ClassMemberNode::Method(method)),
             _ => Err(NodeConversionError(format!(
                 "Cannot convert {:?} to ClassMember",
                 value
@@ -331,6 +333,7 @@ impl TryFrom<AstNode> for ClassMember {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum LambdaBodyNode {
     Block(BlockStmtNode),
     Expr(ExprNode),
@@ -356,6 +359,7 @@ impl TryFrom<AstNode> for LambdaBodyNode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ForInitializerNode {
     VarDecl(VariableDeclNode),
     Expr(ExprNode),
@@ -382,12 +386,12 @@ impl TryFrom<AstNode> for ForInitializerNode {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct TypedNodeRef<T> {
+pub struct TypedNodeRef<T: Clone + Copy> {
     pub id: NodeId,
     pub node: T,
 }
 
-impl<T> TypedNodeRef<T> {
+impl<T: Clone + Copy> TypedNodeRef<T> {
     pub fn new(id: NodeId, node: T) -> Self {
         Self { id, node }
     }
@@ -506,12 +510,26 @@ impl TypedNodeArena {
         }
     }
 
+    pub fn get_obj_entry_node(&self, node_id: NodeId) -> TypedNodeRef<ObjectEntryNode> {
+        let node = self.nodes[node_id.get()];
+
+        match node {
+            AstNode::ObjectEntry(entry) => TypedNodeRef::new(node_id, entry),
+            _ => panic!("Expected ObjectEntryNode."),
+        }
+    }
+
     pub fn get_lambda_body_node(&self, node_id: NodeId) -> TypedNodeRef<LambdaBodyNode> {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())
     }
 
     pub fn get_for_initializer_node(&self, node_id: NodeId) -> TypedNodeRef<ForInitializerNode> {
+        let node = self.nodes[node_id.get()];
+        TypedNodeRef::new(node_id, node.try_into().unwrap())
+    }
+
+    pub fn get_class_member_node(&self, node_id: NodeId) -> TypedNodeRef<ClassMemberNode> {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())
     }
@@ -528,7 +546,7 @@ impl TypedNodeArena {
     pub fn iter_expr_nodes(
         &self,
         array_id: NodeArrayId,
-    ) -> impl Iterator<Item = TypedNodeRef<ExprNode>> + '_ {
+    ) -> impl Iterator<Item = TypedNodeRef<ExprNode>> + DoubleEndedIterator + '_ {
         self.array
             .iter(array_id)
             .map(|node_id| self.get_expr_node(node_id))
@@ -550,10 +568,10 @@ impl TypedNodeArena {
     pub fn iter_class_member_nodes(
         &self,
         array_id: NodeArrayId,
-    ) -> impl Iterator<Item = TypedNodeRef<ClassMember>> + '_ {
+    ) -> impl Iterator<Item = TypedNodeRef<ClassMemberNode>> + '_ {
         self.array.iter(array_id).map(|node_id| {
             let node = self.nodes[node_id.get()];
-            TypedNodeRef::new(node_id, ClassMember::try_from(node).unwrap())
+            TypedNodeRef::new(node_id, ClassMemberNode::try_from(node).unwrap())
         })
     }
 

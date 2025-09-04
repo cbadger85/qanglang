@@ -4,7 +4,7 @@ use crate::{
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
-        typed_node_arena::{NodeId, TypedNodeArena},
+        typed_node_arena::{ExprNode, NodeId, PrimaryNode, TypedNodeArena},
     },
     memory::StringInterner,
     tokenizer::{Token, TokenType, Tokenizer},
@@ -18,12 +18,16 @@ pub struct Parser<'a> {
     previous_token: Option<Token>,
     current_token: Option<Token>,
     errors: ErrorReporter,
-    strings: StringInterner,
+    strings: &'a mut StringInterner,
     nodes: TypedNodeArena,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source_map: &'a SourceMap, nodes: TypedNodeArena, strings: StringInterner) -> Self {
+    pub fn new(
+        source_map: &'a SourceMap,
+        nodes: TypedNodeArena,
+        strings: &'a mut StringInterner,
+    ) -> Self {
         let tokens = Tokenizer::new(source_map);
         let errors = ErrorReporter::new();
         let mut parser = Self {
@@ -40,8 +44,8 @@ impl<'a> Parser<'a> {
         parser
     }
 
-    pub fn into_parts(self) -> (ErrorReporter, StringInterner, TypedNodeArena) {
-        (self.errors, self.strings, self.nodes)
+    pub fn into_parts(self) -> (ErrorReporter, TypedNodeArena) {
+        (self.errors, self.nodes)
     }
 
     fn advance(&mut self) {
@@ -583,13 +587,13 @@ impl<'a> Parser<'a> {
         let condition = self.expression()?;
         self.consume(TokenType::RightParen, "Expected ')'.")?;
 
-        let block_stmt = self.block_statement()?;
-        let block_stmt_span = self.nodes.get_node(block_stmt).span();
-        let span = ast::SourceSpan::combine(start_span, block_stmt_span);
+        let stmt = self.statement()?;
+        let stmt_span = self.nodes.get_node(stmt).span();
+        let span = ast::SourceSpan::combine(start_span, stmt_span);
 
         let node_id = self.nodes.create_node(AstNode::WhileStmt(WhileStmtNode {
             condition,
-            body: block_stmt,
+            body: stmt,
             span,
         }));
 
@@ -629,7 +633,7 @@ impl<'a> Parser<'a> {
         };
         self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
 
-        let body = self.block_statement()?;
+        let body = self.statement()?;
         let body_span = self.nodes.get_node(body).span();
         let span = ast::SourceSpan::combine(start_span, body_span);
         let node_id = self.nodes.create_node(AstNode::ForStmt(ForStmtNode {
@@ -756,14 +760,43 @@ impl<'a> Parser<'a> {
             let value = self.expression()?;
             let span = self.nodes.get_node(value).span();
 
-            if !self.nodes.check_assignment_target_node(expr) {
-                return Err(QangSyntaxError::new(
-                    "Invalid assignment target".to_string(),
-                    span,
-                ));
-            }
+            let expr = self.nodes.get_expr_node(expr);
+            let target = match expr.node {
+                ExprNode::Primary(PrimaryNode::Identifier(_)) => expr.id,
+                ExprNode::Call(call_expr) => {
+                    let call_operation = *self.nodes.get_node(call_expr.operation);
 
-            let target = self.nodes.get_assignment_target_node(expr).id;
+                    match call_operation {
+                        AstNode::PropertyAccess(property) => self.nodes.create_node(
+                            AstNode::PropertyAssignment(PropertyAssignmentNode {
+                                property: property.identifier,
+                                object: call_expr.callee,
+                                span,
+                            }),
+                        ),
+                        AstNode::IndexAccess(index) => {
+                            self.nodes
+                                .create_node(AstNode::IndexAssignment(IndexAssignmentNode {
+                                    object: call_expr.callee,
+                                    index: index.index,
+                                    span,
+                                }))
+                        }
+                        _ => {
+                            return Err(QangSyntaxError::new(
+                                "Invalid assignment target".to_string(),
+                                span,
+                            ));
+                        }
+                    }
+                }
+                _ => {
+                    return Err(QangSyntaxError::new(
+                        "Invalid assignment target".to_string(),
+                        span,
+                    ));
+                }
+            };
 
             let node_id = self
                 .nodes

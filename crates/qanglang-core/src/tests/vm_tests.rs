@@ -1,6 +1,6 @@
 use crate::{
-    CompilerPipeline, HeapAllocator, SourceMap, Value, Vm, disassemble_program,
-    memory::ClosureHandle,
+    HeapAllocator, SourceMap, Value, Vm, backend::assembler::CompilerPipeline, disassemble_program,
+    frontend::typed_node_arena::TypedNodeArena, memory::ClosureHandle,
 };
 
 #[test]
@@ -13,8 +13,9 @@ fn test_globals() {
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             let vm = Vm::new(allocator);
@@ -45,8 +46,9 @@ fn test_string_concat() {
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             let vm = Vm::new(allocator);
             match vm.set_gc_status(false).set_debug(false).interpret(program) {
@@ -73,8 +75,9 @@ fn test_runtime_error_with_source_span() {
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    if let Ok(program) = CompilerPipeline::new(source_map, &mut allocator).run() {
+    if let Ok(program) = CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         match Vm::new(allocator).set_gc_status(false).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
@@ -100,8 +103,9 @@ fn test_pipe_operator() {
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -131,6 +135,7 @@ fn test_calling_functions_from_native() {
     "#;
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
     fn find_function_handle(identifier: &str, vm: &mut Vm) -> ClosureHandle {
         let function_identifier_handle = vm.alloc.strings.intern(identifier.into());
@@ -146,7 +151,7 @@ fn test_calling_functions_from_native() {
         }
     }
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             let mut vm = Vm::new(allocator).set_gc_status(false).set_debug(false);
             match vm.interpret(program) {
@@ -216,8 +221,9 @@ fn test_lambda_declaration() {
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -258,8 +264,9 @@ fn test_lambda_expression() {
   "#;
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -291,8 +298,9 @@ fn test_immediately_invoked_functional_expressions() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -356,8 +364,9 @@ fn test_closures() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -427,8 +436,9 @@ fn test_pipe_partial_application() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => match Vm::new(allocator)
             .set_gc_status(false)
             .set_debug(false)
@@ -475,8 +485,9 @@ fn test_pipe_chaining() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => match Vm::new(allocator)
             .set_gc_status(false)
             .set_debug(false)
@@ -505,8 +516,9 @@ fn test_native_function_with_return() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => match Vm::new(allocator)
             .set_gc_status(false)
             .set_debug(false)
@@ -537,8 +549,9 @@ fn test_class_declaration() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -585,8 +598,9 @@ fn test_class_declaration_with_methods() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -625,8 +639,9 @@ fn test_classing_fields_that_reference_functions() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -671,8 +686,9 @@ fn test_class_inheritance() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -715,8 +731,9 @@ fn test_class_inheritance_with_constructors() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -757,8 +774,9 @@ fn test_field_declarations() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -802,8 +820,9 @@ fn test_field_declarations_with_inheritance() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -840,8 +859,9 @@ fn test_intrinsic_methods() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -883,8 +903,9 @@ fn test_break_and_continue() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -916,8 +937,9 @@ fn test_break_continue_error_cases() {
 
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -940,8 +962,9 @@ fn test_break_continue_error_cases() {
 
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -974,8 +997,9 @@ fn test_break_error_cases_inside_nested_function() {
 
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -1002,8 +1026,9 @@ fn test_break_error_cases_inside_nested_function() {
 
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -1036,8 +1061,9 @@ fn test_continue_error_cases_inside_nested_function() {
 
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -1064,8 +1090,9 @@ fn test_continue_error_cases_inside_nested_function() {
 
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -1105,8 +1132,9 @@ fn test_null_methods() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1153,8 +1181,9 @@ fn test_arrays() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1196,8 +1225,9 @@ fn test_intrinsic_call_fn() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1241,8 +1271,9 @@ fn test_object_literals() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1279,8 +1310,9 @@ fn test_object_with_lambda_properties() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1341,8 +1373,9 @@ fn test_is_operator() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1386,8 +1419,9 @@ fn test_pipe_method() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1421,8 +1455,9 @@ fn test_pipe_with_intrinsic() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1468,8 +1503,9 @@ fn test_pipe_with_apply() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1514,8 +1550,9 @@ fn test_call_and_apply_intrinsics() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1548,8 +1585,9 @@ fn test_optional_properties() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1584,8 +1622,9 @@ fn test_optional_calling_of_methods() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1625,8 +1664,9 @@ fn test_class_init() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1681,8 +1721,9 @@ fn test_map_expression() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1744,8 +1785,9 @@ fn test_map_expression_with_boolean() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1806,8 +1848,9 @@ fn test_inheritance_with_n_methods(n: usize) -> Result<(), String> {
 
     let source_map = SourceMap::new(source);
     let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             let mut vm = Vm::new(allocator).set_gc_status(false).set_debug(false);
             match vm.interpret(program) {
@@ -1852,8 +1895,9 @@ fn test_class_without_methods() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1895,8 +1939,9 @@ fn test_identifier_constant_corruption() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // Enable disassembly to see the bytecode
             disassemble_program(&allocator);
@@ -1957,8 +2002,9 @@ fn test_fifth_method_debug() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // Enable disassembly to see the bytecode
             disassemble_program(&allocator);
@@ -2019,8 +2065,9 @@ fn test_debug_16bit_identifiers() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // Enable disassembly to see the bytecode
             disassemble_program(&allocator);
@@ -2074,8 +2121,9 @@ fn test_map_optional_expression() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -2119,8 +2167,9 @@ fn test_simple_16bit_super_call() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
 
@@ -2188,8 +2237,9 @@ fn test_op_constant_16() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
 
@@ -2225,8 +2275,9 @@ fn test_stdlib_call() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             disassemble_program(&allocator);
 
@@ -2313,8 +2364,9 @@ fn test_class_instance_inside_function() {
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new(source_map, &mut allocator, nodes).run() {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)

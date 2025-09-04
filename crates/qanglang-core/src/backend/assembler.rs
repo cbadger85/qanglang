@@ -745,18 +745,12 @@ impl<'a> Assembler<'a> {
         let upvalue_count = function.upvalue_count;
 
         let function_handle = self.allocator.allocate_function(function);
-        let constant_index = self
-            .current_chunk_mut()
-            .add_constant(Value::FunctionDecl(function_handle));
-        if constant_index <= u8::MAX as usize {
-            self.emit_opcode_and_byte(OpCode::Closure, constant_index as u8, identifier.span);
-        } else {
-            // TODO use Closure16 OpCode
-            return Err(QangSyntaxError::new(
-                "Function constant index too large".to_string(),
-                identifier.span,
-            ));
-        }
+        self.emit_constant_opcode(
+            OpCode::Closure,
+            OpCode::Closure16,
+            Value::FunctionDecl(function_handle),
+            identifier.span,
+        )?;
 
         for i in 0..upvalue_count {
             let upvalue = compiler.upvalues[i];
@@ -1591,17 +1585,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let upvalue_count = function.upvalue_count;
 
         let function_handle = self.allocator.allocate_function(function);
-        let constant_index = self
-            .current_chunk_mut()
-            .add_constant(Value::FunctionDecl(function_handle));
-        if constant_index <= u8::MAX as usize {
-            self.emit_opcode_and_byte(OpCode::Closure, constant_index as u8, lambda_expr.node.span);
-        } else {
-            return Err(QangSyntaxError::new(
-                "Function constant index too large".to_string(),
-                lambda_expr.node.span,
-            ));
-        }
+        self.emit_constant_opcode(
+            OpCode::Closure,
+            OpCode::Closure16,
+            Value::FunctionDecl(function_handle),
+            lambda_expr.node.span,
+        )?;
 
         for i in 0..upvalue_count {
             let upvalue = compiler.upvalues[i];

@@ -14,12 +14,12 @@ mod tokenizer;
 mod value;
 mod vm;
 
+pub use backend::assembler::CompilerPipeline;
 pub use chunk::SourceLocation;
-pub use compiler::{
-    CompilerError, CompilerPipeline, CompilerVisitor, ErrorMessageFormat, QangProgram,
-};
+pub use compiler::{CompilerError, CompilerVisitor, ErrorMessageFormat, QangProgram};
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{ErrorReporter, NativeFunctionError, QangRuntimeError, QangSyntaxError, Trace};
+pub use frontend::typed_node_arena::TypedNodeArena;
 pub use memory::{
     BoundIntrinsicHandle, BoundIntrinsicObject, BoundMethodHandle, BoundMethodObject, ClassHandle,
     ClassObject, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle,

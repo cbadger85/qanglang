@@ -1,6 +1,6 @@
 use crate::{
-    CompilerError, ErrorMessageFormat, ErrorReporter, FunctionHandle, QangProgram, QangSyntaxError,
-    SourceMap, Value,
+    CompilerError, ErrorMessageFormat, ErrorReporter, QangProgram, QangSyntaxError, SourceMap,
+    Value,
     ast::{self, SourceSpan},
     chunk::{Chunk, OpCode, SourceLocation},
     frontend::{
@@ -189,20 +189,14 @@ pub struct CompilerPipeline<'a> {
     source_map: SourceMap,
     allocator: &'a mut HeapAllocator,
     error_message_format: ErrorMessageFormat,
-    nodes: TypedNodeArena,
 }
 
 impl<'a> CompilerPipeline<'a> {
-    pub fn new(
-        source_map: SourceMap,
-        allocator: &'a mut HeapAllocator,
-        nodes: TypedNodeArena,
-    ) -> Self {
+    pub fn new(source_map: SourceMap, allocator: &'a mut HeapAllocator) -> Self {
         Self {
             source_map,
             allocator,
             error_message_format: ErrorMessageFormat::Minimal,
-            nodes,
         }
     }
 
@@ -473,13 +467,13 @@ impl<'a> Assembler<'a> {
         self.emit_opcode(OpCode::Return, span);
     }
 
-    fn is_tail_call(&self, expr: ExprNode) -> bool {
-        matches!(expr, ExprNode::Call(_))
-    }
+    // fn is_tail_call(&self, expr: ExprNode) -> bool {
+    //     matches!(expr, ExprNode::Call(_))
+    // }
 
-    fn emit_tail_call(&mut self, arg_count: u8, span: SourceSpan) {
-        self.emit_opcode_and_byte(OpCode::TailCall, arg_count, span);
-    }
+    // fn emit_tail_call(&mut self, arg_count: u8, span: SourceSpan) {
+    //     self.emit_opcode_and_byte(OpCode::TailCall, arg_count, span);
+    // }
 
     fn begin_scope(&mut self) {
         self.state.scope_depth += 1;

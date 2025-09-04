@@ -1,6 +1,6 @@
 use crate::{
     CompilerPipeline, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap, Value, Vm,
-    backend::assembler::STACK_MAX, peek_value, pop_value, push_value, vm::RuntimeResult,
+    backend::assembler::STACK_MAX, backend::vm::RuntimeResult, peek_value, pop_value, push_value,
 };
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {

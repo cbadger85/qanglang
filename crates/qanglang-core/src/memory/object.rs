@@ -1,6 +1,6 @@
 use crate::{
     ClassHandle, ClosureHandle, FunctionHandle, HashMapHandle, NativeFunctionError, Value, Vm,
-    chunk::Chunk,
+    backend::chunk::Chunk,
     memory::{
         StringHandle,
         closure_arena::{INLINE_UPVALUE_COUNT, OverflowHandle},

@@ -393,6 +393,7 @@ impl<T: Clone + Copy> TypedNodeRef<T> {
     }
 }
 
+#[derive(Default, Clone)]
 pub struct TypedNodeArena {
     nodes: Arena<AstNode>,
     pub array: NodeArrayArena,

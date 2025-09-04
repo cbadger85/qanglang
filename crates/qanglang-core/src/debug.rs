@@ -1,6 +1,6 @@
 use crate::{
     HeapAllocator, Value,
-    chunk::{Chunk, OpCode},
+    backend::chunk::{Chunk, OpCode},
 };
 
 #[allow(dead_code)]

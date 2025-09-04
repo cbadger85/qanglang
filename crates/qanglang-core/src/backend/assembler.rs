@@ -1,22 +1,24 @@
 use crate::{
     ErrorReporter, FunctionHandle, QangSyntaxError, SourceMap, Value,
-    chunk::{Chunk, OpCode, SourceLocation},
+    backend::{
+        chunk::{Chunk, OpCode, SourceLocation},
+        value::{
+            ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
+            NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        },
+    },
     error::{CompilerError, ErrorMessageFormat},
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
         nodes::*,
         parse::Parser,
+        source::DEFALT_SOURCE_MAP,
         typed_node_arena::{
             AssignmentTargetNode, CallOperationNode, ClassMemberNode, DeclNode, ExprNode,
             ForInitializerNode, LambdaBodyNode, NodeId, PrimaryNode, TypedNodeArena, TypedNodeRef,
         },
     },
     memory::{FunctionObject, HeapAllocator, StringHandle},
-    source::DEFALT_SOURCE_MAP,
-    value::{
-        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
-    },
 };
 
 #[derive(Debug, Clone, PartialEq)]

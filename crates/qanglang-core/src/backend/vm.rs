@@ -10,23 +10,26 @@ use crate::{
     BoundIntrinsicObject, BoundMethodObject, ClassHandle, HashMapHandle, HeapAllocator, NativeFn,
     NativeFunctionError, NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError,
     Value,
-    backend::assembler::{FRAME_MAX, STACK_MAX},
-    chunk::{OpCode, SourceLocation},
+    backend::{
+        assembler::{FRAME_MAX, STACK_MAX},
+        chunk::{OpCode, SourceLocation},
+        qang_std::{
+            qang_array_concat, qang_array_construct, qang_array_get, qang_array_length,
+            qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice, qang_assert,
+            qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
+            qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_string,
+            qang_typeof,
+        },
+        value::{
+            ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
+            NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        },
+    },
     debug_log,
     error::Trace,
     memory::{
         ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, StringHandle,
         UpvalueSlot,
-    },
-    qang_std::{
-        qang_array_concat, qang_array_construct, qang_array_get, qang_array_length, qang_array_pop,
-        qang_array_push, qang_array_reverse, qang_array_slice, qang_assert, qang_assert_eq,
-        qang_assert_throws, qang_hash, qang_print, qang_println, qang_string_to_lowercase,
-        qang_string_to_uppercase, qang_system_time, qang_to_string, qang_typeof,
-    },
-    value::{
-        ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-        NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
 

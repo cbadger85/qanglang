@@ -8,7 +8,7 @@ mod tests {
         FunctionObject {
             name: 0,
             arity: 0,
-            chunk: crate::chunk::Chunk::new(),
+            chunk: crate::backend::chunk::Chunk::new(),
             upvalue_count: 0,
         }
     }

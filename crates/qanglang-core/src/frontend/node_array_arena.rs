@@ -12,6 +12,8 @@ struct NodeArrayChunk {
     size: usize,
     next_chunk: Option<NodeArrayId>,
 }
+
+#[derive(Default, Clone)]
 pub struct NodeArrayArena {
     node_ids: Arena<NodeArrayChunk>,
 }

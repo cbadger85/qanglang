@@ -1,4 +1,4 @@
-use crate::{SourceMap, chunk::SourceLocation, nodes::SourceSpan};
+use crate::{SourceMap, backend::chunk::SourceLocation, nodes::SourceSpan};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ErrorMessageFormat {

@@ -3,10 +3,10 @@ use crate::{
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
+        tokenizer::{Token, TokenType, Tokenizer},
         typed_node_arena::{ExprNode, NodeId, PrimaryNode, TypedNodeArena},
     },
     memory::StringInterner,
-    tokenizer::{Token, TokenType, Tokenizer},
 };
 
 type ParseResult<T> = Result<T, QangSyntaxError>;
@@ -840,7 +840,7 @@ impl<'a> Parser<'a> {
 
 mod expression_parser {
     use super::*;
-    use crate::{frontend::node_array_arena::NodeArrayId, tokenizer};
+    use crate::{frontend::node_array_arena::NodeArrayId, frontend::tokenizer};
 
     #[derive(Debug, PartialEq, PartialOrd)]
     #[repr(u8)]

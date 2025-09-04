@@ -1,10 +1,6 @@
 use crate::{
     arena::{Arena, Index},
-    ast::SourceSpan,
-    frontend::{
-        node_array_arena::{NodeArrayArena, NodeArrayId},
-        nodes::*,
-    },
+    frontend::{node_array_arena::NodeArrayArena, nodes::*},
 };
 use std::convert::TryFrom;
 
@@ -532,55 +528,5 @@ impl TypedNodeArena {
     pub fn get_class_member_node(&self, node_id: NodeId) -> TypedNodeRef<ClassMemberNode> {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())
-    }
-
-    pub fn iter_decl_nodes(
-        &self,
-        array_id: NodeArrayId,
-    ) -> impl Iterator<Item = TypedNodeRef<DeclNode>> + '_ {
-        self.array
-            .iter(array_id)
-            .map(|node_id| self.get_decl_node(node_id))
-    }
-
-    pub fn iter_expr_nodes(
-        &self,
-        array_id: NodeArrayId,
-    ) -> impl Iterator<Item = TypedNodeRef<ExprNode>> + DoubleEndedIterator + '_ {
-        self.array
-            .iter(array_id)
-            .map(|node_id| self.get_expr_node(node_id))
-    }
-
-    pub fn iter_object_entry_nodes(
-        &self,
-        array_id: NodeArrayId,
-    ) -> impl Iterator<Item = TypedNodeRef<ObjectEntryNode>> + '_ {
-        self.array.iter(array_id).map(|node_id| {
-            let node = self.nodes[node_id.get()];
-            match node {
-                AstNode::ObjectEntry(entry) => TypedNodeRef::new(node_id, entry),
-                _ => panic!("Expected ObjectEntryNode"),
-            }
-        })
-    }
-
-    pub fn iter_class_member_nodes(
-        &self,
-        array_id: NodeArrayId,
-    ) -> impl Iterator<Item = TypedNodeRef<ClassMemberNode>> + '_ {
-        self.array.iter(array_id).map(|node_id| {
-            let node = self.nodes[node_id.get()];
-            TypedNodeRef::new(node_id, ClassMemberNode::try_from(node).unwrap())
-        })
-    }
-
-    pub fn iter_identifier_nodes(
-        &self,
-        array_id: NodeArrayId,
-    ) -> impl Iterator<Item = TypedNodeRef<IdentifierNode>> + '_ {
-        self.array
-            .iter(array_id)
-            .map(|node_id| self.get_identifier_node(node_id))
     }
 }

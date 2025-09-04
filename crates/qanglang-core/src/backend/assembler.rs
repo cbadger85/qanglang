@@ -1,8 +1,7 @@
 use crate::{
-    CompilerError, ErrorMessageFormat, ErrorReporter, QangProgram, QangSyntaxError, SourceMap,
-    Value,
-    ast::{self, SourceSpan},
+    ErrorReporter, FunctionHandle, QangSyntaxError, SourceMap, Value,
     chunk::{Chunk, OpCode, SourceLocation},
+    error::{CompilerError, ErrorMessageFormat},
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
         nodes::*,
@@ -19,6 +18,19 @@ use crate::{
         NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
     },
 };
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QangProgram(FunctionHandle);
+
+impl QangProgram {
+    pub fn new(handle: FunctionHandle) -> Self {
+        Self(handle)
+    }
+
+    pub fn into_handle(self) -> FunctionHandle {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 struct LoopContext {
@@ -704,14 +716,19 @@ impl<'a> Assembler<'a> {
             ));
         }
 
-        for TypedNodeRef { id: _, node } in ctx.nodes.iter_identifier_nodes(func_expr.parameters) {
-            let handle = if self.parse_variable(node.name, node.span)? {
-                Some(node.name)
-            } else {
-                None
-            };
+        let length = ctx.nodes.array.size(func_expr.parameters);
 
-            self.define_variable(handle, node.span)?;
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(func_expr.parameters, i) {
+                let node = ctx.nodes.get_identifier_node(node_id).node;
+                let handle = if self.parse_variable(node.name, node.span)? {
+                    Some(node.name)
+                } else {
+                    None
+                };
+
+                self.define_variable(handle, node.span)?;
+            }
         }
 
         let body_node = ctx.nodes.get_block_stmt_node(func_expr.body);
@@ -752,16 +769,16 @@ impl<'a> Assembler<'a> {
 
     fn emit_compound_assignment_op(
         &mut self,
-        operator: ast::AssignmentOperator,
+        operator: AssignmentOperator,
         span: SourceSpan,
     ) -> Result<(), QangSyntaxError> {
         let opcode = match operator {
-            ast::AssignmentOperator::Assign => unreachable!(),
-            ast::AssignmentOperator::AddAssign => OpCode::Add,
-            ast::AssignmentOperator::SubtractAssign => OpCode::Subtract,
-            ast::AssignmentOperator::MultiplyAssign => OpCode::Multiply,
-            ast::AssignmentOperator::DivideAssign => OpCode::Divide,
-            ast::AssignmentOperator::ModuloAssign => OpCode::Modulo,
+            AssignmentOperator::Assign => unreachable!(),
+            AssignmentOperator::AddAssign => OpCode::Add,
+            AssignmentOperator::SubtractAssign => OpCode::Subtract,
+            AssignmentOperator::MultiplyAssign => OpCode::Multiply,
+            AssignmentOperator::DivideAssign => OpCode::Divide,
+            AssignmentOperator::ModuloAssign => OpCode::Modulo,
         };
 
         self.emit_opcode(opcode, span);
@@ -942,7 +959,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.visit_expression(right, ctx)?;
         self.emit_opcode(equality.node.operator.into(), equality.node.span);
 
-        if let ast::EqualityOperator::NotEqual = equality.node.operator {
+        if let EqualityOperator::NotEqual = equality.node.operator {
             self.emit_opcode(OpCode::Not, equality.node.span);
         }
         Ok(())
@@ -996,7 +1013,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             .node;
         let value = ctx.nodes.get_expr_node(assignment.node.value);
         match assignment.node.operator {
-            ast::AssignmentOperator::Assign => match assignment_target {
+            AssignmentOperator::Assign => match assignment_target {
                 AssignmentTargetNode::Identifier(identifier) => {
                     self.visit_expression(value, ctx)?;
                     self.handle_variable(identifier.name, identifier.span, true)?;

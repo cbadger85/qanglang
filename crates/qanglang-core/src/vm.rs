@@ -10,8 +10,8 @@ use crate::{
     BoundIntrinsicObject, BoundMethodObject, ClassHandle, HashMapHandle, HeapAllocator, NativeFn,
     NativeFunctionError, NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError,
     Value,
+    backend::assembler::{FRAME_MAX, STACK_MAX},
     chunk::{OpCode, SourceLocation},
-    compiler::{FRAME_MAX, STACK_MAX},
     debug_log,
     error::Trace,
     memory::{

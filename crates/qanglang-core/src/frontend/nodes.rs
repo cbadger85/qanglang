@@ -1,11 +1,78 @@
 use crate::{
-    StringHandle,
-    ast::{
-        AssignmentOperator, ComparisonOperator, EqualityOperator, FactorOperator, SourceSpan,
-        TermOperator, UnaryOperator,
-    },
+    StringHandle, Token,
     frontend::{node_array_arena::NodeArrayId, typed_node_arena::NodeId},
 };
+
+#[derive(Debug, Clone, PartialEq, Default, Copy)]
+pub struct SourceSpan {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl SourceSpan {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+
+    pub fn from_token(token: &Token) -> Self {
+        Self {
+            start: token.start,
+            end: token.end,
+        }
+    }
+
+    pub fn combine(start: SourceSpan, end: SourceSpan) -> Self {
+        Self {
+            start: start.start,
+            end: end.end,
+        }
+    }
+}
+
+/// Assignment operators
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum AssignmentOperator {
+    Assign,         // =
+    AddAssign,      // +=
+    SubtractAssign, // -=
+    MultiplyAssign, // *=
+    DivideAssign,   // /=
+    ModuloAssign,   // %=
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ComparisonOperator {
+    Greater,      // >
+    GreaterEqual, // >=
+    Less,         // <
+    LessEqual,    // <=
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum EqualityOperator {
+    Equal,    // ==
+    NotEqual, // !=
+    Is,       // is
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum FactorOperator {
+    Divide,   // /
+    Multiply, // *
+    Modulo,   // %
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum TermOperator {
+    Add,      // +
+    Subtract, // -
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum UnaryOperator {
+    Minus, // -
+    Not,   // !
+}
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum AstNode {

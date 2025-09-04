@@ -1,4 +1,7 @@
-use crate::{Value, ast};
+use crate::{
+    Value,
+    nodes::{ComparisonOperator, EqualityOperator, FactorOperator, TermOperator, UnaryOperator},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
@@ -141,49 +144,49 @@ impl From<bool> for OpCode {
     }
 }
 
-impl From<ast::ComparisonOperator> for OpCode {
-    fn from(value: ast::ComparisonOperator) -> Self {
+impl From<ComparisonOperator> for OpCode {
+    fn from(value: ComparisonOperator) -> Self {
         match value {
-            ast::ComparisonOperator::Greater => OpCode::Greater,
-            ast::ComparisonOperator::Less => OpCode::Less,
-            ast::ComparisonOperator::GreaterEqual => OpCode::GreaterEqual,
-            ast::ComparisonOperator::LessEqual => OpCode::LessEqual,
+            ComparisonOperator::Greater => OpCode::Greater,
+            ComparisonOperator::Less => OpCode::Less,
+            ComparisonOperator::GreaterEqual => OpCode::GreaterEqual,
+            ComparisonOperator::LessEqual => OpCode::LessEqual,
         }
     }
 }
 
-impl From<ast::TermOperator> for OpCode {
-    fn from(value: ast::TermOperator) -> Self {
+impl From<TermOperator> for OpCode {
+    fn from(value: TermOperator) -> Self {
         match value {
-            ast::TermOperator::Add => OpCode::Add,
-            ast::TermOperator::Subtract => OpCode::Subtract,
+            TermOperator::Add => OpCode::Add,
+            TermOperator::Subtract => OpCode::Subtract,
         }
     }
 }
 
-impl From<ast::FactorOperator> for OpCode {
-    fn from(value: ast::FactorOperator) -> Self {
+impl From<FactorOperator> for OpCode {
+    fn from(value: FactorOperator) -> Self {
         match value {
-            ast::FactorOperator::Divide => OpCode::Divide,
-            ast::FactorOperator::Multiply => OpCode::Multiply,
-            ast::FactorOperator::Modulo => OpCode::Modulo,
+            FactorOperator::Divide => OpCode::Divide,
+            FactorOperator::Multiply => OpCode::Multiply,
+            FactorOperator::Modulo => OpCode::Modulo,
         }
     }
 }
 
-impl From<ast::UnaryOperator> for OpCode {
-    fn from(value: ast::UnaryOperator) -> Self {
+impl From<UnaryOperator> for OpCode {
+    fn from(value: UnaryOperator) -> Self {
         match value {
-            ast::UnaryOperator::Minus => OpCode::Negate,
-            ast::UnaryOperator::Not => OpCode::Not,
+            UnaryOperator::Minus => OpCode::Negate,
+            UnaryOperator::Not => OpCode::Not,
         }
     }
 }
 
-impl From<ast::EqualityOperator> for OpCode {
-    fn from(value: ast::EqualityOperator) -> Self {
+impl From<EqualityOperator> for OpCode {
+    fn from(value: EqualityOperator) -> Self {
         match value {
-            ast::EqualityOperator::Is => OpCode::Is,
+            EqualityOperator::Is => OpCode::Is,
             _ => OpCode::Equal,
         }
     }

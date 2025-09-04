@@ -1,4 +1,28 @@
-use crate::{SourceMap, ast::SourceSpan, chunk::SourceLocation};
+use crate::{SourceMap, chunk::SourceLocation, nodes::SourceSpan};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ErrorMessageFormat {
+    Verbose,
+    Compact,
+    Minimal,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompilerError(Vec<QangSyntaxError>);
+
+impl CompilerError {
+    pub fn new(errors: Vec<QangSyntaxError>) -> Self {
+        Self(errors)
+    }
+
+    pub fn all(&self) -> &[QangSyntaxError] {
+        &self.0
+    }
+
+    pub fn into_errors(self) -> Vec<QangSyntaxError> {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangSyntaxError {

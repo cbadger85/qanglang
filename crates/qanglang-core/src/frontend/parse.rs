@@ -1,6 +1,5 @@
 use crate::{
     ErrorReporter, QangSyntaxError, SourceMap,
-    ast::{self, SourceSpan},
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
@@ -73,7 +72,7 @@ impl<'a> Parser<'a> {
         let span = self
             .current_token
             .as_ref()
-            .map(ast::SourceSpan::from_token)
+            .map(SourceSpan::from_token)
             .unwrap_or_default();
 
         if !self.is_at_end() {
@@ -107,31 +106,29 @@ impl<'a> Parser<'a> {
             .unwrap_or("Tokenization error")
             .to_string();
 
-        self.errors.report_error(QangSyntaxError::new(
-            message,
-            ast::SourceSpan::from_token(token),
-        ));
+        self.errors
+            .report_error(QangSyntaxError::new(message, SourceSpan::from_token(token)));
     }
 
-    fn get_current_span(&self) -> ast::SourceSpan {
+    fn get_current_span(&self) -> SourceSpan {
         self.current_token
             .as_ref()
-            .map(ast::SourceSpan::from_token)
+            .map(SourceSpan::from_token)
             .unwrap_or_default()
     }
 
-    fn get_previous_span(&self) -> ast::SourceSpan {
+    fn get_previous_span(&self) -> SourceSpan {
         self.previous_token
             .as_ref()
-            .map(ast::SourceSpan::from_token)
+            .map(SourceSpan::from_token)
             .unwrap_or_default()
     }
 
     fn get_identifier(&mut self) -> ParseResult<NodeId> {
         let token = self.previous_token.as_ref();
         let span = token
-            .map(ast::SourceSpan::from_token)
-            .unwrap_or(ast::SourceSpan { start: 0, end: 0 });
+            .map(SourceSpan::from_token)
+            .unwrap_or(SourceSpan { start: 0, end: 0 });
 
         if let Some(token) = token {
             let name = token.lexeme(self.source_map);
@@ -321,7 +318,7 @@ impl<'a> Parser<'a> {
 
         self.nodes.create_node(AstNode::Program(ProgramNode {
             decls,
-            span: ast::SourceSpan::combine(start_span, end_span),
+            span: SourceSpan::combine(start_span, end_span),
         }))
     }
 
@@ -373,7 +370,7 @@ impl<'a> Parser<'a> {
         )?;
 
         let semicolon_span = self.get_previous_span();
-        let span = ast::SourceSpan::combine(var_span, semicolon_span);
+        let span = SourceSpan::combine(var_span, semicolon_span);
 
         let node_id = self
             .nodes
@@ -409,7 +406,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
         let end_span = self.get_previous_span();
-        let span = ast::SourceSpan::combine(start_span, end_span);
+        let span = SourceSpan::combine(start_span, end_span);
 
         let node_id = self.nodes.create_node(AstNode::Class(ClassDeclNode {
             name,
@@ -454,7 +451,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expect ';' after field declaration.")?;
         let end_span = self.get_previous_span();
-        let span = ast::SourceSpan::combine(start_span, end_span);
+        let span = SourceSpan::combine(start_span, end_span);
 
         let node_id = self.nodes.create_node(AstNode::FieldDecl(FieldDeclNode {
             name,
@@ -468,7 +465,7 @@ impl<'a> Parser<'a> {
     fn function_declaration(&mut self) -> ParseResult<NodeId> {
         let function_expr = self.function_expression()?;
         let function_expr_span = self.nodes.get_func_expr_node(function_expr).node.span;
-        let span = ast::SourceSpan::combine(self.get_previous_span(), function_expr_span);
+        let span = SourceSpan::combine(self.get_previous_span(), function_expr_span);
 
         let node_id = self
             .nodes
@@ -520,7 +517,7 @@ impl<'a> Parser<'a> {
 
         let node_id = self.nodes.create_node(AstNode::BlockStmt(BlockStmtNode {
             decls,
-            span: ast::SourceSpan::combine(start_span, end_span),
+            span: SourceSpan::combine(start_span, end_span),
         }));
 
         Ok(node_id)
@@ -538,11 +535,11 @@ impl<'a> Parser<'a> {
         let (else_branch, span) = if self.match_token(TokenType::Else) {
             let else_stmt = self.statement()?;
             let else_stmt_span = self.nodes.get_node(else_stmt).span();
-            let span = ast::SourceSpan::combine(start_span, else_stmt_span);
+            let span = SourceSpan::combine(start_span, else_stmt_span);
             (Some(else_stmt), span)
         } else {
             let then_branch_span = self.nodes.get_node(then_branch).span();
-            (None, ast::SourceSpan::combine(start_span, then_branch_span))
+            (None, SourceSpan::combine(start_span, then_branch_span))
         };
 
         let node_id = self.nodes.create_node(AstNode::IfStmt(IfStmtNode {
@@ -589,7 +586,7 @@ impl<'a> Parser<'a> {
 
         let stmt = self.statement()?;
         let stmt_span = self.nodes.get_node(stmt).span();
-        let span = ast::SourceSpan::combine(start_span, stmt_span);
+        let span = SourceSpan::combine(start_span, stmt_span);
 
         let node_id = self.nodes.create_node(AstNode::WhileStmt(WhileStmtNode {
             condition,
@@ -635,7 +632,7 @@ impl<'a> Parser<'a> {
 
         let body = self.statement()?;
         let body_span = self.nodes.get_node(body).span();
-        let span = ast::SourceSpan::combine(start_span, body_span);
+        let span = SourceSpan::combine(start_span, body_span);
         let node_id = self.nodes.create_node(AstNode::ForStmt(ForStmtNode {
             initializer,
             condition,
@@ -651,7 +648,7 @@ impl<'a> Parser<'a> {
         let start_span = self.get_current_span();
         self.advance();
         self.consume(TokenType::Semicolon, "Expected ';'.")?;
-        let span = ast::SourceSpan::combine(start_span, self.get_previous_span());
+        let span = SourceSpan::combine(start_span, self.get_previous_span());
 
         let node_id = self
             .nodes
@@ -664,7 +661,7 @@ impl<'a> Parser<'a> {
         let start_span = self.get_current_span();
         self.advance();
         self.consume(TokenType::Semicolon, "Expected ';'.")?;
-        let span = ast::SourceSpan::combine(start_span, self.get_previous_span());
+        let span = SourceSpan::combine(start_span, self.get_previous_span());
 
         let node_id = self
             .nodes
@@ -685,7 +682,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
         let end_span = self.get_previous_span();
-        let span = ast::SourceSpan::combine(start_span, end_span);
+        let span = SourceSpan::combine(start_span, end_span);
 
         let node_id = self
             .nodes
@@ -705,7 +702,7 @@ impl<'a> Parser<'a> {
 
         let node_id = self.nodes.create_node(AstNode::ExprStmt(ExprStmtNode {
             expr,
-            span: ast::SourceSpan::combine(expr_span, semicolon_span),
+            span: SourceSpan::combine(expr_span, semicolon_span),
         }));
 
         Ok(node_id)
@@ -723,7 +720,7 @@ impl<'a> Parser<'a> {
         let parameters = self.argument_parameters()?;
         let body = self.block_statement()?;
         let body_span = self.nodes.get_node(body).span();
-        let span = ast::SourceSpan::combine(start_span, body_span);
+        let span = SourceSpan::combine(start_span, body_span);
 
         let node_id = self
             .nodes
@@ -741,17 +738,17 @@ impl<'a> Parser<'a> {
         let expr = expression_parser::parse(self, expression_parser::Precedence::Ternary)?;
 
         let assignment_operator = if self.match_token(TokenType::Equals) {
-            Some(ast::AssignmentOperator::Assign)
+            Some(AssignmentOperator::Assign)
         } else if self.match_token(TokenType::PlusAssign) {
-            Some(ast::AssignmentOperator::AddAssign)
+            Some(AssignmentOperator::AddAssign)
         } else if self.match_token(TokenType::MinusAssign) {
-            Some(ast::AssignmentOperator::SubtractAssign)
+            Some(AssignmentOperator::SubtractAssign)
         } else if self.match_token(TokenType::StarAssign) {
-            Some(ast::AssignmentOperator::MultiplyAssign)
+            Some(AssignmentOperator::MultiplyAssign)
         } else if self.match_token(TokenType::SlashAssign) {
-            Some(ast::AssignmentOperator::DivideAssign)
+            Some(AssignmentOperator::DivideAssign)
         } else if self.match_token(TokenType::ModuloAssign) {
-            Some(ast::AssignmentOperator::ModuloAssign)
+            Some(AssignmentOperator::ModuloAssign)
         } else {
             None
         };
@@ -894,7 +891,7 @@ mod expression_parser {
     fn number(parser: &mut Parser) -> ParseResult<NodeId> {
         let token = get_previous_token(parser);
 
-        let span = ast::SourceSpan::from_token(token);
+        let span = SourceSpan::from_token(token);
 
         let value = token
             .lexeme(parser.source_map)
@@ -977,7 +974,7 @@ mod expression_parser {
             parser.expression()?
         };
         let body_span = parser.nodes.get_node(body).span();
-        let span = ast::SourceSpan::combine(start_span, body_span);
+        let span = SourceSpan::combine(start_span, body_span);
 
         let node_id = parser
             .nodes
@@ -993,22 +990,22 @@ mod expression_parser {
     fn unary(parser: &mut Parser) -> ParseResult<NodeId> {
         let token = get_previous_token(parser);
         let operator_type = token.token_type;
-        let operator_span = ast::SourceSpan::from_token(token);
+        let operator_span = SourceSpan::from_token(token);
         let operand = parse(parser, Precedence::Unary)?;
         let operand_span = parser.nodes.get_node(operand).span();
 
-        let span = ast::SourceSpan::combine(operator_span, operand_span);
+        let span = SourceSpan::combine(operator_span, operand_span);
         match operator_type {
             tokenizer::TokenType::Minus => {
                 Ok(parser.nodes.create_node(AstNode::UnaryExpr(UnaryExprNode {
-                    operator: ast::UnaryOperator::Minus,
+                    operator: UnaryOperator::Minus,
                     operand,
                     span,
                 })))
             }
             tokenizer::TokenType::Bang => {
                 Ok(parser.nodes.create_node(AstNode::UnaryExpr(UnaryExprNode {
-                    operator: ast::UnaryOperator::Not,
+                    operator: UnaryOperator::Not,
                     operand,
                     span,
                 })))
@@ -1023,7 +1020,7 @@ mod expression_parser {
     fn literal(parser: &mut Parser) -> ParseResult<NodeId> {
         let token = get_previous_token(parser);
 
-        let span = ast::SourceSpan::from_token(token);
+        let span = SourceSpan::from_token(token);
 
         match token.token_type {
             tokenizer::TokenType::False => {
@@ -1063,7 +1060,7 @@ mod expression_parser {
 
                 let method_name = parser.get_identifier()?;
                 let method_name_span = parser.nodes.get_node(method_name).span();
-                let method_span = ast::SourceSpan::combine(span, method_name_span);
+                let method_span = SourceSpan::combine(span, method_name_span);
                 let node_id = parser.nodes.create_node(AstNode::SuperExpr(SuperExprNode {
                     method: method_name,
                     span: method_span,
@@ -1114,7 +1111,7 @@ mod expression_parser {
 
         let value = token.lexeme(parser.source_map);
 
-        let span = ast::SourceSpan::from_token(token);
+        let span = SourceSpan::from_token(token);
 
         let raw_content = value[1..value.len() - 1].iter().collect::<String>();
 
@@ -1143,7 +1140,7 @@ mod expression_parser {
         if parser.check(tokenizer::TokenType::RightSquareBracket) {
             parser.advance();
             let end_span = parser.get_previous_span();
-            let span = ast::SourceSpan::combine(start_span, end_span);
+            let span = SourceSpan::combine(start_span, end_span);
             let node_id =
                 parser
                     .nodes
@@ -1178,7 +1175,7 @@ mod expression_parser {
         )?;
 
         let end_span = parser.get_previous_span();
-        let span = ast::SourceSpan::combine(start_span, end_span);
+        let span = SourceSpan::combine(start_span, end_span);
         let node_id = parser
             .nodes
             .create_node(AstNode::ArrayLiteralExpr(ArrayLiteralExprNode {
@@ -1205,7 +1202,7 @@ mod expression_parser {
         let body = expression_parser::parse(parser, Precedence::Ternary)?;
         parser.consume(TokenType::Bar, "Expect '|' after map body.")?;
 
-        let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
+        let span = SourceSpan::combine(start_span, parser.get_previous_span());
 
         let operation = parser.nodes.create_node(AstNode::MapExpr(MapExprNode {
             parameter,
@@ -1240,7 +1237,7 @@ mod expression_parser {
 
         parser.consume(TokenType::Bar, "Expect '|' after map body.")?;
 
-        let span = ast::SourceSpan::combine(start_span, parser.get_previous_span());
+        let span = SourceSpan::combine(start_span, parser.get_previous_span());
 
         let operation = parser
             .nodes
@@ -1265,7 +1262,7 @@ mod expression_parser {
         if parser.check(tokenizer::TokenType::DoubleRightBrace) {
             parser.advance();
             let end_span = parser.get_previous_span();
-            let span = ast::SourceSpan::combine(start_span, end_span);
+            let span = SourceSpan::combine(start_span, end_span);
             let node_id =
                 parser
                     .nodes
@@ -1334,7 +1331,7 @@ mod expression_parser {
         if rule.is_empty() {
             return Err(QangSyntaxError::new(
                 "Unexpected token.".to_string(),
-                ast::SourceSpan::from_token(token),
+                SourceSpan::from_token(token),
             ));
         }
 
@@ -1342,13 +1339,13 @@ mod expression_parser {
 
         let right = parse(parser, precedence)?;
         let right_span = parser.nodes.get_node(right).span();
-        let span = ast::SourceSpan::new(span_start, right_span.end);
+        let span = SourceSpan::new(span_start, right_span.end);
 
         match token_type {
             tokenizer::TokenType::Plus => {
                 Ok(parser.nodes.create_node(AstNode::TermExpr(TermExprNode {
                     left,
-                    operator: ast::TermOperator::Add,
+                    operator: TermOperator::Add,
                     right,
                     span,
                 })))
@@ -1356,7 +1353,7 @@ mod expression_parser {
             tokenizer::TokenType::Minus => {
                 Ok(parser.nodes.create_node(AstNode::TermExpr(TermExprNode {
                     left,
-                    operator: ast::TermOperator::Subtract,
+                    operator: TermOperator::Subtract,
                     right,
                     span,
                 })))
@@ -1366,7 +1363,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::FactorExpr(FactorExprNode {
                         left,
-                        operator: ast::FactorOperator::Multiply,
+                        operator: FactorOperator::Multiply,
                         right,
                         span,
                     })))
@@ -1376,7 +1373,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::FactorExpr(FactorExprNode {
                         left,
-                        operator: ast::FactorOperator::Divide,
+                        operator: FactorOperator::Divide,
                         right,
                         span,
                     })))
@@ -1386,7 +1383,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::FactorExpr(FactorExprNode {
                         left,
-                        operator: ast::FactorOperator::Modulo,
+                        operator: FactorOperator::Modulo,
                         right,
                         span,
                     })))
@@ -1396,7 +1393,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::EqualityExpr(EqualityExprNode {
                         left,
-                        operator: ast::EqualityOperator::Equal,
+                        operator: EqualityOperator::Equal,
                         right,
                         span,
                     })))
@@ -1406,7 +1403,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::EqualityExpr(EqualityExprNode {
                         left,
-                        operator: ast::EqualityOperator::NotEqual,
+                        operator: EqualityOperator::NotEqual,
                         right,
                         span,
                     })))
@@ -1416,7 +1413,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::EqualityExpr(EqualityExprNode {
                         left,
-                        operator: ast::EqualityOperator::Is,
+                        operator: EqualityOperator::Is,
                         right,
                         span,
                     })))
@@ -1426,7 +1423,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::ComparisonExpr(ComparisonExprNode {
                         left,
-                        operator: ast::ComparisonOperator::Less,
+                        operator: ComparisonOperator::Less,
                         right,
                         span,
                     })))
@@ -1436,7 +1433,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::ComparisonExpr(ComparisonExprNode {
                         left,
-                        operator: ast::ComparisonOperator::LessEqual,
+                        operator: ComparisonOperator::LessEqual,
                         right,
                         span,
                     })))
@@ -1446,7 +1443,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::ComparisonExpr(ComparisonExprNode {
                         left,
-                        operator: ast::ComparisonOperator::Greater,
+                        operator: ComparisonOperator::Greater,
                         right,
                         span,
                     })))
@@ -1456,7 +1453,7 @@ mod expression_parser {
                     .nodes
                     .create_node(AstNode::ComparisonExpr(ComparisonExprNode {
                         left,
-                        operator: ast::ComparisonOperator::GreaterEqual,
+                        operator: ComparisonOperator::GreaterEqual,
                         right,
                         span,
                     })))
@@ -1498,7 +1495,7 @@ mod expression_parser {
 
         let left_span = parser.nodes.get_node(left).span();
         let else_expr_span = parser.nodes.get_node(else_expr).span();
-        let span = ast::SourceSpan::combine(left_span, else_expr_span);
+        let span = SourceSpan::combine(left_span, else_expr_span);
 
         let node_id = parser
             .nodes
@@ -1516,7 +1513,7 @@ mod expression_parser {
         let right = parse(parser, (Precedence::Pipe as u8 + 1).into())?;
         let left_span = parser.nodes.get_node(left).span();
         let right_span = parser.nodes.get_node(right).span();
-        let span = ast::SourceSpan::combine(left_span, right_span);
+        let span = SourceSpan::combine(left_span, right_span);
 
         let node_id =
             parser
@@ -1612,7 +1609,7 @@ mod expression_parser {
 
         let left_span = parser.nodes.get_node(left).span();
         let end_span = parser.get_previous_span();
-        let span = ast::SourceSpan::combine(left_span, end_span);
+        let span = SourceSpan::combine(left_span, end_span);
         let node_id = parser.nodes.create_node(AstNode::CallExpr(CallExprNode {
             callee: left,
             operation,
@@ -1858,7 +1855,7 @@ mod expression_parser {
                 let span = parser
                     .previous_token
                     .as_ref()
-                    .map(ast::SourceSpan::from_token)
+                    .map(SourceSpan::from_token)
                     .unwrap_or_default();
 
                 return Err(crate::QangSyntaxError::new(

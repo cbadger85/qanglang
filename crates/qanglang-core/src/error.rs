@@ -8,39 +8,68 @@ pub enum ErrorMessageFormat {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CompilerError(Vec<QangSyntaxError>);
+pub struct CompilerError(Vec<QangCompilerError>);
 
 impl CompilerError {
-    pub fn new(errors: Vec<QangSyntaxError>) -> Self {
+    pub fn new(errors: Vec<QangCompilerError>) -> Self {
         Self(errors)
     }
 
-    pub fn all(&self) -> &[QangSyntaxError] {
+    pub fn all(&self) -> &[QangCompilerError] {
         &self.0
     }
 
-    pub fn into_errors(self) -> Vec<QangSyntaxError> {
+    pub fn into_errors(self) -> Vec<QangCompilerError> {
         self.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct QangSyntaxError {
-    pub message: String,
-    pub span: SourceSpan,
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum QangErrorKind {
+    Syntax,
+    Analysis,
 }
 
-impl QangSyntaxError {
-    pub fn new(message: String, span: SourceSpan) -> Self {
-        Self { message, span }
+impl std::fmt::Display for QangErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Syntax => write!(f, "Syntax Error"),
+            Self::Analysis => write!(f, "Analysis Error"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QangCompilerError {
+    pub message: String,
+    pub span: SourceSpan,
+    pub kind: QangErrorKind,
+}
+
+impl QangCompilerError {
+    pub fn new_syntax_error(message: String, span: SourceSpan) -> Self {
+        Self {
+            message,
+            span,
+            kind: QangErrorKind::Syntax,
+        }
+    }
+
+    pub fn new_analysis_error(message: String, span: SourceSpan) -> Self {
+        Self {
+            message,
+            span,
+            kind: QangErrorKind::Analysis,
+        }
     }
 
     pub fn into_formatted(self, source_map: &SourceMap) -> Self {
-        let message = pretty_print_syntax_error(source_map, &self.message, self.span);
+        let message = pretty_print_error(source_map, self.kind, &self.message, self.span);
 
         Self {
             message,
             span: self.span,
+            kind: self.kind,
         }
     }
 
@@ -50,23 +79,24 @@ impl QangSyntaxError {
 
         let message = format!(
             "{} at line {}, column {}: {}\n",
-            "Syntax Error", line_num, col_num, self.message
+            self.kind, line_num, col_num, self.message
         );
 
         Self {
             message,
             span: self.span,
+            kind: self.kind,
         }
     }
 }
 
-impl std::fmt::Display for QangSyntaxError {
+impl std::fmt::Display for QangCompilerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
     }
 }
 
-impl std::error::Error for QangSyntaxError {}
+impl std::error::Error for QangCompilerError {}
 
 #[derive(Debug, Clone)]
 pub struct NativeFunctionError(pub String);
@@ -155,7 +185,7 @@ impl std::error::Error for QangRuntimeError {}
 /// Handles error reporting and pretty printing for the QangLang compiler.
 #[derive(Debug, Clone, Default)]
 pub struct ErrorReporter {
-    errors: Vec<QangSyntaxError>,
+    errors: Vec<QangCompilerError>,
 }
 
 impl ErrorReporter {
@@ -164,7 +194,7 @@ impl ErrorReporter {
     }
 
     /// Add an error to the error list
-    pub fn report_error(&mut self, error: QangSyntaxError) {
+    pub fn report_error(&mut self, error: QangCompilerError) {
         self.errors.push(error);
     }
 
@@ -173,18 +203,19 @@ impl ErrorReporter {
         !self.errors.is_empty()
     }
 
-    pub fn errors(&self) -> &[QangSyntaxError] {
+    pub fn errors(&self) -> &[QangCompilerError] {
         &self.errors
     }
 
-    pub fn take_errors(self) -> Vec<QangSyntaxError> {
+    pub fn take_errors(self) -> Vec<QangCompilerError> {
         self.errors
     }
 }
 
 /// Pretty print a single error with source context
-pub fn pretty_print_syntax_error(
+pub fn pretty_print_error(
     source_map: &SourceMap,
+    kind: QangErrorKind,
     message: &str,
     span: SourceSpan,
 ) -> String {
@@ -196,7 +227,7 @@ pub fn pretty_print_syntax_error(
     // Error header with kind
     output.push_str(&format!(
         "{} at line {}, column {}: {}\n",
-        "Syntax Error", line_num, col_num, message
+        kind, line_num, col_num, message
     ));
 
     // Get the problematic line
@@ -267,7 +298,7 @@ mod tests {
     use super::*;
     use crate::SourceMap;
 
-    fn error_summary(errors: &[QangSyntaxError]) -> String {
+    fn error_summary(errors: &[QangCompilerError]) -> String {
         if errors.is_empty() {
             "No errors found.".to_string()
         } else if errors.len() == 1 {
@@ -285,7 +316,7 @@ mod tests {
 
         // Report an error
         reporter.report_error(
-            QangSyntaxError::new(
+            QangCompilerError::new_syntax_error(
                 "Expected expression after '+'".to_string(),
                 SourceSpan::new(11, 11),
             )
@@ -304,7 +335,7 @@ mod tests {
 
         // Report multiple errors
         reporter.report_error(
-            QangSyntaxError::new(
+            QangCompilerError::new_syntax_error(
                 "Missing operand after '+'".to_string(),
                 SourceSpan::new(11, 11),
             )
@@ -312,7 +343,7 @@ mod tests {
         );
 
         reporter.report_error(
-            QangSyntaxError::new(
+            QangCompilerError::new_syntax_error(
                 "Missing operand after '*'".to_string(),
                 SourceSpan::new(23, 23),
             )
@@ -340,8 +371,11 @@ mod tests {
         let mut reporter = ErrorReporter::new();
 
         reporter.report_error(
-            QangSyntaxError::new("Syntax error 1".to_string(), SourceSpan::new(0, 3))
-                .into_formatted(&source_map),
+            QangCompilerError::new_syntax_error(
+                "Syntax error 1".to_string(),
+                SourceSpan::new(0, 3),
+            )
+            .into_formatted(&source_map),
         );
 
         let summary = error_summary(reporter.errors());
@@ -355,12 +389,18 @@ mod tests {
         let mut reporter = ErrorReporter::new();
 
         reporter.report_error(
-            QangSyntaxError::new("Syntax error 1".to_string(), SourceSpan::new(0, 3))
-                .into_formatted(&source_map),
+            QangCompilerError::new_syntax_error(
+                "Syntax error 1".to_string(),
+                SourceSpan::new(0, 3),
+            )
+            .into_formatted(&source_map),
         );
         reporter.report_error(
-            QangSyntaxError::new("Syntax error 2".to_string(), SourceSpan::new(4, 5))
-                .into_formatted(&source_map),
+            QangCompilerError::new_syntax_error(
+                "Syntax error 2".to_string(),
+                SourceSpan::new(4, 5),
+            )
+            .into_formatted(&source_map),
         );
 
         let summary = error_summary(reporter.errors());

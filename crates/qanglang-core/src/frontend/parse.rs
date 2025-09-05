@@ -1,5 +1,5 @@
 use crate::{
-    ErrorReporter, QangSyntaxError, SourceMap,
+    ErrorReporter, QangCompilerError, SourceMap,
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
@@ -9,7 +9,7 @@ use crate::{
     memory::StringInterner,
 };
 
-type ParseResult<T> = Result<T, QangSyntaxError>;
+type ParseResult<T> = Result<T, QangCompilerError>;
 
 pub struct Parser<'a> {
     source_map: &'a SourceMap,
@@ -79,7 +79,10 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        Err(QangSyntaxError::new(message.to_string(), span))
+        Err(QangCompilerError::new_syntax_error(
+            message.to_string(),
+            span,
+        ))
     }
 
     fn match_token(&mut self, token_type: TokenType) -> bool {
@@ -107,7 +110,10 @@ impl<'a> Parser<'a> {
             .to_string();
 
         self.errors
-            .report_error(QangSyntaxError::new(message, SourceSpan::from_token(token)));
+            .report_error(QangCompilerError::new_syntax_error(
+                message,
+                SourceSpan::from_token(token),
+            ));
     }
 
     fn get_current_span(&self) -> SourceSpan {
@@ -138,7 +144,7 @@ impl<'a> Parser<'a> {
                 .create_node(AstNode::Identifier(IdentifierNode { name, span }));
             Ok(node_id)
         } else {
-            Err(QangSyntaxError::new(
+            Err(QangCompilerError::new_syntax_error(
                 "Expected identifier.".to_string(),
                 span,
             ))
@@ -344,7 +350,8 @@ impl<'a> Parser<'a> {
         match result {
             Ok(decl) => Some(decl),
             Err(error) => {
-                let formatted_error = QangSyntaxError::new(error.message, error.span);
+                let formatted_error =
+                    QangCompilerError::new_syntax_error(error.message, error.span);
                 self.errors.report_error(formatted_error);
                 self.synchronize();
                 None
@@ -431,7 +438,7 @@ impl<'a> Parser<'a> {
                 Ok(self.field_declaration()?)
             }
         } else {
-            Err(QangSyntaxError::new(
+            Err(QangCompilerError::new_syntax_error(
                 "Expected field or method declaration.".to_string(),
                 self.get_current_span(),
             ))
@@ -481,7 +488,7 @@ impl<'a> Parser<'a> {
         let current_token_type = self
             .current_token
             .as_ref()
-            .ok_or(QangSyntaxError::new(
+            .ok_or(QangCompilerError::new_syntax_error(
                 "Expected statement.".to_string(),
                 self.previous_token
                     .as_ref()
@@ -556,7 +563,7 @@ impl<'a> Parser<'a> {
         let current_token_type = self
             .current_token
             .as_ref()
-            .ok_or(QangSyntaxError::new(
+            .ok_or(QangCompilerError::new_syntax_error(
                 "Expected statement.".to_string(),
                 self.previous_token
                     .as_ref()
@@ -780,7 +787,7 @@ impl<'a> Parser<'a> {
                                 }))
                         }
                         _ => {
-                            return Err(QangSyntaxError::new(
+                            return Err(QangCompilerError::new_syntax_error(
                                 "Invalid assignment target".to_string(),
                                 span,
                             ));
@@ -788,7 +795,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 _ => {
-                    return Err(QangSyntaxError::new(
+                    return Err(QangCompilerError::new_syntax_error(
                         "Invalid assignment target".to_string(),
                         span,
                     ));
@@ -898,7 +905,9 @@ mod expression_parser {
             .iter()
             .collect::<String>()
             .parse::<f64>()
-            .map_err(|_| crate::QangSyntaxError::new("Expected number.".to_string(), span))?;
+            .map_err(|_| {
+                crate::QangCompilerError::new_syntax_error("Expected number.".to_string(), span)
+            })?;
 
         let node_id = parser
             .nodes
@@ -1010,7 +1019,7 @@ mod expression_parser {
                     span,
                 })))
             }
-            _ => Err(crate::QangSyntaxError::new(
+            _ => Err(crate::QangCompilerError::new_syntax_error(
                 "Unknown operator.".to_string(),
                 span,
             )),
@@ -1047,7 +1056,7 @@ mod expression_parser {
                 .create_node(AstNode::ThisExpr(ThisExprNode { span }))),
             tokenizer::TokenType::Super => {
                 if !parser.match_token(tokenizer::TokenType::Dot) {
-                    return Err(crate::QangSyntaxError::new(
+                    return Err(crate::QangCompilerError::new_syntax_error(
                         "Expect '.' after 'super'.".to_string(),
                         span,
                     ));
@@ -1067,7 +1076,7 @@ mod expression_parser {
                 }));
                 Ok(node_id)
             }
-            _ => Err(crate::QangSyntaxError::new(
+            _ => Err(crate::QangCompilerError::new_syntax_error(
                 "Unknown literal.".to_string(),
                 span,
             )),
@@ -1192,7 +1201,7 @@ mod expression_parser {
         let parameter = if parser.match_token(TokenType::Identifier) {
             parser.get_identifier()?
         } else {
-            return Err(crate::QangSyntaxError::new(
+            return Err(crate::QangCompilerError::new_syntax_error(
                 "Expect parameter name before '->' in map expression.".to_string(),
                 parser.get_current_span(),
             ));
@@ -1225,7 +1234,7 @@ mod expression_parser {
             parser.advance();
             parser.get_identifier()?
         } else {
-            return Err(crate::QangSyntaxError::new(
+            return Err(crate::QangCompilerError::new_syntax_error(
                 "Expect parameter name before '->' in optional map expression.".to_string(),
                 parser.get_current_span(),
             ));
@@ -1329,7 +1338,7 @@ mod expression_parser {
         let rule = get_rule(token_type);
 
         if rule.is_empty() {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Unexpected token.".to_string(),
                 SourceSpan::from_token(token),
             ));
@@ -1476,7 +1485,7 @@ mod expression_parser {
                         span,
                     })))
             }
-            _ => Err(crate::QangSyntaxError::new(
+            _ => Err(crate::QangCompilerError::new_syntax_error(
                 "Unknown operator.".to_string(),
                 span,
             )),
@@ -1858,7 +1867,7 @@ mod expression_parser {
                     .map(SourceSpan::from_token)
                     .unwrap_or_default();
 
-                return Err(crate::QangSyntaxError::new(
+                return Err(crate::QangCompilerError::new_syntax_error(
                     "Expected expression.".to_string(),
                     span,
                 ));
@@ -1905,7 +1914,7 @@ mod expression_parser {
 
                     let span = SourceSpan::new(location, location); // TODO move the logic to get this span into a helper in the Parser.
 
-                    return Err(crate::QangSyntaxError::new(
+                    return Err(crate::QangCompilerError::new_syntax_error(
                         "Unexpected oprand. Missing operator or ';'.".to_string(),
                         span,
                     ));

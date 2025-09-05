@@ -1,5 +1,5 @@
 use crate::{
-    ErrorReporter, FunctionHandle, QangSyntaxError, SourceMap, Value,
+    ErrorReporter, FunctionHandle, QangCompilerError, SourceMap, Value,
     backend::{
         chunk::{Chunk, OpCode, SourceLocation},
         value::{
@@ -124,13 +124,13 @@ impl AssemblerState {
         &self,
         handle: StringHandle,
         span: SourceSpan,
-    ) -> Result<Option<usize>, QangSyntaxError> {
+    ) -> Result<Option<usize>, QangCompilerError> {
         for i in (0..self.local_count).rev() {
             if let Some(local) = self.locals.get(i)
                 && local.name == handle
             {
                 if local.depth.is_none() {
-                    return Err(QangSyntaxError::new(
+                    return Err(QangCompilerError::new_syntax_error(
                         "Cannot read local variable during its initialization.".to_string(),
                         span,
                     ));
@@ -146,7 +146,7 @@ impl AssemblerState {
         &mut self,
         handle: StringHandle,
         span: SourceSpan,
-    ) -> Result<Option<usize>, QangSyntaxError> {
+    ) -> Result<Option<usize>, QangCompilerError> {
         if let Some(enclosing) = self.enclosing.as_mut() {
             // First check if it's a local variable in the immediately enclosing scope
             if let Some(local_index) = enclosing.resolve_local_variable(handle, span)? {
@@ -172,7 +172,7 @@ impl AssemblerState {
         index: usize,
         is_local: bool,
         span: SourceSpan,
-    ) -> Result<usize, QangSyntaxError> {
+    ) -> Result<usize, QangCompilerError> {
         let upvalue_count = self.function.upvalue_count;
 
         for i in 0..upvalue_count {
@@ -183,7 +183,7 @@ impl AssemblerState {
         }
 
         if upvalue_count == u8::MAX as usize {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Can only close over up to 256 variables.".to_string(),
                 span,
             ));
@@ -378,11 +378,11 @@ impl<'a> Assembler<'a> {
         self.current_chunk_mut().code.len() - 2
     }
 
-    fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
+    fn patch_jump(&mut self, offset: usize, span: SourceSpan) -> Result<(), QangCompilerError> {
         let jump = self.current_chunk_mut().code.len() - offset - 2;
 
         if jump > u16::MAX as usize {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Too much code to jump over.".to_string(),
                 span,
             ));
@@ -394,11 +394,11 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
-    fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangSyntaxError> {
+    fn emit_loop(&mut self, loop_start: usize, span: SourceSpan) -> Result<(), QangCompilerError> {
         self.emit_opcode(OpCode::Loop, span);
         let offset = self.current_chunk_mut().code.len() - loop_start + 2;
         if offset > u16::MAX as usize {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Loop body too large.".to_string(),
                 span,
             ));
@@ -415,7 +415,7 @@ impl<'a> Assembler<'a> {
         self.emit_byte(byte, span);
     }
 
-    fn emit_constant(&mut self, value: Value, span: SourceSpan) -> Result<(), QangSyntaxError> {
+    fn emit_constant(&mut self, value: Value, span: SourceSpan) -> Result<(), QangCompilerError> {
         let index = self.current_chunk_mut().add_constant(value);
 
         if index <= u8::MAX as usize {
@@ -425,7 +425,7 @@ impl<'a> Assembler<'a> {
             self.emit_byte((index >> 8) as u8, span);
             self.emit_byte((index & 0xff) as u8, span);
         } else {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Too many constants in function".to_string(),
                 span,
             ));
@@ -434,11 +434,11 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
-    fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangSyntaxError> {
+    fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangCompilerError> {
         let index = self.current_chunk_mut().add_constant(value);
 
         if index > u8::MAX as usize {
-            Err(QangSyntaxError::new(
+            Err(QangCompilerError::new_syntax_error(
                 "Too many constants in function (max 256)".to_string(),
                 span,
             ))
@@ -453,7 +453,7 @@ impl<'a> Assembler<'a> {
         opcode_16: OpCode,
         value: Value,
         span: SourceSpan,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         let index = self.current_chunk_mut().add_constant(value);
 
         if index <= u8::MAX as usize {
@@ -463,7 +463,7 @@ impl<'a> Assembler<'a> {
             self.emit_byte((index >> 8) as u8, span);
             self.emit_byte((index & 0xff) as u8, span);
         } else {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Too many constants in function (max 65536)".to_string(),
                 span,
             ));
@@ -527,10 +527,10 @@ impl<'a> Assembler<'a> {
         }
     }
 
-    fn add_local(&mut self, handle: StringHandle, span: SourceSpan) -> Result<(), QangSyntaxError> {
+    fn add_local(&mut self, handle: StringHandle, span: SourceSpan) -> Result<(), QangCompilerError> {
         let current = &mut self.state;
         if current.local_count >= STACK_MAX {
-            Err(QangSyntaxError::new(
+            Err(QangCompilerError::new_syntax_error(
                 "Too many local variables in scope.".to_string(),
                 span,
             ))
@@ -550,7 +550,7 @@ impl<'a> Assembler<'a> {
         &mut self,
         handle: StringHandle,
         span: SourceSpan,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         let current = &self.state;
         if current.scope_depth == 0 {
             return Ok(());
@@ -566,7 +566,7 @@ impl<'a> Assembler<'a> {
                 }
 
                 if local.name == handle {
-                    return Err(QangSyntaxError::new(
+                    return Err(QangCompilerError::new_syntax_error(
                         "Already a variable with this name in this scope.".to_string(),
                         span,
                     ));
@@ -582,7 +582,7 @@ impl<'a> Assembler<'a> {
         &mut self,
         handle: Option<StringHandle>,
         span: SourceSpan,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         if self.state.scope_depth > 0 {
             self.mark_initialized();
 
@@ -616,7 +616,7 @@ impl<'a> Assembler<'a> {
         &mut self,
         identifer: StringHandle,
         span: SourceSpan,
-    ) -> Result<bool, QangSyntaxError> {
+    ) -> Result<bool, QangCompilerError> {
         self.declare_variable(identifer, span)?;
 
         if self.state.scope_depth > 0 {
@@ -631,7 +631,7 @@ impl<'a> Assembler<'a> {
         handle: StringHandle,
         span: SourceSpan,
         is_assignment: bool,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         let (index, get_op, set_op) = {
             if let Some(index) = self.resolve_local_variable(handle, span)? {
                 (index as u8, OpCode::GetLocal, OpCode::SetLocal)
@@ -659,7 +659,7 @@ impl<'a> Assembler<'a> {
         handle: StringHandle,
         is_assignment: bool,
         span: SourceSpan,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         if is_assignment {
             self.emit_constant_opcode(
                 OpCode::SetGlobal,
@@ -681,7 +681,7 @@ impl<'a> Assembler<'a> {
         &mut self,
         name: StringHandle,
         span: SourceSpan,
-    ) -> Result<Option<usize>, QangSyntaxError> {
+    ) -> Result<Option<usize>, QangCompilerError> {
         self.state.resolve_upvalue(name, span)
     }
 
@@ -689,7 +689,7 @@ impl<'a> Assembler<'a> {
         &self,
         handle: StringHandle,
         span: SourceSpan,
-    ) -> Result<Option<usize>, QangSyntaxError> {
+    ) -> Result<Option<usize>, QangCompilerError> {
         self.state.resolve_local_variable(handle, span)
     }
 
@@ -699,7 +699,7 @@ impl<'a> Assembler<'a> {
         func_expr: FunctionExprNode,
         has_superclass: bool,
         ctx: &mut VisitorContext,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         let identifier = ctx.nodes.get_identifier_node(func_expr.name).node;
         if matches!(kind, AssemblerKind::Function) {
             self.parse_variable(identifier.name, func_expr.span)?;
@@ -712,7 +712,7 @@ impl<'a> Assembler<'a> {
         self.begin_scope();
 
         if arity > 255 {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Cannot have more than 255 parameters.".to_string(),
                 identifier.span,
             ));
@@ -770,7 +770,7 @@ impl<'a> Assembler<'a> {
         &mut self,
         operator: AssignmentOperator,
         span: SourceSpan,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         let opcode = match operator {
             AssignmentOperator::Assign => unreachable!(),
             AssignmentOperator::AddAssign => OpCode::Add,
@@ -789,7 +789,7 @@ impl<'a> Assembler<'a> {
         callee: TypedNodeRef<ExprNode>,
         map_expr: TypedNodeRef<MapExprNode>,
         ctx: &mut VisitorContext,
-    ) -> Result<(), QangSyntaxError> {
+    ) -> Result<(), QangCompilerError> {
         let parameters = ctx.nodes.array.create();
         ctx.nodes.array.push(parameters, map_expr.node.parameter);
         let lambda_expr = LambdaExprNode {
@@ -805,7 +805,7 @@ impl<'a> Assembler<'a> {
 }
 
 impl<'a> NodeVisitor for Assembler<'a> {
-    type Error = QangSyntaxError;
+    type Error = QangCompilerError;
 
     fn visit_return_statement(
         &mut self,
@@ -889,7 +889,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.node.span);
             Ok(())
         } else {
-            Err(QangSyntaxError::new(
+            Err(QangCompilerError::new_syntax_error(
                 "Cannot use 'this' outside of a class method.".to_string(),
                 this_expr.node.span,
             ))
@@ -902,7 +902,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if !self.state.has_superclass {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Can't use 'super' in a class with no superclass.".to_string(),
                 super_expr.node.span,
             ));
@@ -912,7 +912,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.state.kind,
             AssemblerKind::Method | AssemblerKind::Initializer
         ) {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Can't use 'super' outside of a class method.".to_string(),
                 super_expr.node.span,
             ));
@@ -1313,7 +1313,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             let jump_distance = continue_position - loop_start + 3;
 
             if jump_distance > u16::MAX as usize {
-                return Err(QangSyntaxError::new(
+                return Err(QangCompilerError::new_syntax_error(
                     "Continue jump too large.".to_string(),
                     while_stmt.node.span,
                 ));
@@ -1419,7 +1419,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             if continue_target > continue_jump {
                 let jump_distance = continue_target - continue_jump - 3;
                 if jump_distance > u16::MAX as usize {
-                    return Err(QangSyntaxError::new(
+                    return Err(QangCompilerError::new_syntax_error(
                         "Continue jump too large.".to_string(),
                         for_stmt.node.span,
                     ));
@@ -1430,7 +1430,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             } else {
                 let jump_distance = continue_jump - continue_target + 2;
                 if jump_distance > u16::MAX as usize {
-                    return Err(QangSyntaxError::new(
+                    return Err(QangCompilerError::new_syntax_error(
                         "Continue jump too large.".to_string(),
                         for_stmt.node.span,
                     ));
@@ -1477,7 +1477,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
             Ok(())
         } else {
-            Err(QangSyntaxError::new(
+            Err(QangCompilerError::new_syntax_error(
                 "'break' can only be used inside loops.".to_string(),
                 break_stmt.node.span,
             ))
@@ -1496,7 +1496,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
             Ok(())
         } else {
-            Err(QangSyntaxError::new(
+            Err(QangCompilerError::new_syntax_error(
                 "'continue' can only be used inside loops.".to_string(),
                 continue_stmt.node.span,
             ))
@@ -1539,7 +1539,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.begin_scope();
 
         if arity > 255 {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "Cannot have more than 255 parameters.".to_string(),
                 lambda_expr.node.span,
             ));
@@ -1614,7 +1614,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             CallOperationNode::Call(args) => {
                 let arg_length = ctx.nodes.array.size(args.args);
                 if arg_length > u8::MAX as usize {
-                    return Err(QangSyntaxError::new(
+                    return Err(QangCompilerError::new_syntax_error(
                         "Functions may only take up to 256 arguments.".to_string(),
                         call.node.span,
                     ));
@@ -1622,7 +1622,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
                 if let ExprNode::Primary(PrimaryNode::Super(super_expr)) = callee.node {
                     if !self.state.has_superclass {
-                        return Err(QangSyntaxError::new(
+                        return Err(QangCompilerError::new_syntax_error(
                             "Can't use 'super' in a class with no superclass.".to_string(),
                             super_expr.span,
                         ));
@@ -1632,7 +1632,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         self.state.kind,
                         AssemblerKind::Method | AssemblerKind::Initializer
                     ) {
-                        return Err(QangSyntaxError::new(
+                        return Err(QangCompilerError::new_syntax_error(
                             "Can't use 'super' outside of a class method.".to_string(),
                             super_expr.span,
                         ));
@@ -1839,7 +1839,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
                             let total_args = 1 + arg_length;
                             if total_args > u8::MAX as usize {
-                                return Err(QangSyntaxError::new(
+                                return Err(QangCompilerError::new_syntax_error(
                                     "Functions may only take up to 256 arguments.".to_string(),
                                     pipe.node.span,
                                 ));
@@ -1869,7 +1869,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         self.emit_byte(1, pipe.node.span);
                     }
                     _ => {
-                        return Err(QangSyntaxError::new(
+                        return Err(QangCompilerError::new_syntax_error(
                             "Pipe expression with non-call operation not supported.".to_string(),
                             call_expr.span,
                         ));
@@ -1912,7 +1912,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.handle_variable(class_handle, name.node.span, false)?;
 
             if class_handle == superclass.node.name {
-                return Err(QangSyntaxError::new(
+                return Err(QangCompilerError::new_syntax_error(
                     "A class cannot inherit from itself.".to_string(),
                     superclass.node.span,
                 ));
@@ -1964,16 +1964,21 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     }
                     ClassMemberNode::Field(field) => {
                         let name = ctx.nodes.get_identifier_node(field.name);
-                        let nil_node = ctx
-                            .nodes
-                            .create_node(AstNode::NilLiteral(NilLiteralNode { span: field.span }));
-                        let default = ExprNode::Primary(PrimaryNode::Nil(NilLiteralNode {
-                            span: name.node.span,
-                        }));
+
                         let initializer = field
                             .initializer
                             .map(|init| ctx.nodes.get_expr_node(init))
-                            .unwrap_or(TypedNodeRef::new(nil_node, default));
+                            .unwrap_or_else(|| {
+                                let node_id =
+                                    ctx.nodes.create_node(AstNode::NilLiteral(NilLiteralNode {
+                                        span: field.span,
+                                    }));
+                                let nil_node =
+                                    ExprNode::Primary(PrimaryNode::Nil(NilLiteralNode {
+                                        span: name.node.span,
+                                    }));
+                                TypedNodeRef::new(node_id, nil_node)
+                            });
 
                         self.visit_expression(initializer, ctx)?;
                         let handle_identifier = name.node.name;
@@ -2004,7 +2009,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let length = ctx.nodes.array.size(array.node.elements);
 
         if length > u8::MAX.into() {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "An array literal cannot be initialized with more than 256 elements.".to_string(),
                 array.node.span,
             ));
@@ -2030,7 +2035,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let length = ctx.nodes.array.size(object.node.entries);
 
         if length > u8::MAX.into() {
-            return Err(QangSyntaxError::new(
+            return Err(QangCompilerError::new_syntax_error(
                 "An object literal cannot be initialized with more than 256 entries.".to_string(),
                 object.node.span,
             ));

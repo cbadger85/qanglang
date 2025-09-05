@@ -11,8 +11,8 @@ pub use backend::value::Value;
 pub use backend::vm::Vm;
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{
-    CompilerError, ErrorMessageFormat, ErrorReporter, NativeFunctionError, QangRuntimeError,
-    QangSyntaxError, Trace,
+    CompilerError, ErrorMessageFormat, ErrorReporter, NativeFunctionError, QangCompilerError,
+    QangRuntimeError, Trace,
 };
 pub use frontend::source::SourceMap;
 pub use frontend::tokenizer::{Token, TokenType, Tokenizer};

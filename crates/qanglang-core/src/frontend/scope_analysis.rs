@@ -36,8 +36,7 @@ pub struct FunctionInfo {
     pub upvalues: Vec<UpvalueInfo>,
     pub max_locals: usize,
     pub span: SourceSpan,
-    pub is_method: bool,
-    pub is_initializer: bool,
+    pub kind: FunctionKind,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +71,13 @@ impl Scope {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FunctionKind {
+    Function,
+    Method,
+    Initializer,
+}
+
 #[derive(Debug, Clone)]
 struct FunctionScope {
     name: StringHandle,
@@ -79,43 +85,31 @@ struct FunctionScope {
     upvalues: Vec<UpvalueInfo>,
     local_count: usize,
     span: SourceSpan,
-    is_method: bool,
-    is_initializer: bool,
+    kind: FunctionKind,
     enclosing: Option<Box<FunctionScope>>,
 }
 
 impl FunctionScope {
-    fn new(
-        name: StringHandle,
-        arity: usize,
-        span: SourceSpan,
-        is_method: bool,
-        is_initializer: bool,
-    ) -> Self {
+    fn new(name: StringHandle, arity: usize, span: SourceSpan, kind: FunctionKind) -> Self {
+        let local_count = if matches!(kind, FunctionKind::Method | FunctionKind::Initializer) {
+            1
+        } else {
+            0
+        };
+
         Self {
             name,
             arity,
             upvalues: Vec::new(),
-            local_count: if is_method || is_initializer { 1 } else { 0 },
+            local_count,
             span,
-            is_method,
-            is_initializer,
+            kind,
             enclosing: None,
         }
     }
 
-    fn push(
-        &mut self,
-        name: StringHandle,
-        arity: usize,
-        span: SourceSpan,
-        is_method: bool,
-        is_initializer: bool,
-    ) {
-        let previous = std::mem::replace(
-            self,
-            Self::new(name, arity, span, is_method, is_initializer),
-        );
+    fn push(&mut self, name: StringHandle, arity: usize, span: SourceSpan, kind: FunctionKind) {
+        let previous = std::mem::replace(self, Self::new(name, arity, span, kind));
         self.enclosing = Some(Box::new(previous));
     }
 
@@ -126,6 +120,44 @@ impl FunctionScope {
         } else {
             None
         }
+    }
+
+    fn resolve_upvalue(
+        self: &mut FunctionScope,
+        name: StringHandle,
+        span: SourceSpan,
+    ) -> Result<Option<VariableKind>, QangCompilerError> {
+        // Check if this upvalue already exists in the function scope
+        for (index, upvalue) in self.upvalues.iter().enumerate() {
+            if upvalue.name == name {
+                return Ok(Some(VariableKind::Upvalue {
+                    index,
+                    is_local: upvalue.is_local,
+                }));
+            }
+        }
+
+        if let Some(enclosing) = &mut self.enclosing {
+            // Recursively check the next outer function
+            if let Some(outer_upvalue) = Self::resolve_upvalue(enclosing, name, span)? {
+                if let VariableKind::Upvalue { index, .. } = outer_upvalue {
+                    // Add to current function scope
+                    let upvalue_index = self.upvalues.len();
+                    self.upvalues.push(UpvalueInfo {
+                        name,
+                        index,
+                        is_local: false,
+                    });
+
+                    return Ok(Some(VariableKind::Upvalue {
+                        index: upvalue_index,
+                        is_local: false,
+                    }));
+                }
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -151,11 +183,13 @@ impl<'a> ScopeAnalyzer<'a> {
         program: NodeId,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
-    ) -> bool {
+    ) -> ScopeAnalysis {
         let mut ctx = VisitorContext::new(nodes, errors);
         let program_node = ctx.nodes.get_program_node(program);
 
-        self.visit_program(program_node, &mut ctx).is_ok()
+        let _ = self.visit_program(program_node, &mut ctx);
+
+        self.results
     }
 
     fn current_scope_depth(&self) -> usize {
@@ -270,7 +304,67 @@ impl<'a> ScopeAnalyzer<'a> {
         name: StringHandle,
         span: SourceSpan,
     ) -> Result<Option<VariableKind>, QangCompilerError> {
-        todo!()
+        // We need an enclosing function to have upvalues
+        if self.current_function.is_none() {
+            return Ok(None);
+        }
+
+        // Take ownership of current_function temporarily to avoid borrowing conflicts
+        let mut current_function = self.current_function.take().unwrap();
+
+        if let Some(enclosing) = &mut current_function.enclosing {
+            // First check if it's a local variable in the immediately enclosing function's scopes
+            // Search in current scopes for the variable
+            for scope in self.scopes.iter_mut().rev() {
+                if let Some(var_info) = scope.variables.get_mut(&name) {
+                    // Mark the variable as captured
+                    var_info.is_captured = true;
+
+                    // Add upvalue to current function with is_local=true
+                    let upvalue_index = current_function.upvalues.len();
+                    if let VariableKind::Local { slot, .. } = var_info.kind {
+                        current_function.upvalues.push(UpvalueInfo {
+                            name,
+                            index: slot,
+                            is_local: true,
+                        });
+
+                        // Restore current_function
+                        self.current_function = Some(current_function);
+
+                        return Ok(Some(VariableKind::Upvalue {
+                            index: upvalue_index,
+                            is_local: true,
+                        }));
+                    }
+                }
+            }
+
+            // If not found as local, recursively check outer scopes for upvalues
+            if let Some(upvalue_kind) = enclosing.resolve_upvalue(name, span)? {
+                if let VariableKind::Upvalue { index, .. } = upvalue_kind {
+                    // Add upvalue to current function with is_local=false
+                    let upvalue_index = current_function.upvalues.len();
+                    current_function.upvalues.push(UpvalueInfo {
+                        name,
+                        index,
+                        is_local: false,
+                    });
+
+                    // Restore current_function
+                    self.current_function = Some(current_function);
+
+                    return Ok(Some(VariableKind::Upvalue {
+                        index: upvalue_index,
+                        is_local: false,
+                    }));
+                }
+            }
+        }
+
+        // Restore current_function
+        self.current_function = Some(current_function);
+        Ok(None)
     }
 
     fn begin_function(
@@ -278,8 +372,7 @@ impl<'a> ScopeAnalyzer<'a> {
         name: StringHandle,
         arity: usize,
         span: SourceSpan,
-        is_method: bool,
-        is_initializer: bool,
+        kind: FunctionKind,
         errors: &mut ErrorReporter,
     ) {
         if arity > 255 {
@@ -289,7 +382,7 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let mut new_function = FunctionScope::new(name, arity, span, is_method, is_initializer);
+        let mut new_function = FunctionScope::new(name, arity, span, kind);
 
         if let Some(current) = self.current_function.take() {
             new_function.enclosing = Some(Box::new(current));
@@ -309,8 +402,7 @@ impl<'a> ScopeAnalyzer<'a> {
                 upvalues: function.upvalues.clone(),
                 max_locals: function.local_count,
                 span: function.span,
-                is_method: function.is_method,
-                is_initializer: function.is_initializer,
+                kind: function.kind,
             };
 
             self.results.functions.insert(node_id, analysis);
@@ -399,8 +491,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             self.get_identifier_name(ctx.nodes, func_expr.node.name),
             arity,
             func_expr.node.span,
-            false,
-            false,
+            FunctionKind::Function,
             ctx.errors,
         );
 
@@ -441,8 +532,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             anonymous_name,
             arity,
             lambda_expr.node.span,
-            false,
-            false,
+            FunctionKind::Function,
             ctx.errors,
         );
 
@@ -563,8 +653,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                             method_name.node.name,
                             arity,
                             method.span,
-                            true,
-                            is_initializer,
+                            if is_initializer {
+                                FunctionKind::Initializer
+                            } else {
+                                FunctionKind::Method
+                            },
                             ctx.errors,
                         );
 
@@ -597,6 +690,48 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
+        Ok(())
+    }
+
+    fn visit_block_statement(
+        &mut self,
+        block_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BlockStmtNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
+        let decl_count = ctx.nodes.array.size(block_stmt.node.decls);
+        for i in 0..decl_count {
+            if let Some(decl_id) = ctx.nodes.array.get_node_id_at(block_stmt.node.decls, i) {
+                let decl = ctx.nodes.get_decl_node(decl_id);
+                self.visit_declaration(decl, ctx)?;
+            }
+        }
+
+        self.end_scope();
+        Ok(())
+    }
+
+    fn visit_for_statement(
+        &mut self,
+        for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+        if let Some(initializer_id) = for_stmt.node.initializer {
+            self.visit_for_initializer(ctx.nodes.get_for_initializer_node(initializer_id), ctx)?;
+        }
+
+        if let Some(condition_id) = for_stmt.node.condition {
+            self.visit_expression(ctx.nodes.get_expr_node(condition_id), ctx)?;
+        }
+
+        if let Some(increment_id) = for_stmt.node.increment {
+            self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
+        }
+
+        self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
+        self.end_scope();
         Ok(())
     }
 }

@@ -1,6 +1,14 @@
 use crate::{
     CompilerPipeline, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap, Value, Vm,
-    backend::assembler::STACK_MAX, backend::vm::RuntimeResult, peek_value, pop_value, push_value,
+    backend::{
+        assembler::STACK_MAX,
+        value::{
+            ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
+            NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+        },
+        vm::RuntimeResult,
+    },
+    peek_value, pop_value, push_value,
 };
 
 pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
@@ -345,6 +353,7 @@ impl Vm {
     }
 
     fn load_stdlib(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.load_constants();
         let stdlib_source = include_str!("stdlib.ql");
         let source_map = SourceMap::from_source("<stdlib>", stdlib_source.to_owned());
 
@@ -372,6 +381,25 @@ impl Vm {
         self.state.frame_count = saved_frame_count;
 
         Ok(())
+    }
+
+    fn load_constants(&mut self) {
+        self.alloc.strings.intern("NIL");
+        self.alloc.strings.intern(NIL_TYPE_STRING);
+        self.alloc.strings.intern("BOOLEAN");
+        self.alloc.strings.intern(BOOLEAN_TYPE_STRING);
+        self.alloc.strings.intern("NUMBER");
+        self.alloc.strings.intern(NUMBER_TYPE_STRING);
+        self.alloc.strings.intern("STRING");
+        self.alloc.strings.intern(STRING_TYPE_STRING);
+        self.alloc.strings.intern("FUNCTION");
+        self.alloc.strings.intern(FUNCTION_TYPE_STRING);
+        self.alloc.strings.intern("CLASS");
+        self.alloc.strings.intern(CLASS_TYPE_STRING);
+        self.alloc.strings.intern("OBJECT");
+        self.alloc.strings.intern(OBJECT_TYPE_STRING);
+        self.alloc.strings.intern("ARRAY");
+        self.alloc.strings.intern(ARRAY_TYPE_STRING);
     }
 
     pub(crate) fn handle_function_intrinsic_call(

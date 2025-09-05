@@ -1,12 +1,6 @@
 use crate::{
     ErrorReporter, FunctionHandle, QangCompilerError, SourceMap, Value,
-    backend::{
-        chunk::{Chunk, OpCode, SourceLocation},
-        value::{
-            ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-            NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
-        },
-    },
+    backend::chunk::{Chunk, OpCode, SourceLocation},
     error::{CompilerError, ErrorMessageFormat},
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
@@ -227,25 +221,7 @@ impl<'a> CompilerPipeline<'a> {
         let (errors, mut nodes) = parser.into_parts();
         match Assembler::new(self.allocator).compile(program, &mut nodes, &self.source_map, errors)
         {
-            Ok(program) => {
-                self.allocator.strings.intern("NIL");
-                self.allocator.strings.intern(NIL_TYPE_STRING);
-                self.allocator.strings.intern("BOOLEAN");
-                self.allocator.strings.intern(BOOLEAN_TYPE_STRING);
-                self.allocator.strings.intern("NUMBER");
-                self.allocator.strings.intern(NUMBER_TYPE_STRING);
-                self.allocator.strings.intern("STRING");
-                self.allocator.strings.intern(STRING_TYPE_STRING);
-                self.allocator.strings.intern("FUNCTION");
-                self.allocator.strings.intern(FUNCTION_TYPE_STRING);
-                self.allocator.strings.intern("CLASS");
-                self.allocator.strings.intern(CLASS_TYPE_STRING);
-                self.allocator.strings.intern("OBJECT");
-                self.allocator.strings.intern(OBJECT_TYPE_STRING);
-                self.allocator.strings.intern("ARRAY");
-                self.allocator.strings.intern(ARRAY_TYPE_STRING);
-                Ok(QangProgram::new(self.allocator.allocate_function(program)))
-            }
+            Ok(program) => Ok(QangProgram::new(self.allocator.allocate_function(program))),
             Err(error) => Err(CompilerError::new(
                 error
                     .all()
@@ -527,7 +503,11 @@ impl<'a> Assembler<'a> {
         }
     }
 
-    fn add_local(&mut self, handle: StringHandle, span: SourceSpan) -> Result<(), QangCompilerError> {
+    fn add_local(
+        &mut self,
+        handle: StringHandle,
+        span: SourceSpan,
+    ) -> Result<(), QangCompilerError> {
         let current = &mut self.state;
         if current.local_count >= STACK_MAX {
             Err(QangCompilerError::new_syntax_error(

@@ -28,6 +28,7 @@ impl CompilerError {
 pub enum QangErrorKind {
     Syntax,
     Analysis,
+    Assembler,
 }
 
 impl std::fmt::Display for QangErrorKind {
@@ -35,6 +36,7 @@ impl std::fmt::Display for QangErrorKind {
         match self {
             Self::Syntax => write!(f, "Syntax Error"),
             Self::Analysis => write!(f, "Analysis Error"),
+            Self::Assembler => write!(f, "Assembler Error"),
         }
     }
 }
@@ -60,6 +62,14 @@ impl QangCompilerError {
             message,
             span,
             kind: QangErrorKind::Analysis,
+        }
+    }
+
+    pub fn new_assembler_error(message: String, span: SourceSpan) -> Self {
+        Self {
+            message,
+            span,
+            kind: QangErrorKind::Assembler,
         }
     }
 

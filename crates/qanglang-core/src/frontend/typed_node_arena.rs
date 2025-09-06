@@ -443,12 +443,6 @@ impl TypedNodeArena {
         TypedNodeRef::new(node_id, node.try_into().unwrap())
     }
 
-    pub fn check_assignment_target_node(&self, node_id: NodeId) -> bool {
-        let node = self.nodes[node_id.get()];
-        let target_node: Result<AssignmentTargetNode, _> = node.try_into();
-        target_node.is_ok()
-    }
-
     pub fn get_primary_node(&self, node_id: NodeId) -> TypedNodeRef<PrimaryNode> {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())

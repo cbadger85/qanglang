@@ -6,7 +6,7 @@ use crate::{
         analyzer::{AnalysisPipeline, AnalysisResults},
         node_visitor::{NodeVisitor, VisitorContext},
         scope_analysis::{FunctionInfo, FunctionKind, VariableKind},
-        typed_node_arena::TypedNodeRef,
+        typed_node_arena::{AssignmentTargetNode, TypedNodeRef},
     },
     nodes::*,
 };
@@ -346,6 +346,56 @@ impl<'a> Assembler<'a> {
         self.current_function_id
             .map(|id| self.get_function_info(id))
     }
+
+    fn emit_compound_assignment_op(
+        &mut self,
+        operator: AssignmentOperator,
+        span: SourceSpan,
+    ) -> Result<(), QangCompilerError> {
+        let opcode = match operator {
+            AssignmentOperator::Assign => unreachable!(),
+            AssignmentOperator::AddAssign => OpCode::Add,
+            AssignmentOperator::SubtractAssign => OpCode::Subtract,
+            AssignmentOperator::MultiplyAssign => OpCode::Multiply,
+            AssignmentOperator::DivideAssign => OpCode::Divide,
+            AssignmentOperator::ModuloAssign => OpCode::Modulo,
+        };
+
+        self.emit_opcode(opcode, span);
+        Ok(())
+    }
+
+    fn handle_map_expression(
+        &mut self,
+        callee: TypedNodeRef<crate::frontend::typed_node_arena::ExprNode>,
+        map_expr: MapExprNode,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), QangCompilerError> {
+        // Create a lambda expression from the map expression
+        let parameters = ctx.nodes.array.create();
+        ctx.nodes.array.push(parameters, map_expr.parameter);
+        let lambda_expr = LambdaExprNode {
+            parameters,
+            body: map_expr.body,
+            span: map_expr.span,
+        };
+
+        // Visit the lambda expression (this creates the closure)
+        self.visit_lambda_expression(
+            TypedNodeRef::new(
+                ctx.nodes.create_node(AstNode::LambdaExpr(lambda_expr)),
+                lambda_expr,
+            ),
+            ctx,
+        )?;
+
+        // Visit the callee (the value being mapped over)
+        self.visit_expression(callee, ctx)?;
+
+        // Call the lambda with one argument (the callee result)
+        self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
+        Ok(())
+    }
 }
 
 impl<'a> NodeVisitor for Assembler<'a> {
@@ -568,7 +618,115 @@ impl<'a> NodeVisitor for Assembler<'a> {
         assignment: TypedNodeRef<AssignmentExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let assignment_target = ctx.nodes.get_assignment_target_node(assignment.node.target);
+        let value = ctx.nodes.get_expr_node(assignment.node.value);
+
+        match assignment.node.operator {
+            AssignmentOperator::Assign => match assignment_target.node {
+                AssignmentTargetNode::Identifier(identifier) => {
+                    // Emit the value first
+                    self.visit_expression(value, ctx)?;
+                    // Then store it in the variable
+                    self.emit_variable_access(assignment_target.id, identifier.span, true)?;
+                }
+                AssignmentTargetNode::Property(property) => {
+                    // Emit object
+                    self.visit_expression(ctx.nodes.get_expr_node(property.object), ctx)?;
+                    // Emit value
+                    self.visit_expression(value, ctx)?;
+                    // Emit property assignment
+                    let identifier_handle =
+                        ctx.nodes.get_identifier_node(property.property).node.name;
+                    self.emit_constant_opcode(
+                        OpCode::SetProperty,
+                        OpCode::SetProperty16,
+                        Value::String(identifier_handle),
+                        property.span,
+                    )?;
+                }
+                AssignmentTargetNode::Index(index) => {
+                    // Emit array
+                    let array = ctx.nodes.get_expr_node(index.object);
+                    self.visit_expression(array, ctx)?;
+                    // Emit index
+                    let index_expr = ctx.nodes.get_expr_node(index.index);
+                    self.visit_expression(index_expr, ctx)?;
+                    // Emit value
+                    self.visit_expression(value, ctx)?;
+                    // Emit index assignment
+                    self.emit_opcode(OpCode::SetArrayIndex, index.span);
+                }
+            },
+            _ => match assignment_target.node {
+                AssignmentTargetNode::Identifier(identifier) => {
+                    // For compound assignment: load current value, compute, store
+                    self.emit_variable_access(assignment_target.id, identifier.span, false)?;
+                    self.visit_expression(value, ctx)?;
+                    self.emit_compound_assignment_op(
+                        assignment.node.operator,
+                        assignment.node.span,
+                    )?;
+                    self.emit_variable_access(assignment_target.id, identifier.span, true)?;
+                }
+                AssignmentTargetNode::Property(property) => {
+                    // For compound property assignment
+                    let property_object = ctx.nodes.get_expr_node(property.object);
+                    self.visit_expression(property_object, ctx)?;
+                    self.visit_expression(property_object, ctx)?;
+                    let identifier_handle =
+                        ctx.nodes.get_identifier_node(property.property).node.name;
+                    self.emit_constant_opcode(
+                        OpCode::GetProperty,
+                        OpCode::GetProperty16,
+                        Value::String(identifier_handle),
+                        property.span,
+                    )?;
+
+                    self.visit_expression(value, ctx)?;
+                    self.emit_compound_assignment_op(
+                        assignment.node.operator,
+                        assignment.node.span,
+                    )?;
+
+                    self.emit_constant_opcode(
+                        OpCode::SetProperty,
+                        OpCode::SetProperty16,
+                        Value::String(identifier_handle),
+                        property.span,
+                    )?;
+                }
+                AssignmentTargetNode::Index(index_node) => {
+                    // For compound index assignment
+                    let array = ctx.nodes.get_expr_node(index_node.object);
+                    let index = ctx.nodes.get_expr_node(index_node.index);
+
+                    // Load array and index for getting current value
+                    self.visit_expression(array, ctx)?;
+                    self.visit_expression(index, ctx)?;
+
+                    // Duplicate array and index for setting later
+                    self.visit_expression(array, ctx)?;
+                    self.visit_expression(index, ctx)?;
+
+                    // Get current value
+                    self.emit_opcode(OpCode::GetArrayIndex, index.node.span());
+
+                    // Emit the right-hand value
+                    self.visit_expression(value, ctx)?;
+
+                    // Perform the compound operation
+                    self.emit_compound_assignment_op(
+                        assignment.node.operator,
+                        assignment.node.span,
+                    )?;
+
+                    // Set the result
+                    self.emit_opcode(OpCode::SetArrayIndex, index_node.span);
+                }
+            },
+        }
+
+        Ok(())
     }
 
     fn visit_expression_statement(
@@ -1100,7 +1258,193 @@ impl<'a> NodeVisitor for Assembler<'a> {
         call: TypedNodeRef<CallExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let callee = ctx.nodes.get_expr_node(call.node.callee);
+        let call_operation = ctx.nodes.get_call_operation_node(call.node.operation);
+
+        match call_operation.node {
+            crate::frontend::typed_node_arena::CallOperationNode::Call(args) => {
+                let arg_length = ctx.nodes.array.size(args.args);
+                if arg_length > u8::MAX as usize {
+                    return Err(QangCompilerError::new_assembler_error(
+                        "Functions may only take up to 256 arguments.".to_string(),
+                        call.node.span,
+                    ));
+                }
+
+                // Handle super calls
+                if let crate::frontend::typed_node_arena::ExprNode::Primary(
+                    crate::frontend::typed_node_arena::PrimaryNode::Super(super_expr),
+                ) = callee.node
+                {
+                    // Check if we're in a method context
+                    let current_function_kind = self
+                        .get_current_function_info()
+                        .map(|f| f.kind)
+                        .ok_or_else(|| {
+                            QangCompilerError::new_assembler_error(
+                                "Cannot use 'super' outside of a class method.".to_string(),
+                                super_expr.span,
+                            )
+                        })?;
+
+                    if !matches!(
+                        current_function_kind,
+                        FunctionKind::Method | FunctionKind::Initializer
+                    ) {
+                        return Err(QangCompilerError::new_assembler_error(
+                            "Cannot use 'super' outside of a class method.".to_string(),
+                            super_expr.span,
+                        ));
+                    }
+
+                    // Load 'this' (always at local slot 0)
+                    self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.span);
+
+                    // Emit arguments
+                    for i in 0..arg_length {
+                        if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
+                            let expr = ctx.nodes.get_expr_node(node_id);
+                            self.visit_expression(expr, ctx)?;
+                        } else {
+                            self.emit_opcode(OpCode::Nil, call.node.span);
+                        }
+                    }
+
+                    // Load 'super'
+                    let super_handle = self.allocator.strings.intern("super");
+                    self.emit_global_variable_access(super_handle, false, super_expr.span)?;
+
+                    // Get method name and emit SuperInvoke
+                    let method = ctx.nodes.get_identifier_node(super_expr.method);
+                    self.emit_constant_opcode(
+                        OpCode::SuperInvoke,
+                        OpCode::SuperInvoke16,
+                        Value::String(method.node.name),
+                        call.node.span,
+                    )?;
+                    self.emit_byte(arg_length as u8, call.node.span);
+
+                    return Ok(());
+                }
+
+                // Handle method calls (optimization for obj.method(args))
+                if let crate::frontend::typed_node_arena::ExprNode::Call(property_call) =
+                    callee.node
+                {
+                    if let crate::frontend::typed_node_arena::CallOperationNode::Property(
+                        method_name,
+                    ) = ctx
+                        .nodes
+                        .get_call_operation_node(property_call.operation)
+                        .node
+                    {
+                        // Emit the object
+                        let expr = ctx.nodes.get_expr_node(property_call.callee);
+                        self.visit_expression(expr, ctx)?;
+
+                        // Get method handle
+                        let method_handle = ctx
+                            .nodes
+                            .get_identifier_node(method_name.identifier)
+                            .node
+                            .name;
+
+                        // Emit arguments
+                        for i in 0..arg_length {
+                            if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
+                                let expr = ctx.nodes.get_expr_node(node_id);
+                                self.visit_expression(expr, ctx)?;
+                            } else {
+                                self.emit_opcode(OpCode::Nil, call.node.span);
+                            }
+                        }
+
+                        // Emit optimized invoke
+                        self.emit_constant_opcode(
+                            OpCode::Invoke,
+                            OpCode::Invoke16,
+                            Value::String(method_handle),
+                            call.node.span,
+                        )?;
+                        self.emit_byte(arg_length as u8, call.node.span);
+
+                        return Ok(());
+                    }
+                }
+
+                // Regular function call
+                self.visit_expression(callee, ctx)?;
+
+                // Emit arguments
+                for i in 0..arg_length {
+                    if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
+                        let expr = ctx.nodes.get_expr_node(node_id);
+                        self.visit_expression(expr, ctx)?;
+                    } else {
+                        self.emit_opcode(OpCode::Nil, call.node.span);
+                    }
+                }
+
+                self.emit_opcode_and_byte(OpCode::Call, arg_length as u8, call.node.span);
+                Ok(())
+            }
+            crate::frontend::typed_node_arena::CallOperationNode::Property(identifier) => {
+                self.visit_expression(callee, ctx)?;
+                let identifier_handle = ctx
+                    .nodes
+                    .get_identifier_node(identifier.identifier)
+                    .node
+                    .name;
+                self.emit_constant_opcode(
+                    OpCode::GetProperty,
+                    OpCode::GetProperty16,
+                    Value::String(identifier_handle),
+                    call.node.span,
+                )?;
+                Ok(())
+            }
+            crate::frontend::typed_node_arena::CallOperationNode::Index(expr) => {
+                self.visit_expression(callee, ctx)?;
+                let expr = ctx.nodes.get_expr_node(expr.index);
+                self.visit_expression(expr, ctx)?;
+                self.emit_opcode(OpCode::GetArrayIndex, call.node.span);
+                Ok(())
+            }
+            crate::frontend::typed_node_arena::CallOperationNode::OptionalProperty(identifier) => {
+                self.visit_expression(callee, ctx)?;
+                let identifier_handle = ctx
+                    .nodes
+                    .get_identifier_node(identifier.identifier)
+                    .node
+                    .name;
+                self.emit_constant_opcode(
+                    OpCode::GetOptionalProperty,
+                    OpCode::GetOptionalProperty16,
+                    Value::String(identifier_handle),
+                    call.node.span,
+                )?;
+                Ok(())
+            }
+            crate::frontend::typed_node_arena::CallOperationNode::Map(map_expr) => {
+                self.handle_map_expression(callee, map_expr, ctx)
+            }
+            crate::frontend::typed_node_arena::CallOperationNode::OptionalMap(map_expr) => {
+                self.visit_expression(callee, ctx)?;
+                let nil_jump = self.emit_jump(OpCode::JumpIfNil, map_expr.span);
+                self.emit_opcode(OpCode::Pop, map_expr.span);
+                self.handle_map_expression(
+                    callee,
+                    MapExprNode {
+                        body: map_expr.body,
+                        parameter: map_expr.parameter,
+                        span: map_expr.span,
+                    },
+                    ctx,
+                )?;
+                self.patch_jump(nil_jump, map_expr.span)?;
+                Ok(())
+            }
+        }
     }
 
     fn visit_pipe_expression(

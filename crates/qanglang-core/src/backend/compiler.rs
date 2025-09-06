@@ -41,9 +41,7 @@ struct Assembler<'a> {
     source_map: &'a SourceMap,
     allocator: &'a mut HeapAllocator,
     analysis: &'a AnalysisResults,
-    // current_function_info: Option<FunctionInfo>,
     current_function_id: Option<NodeId>,
-    // function_stack: Vec<FunctionObject>,
     current_function: FunctionObject,
     loop_contexts: Vec<LoopContext>,
 }
@@ -60,7 +58,6 @@ impl<'a> Assembler<'a> {
             allocator,
             analysis,
             current_function: FunctionObject::new(handle, 0),
-            // current_function_info: None,
             current_function_id: None,
             loop_contexts: Vec::new(),
         }
@@ -455,7 +452,48 @@ impl<'a> NodeVisitor for Assembler<'a> {
         super_expr: TypedNodeRef<SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        // Check if we're in a method or initializer context
+        let current_function_kind = self
+            .get_current_function_info()
+            .map(|f| f.kind)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Cannot use 'super' outside of a class method.".to_string(),
+                    super_expr.node.span,
+                )
+            })?;
+
+        if !matches!(
+            current_function_kind,
+            FunctionKind::Method | FunctionKind::Initializer
+        ) {
+            return Err(QangCompilerError::new_assembler_error(
+                "Cannot use 'super' outside of a class method.".to_string(),
+                super_expr.node.span,
+            ));
+        }
+
+        // Load 'this' onto the stack first
+        // 'this' is always at local slot 0 for methods/initializers
+        self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.node.span);
+
+        // Load 'super' variable onto the stack
+        let super_handle = self.allocator.strings.intern("super");
+        // 'super' should be resolved through scope analysis like any other variable
+        // We need to find the node ID for the super variable access
+        // Since we don't have it directly, we'll use global access as fallback
+        self.emit_global_variable_access(super_handle, false, super_expr.node.span)?;
+
+        // Get the method name and emit GetSuper instruction
+        let method_identifier = ctx.nodes.get_identifier_node(super_expr.node.method);
+        self.emit_constant_opcode(
+            OpCode::GetSuper,
+            OpCode::GetSuper16,
+            Value::String(method_identifier.node.name),
+            super_expr.node.span,
+        )?;
+
+        Ok(())
     }
 
     fn visit_comparison_expression(

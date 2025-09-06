@@ -11,8 +11,10 @@ use crate::{
     nodes::*,
 };
 
-pub fn compile(source_map: &SourceMap) -> Result<QangProgram, CompilerError> {
-    let mut alloc = HeapAllocator::new();
+pub fn compile(
+    source_map: &SourceMap,
+    alloc: &mut HeapAllocator,
+) -> Result<QangProgram, CompilerError> {
     let mut parser = Parser::new(source_map, TypedNodeArena::new(), &mut alloc.strings);
     let program = parser.parse();
 
@@ -25,7 +27,7 @@ pub fn compile(source_map: &SourceMap) -> Result<QangProgram, CompilerError> {
         return Err(CompilerError::new(errors.take_errors()));
     }
 
-    let assembler = Assembler::new(source_map, &mut alloc, &result);
+    let assembler = Assembler::new(source_map, alloc, &result);
     let main_function = assembler.assemble(program, &mut nodes, &mut errors)?;
 
     Ok(QangProgram::new(alloc.allocate_function(main_function)))
@@ -1452,7 +1454,114 @@ impl<'a> NodeVisitor for Assembler<'a> {
         pipe: TypedNodeRef<PipeExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let left = ctx.nodes.get_expr_node(pipe.node.left);
+        let right = ctx.nodes.get_expr_node(pipe.node.right);
+        let call_handle = self.allocator.strings.intern("call");
+
+        match right.node {
+            crate::frontend::typed_node_arena::ExprNode::Call(call_expr) => {
+                match ctx.nodes.get_call_operation_node(call_expr.operation).node {
+                    crate::frontend::typed_node_arena::CallOperationNode::Call(arguments) => {
+                        // Check if this is a special .call() method invocation
+                        if let crate::frontend::typed_node_arena::ExprNode::Call(inner_call) =
+                            ctx.nodes.get_expr_node(call_expr.callee).node
+                        {
+                            if let crate::frontend::typed_node_arena::CallOperationNode::Property(
+                                method_name,
+                            ) = ctx.nodes.get_call_operation_node(inner_call.operation).node
+                            {
+                                if ctx
+                                    .nodes
+                                    .get_identifier_node(method_name.identifier)
+                                    .node
+                                    .name
+                                    == call_handle
+                                {
+                                    // This is obj.call(args) piped - use invoke optimization
+                                    self.visit_expression(
+                                        ctx.nodes.get_expr_node(call_expr.callee),
+                                        ctx,
+                                    )?;
+                                    self.visit_expression(left, ctx)?;
+                                    let method_handle = ctx
+                                        .nodes
+                                        .get_identifier_node(method_name.identifier)
+                                        .node
+                                        .name;
+                                    self.emit_constant_opcode(
+                                        OpCode::Invoke,
+                                        OpCode::Invoke16,
+                                        Value::String(method_handle),
+                                        pipe.node.span,
+                                    )?;
+                                    self.emit_byte(1, pipe.node.span);
+                                    return Ok(());
+                                }
+                            }
+                        }
+
+                        // Regular function call with pipe
+                        self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;
+
+                        // The left side of the pipe becomes the first argument
+                        self.visit_expression(left, ctx)?;
+
+                        // Add the additional arguments from the call
+                        let arg_length = ctx.nodes.array.size(arguments.args);
+                        for i in 0..arg_length {
+                            if let Some(node_id) = ctx.nodes.array.get_node_id_at(arguments.args, i)
+                            {
+                                let expr = ctx.nodes.get_expr_node(node_id);
+                                self.visit_expression(expr, ctx)?;
+                            } else {
+                                self.emit_opcode(OpCode::Nil, pipe.node.span);
+                            }
+                        }
+
+                        let total_args = 1 + arg_length;
+                        if total_args > u8::MAX as usize {
+                            return Err(QangCompilerError::new_assembler_error(
+                                "Functions may only take up to 256 arguments.".to_string(),
+                                pipe.node.span,
+                            ));
+                        }
+
+                        self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.node.span);
+                    }
+                    crate::frontend::typed_node_arena::CallOperationNode::Property(method_name) => {
+                        // Method call with pipe: obj.method |> value becomes value.method()
+                        self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;
+                        self.visit_expression(left, ctx)?;
+                        let method_handle = ctx
+                            .nodes
+                            .get_identifier_node(method_name.identifier)
+                            .node
+                            .name;
+                        self.emit_constant_opcode(
+                            OpCode::Invoke,
+                            OpCode::Invoke16,
+                            Value::String(method_handle),
+                            pipe.node.span,
+                        )?;
+                        self.emit_byte(1, pipe.node.span);
+                    }
+                    _ => {
+                        return Err(QangCompilerError::new_assembler_error(
+                            "Pipe expression with non-call operation not supported.".to_string(),
+                            call_expr.span,
+                        ));
+                    }
+                }
+            }
+            _ => {
+                // Simple pipe: left |> right becomes right(left)
+                self.visit_expression(right, ctx)?;
+                self.visit_expression(left, ctx)?;
+                self.emit_opcode_and_byte(OpCode::Call, 1, pipe.node.span);
+            }
+        }
+
+        Ok(())
     }
 
     fn visit_class_declaration(

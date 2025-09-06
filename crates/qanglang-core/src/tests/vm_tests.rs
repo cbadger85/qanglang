@@ -183,7 +183,6 @@ fn test_lambda_expression() {
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match compile(&source_map, &mut allocator) {
-        // match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -228,7 +227,6 @@ fn test_calling_functions_from_native() {
         }
     }
 
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             let mut vm = Vm::new(allocator).set_gc_status(false).set_debug(false);
@@ -294,7 +292,7 @@ fn test_immediately_invoked_functional_expressions() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -359,7 +357,8 @@ fn test_closures() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)

@@ -89,11 +89,8 @@ struct FunctionScope {
 
 impl FunctionScope {
     fn new(name: StringHandle, arity: usize, span: SourceSpan, kind: FunctionKind) -> Self {
-        let local_count = if matches!(kind, FunctionKind::Method | FunctionKind::Initializer) {
-            1
-        } else {
-            0
-        };
+        // All functions reserve slot 0 - for 'this' in methods, blank in regular functions
+        let local_count = 1;
 
         Self {
             name,

@@ -5,7 +5,7 @@ use crate::{
     frontend::{
         analyzer::{AnalysisPipeline, AnalysisResults},
         node_visitor::{NodeVisitor, VisitorContext},
-        scope_analysis::{FunctionInfo, FunctionKind},
+        scope_analysis::{FunctionInfo, FunctionKind, VariableKind},
         typed_node_arena::TypedNodeRef,
     },
     nodes::*,
@@ -41,8 +41,10 @@ struct Assembler<'a> {
     source_map: &'a SourceMap,
     allocator: &'a mut HeapAllocator,
     analysis: &'a AnalysisResults,
+    // current_function_info: Option<FunctionInfo>,
+    current_function_id: Option<NodeId>,
+    // function_stack: Vec<FunctionObject>,
     current_function: FunctionObject,
-    current_function_info: Option<FunctionInfo>,
     loop_contexts: Vec<LoopContext>,
 }
 
@@ -58,7 +60,8 @@ impl<'a> Assembler<'a> {
             allocator,
             analysis,
             current_function: FunctionObject::new(handle, 0),
-            current_function_info: None,
+            // current_function_info: None,
+            current_function_id: None,
             loop_contexts: Vec::new(),
         }
     }
@@ -75,6 +78,9 @@ impl<'a> Assembler<'a> {
 
         self.visit_program(program_node, &mut ctx)
             .map_err(|err| CompilerError::new(vec![err]))?;
+
+        self.emit_opcode(OpCode::Nil, SourceSpan::default());
+        self.emit_opcode(OpCode::Return, SourceSpan::default());
 
         Ok(self.current_function)
     }
@@ -200,9 +206,8 @@ impl<'a> Assembler<'a> {
 
     fn emit_return(&mut self, function_kind: FunctionKind, span: SourceSpan) {
         let is_init = self
-            .current_function_info
-            .as_ref()
-            .map(|f| matches!(f.kind, FunctionKind::Initializer))
+            .current_function_id
+            .map(|id| matches!(self.get_function_info(id).kind, FunctionKind::Initializer))
             .unwrap_or(false);
         if is_init {
             self.emit_opcode_and_byte(OpCode::GetLocal, 0, span);
@@ -210,6 +215,139 @@ impl<'a> Assembler<'a> {
             self.emit_opcode(OpCode::Nil, span);
         }
         self.emit_opcode(OpCode::Return, span);
+    }
+
+    fn emit_variable_access(
+        &mut self,
+        node_id: NodeId,
+        span: SourceSpan,
+        is_assignment: bool,
+    ) -> Result<(), QangCompilerError> {
+        let var_info = self.analysis.scope.variables.get(&node_id).ok_or_else(|| {
+            QangCompilerError::new_assembler_error(
+                "Variable not found in analysis results".to_string(),
+                span,
+            )
+        })?;
+
+        match &var_info.kind {
+            VariableKind::Local { slot, .. } => {
+                let opcode = if is_assignment {
+                    OpCode::SetLocal
+                } else {
+                    OpCode::GetLocal
+                };
+                self.emit_opcode_and_byte(opcode, *slot as u8, span);
+            }
+            VariableKind::Global => {
+                self.emit_global_variable_access(var_info.name, is_assignment, span)?;
+            }
+            VariableKind::Upvalue { index, .. } => {
+                let opcode = if is_assignment {
+                    OpCode::SetUpvalue
+                } else {
+                    OpCode::GetUpvalue
+                };
+                self.emit_opcode_and_byte(opcode, *index as u8, span);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn emit_global_variable_access(
+        &mut self,
+        handle: crate::StringHandle,
+        is_assignment: bool,
+        span: SourceSpan,
+    ) -> Result<(), QangCompilerError> {
+        if is_assignment {
+            self.emit_constant_opcode(
+                OpCode::SetGlobal,
+                OpCode::SetGlobal16,
+                Value::String(handle),
+                span,
+            )
+        } else {
+            self.emit_constant_opcode(
+                OpCode::GetGlobal,
+                OpCode::GetGlobal16,
+                Value::String(handle),
+                span,
+            )
+        }
+    }
+
+    fn compile_function(
+        &mut self,
+        func_node_id: NodeId,
+        func_expr: FunctionExprNode,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), QangCompilerError> {
+        // Get function info from analysis
+        let func_info = self.get_function_info(func_node_id);
+        let func_kind = func_info.kind;
+
+        // Create new function object
+        let identifier = ctx.nodes.get_identifier_node(func_expr.name).node;
+        let function = FunctionObject::new(identifier.name, func_info.arity);
+
+        // Store current function and switch to new one
+        let old_function = std::mem::replace(&mut self.current_function, function);
+
+        let old_func_id = self.current_function_id;
+        self.current_function_id = Some(func_node_id);
+
+        // Compile function body
+        let body_node = ctx.nodes.get_block_stmt_node(func_expr.body);
+        self.visit_block_statement(body_node, ctx)?;
+
+        // Emit return
+        self.emit_return(func_kind, func_expr.span);
+
+        // Get upvalue info for this function
+        let upvalue_captures = self
+            .analysis
+            .scope
+            .upvalue_captures
+            .get(&func_node_id)
+            .cloned()
+            .unwrap_or_default();
+
+        // Store compiled function
+        let compiled_function = std::mem::replace(&mut self.current_function, old_function);
+        self.current_function_id = old_func_id;
+
+        // Allocate function and emit closure
+        let function_handle = self.allocator.allocate_function(compiled_function);
+        self.emit_constant_opcode(
+            OpCode::Closure,
+            OpCode::Closure16,
+            Value::FunctionDecl(function_handle),
+            func_expr.span,
+        )?;
+
+        // Emit upvalue information
+        for upvalue in upvalue_captures {
+            let is_local_byte = if upvalue.is_local { 1 } else { 0 };
+            self.emit_byte(is_local_byte, func_expr.span);
+            self.emit_byte(upvalue.index as u8, func_expr.span);
+        }
+
+        Ok(())
+    }
+
+    fn get_function_info(&self, node_id: NodeId) -> &FunctionInfo {
+        self.analysis
+            .scope
+            .functions
+            .get(&node_id)
+            .expect("Function not found in analysis results")
+    }
+
+    fn get_current_function_info(&self) -> Option<&FunctionInfo> {
+        self.current_function_id
+            .map(|id| self.get_function_info(id))
     }
 }
 
@@ -221,12 +359,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         return_stmt: TypedNodeRef<ReturnStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        let is_init = self
-            .current_function_info
-            .as_ref()
-            .map(|f| matches!(f.kind, FunctionKind::Initializer))
-            .unwrap_or(false);
-
         if let Some(expr) = return_stmt.node.value {
             // TODO: Tail call optimization disabled until static analysis is implemented
             // to avoid issues with class instantiation
@@ -248,10 +380,17 @@ impl<'a> NodeVisitor for Assembler<'a> {
             // }
             let expr_node = ctx.nodes.get_expr_node(expr);
             self.visit_expression(expr_node, ctx)?;
-        } else if is_init {
-            self.emit_opcode_and_byte(OpCode::GetLocal, 0, return_stmt.node.span);
         } else {
-            self.emit_opcode(OpCode::Nil, return_stmt.node.span);
+            let is_init = self
+                .get_current_function_info()
+                .map(|f| matches!(f.kind, FunctionKind::Initializer))
+                .unwrap_or(false);
+
+            if is_init {
+                self.emit_opcode_and_byte(OpCode::GetLocal, 0, return_stmt.node.span);
+            } else {
+                self.emit_opcode(OpCode::Nil, return_stmt.node.span);
+            }
         }
 
         self.emit_opcode(OpCode::Return, return_stmt.node.span);
@@ -294,10 +433,21 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
     fn visit_this_expression(
         &mut self,
-        _this_expr: TypedNodeRef<ThisExprNode>,
+        this_expr: TypedNodeRef<ThisExprNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        if matches!(
+            self.get_current_function_info().map(|f| f.kind),
+            Some(FunctionKind::Method | FunctionKind::Initializer)
+        ) {
+            self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.node.span);
+            Ok(())
+        } else {
+            Err(QangCompilerError::new_assembler_error(
+                "Cannot use 'this' outside of a class method.".to_string(),
+                this_expr.node.span,
+            ))
+        }
     }
 
     fn visit_super_expression(
@@ -399,15 +549,63 @@ impl<'a> NodeVisitor for Assembler<'a> {
         var_decl: TypedNodeRef<VariableDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let identifier = ctx.nodes.get_identifier_node(var_decl.node.target);
+
+        // Emit initializer
+        if let Some(expr) = var_decl
+            .node
+            .initializer
+            .map(|id| ctx.nodes.get_expr_node(id))
+        {
+            self.visit_expression(expr, ctx)?;
+        } else {
+            self.emit_opcode(OpCode::Nil, var_decl.node.span);
+        }
+
+        // Use static analysis to determine how to define the variable
+        let var_info = self
+            .analysis
+            .scope
+            .variables
+            .get(&identifier.id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Variable not found in analysis results".to_string(),
+                    identifier.node.span,
+                )
+            })?;
+
+        match &var_info.kind {
+            VariableKind::Global => {
+                self.emit_constant_opcode(
+                    OpCode::DefineGlobal,
+                    OpCode::DefineGlobal16,
+                    Value::String(identifier.node.name),
+                    var_decl.node.span,
+                )?;
+            }
+            VariableKind::Local { .. } => {
+                // Local variables are automatically placed on the stack
+                // No additional instruction needed for definition
+            }
+            VariableKind::Upvalue { .. } => {
+                // This shouldn't happen for declarations
+                return Err(QangCompilerError::new_assembler_error(
+                    "Cannot declare upvalue variable".to_string(),
+                    var_decl.node.span,
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     fn visit_identifier(
         &mut self,
-        _identifier: TypedNodeRef<IdentifierNode>,
+        identifier: TypedNodeRef<IdentifierNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        self.emit_variable_access(identifier.id, identifier.node.span, false)
     }
 
     fn visit_if_statement(
@@ -556,7 +754,108 @@ impl<'a> NodeVisitor for Assembler<'a> {
         for_stmt: TypedNodeRef<ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        // For statements need scope management but we'll let the static analysis handle that
+        self.loop_contexts.push(LoopContext::default());
+
+        // Handle initializer
+        if let Some(initializer_id) = for_stmt.node.initializer {
+            let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
+            match initializer.node {
+                crate::frontend::typed_node_arena::ForInitializerNode::VarDecl(var_decl) => {
+                    self.visit_variable_declaration(
+                        TypedNodeRef::new(initializer.id, var_decl),
+                        ctx,
+                    )?;
+                }
+                crate::frontend::typed_node_arena::ForInitializerNode::Expr(expr) => {
+                    self.visit_expression(TypedNodeRef::new(initializer.id, expr), ctx)?;
+                    self.emit_opcode(OpCode::Pop, expr.span());
+                }
+            }
+        }
+
+        let mut loop_start = self.current_chunk_mut().code.len();
+        let mut exit_jump: Option<usize> = None;
+        let increment_start: Option<usize>;
+
+        // Handle condition and body
+        if let Some(condition_id) = for_stmt.node.condition {
+            let condition = ctx.nodes.get_expr_node(condition_id);
+            let condition_jump = self.emit_jump(OpCode::Jump, condition.node.span());
+            loop_start = self.current_chunk_mut().code.len();
+
+            let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
+            self.visit_statement(body, ctx)?;
+
+            increment_start = Some(self.current_chunk_mut().code.len());
+
+            if let Some(increment_id) = for_stmt.node.increment {
+                let increment = ctx.nodes.get_expr_node(increment_id);
+                self.visit_expression(increment, ctx)?;
+                self.emit_opcode(OpCode::Pop, increment.node.span());
+            }
+
+            self.patch_jump(condition_jump, condition.node.span())?;
+            self.visit_expression(condition, ctx)?;
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse, condition.node.span()));
+            self.emit_opcode(OpCode::Pop, condition.node.span());
+            self.emit_loop(loop_start, body.node.span())?;
+        } else {
+            let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
+            self.visit_statement(body, ctx)?;
+
+            increment_start = Some(self.current_chunk_mut().code.len());
+
+            if let Some(increment_id) = for_stmt.node.increment {
+                let increment = ctx.nodes.get_expr_node(increment_id);
+                self.visit_expression(increment, ctx)?;
+                self.emit_opcode(OpCode::Pop, increment.node.span());
+            }
+
+            self.emit_loop(loop_start, body.node.span())?;
+        }
+
+        let loop_context = self.loop_contexts.pop().expect("Loop context should exist");
+
+        // Handle continue jumps
+        let continue_target = increment_start.unwrap_or(loop_start);
+        for continue_jump in loop_context.continue_jumps {
+            if continue_target > continue_jump {
+                let jump_distance = continue_target - continue_jump - 3;
+                if jump_distance > u16::MAX as usize {
+                    return Err(QangCompilerError::new_assembler_error(
+                        "Continue jump too large.".to_string(),
+                        for_stmt.node.span,
+                    ));
+                }
+                let chunk = self.current_chunk_mut();
+                chunk.code[continue_jump + 1] = ((jump_distance >> 8) & 0xff) as u8;
+                chunk.code[continue_jump + 2] = (jump_distance & 0xff) as u8;
+            } else {
+                let jump_distance = continue_jump - continue_target + 2;
+                if jump_distance > u16::MAX as usize {
+                    return Err(QangCompilerError::new_assembler_error(
+                        "Continue jump too large.".to_string(),
+                        for_stmt.node.span,
+                    ));
+                }
+                let chunk = self.current_chunk_mut();
+                chunk.code[continue_jump] = OpCode::Loop as u8;
+                chunk.code[continue_jump + 1] = ((jump_distance >> 8) & 0xff) as u8;
+                chunk.code[continue_jump + 2] = (jump_distance & 0xff) as u8;
+            }
+        }
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump, for_stmt.node.span)?;
+            self.emit_opcode(OpCode::Pop, for_stmt.node.span);
+        }
+
+        for break_jump in loop_context.break_jumps {
+            self.patch_jump(break_jump, for_stmt.node.span)?;
+        }
+
+        Ok(())
     }
 
     fn visit_function_declaration(
@@ -564,7 +863,47 @@ impl<'a> NodeVisitor for Assembler<'a> {
         func_decl: TypedNodeRef<FunctionDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let func_expr = ctx.nodes.get_func_expr_node(func_decl.node.function);
+
+        // Declare the function variable first (for global functions)
+        let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
+        let var_info = self
+            .analysis
+            .scope
+            .variables
+            .get(&identifier.id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Function variable not found in analysis results".to_string(),
+                    identifier.node.span,
+                )
+            })?;
+
+        // Compile the function
+        self.compile_function(func_decl.id, func_expr.node, ctx)?;
+
+        // Define the function variable
+        match &var_info.kind {
+            VariableKind::Global => {
+                self.emit_constant_opcode(
+                    OpCode::DefineGlobal,
+                    OpCode::DefineGlobal16,
+                    Value::String(identifier.node.name),
+                    func_decl.node.span,
+                )?;
+            }
+            VariableKind::Local { .. } => {
+                // Local function, no additional instruction needed
+            }
+            VariableKind::Upvalue { .. } => {
+                return Err(QangCompilerError::new_assembler_error(
+                    "Cannot declare upvalue function".to_string(),
+                    func_decl.node.span,
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     fn visit_break_statement(
@@ -610,7 +949,46 @@ impl<'a> NodeVisitor for Assembler<'a> {
         lambda_decl: TypedNodeRef<LambdaDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let identifier = ctx.nodes.get_identifier_node(lambda_decl.node.name);
+        let lambda_expr = ctx.nodes.get_lambda_expr_node(lambda_decl.node.lambda);
+
+        // Compile the lambda expression
+        self.visit_lambda_expression(lambda_expr, ctx)?;
+
+        // Define the lambda variable using static analysis
+        let var_info = self
+            .analysis
+            .scope
+            .variables
+            .get(&identifier.id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Lambda variable not found in analysis results".to_string(),
+                    identifier.node.span,
+                )
+            })?;
+
+        match &var_info.kind {
+            VariableKind::Global => {
+                self.emit_constant_opcode(
+                    OpCode::DefineGlobal,
+                    OpCode::DefineGlobal16,
+                    Value::String(identifier.node.name),
+                    lambda_decl.node.span,
+                )?;
+            }
+            VariableKind::Local { .. } => {
+                // Local lambda, no additional instruction needed
+            }
+            VariableKind::Upvalue { .. } => {
+                return Err(QangCompilerError::new_assembler_error(
+                    "Cannot declare upvalue lambda".to_string(),
+                    lambda_decl.node.span,
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     fn visit_lambda_expression(
@@ -618,7 +996,65 @@ impl<'a> NodeVisitor for Assembler<'a> {
         lambda_expr: TypedNodeRef<LambdaExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let lambda_name_handle = self.allocator.strings.intern("<anonymous>");
+        let func_info = self.get_function_info(lambda_expr.id);
+        let func_kind = func_info.kind;
+
+        // Create new function object for lambda
+        let function = FunctionObject::new(lambda_name_handle, func_info.arity);
+
+        // Store current function and switch to new one
+        let old_function = std::mem::replace(&mut self.current_function, function);
+        let old_function_id = self.current_function_id;
+        self.current_function_id = Some(lambda_expr.id);
+
+        // Compile lambda body
+        let lambda_body = ctx.nodes.get_lambda_body_node(lambda_expr.node.body);
+        match lambda_body.node {
+            crate::frontend::typed_node_arena::LambdaBodyNode::Block(body) => {
+                self.visit_block_statement(TypedNodeRef::new(lambda_body.id, body), ctx)?;
+                self.emit_return(func_kind, lambda_expr.node.span);
+            }
+            crate::frontend::typed_node_arena::LambdaBodyNode::Expr(_) => {
+                // For expression lambdas, create a return statement
+                let return_node = ReturnStmtNode {
+                    value: Some(lambda_body.id),
+                    span: lambda_body.node.span(),
+                };
+                self.visit_return_statement(TypedNodeRef::new(lambda_body.id, return_node), ctx)?;
+            }
+        }
+
+        // Get upvalue info for this lambda
+        let upvalue_captures = self
+            .analysis
+            .scope
+            .upvalue_captures
+            .get(&lambda_expr.id)
+            .cloned()
+            .unwrap_or_default();
+
+        // Store compiled function
+        let compiled_function = std::mem::replace(&mut self.current_function, old_function);
+        self.current_function_id = old_function_id;
+
+        // Allocate function and emit closure
+        let function_handle = self.allocator.allocate_function(compiled_function);
+        self.emit_constant_opcode(
+            OpCode::Closure,
+            OpCode::Closure16,
+            Value::FunctionDecl(function_handle),
+            lambda_expr.node.span,
+        )?;
+
+        // Emit upvalue information
+        for upvalue in upvalue_captures {
+            let is_local_byte = if upvalue.is_local { 1 } else { 0 };
+            self.emit_byte(is_local_byte, lambda_expr.node.span);
+            self.emit_byte(upvalue.index as u8, lambda_expr.node.span);
+        }
+
+        Ok(())
     }
 
     fn visit_call_expression(

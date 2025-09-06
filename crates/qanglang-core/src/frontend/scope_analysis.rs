@@ -58,14 +58,12 @@ impl ScopeAnalysis {
 
 #[derive(Debug, Clone)]
 struct Scope {
-    depth: usize,
     variables: FxHashMap<StringHandle, VariableInfo>,
 }
 
 impl Scope {
-    fn new(depth: usize) -> Self {
+    fn new() -> Self {
         Self {
-            depth,
             variables: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
@@ -105,20 +103,6 @@ impl FunctionScope {
             span,
             kind,
             enclosing: None,
-        }
-    }
-
-    fn push(&mut self, name: StringHandle, arity: usize, span: SourceSpan, kind: FunctionKind) {
-        let previous = std::mem::replace(self, Self::new(name, arity, span, kind));
-        self.enclosing = Some(Box::new(previous));
-    }
-
-    fn pop(&mut self) -> Option<FunctionScope> {
-        if let Some(previous) = self.enclosing.take() {
-            let current = std::mem::replace(self, *previous);
-            Some(current)
-        } else {
-            None
         }
     }
 
@@ -172,7 +156,7 @@ impl<'a> ScopeAnalyzer<'a> {
     pub fn new(strings: &'a mut StringInterner) -> Self {
         Self {
             strings,
-            scopes: vec![Scope::new(0)],
+            scopes: vec![Scope::new()],
             current_function: None,
             results: ScopeAnalysis::new(),
         }
@@ -197,8 +181,7 @@ impl<'a> ScopeAnalyzer<'a> {
     }
 
     fn begin_scope(&mut self) {
-        let depth = self.scopes.len();
-        self.scopes.push(Scope::new(depth));
+        self.scopes.push(Scope::new());
     }
 
     fn end_scope(&mut self) {
@@ -207,28 +190,26 @@ impl<'a> ScopeAnalyzer<'a> {
 
     fn declare_variable(
         &mut self,
-        name: StringHandle,
-        span: SourceSpan,
-        node_id: NodeId,
+        identifier: crate::frontend::typed_node_arena::TypedNodeRef<
+            crate::frontend::nodes::IdentifierNode,
+        >,
     ) -> Result<(), QangCompilerError> {
-        let scope_depth = self.current_scope_depth();
-
-        if scope_depth == 0 {
+        if self.current_scope_depth() == 0 {
             let var_info = VariableInfo {
-                name,
+                name: identifier.node.name,
                 kind: VariableKind::Global,
                 is_captured: false,
-                span,
+                span: identifier.node.span,
             };
-            self.results.variables.insert(node_id, var_info);
+            self.results.variables.insert(identifier.id, var_info);
             return Ok(());
         }
 
         if let Some(current_scope) = self.scopes.last() {
-            if current_scope.variables.contains_key(&name) {
+            if current_scope.variables.contains_key(&identifier.node.name) {
                 return Err(QangCompilerError::new_analysis_error(
                     "Variable with this name already declared in this scope.".to_string(),
-                    span,
+                    identifier.node.span,
                 ));
             }
         }
@@ -242,17 +223,22 @@ impl<'a> ScopeAnalyzer<'a> {
         };
 
         let var_info = VariableInfo {
-            name,
-            kind: VariableKind::Local { scope_depth, slot },
+            name: identifier.node.name,
+            kind: VariableKind::Local {
+                scope_depth: self.current_scope_depth(),
+                slot,
+            },
             is_captured: false,
-            span,
+            span: identifier.node.span,
         };
 
         if let Some(current_scope) = self.scopes.last_mut() {
-            current_scope.variables.insert(name, var_info.clone());
+            current_scope
+                .variables
+                .insert(identifier.node.name, var_info.clone());
         }
 
-        self.results.variables.insert(node_id, var_info);
+        self.results.variables.insert(identifier.id, var_info);
         Ok(())
     }
 
@@ -478,6 +464,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let arity = ctx.nodes.array.size(func_expr.node.parameters);
+        let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
+        self.declare_variable(identifier)?;
 
         if arity > u8::MAX as usize {
             ctx.errors
@@ -498,7 +486,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         for i in 0..arity {
             if let Some(param_id) = ctx.nodes.array.get_node_id_at(func_expr.node.parameters, i) {
                 let param = ctx.nodes.get_identifier_node(param_id);
-                self.declare_variable(param.node.name, param.node.span, param.id)?;
+                self.declare_variable(param)?;
             }
         }
 
@@ -543,7 +531,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 .get_node_id_at(lambda_expr.node.parameters, i)
             {
                 let param = ctx.nodes.get_identifier_node(param_id);
-                self.declare_variable(param.node.name, param.node.span, param.id)?;
+                self.declare_variable(param)?;
             }
         }
 
@@ -570,7 +558,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         }
 
         // Then declare the variable
-        self.declare_variable(identifier.node.name, identifier.node.span, identifier.id)?;
+        self.declare_variable(identifier)?;
 
         Ok(())
     }
@@ -620,7 +608,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
-        self.declare_variable(name_node.node.name, name_node.node.span, name_node.id)?;
+        self.declare_variable(name_node)?;
 
         // Visit superclass if present
         if let Some(superclass_id) = class_decl.node.superclass {
@@ -667,7 +655,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                                 ctx.nodes.array.get_node_id_at(method.parameters, j)
                             {
                                 let param = ctx.nodes.get_identifier_node(param_id);
-                                self.declare_variable(param.node.name, param.node.span, param.id)?;
+                                self.declare_variable(param)?;
                             }
                         }
 

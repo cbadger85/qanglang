@@ -6,7 +6,7 @@ use crate::{
         analyzer::{AnalysisPipeline, AnalysisResults},
         node_visitor::{NodeVisitor, VisitorContext},
         scope_analysis::{FunctionInfo, FunctionKind, VariableKind},
-        typed_node_arena::{AssignmentTargetNode, TypedNodeRef},
+        typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
     },
     nodes::*,
 };
@@ -24,6 +24,7 @@ pub fn compile(
         AnalysisPipeline::new(&mut alloc.strings).analyze(program, &mut nodes, &mut errors);
 
     if errors.has_errors() {
+        // TODO format errors based an analysis config
         return Err(CompilerError::new(errors.take_errors()));
     }
 
@@ -203,7 +204,7 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
-    fn emit_return(&mut self, function_kind: FunctionKind, span: SourceSpan) {
+    fn emit_return(&mut self, span: SourceSpan) {
         let is_init = self
             .current_function_id
             .map(|id| matches!(self.get_function_info(id).kind, FunctionKind::Initializer))
@@ -285,7 +286,6 @@ impl<'a> Assembler<'a> {
     ) -> Result<(), QangCompilerError> {
         // Get function info from analysis
         let func_info = self.get_function_info(func_node_id);
-        let func_kind = func_info.kind;
 
         // Create new function object
         let identifier = ctx.nodes.get_identifier_node(func_expr.name).node;
@@ -302,7 +302,7 @@ impl<'a> Assembler<'a> {
         self.visit_block_statement(body_node, ctx)?;
 
         // Emit return
-        self.emit_return(func_kind, func_expr.span);
+        self.emit_return(func_expr.span);
 
         // Get upvalue info for this function
         let upvalue_captures = self
@@ -1078,7 +1078,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             })?;
 
         // Compile the function
-        self.compile_function(func_decl.id, func_expr.node, ctx)?;
+        self.compile_function(func_decl.node.function, func_expr.node, ctx)?;
 
         // Define the function variable
         match &var_info.kind {
@@ -1196,7 +1196,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let lambda_name_handle = self.allocator.strings.intern("<anonymous>");
         let func_info = self.get_function_info(lambda_expr.id);
-        let func_kind = func_info.kind;
 
         // Create new function object for lambda
         let function = FunctionObject::new(lambda_name_handle, func_info.arity);
@@ -1211,7 +1210,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         match lambda_body.node {
             crate::frontend::typed_node_arena::LambdaBodyNode::Block(body) => {
                 self.visit_block_statement(TypedNodeRef::new(lambda_body.id, body), ctx)?;
-                self.emit_return(func_kind, lambda_expr.node.span);
+                self.emit_return(lambda_expr.node.span);
             }
             crate::frontend::typed_node_arena::LambdaBodyNode::Expr(_) => {
                 // For expression lambdas, create a return statement
@@ -1569,7 +1568,117 @@ impl<'a> NodeVisitor for Assembler<'a> {
         class_decl: TypedNodeRef<ClassDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let name = ctx.nodes.get_identifier_node(class_decl.node.name);
+        let superclass = class_decl
+            .node
+            .superclass
+            .map(|superclass| ctx.nodes.get_identifier_node(superclass));
+
+        // Emit the class constant and create the class
+        let class_handle = name.node.name;
+        let byte = self.make_constant(Value::String(class_handle), name.node.span)?;
+        self.emit_opcode_and_byte(OpCode::Class, byte, name.node.span);
+
+        // Define the class variable using static analysis
+        let var_info = self.analysis.scope.variables.get(&name.id).ok_or_else(|| {
+            QangCompilerError::new_assembler_error(
+                "Class variable not found in analysis results".to_string(),
+                name.node.span,
+            )
+        })?;
+
+        match &var_info.kind {
+            VariableKind::Global => {
+                self.emit_constant_opcode(
+                    OpCode::DefineGlobal,
+                    OpCode::DefineGlobal16,
+                    Value::String(class_handle),
+                    name.node.span,
+                )?;
+            }
+            VariableKind::Local { .. } => {
+                // Local class, no additional instruction needed for definition
+            }
+            VariableKind::Upvalue { .. } => {
+                unreachable!()
+                // return Err(QangCompilerError::new_assembler_error(
+                //     "Cannot declare upvalue class".to_string(),
+                //     class_decl.node.span,
+                // ));
+            }
+        }
+
+        // Load the class for method/field definitions
+        self.emit_variable_access(name.id, name.node.span, false)?;
+
+        // Handle inheritance
+        if let Some(superclass) = superclass {
+            // Load the class again for inheritance setup
+            self.emit_variable_access(name.id, name.node.span, false)?;
+
+            // Check for self-inheritance
+            if class_handle == superclass.node.name {
+                return Err(QangCompilerError::new_assembler_error(
+                    "A class cannot inherit from itself.".to_string(),
+                    superclass.node.span,
+                ));
+            }
+
+            // Load the superclass
+            self.emit_variable_access(superclass.id, superclass.node.span, false)?;
+
+            // Emit inheritance instruction
+            self.emit_opcode(OpCode::Inherit, superclass.node.span);
+        }
+
+        // Process class members
+        let length = ctx.nodes.array.size(class_decl.node.members);
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {
+                let member = ctx.nodes.get_class_member_node(node_id);
+
+                match member.node {
+                    ClassMemberNode::Method(function) => {
+                        let method_name = ctx.nodes.get_identifier_node(function.name);
+
+                        // Compile the method function
+                        self.compile_function(node_id, function, ctx)?;
+
+                        // Add the method to the class
+                        self.emit_constant_opcode(
+                            OpCode::Method,
+                            OpCode::Method16,
+                            Value::String(method_name.node.name),
+                            function.span,
+                        )?;
+                    }
+                    ClassMemberNode::Field(field) => {
+                        let field_name = ctx.nodes.get_identifier_node(field.name);
+
+                        // Emit the field initializer (or nil if none)
+                        if let Some(init_id) = field.initializer {
+                            let initializer = ctx.nodes.get_expr_node(init_id);
+                            self.visit_expression(initializer, ctx)?;
+                        } else {
+                            self.emit_opcode(OpCode::Nil, field.span);
+                        }
+
+                        // Add the field to the class
+                        self.emit_constant_opcode(
+                            OpCode::InitField,
+                            OpCode::InitField16,
+                            Value::String(field_name.node.name),
+                            field_name.node.span,
+                        )?;
+                    }
+                }
+            }
+        }
+
+        // Pop the class from the stack
+        self.emit_opcode(OpCode::Pop, class_decl.node.span);
+
+        Ok(())
     }
 
     fn visit_array_literal(

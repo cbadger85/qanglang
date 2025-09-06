@@ -1,6 +1,6 @@
 use crate::{
-    HeapAllocator, SourceMap, Value, Vm, backend::assembler::CompilerPipeline, disassemble_program,
-    memory::ClosureHandle,
+    HeapAllocator, SourceMap, Value, Vm, backend::assembler::CompilerPipeline, compile,
+    disassemble_program, memory::ClosureHandle,
 };
 
 #[test]
@@ -14,7 +14,7 @@ fn test_globals() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             let vm = Vm::new(allocator);
@@ -46,7 +46,7 @@ fn test_string_concat() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             let vm = Vm::new(allocator);
             match vm.set_gc_status(false).set_debug(false).interpret(program) {
@@ -74,7 +74,7 @@ fn test_runtime_error_with_source_span() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    if let Ok(program) = CompilerPipeline::new(source_map, &mut allocator).run() {
+    if let Ok(program) = compile(&source_map, &mut allocator) {
         match Vm::new(allocator).set_gc_status(false).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")
@@ -101,12 +101,94 @@ fn test_pipe_operator() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_lambda_declaration() {
+    let source = r#"
+        var lambda = () -> "hello world";
+
+        assert_eq(lambda(), "hello world");
+        
+        var lambda_two = () -> {
+            return "hello world";
+        };
+
+        assert_eq(lambda_two(), "hello world");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_lambda_expression() {
+    let source = r#"
+        fn identity(x) {
+            return x;
+        }
+
+        var y = identity(() -> "hello world");
+        assert_eq(y(), "hello world");
+        
+        var z = identity(() -> {
+            return "hello world";
+        });
+            
+        assert_eq(z(), "hello world");
+  "#;
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        // match compile(&source_map, &mut allocator) {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
                 .interpret(program)
             {
                 Ok(_) => (),
@@ -146,7 +228,8 @@ fn test_calling_functions_from_native() {
         }
     }
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             let mut vm = Vm::new(allocator).set_gc_status(false).set_debug(false);
             match vm.interpret(program) {
@@ -190,87 +273,6 @@ fn test_calling_functions_from_native() {
                     panic!("Operation failed")
                 }
                 _ => panic!("Unexpected type conversion."),
-            }
-        }
-        Err(errors) => {
-            for error in errors.all() {
-                println!("{}", error.message);
-            }
-            panic!("Failed with compiler errors.")
-        }
-    }
-}
-
-#[test]
-fn test_lambda_declaration() {
-    let source = r#"
-        var lambda = () -> "hello world";
-
-        assert_eq(lambda(), "hello world");
-        
-        var lambda_two = () -> {
-            return "hello world";
-        };
-
-        assert_eq(lambda_two(), "hello world");
-  "#;
-    let source_map = SourceMap::new(source.to_string());
-    let mut allocator: HeapAllocator = HeapAllocator::new();
-
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        Ok(program) => {
-            disassemble_program(&allocator);
-            match Vm::new(allocator)
-                .set_gc_status(false)
-                .set_debug(false)
-                .interpret(program)
-            {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
-            }
-        }
-        Err(errors) => {
-            for error in errors.all() {
-                println!("{}", error.message);
-            }
-            panic!("Failed with compiler errors.")
-        }
-    }
-}
-
-#[test]
-fn test_lambda_expression() {
-    let source = r#"
-        fn identity(x) {
-            return x;
-        }
-
-        var y = identity(() -> "hello world");
-        assert_eq(y(), "hello world");
-        
-        var z = identity(() -> {
-            return "hello world";
-        });
-            
-        assert_eq(z(), "hello world");
-  "#;
-    let source_map = SourceMap::new(source.to_string());
-    let mut allocator: HeapAllocator = HeapAllocator::new();
-
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        Ok(program) => {
-            disassemble_program(&allocator);
-            match Vm::new(allocator)
-                .set_gc_status(false)
-                .set_debug(true)
-                .interpret(program)
-            {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
             }
         }
         Err(errors) => {

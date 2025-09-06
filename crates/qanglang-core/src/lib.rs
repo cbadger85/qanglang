@@ -7,6 +7,7 @@ pub mod memory;
 
 pub use backend::assembler::{Assembler, CompilerPipeline, QangProgram};
 pub use backend::chunk::SourceLocation;
+pub use backend::compiler::compile;
 pub use backend::value::Value;
 pub use backend::vm::Vm;
 pub use debug::{disassemble_chunk, disassemble_program};

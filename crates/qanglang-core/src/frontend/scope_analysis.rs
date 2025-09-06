@@ -245,30 +245,59 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         node_id: NodeId,
     ) -> Result<VariableKind, QangCompilerError> {
-        // Search scopes from innermost to outermost
-        for scope in self.scopes.iter().rev() {
-            if let Some(var_info) = scope.variables.get(&name) {
-                let var_info_copy = VariableInfo {
+        // In a function context, variables should be resolved with proper upvalue handling
+        if let Some(_) = &self.current_function {
+            // First check current function's local scopes
+            // We need to only look in scopes that belong to the current function
+            // For simplicity, let's check if variable exists in any scope
+            for scope in self.scopes.iter().rev() {
+                if let Some(var_info) = scope.variables.get(&name) {
+                    // Found in a scope - but is it in the current function?
+                    // If it's a Local variable with different scope depth, it might be an upvalue
+                    if let VariableKind::Local { scope_depth, .. } = var_info.kind {
+                        // If the variable's scope depth is less than current, it's an upvalue candidate
+                        if scope_depth < self.current_scope_depth() {
+                            // This variable is from an outer function - try upvalue resolution
+                            break;
+                        }
+                    }
+                    // Variable is in current function's scope
+                    let var_info_copy = VariableInfo {
+                        name,
+                        kind: var_info.kind.clone(),
+                        is_captured: var_info.is_captured,
+                        span,
+                    };
+                    self.results.variables.insert(node_id, var_info_copy);
+                    return Ok(var_info.kind.clone());
+                }
+            }
+            
+            // Try to resolve as upvalue
+            if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
+                let var_info = VariableInfo {
                     name,
-                    kind: var_info.kind.clone(),
-                    is_captured: var_info.is_captured,
+                    kind: upvalue_kind.clone(),
+                    is_captured: false,
                     span,
                 };
-                self.results.variables.insert(node_id, var_info_copy);
-                return Ok(var_info.kind.clone());
+                self.results.variables.insert(node_id, var_info);
+                return Ok(upvalue_kind);
             }
-        }
-
-        // Try to resolve as upvalue
-        if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
-            let var_info = VariableInfo {
-                name,
-                kind: upvalue_kind.clone(),
-                is_captured: false,
-                span,
-            };
-            self.results.variables.insert(node_id, var_info);
-            return Ok(upvalue_kind);
+        } else {
+            // Global scope - search all scopes
+            for scope in self.scopes.iter().rev() {
+                if let Some(var_info) = scope.variables.get(&name) {
+                    let var_info_copy = VariableInfo {
+                        name,
+                        kind: var_info.kind.clone(),
+                        is_captured: var_info.is_captured,
+                        span,
+                    };
+                    self.results.variables.insert(node_id, var_info_copy);
+                    return Ok(var_info.kind.clone());
+                }
+            }
         }
 
         // Global variable
@@ -303,7 +332,20 @@ impl<'a> ScopeAnalyzer<'a> {
                     // Mark the variable as captured
                     var_info.is_captured = true;
 
-                    // Add upvalue to current function with is_local=true
+                    // Check if this upvalue already exists
+                    for (upvalue_index, upvalue) in current_function.upvalues.iter().enumerate() {
+                        if upvalue.name == name {
+                            let is_local = upvalue.is_local; // Copy before move
+                            // Restore current_function
+                            self.current_function = Some(current_function);
+                            return Ok(Some(VariableKind::Upvalue {
+                                index: upvalue_index,
+                                is_local,
+                            }));
+                        }
+                    }
+
+                    // Add new upvalue to current function with is_local=true
                     let upvalue_index = current_function.upvalues.len();
                     if let VariableKind::Local { slot, .. } = var_info.kind {
                         current_function.upvalues.push(UpvalueInfo {
@@ -326,7 +368,20 @@ impl<'a> ScopeAnalyzer<'a> {
             // If not found as local, recursively check outer scopes for upvalues
             if let Some(upvalue_kind) = enclosing.resolve_upvalue(name, span)? {
                 if let VariableKind::Upvalue { index, .. } = upvalue_kind {
-                    // Add upvalue to current function with is_local=false
+                    // Check if this upvalue already exists
+                    for (upvalue_index, upvalue) in current_function.upvalues.iter().enumerate() {
+                        if upvalue.name == name {
+                            let is_local = upvalue.is_local; // Copy before move
+                            // Restore current_function
+                            self.current_function = Some(current_function);
+                            return Ok(Some(VariableKind::Upvalue {
+                                index: upvalue_index,
+                                is_local,
+                            }));
+                        }
+                    }
+
+                    // Add new upvalue to current function with is_local=false
                     let upvalue_index = current_function.upvalues.len();
                     current_function.upvalues.push(UpvalueInfo {
                         name,

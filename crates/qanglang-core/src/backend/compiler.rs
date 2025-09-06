@@ -1231,8 +1231,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
             .cloned()
             .unwrap_or_default();
 
-        // Store compiled function
-        let compiled_function = std::mem::replace(&mut self.current_function, old_function);
+        // Store compiled function and set upvalue count
+        let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
+        compiled_function.upvalue_count = upvalue_captures.len();
         self.current_function_id = old_function_id;
 
         // Allocate function and emit closure
@@ -1244,8 +1245,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
             lambda_expr.node.span,
         )?;
 
-        // Emit upvalue information
-        for upvalue in upvalue_captures {
+        // Emit upvalue information for the VM
+        for upvalue in &upvalue_captures {
             let is_local_byte = if upvalue.is_local { 1 } else { 0 };
             self.emit_byte(is_local_byte, lambda_expr.node.span);
             self.emit_byte(upvalue.index as u8, lambda_expr.node.span);

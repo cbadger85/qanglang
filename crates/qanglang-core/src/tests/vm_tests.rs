@@ -360,7 +360,7 @@ fn test_closures() {
     // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
-            // disassemble_program(&allocator);
+            disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)

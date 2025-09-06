@@ -85,10 +85,11 @@ struct FunctionScope {
     span: SourceSpan,
     kind: FunctionKind,
     enclosing: Option<Box<FunctionScope>>,
+    scope_depth: usize, // The scope depth when this function was entered
 }
 
 impl FunctionScope {
-    fn new(name: StringHandle, arity: usize, span: SourceSpan, kind: FunctionKind) -> Self {
+    fn new(name: StringHandle, arity: usize, span: SourceSpan, kind: FunctionKind, scope_depth: usize) -> Self {
         // All functions reserve slot 0 - for 'this' in methods, blank in regular functions
         let local_count = 1;
 
@@ -100,6 +101,7 @@ impl FunctionScope {
             span,
             kind,
             enclosing: None,
+            scope_depth,
         }
     }
 
@@ -245,44 +247,58 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         node_id: NodeId,
     ) -> Result<VariableKind, QangCompilerError> {
-        // In a function context, variables should be resolved with proper upvalue handling
-        if let Some(_) = &self.current_function {
-            // First check current function's local scopes
-            // We need to only look in scopes that belong to the current function
-            // For simplicity, let's check if variable exists in any scope
+        // Get current function scope depth to avoid borrowing issues
+        let current_function_scope_depth = self.current_function.as_ref().map(|f| f.scope_depth);
+        
+        // Check if we have a current function to determine scope boundaries
+        if let Some(function_scope_depth) = current_function_scope_depth {
+            // Search for the variable in scopes
+            let mut found_enclosing_var = false;
             for scope in self.scopes.iter().rev() {
                 if let Some(var_info) = scope.variables.get(&name) {
-                    // Found in a scope - but is it in the current function?
-                    // If it's a Local variable with different scope depth, it might be an upvalue
+                    // Check if this variable belongs to the current function or an enclosing one
                     if let VariableKind::Local { scope_depth, .. } = var_info.kind {
-                        // If the variable's scope depth is less than current, it's an upvalue candidate
-                        if scope_depth < self.current_scope_depth() {
-                            // This variable is from an outer function - try upvalue resolution
+                        if scope_depth > function_scope_depth {
+                            // This is a local variable of the current function
+                            let var_info_copy = VariableInfo {
+                                name,
+                                kind: var_info.kind.clone(),
+                                is_captured: var_info.is_captured,
+                                span,
+                            };
+                            self.results.variables.insert(node_id, var_info_copy);
+                            return Ok(var_info.kind.clone());
+                        } else {
+                            // This variable belongs to an enclosing function - mark for upvalue resolution
+                            found_enclosing_var = true;
                             break;
                         }
+                    } else {
+                        // Non-local variable (e.g., global) - handle normally
+                        let var_info_copy = VariableInfo {
+                            name,
+                            kind: var_info.kind.clone(),
+                            is_captured: var_info.is_captured,
+                            span,
+                        };
+                        self.results.variables.insert(node_id, var_info_copy);
+                        return Ok(var_info.kind.clone());
                     }
-                    // Variable is in current function's scope
-                    let var_info_copy = VariableInfo {
-                        name,
-                        kind: var_info.kind.clone(),
-                        is_captured: var_info.is_captured,
-                        span,
-                    };
-                    self.results.variables.insert(node_id, var_info_copy);
-                    return Ok(var_info.kind.clone());
                 }
             }
             
-            // Try to resolve as upvalue
-            if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
-                let var_info = VariableInfo {
-                    name,
-                    kind: upvalue_kind.clone(),
-                    is_captured: false,
-                    span,
-                };
-                self.results.variables.insert(node_id, var_info);
-                return Ok(upvalue_kind);
+            // Try upvalue resolution if we found an enclosing variable
+            if found_enclosing_var {
+                if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
+                    let var_info = VariableInfo {
+                        name,
+                        kind: upvalue_kind.clone(),
+                        is_captured: false,
+                        span,
+                    };
+                    self.results.variables.insert(node_id, var_info);
+                    return Ok(upvalue_kind);
+                }
             }
         } else {
             // Global scope - search all scopes
@@ -420,7 +436,7 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let mut new_function = FunctionScope::new(name, arity, span, kind);
+        let mut new_function = FunctionScope::new(name, arity, span, kind, self.current_scope_depth());
 
         if let Some(current) = self.current_function.take() {
             new_function.enclosing = Some(Box::new(current));

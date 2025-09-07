@@ -221,9 +221,53 @@ impl<'a> ScopeAnalyzer<'a> {
             crate::frontend::nodes::IdentifierNode,
         >,
     ) -> Result<(), QangCompilerError> {
-        // TODO add variable to function scope
-        // TODO add variable to variable results
-        todo!()
+        let name = identifier.node.name;
+        let span = identifier.node.span;
+
+        // Check for duplicate variables in current scope
+        if let Some(current_scope) = self.scopes.last() {
+            if current_scope.variables.contains_key(&name) {
+                return Err(QangCompilerError::new_analysis_error(
+                    "Already a variable with this name in this scope.".to_string(),
+                    span,
+                ));
+            }
+        }
+
+        let variable_info = if self.scopes.len() == 1 {
+            // Global scope
+            VariableInfo {
+                name,
+                kind: VariableKind::Global,
+                is_captured: false,
+                span,
+            }
+        } else {
+            // Local scope - add to current function's locals
+            let scope_depth = self.current_scope_depth();
+            let slot = if let Some(function) = self.functions.last_mut() {
+                function.add_local(name, scope_depth)
+            } else {
+                0
+            };
+
+            VariableInfo {
+                name,
+                kind: VariableKind::Local { scope_depth, slot },
+                is_captured: false,
+                span,
+            }
+        };
+
+        // Add to current scope
+        if let Some(current_scope) = self.scopes.last_mut() {
+            current_scope.variables.insert(name, variable_info.clone());
+        }
+
+        // Add to results
+        self.results.variables.insert(identifier.id, variable_info);
+
+        Ok(())
     }
 
     fn resolve_variable(
@@ -232,7 +276,51 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         node_id: NodeId,
     ) -> Result<VariableKind, QangCompilerError> {
-        todo!()
+        // First try to resolve as local variable in current function
+        if let Some(function) = self.functions.last() {
+            if let Some(local_index) = function.find_local(name) {
+                let local = &function.locals[local_index];
+                let variable_kind = VariableKind::Local {
+                    scope_depth: local.scope_depth,
+                    slot: local.slot,
+                };
+
+                // Add to results
+                let variable_info = VariableInfo {
+                    name,
+                    kind: variable_kind.clone(),
+                    is_captured: local.is_captured,
+                    span,
+                };
+                self.results.variables.insert(node_id, variable_info);
+
+                return Ok(variable_kind);
+            }
+        }
+
+        // Try to resolve as upvalue
+        if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
+            let variable_info = VariableInfo {
+                name,
+                kind: upvalue_kind.clone(),
+                is_captured: false,
+                span,
+            };
+            self.results.variables.insert(node_id, variable_info);
+            return Ok(upvalue_kind);
+        }
+
+        // Default to global variable
+        let variable_kind = VariableKind::Global;
+        let variable_info = VariableInfo {
+            name,
+            kind: variable_kind.clone(),
+            is_captured: false,
+            span,
+        };
+        self.results.variables.insert(node_id, variable_info);
+
+        Ok(variable_kind)
     }
 
     fn resolve_upvalue(
@@ -240,7 +328,47 @@ impl<'a> ScopeAnalyzer<'a> {
         name: StringHandle,
         span: SourceSpan,
     ) -> Result<Option<VariableKind>, QangCompilerError> {
-        todo!()
+        if self.functions.len() < 2 {
+            return Ok(None); // No enclosing function to capture from
+        }
+
+        // We need to look at functions in reverse order (excluding current)
+        let current_func_idx = self.functions.len() - 1;
+
+        // Check if it's a local in the immediately enclosing function
+        if let Some(enclosing_func) = self.functions.get_mut(current_func_idx - 1) {
+            if let Some(local_index) = enclosing_func.find_local(name) {
+                // Mark the local as captured
+                enclosing_func.locals[local_index].is_captured = true;
+
+                // Add upvalue to current function
+                if let Some(current_func) = self.functions.get_mut(current_func_idx) {
+                    let upvalue_index = current_func.add_upvalue(name, local_index, true);
+                    return Ok(Some(VariableKind::Upvalue {
+                        index: upvalue_index,
+                        is_local: true,
+                    }));
+                }
+            }
+        }
+
+        // Recursively check outer scopes by temporarily removing current function
+        let current_function = self.functions.pop().unwrap();
+        let upvalue_result = self.resolve_upvalue(name, span)?;
+        self.functions.push(current_function);
+
+        if let Some(VariableKind::Upvalue { index, .. }) = upvalue_result {
+            // Add upvalue reference to current function
+            if let Some(current_func) = self.functions.last_mut() {
+                let upvalue_index = current_func.add_upvalue(name, index, false);
+                return Ok(Some(VariableKind::Upvalue {
+                    index: upvalue_index,
+                    is_local: false,
+                }));
+            }
+        }
+
+        Ok(None)
     }
 
     fn begin_function(

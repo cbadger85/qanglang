@@ -39,7 +39,6 @@ fn test_three_level_closure_capture_bug() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    //   match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -88,7 +87,6 @@ fn test_simple_two_level_closure() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    //   match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -184,6 +182,71 @@ fn test_map_optional_expression() {
 }
 
 #[test]
+fn test_closures() {
+    let source = r#"
+        fn make_working_counter() {
+            var count = 0;
+            var counter = () -> {
+                assert_eq(typeof(count), NUMBER, "Expected " + NUMBER + " but found " + typeof(count));
+                println("typeof count " + typeof(count));
+                count = count + 1;
+                return count;
+            };
+
+            var value = counter();
+            assert_eq(value, 1, "Expected value to be 1."); // This test passes.
+
+            return true;
+        }
+
+        assert(make_working_counter());
+
+        fn make_counter() {
+            var count = 0;
+            return () -> {
+                assert_eq(typeof(count), NUMBER, "Expected " + NUMBER + " but found " + typeof(count));
+                println("typeof count " + typeof(count));
+                count = count + 1;
+                return count;
+            };
+        }
+                
+            fn perform_count() {
+                var counter = make_counter();
+                assert_eq(typeof(counter), FUNCTION, "Expected " + FUNCTION + " but found " + typeof(counter));
+            return counter();
+        }
+
+        assert_eq(perform_count(), 1);
+"#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
 fn test_multiple_overflow_chunks() {
     let source = r#"
         fn wrapper_function_that_is_required_for_failure() {
@@ -206,7 +269,6 @@ fn test_multiple_overflow_chunks() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    //   match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
@@ -249,7 +311,6 @@ fn test_upvalue_chain_linking() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    //   match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
@@ -294,7 +355,6 @@ fn test_minimal_upvalue_overflow() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    //   match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -353,7 +413,6 @@ fn test_isolated_upvalue_overflow_scenario() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    //   match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -399,7 +458,6 @@ fn test_nested_closures() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    //   match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);

@@ -357,7 +357,6 @@ fn test_closures() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    // match compile(&source_map, &mut allocator) {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -673,6 +672,7 @@ fn test_class_inheritance() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);

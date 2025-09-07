@@ -1881,7 +1881,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             .map(|superclass| ctx.nodes.get_identifier_node(superclass));
         self.declare_variable(name.node.name, name.node.span)?;
         let class_handle = name.node.name;
-        // TODO this needs a Class16 variant as well
+        // TODO make use of the Class16 opcode
         let byte = self.make_constant(Value::String(class_handle), name.node.span)?;
         self.emit_opcode_and_byte(OpCode::Class, byte, name.node.span);
         self.define_variable(Some(class_handle), name.node.span)?;

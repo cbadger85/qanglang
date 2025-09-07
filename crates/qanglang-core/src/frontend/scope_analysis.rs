@@ -459,6 +459,13 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 ));
         }
 
+        for i in 0..size {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(array.node.elements, i) {
+                let expr = ctx.nodes.get_expr_node(node_id);
+                self.visit_expression(expr, ctx)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -475,6 +482,14 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                     "Object literal cannot have more than 256 entries.".to_string(),
                     object.node.span,
                 ));
+        }
+
+        // Visit each object entry to analyze the value expressions
+        for i in 0..size {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(object.node.entries, i) {
+                let entry = ctx.nodes.get_obj_entry_node(node_id);
+                self.visit_object_entry(entry, ctx)?;
+            }
         }
 
         Ok(())

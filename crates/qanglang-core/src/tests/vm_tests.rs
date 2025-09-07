@@ -977,7 +977,6 @@ fn test_break_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
@@ -1006,7 +1005,6 @@ fn test_break_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
@@ -1041,7 +1039,6 @@ fn test_continue_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
@@ -1070,7 +1067,6 @@ fn test_continue_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
@@ -1248,8 +1244,7 @@ fn test_object_literals() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1287,8 +1282,7 @@ fn test_object_with_lambda_properties() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1690,8 +1684,8 @@ fn test_map_expression() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    // match compile(&source_map, &mut allocator) {
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
+        // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)

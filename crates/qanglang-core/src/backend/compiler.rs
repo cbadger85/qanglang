@@ -114,7 +114,7 @@ impl<'a> Assembler<'a> {
         let jump = self.current_chunk_mut().code.len() - offset - 2;
 
         if jump > u16::MAX as usize {
-            return Err(QangCompilerError::new_syntax_error(
+            return Err(QangCompilerError::new_assembler_error(
                 "Too much code to jump over.".to_string(),
                 span,
             ));
@@ -130,7 +130,7 @@ impl<'a> Assembler<'a> {
         self.emit_opcode(OpCode::Loop, span);
         let offset = self.current_chunk_mut().code.len() - loop_start + 2;
         if offset > u16::MAX as usize {
-            return Err(QangCompilerError::new_syntax_error(
+            return Err(QangCompilerError::new_assembler_error(
                 "Loop body too large.".to_string(),
                 span,
             ));
@@ -917,7 +917,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             let jump_distance = continue_position - loop_start + 3;
 
             if jump_distance > u16::MAX as usize {
-                return Err(QangCompilerError::new_syntax_error(
+                return Err(QangCompilerError::new_assembler_error(
                     "Continue jump too large.".to_string(),
                     while_stmt.node.span,
                 ));
@@ -1679,7 +1679,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let length = ctx.nodes.array.size(array.node.elements);
 
         if length > u8::MAX.into() {
-            return Err(QangCompilerError::new_syntax_error(
+            return Err(QangCompilerError::new_assembler_error(
                 "An array literal cannot be initialized with more than 256 elements.".to_string(),
                 array.node.span,
             ));
@@ -1705,7 +1705,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let length = ctx.nodes.array.size(object.node.entries);
 
         if length > u8::MAX.into() {
-            return Err(QangCompilerError::new_syntax_error(
+            return Err(QangCompilerError::new_assembler_error(
                 "An object literal cannot be initialized with more than 256 entries.".to_string(),
                 object.node.span,
             ));

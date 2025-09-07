@@ -1,6 +1,6 @@
 use crate::{
-    CompilerError, ErrorReporter, FunctionObject, HeapAllocator, NodeId, Parser, QangCompilerError,
-    QangProgram, SourceLocation, SourceMap, TypedNodeArena, Value,
+    ErrorReporter, FunctionObject, HeapAllocator, NodeId, Parser, QangCompilerError,
+    QangPipelineError, QangProgram, SourceLocation, SourceMap, TypedNodeArena, Value,
     backend::chunk::{Chunk, OpCode},
     frontend::{
         analyzer::{AnalysisPipeline, AnalysisResults},
@@ -14,19 +14,18 @@ use crate::{
 pub fn compile(
     source_map: &SourceMap,
     alloc: &mut HeapAllocator,
-) -> Result<QangProgram, CompilerError> {
+) -> Result<QangProgram, QangPipelineError> {
     let mut parser = Parser::new(source_map, TypedNodeArena::new(), &mut alloc.strings);
     let program = parser.parse();
 
     let (mut errors, mut nodes) = parser.into_parts();
 
-    let result =
-        AnalysisPipeline::new(&mut alloc.strings).analyze(program, &mut nodes, &mut errors);
-
-    if errors.has_errors() {
-        // TODO format errors based an analysis config
-        return Err(CompilerError::new(errors.take_errors()));
-    }
+    let result = AnalysisPipeline::new(&mut alloc.strings).analyze(
+        program,
+        source_map,
+        &mut nodes,
+        &mut errors,
+    )?;
 
     let assembler = Assembler::new(source_map, alloc, &result);
     let main_function = assembler.assemble(program, &mut nodes, &mut errors)?;
@@ -71,13 +70,13 @@ impl<'a> Assembler<'a> {
         program: NodeId,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
-    ) -> Result<FunctionObject, CompilerError> {
+    ) -> Result<FunctionObject, QangPipelineError> {
         let mut ctx = VisitorContext::new(nodes, errors);
 
         let program_node = ctx.nodes.get_program_node(program);
 
         self.visit_program(program_node, &mut ctx)
-            .map_err(|err| CompilerError::new(vec![err]))?;
+            .map_err(|err| QangPipelineError::new(vec![err]))?;
 
         self.emit_opcode(OpCode::Nil, SourceSpan::default());
         self.emit_opcode(OpCode::Return, SourceSpan::default());
@@ -223,12 +222,17 @@ impl<'a> Assembler<'a> {
         span: SourceSpan,
         is_assignment: bool,
     ) -> Result<(), QangCompilerError> {
-        let var_info = self.analysis.scope.variables.get(&node_id).ok_or_else(|| {
-            QangCompilerError::new_assembler_error(
-                "Variable not found in analysis results".to_string(),
-                span,
-            )
-        })?;
+        let var_info = self
+            .analysis
+            .scopes
+            .variables
+            .get(&node_id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Variable not found in analysis results".to_string(),
+                    span,
+                )
+            })?;
 
         match &var_info.kind {
             VariableKind::Local { slot, .. } => {
@@ -307,7 +311,7 @@ impl<'a> Assembler<'a> {
         // Get upvalue info for this function
         let upvalue_captures = self
             .analysis
-            .scope
+            .scopes
             .upvalue_captures
             .get(&func_node_id)
             .cloned()
@@ -339,7 +343,7 @@ impl<'a> Assembler<'a> {
 
     fn get_function_info(&self, node_id: NodeId) -> &FunctionInfo {
         self.analysis
-            .scope
+            .scopes
             .functions
             .get(&node_id)
             .expect("Function not found in analysis results")
@@ -414,7 +418,7 @@ impl<'a> Assembler<'a> {
         // Get upvalue info for this map expression
         let upvalue_captures = self
             .analysis
-            .scope
+            .scopes
             .upvalue_captures
             .get(&map_node_id)
             .cloned()
@@ -805,7 +809,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // Use static analysis to determine how to define the variable
         let var_info = self
             .analysis
-            .scope
+            .scopes
             .variables
             .get(&identifier.id)
             .ok_or_else(|| {
@@ -1109,7 +1113,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
         let var_info = self
             .analysis
-            .scope
+            .scopes
             .variables
             .get(&identifier.id)
             .ok_or_else(|| {
@@ -1184,7 +1188,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // Define the lambda variable using static analysis
         let var_info = self
             .analysis
-            .scope
+            .scopes
             .variables
             .get(&identifier.id)
             .ok_or_else(|| {
@@ -1253,7 +1257,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // Get upvalue info for this lambda
         let upvalue_captures = self
             .analysis
-            .scope
+            .scopes
             .upvalue_captures
             .get(&lambda_expr.id)
             .cloned()
@@ -1610,12 +1614,17 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.emit_opcode_and_byte(OpCode::Class, byte, name.node.span);
 
         // Define the class variable using static analysis
-        let var_info = self.analysis.scope.variables.get(&name.id).ok_or_else(|| {
-            QangCompilerError::new_assembler_error(
-                "Class variable not found in analysis results".to_string(),
-                name.node.span,
-            )
-        })?;
+        let var_info = self
+            .analysis
+            .scopes
+            .variables
+            .get(&name.id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Class variable not found in analysis results".to_string(),
+                    name.node.span,
+                )
+            })?;
 
         match &var_info.kind {
             VariableKind::Global => {

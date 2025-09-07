@@ -1,4 +1,4 @@
-use qanglang_core::{Assembler, CompilerError, HeapAllocator, Parser, SourceMap, TypedNodeArena};
+use qanglang_core::{Assembler, QangPipelineError, HeapAllocator, Parser, SourceMap, TypedNodeArena};
 
 pub struct Analyzer<'a> {
     source_map: &'a SourceMap,
@@ -9,7 +9,7 @@ impl<'a> Analyzer<'a> {
         Analyzer { source_map }
     }
 
-    pub fn analyze(&self) -> Result<(), CompilerError> {
+    pub fn analyze(&self) -> Result<(), QangPipelineError> {
         let mut allocator = HeapAllocator::new();
         let nodes = TypedNodeArena::new();
 

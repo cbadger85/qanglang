@@ -8,9 +8,9 @@ pub enum ErrorMessageFormat {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CompilerError(Vec<QangCompilerError>);
+pub struct QangPipelineError(Vec<QangCompilerError>);
 
-impl CompilerError {
+impl QangPipelineError {
     pub fn new(errors: Vec<QangCompilerError>) -> Self {
         Self(errors)
     }
@@ -217,8 +217,8 @@ impl ErrorReporter {
         &self.errors
     }
 
-    pub fn take_errors(self) -> Vec<QangCompilerError> {
-        self.errors
+    pub fn take_errors(&mut self) -> Vec<QangCompilerError> {
+        std::mem::replace(&mut self.errors, Vec::new())
     }
 }
 

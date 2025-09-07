@@ -1,7 +1,7 @@
 use crate::{
     ErrorReporter, FunctionHandle, QangCompilerError, SourceMap, Value,
     backend::chunk::{Chunk, OpCode, SourceLocation},
-    error::{CompilerError, ErrorMessageFormat},
+    error::{ErrorMessageFormat, QangPipelineError},
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
         nodes::*,
@@ -214,7 +214,7 @@ impl<'a> CompilerPipeline<'a> {
         self
     }
 
-    pub fn run(self) -> Result<QangProgram, CompilerError> {
+    pub fn run(self) -> Result<QangProgram, QangPipelineError> {
         let nodes = TypedNodeArena::new();
         let mut parser = Parser::new(&self.source_map, nodes, &mut self.allocator.strings);
         let program = parser.parse();
@@ -222,7 +222,7 @@ impl<'a> CompilerPipeline<'a> {
         match Assembler::new(self.allocator).compile(program, &mut nodes, &self.source_map, errors)
         {
             Ok(program) => Ok(QangProgram::new(self.allocator.allocate_function(program))),
-            Err(error) => Err(CompilerError::new(
+            Err(error) => Err(QangPipelineError::new(
                 error
                     .all()
                     .iter()
@@ -309,7 +309,7 @@ impl<'a> Assembler<'a> {
         nodes: &mut TypedNodeArena,
         source_map: &'a SourceMap,
         mut errors: ErrorReporter,
-    ) -> Result<FunctionObject, CompilerError> {
+    ) -> Result<FunctionObject, QangPipelineError> {
         self.source_map = source_map;
         let handle = self.allocator.strings.intern(&source_map.name);
         self.state = AssemblerState::new(handle, self.state.blank_handle, self.state.this_handle);
@@ -318,13 +318,13 @@ impl<'a> Assembler<'a> {
         let program_node = ctx.nodes.get_program_node(program);
 
         self.visit_program(program_node, &mut ctx)
-            .map_err(|err| CompilerError::new(vec![err]))?;
+            .map_err(|err| QangPipelineError::new(vec![err]))?;
 
         self.emit_opcode(OpCode::Nil, SourceSpan::default());
         self.emit_opcode(OpCode::Return, SourceSpan::default());
 
         if errors.has_errors() {
-            Err(CompilerError::new(errors.take_errors()))
+            Err(QangPipelineError::new(errors.take_errors()))
         } else {
             let artifacts = std::mem::take(&mut self.state);
             self.reset();

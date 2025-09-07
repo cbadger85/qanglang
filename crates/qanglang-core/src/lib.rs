@@ -12,12 +12,13 @@ pub use backend::value::Value;
 pub use backend::vm::Vm;
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{
-    CompilerError, ErrorMessageFormat, ErrorReporter, NativeFunctionError, QangCompilerError,
+    ErrorMessageFormat, ErrorReporter, NativeFunctionError, QangCompilerError, QangPipelineError,
     QangRuntimeError, Trace,
 };
 pub use frontend::source::SourceMap;
 pub use frontend::tokenizer::{Token, TokenType, Tokenizer};
 pub use frontend::{
+    analyzer::{AnalysisPipeline, AnalysisPipelineConfig, AnalysisResults},
     node_array_arena::NodeArrayId,
     nodes,
     parse::Parser,

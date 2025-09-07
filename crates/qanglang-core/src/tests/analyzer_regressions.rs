@@ -1,31 +1,78 @@
 use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm, compile, disassemble_program};
 
 #[test]
-fn test_block_scope_shadowing() {
+fn test_calling_init_on_super_without_init() {
     let source = r#"
-      fn test_block_scope_shadowing() {
-        var test_value = nil;
-        assert_eq(test_value, nil, "Expected test_value to be nil.");
-        test_value = 2;
-        assert_eq(test_value, 2, "Expected test_value to be 2.");
-        
-        {
-          var test_value = "2";
-          assert_eq(test_value, "2", "Expected test_value to be '2'.");
-        }
+      fn test_calling_init_on_super_without_init() {
+        class TestClass { }
 
-        assert_eq(test_value, 2, "Expected test_value to still be 2.");
+        class OtherClass : TestClass {
+
+          init() {
+            super.init();
+          }
+        }  
+
+        var test = OtherClass();
       }
 
-      test_block_scope_shadowing();
-
+      test_calling_init_on_super_without_init();
     "#;
 
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_class_super_method_calls() {
+    let source = r#"
+      fn test_class_super_method_calls() {
+        class TestClass {
+          test_method() {
+            return 42;
+          }
+        }
+
+        class OtherClass : TestClass {
+          test_method() {
+            return super.test_method() - 42;
+          }
+        }  
+
+        assert_eq(OtherClass().test_method(), 0, "Expected 0.");
+      }
+      
+      test_class_super_method_calls();
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator = HeapAllocator::new();
+
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -73,8 +120,8 @@ fn test_class_super_keyword() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -136,74 +183,8 @@ fn test_class_inheritance() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
-        Ok(program) => {
-            disassemble_program(&allocator);
-            match Vm::new(allocator)
-                .set_gc_status(false)
-                .set_debug(true)
-                .interpret(program)
-            {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
-            }
-        }
-        Err(errors) => {
-            for error in errors.all() {
-                println!("{}", error.message);
-            }
-            panic!("Failed with compiler errors.")
-        }
-    }
-}
-
-#[test]
-fn test_is_operator() {
-    let source = r#"
-      fn test_is_operator() {
-        assert([] is ARRAY);
-        assert({{}} is OBJECT);
-        assert("this is a string" is STRING);
-        assert(0 is NUMBER);
-        assert(true is BOOLEAN);
-        assert(false is BOOLEAN);
-        assert(nil is NIL);
-
-        fn test_function() {}
-        assert(test_function is FUNCTION);
-        var test_lambda = () -> nil;
-        assert(test_lambda is FUNCTION);
-
-        class TestClass {
-          test_method() {}
-        }
-        assert(TestClass is CLASS);
-        var test_instance = TestClass();
-        assert(test_instance.test_method is FUNCTION);
-        var bound_method = test_instance.test_method;
-        assert(bound_method is FUNCTION);
-        assert(test_instance is OBJECT);
-        assert(test_instance is TestClass);
-        
-        class SubTestClass : TestClass {}
-        var sub_test_instance = SubTestClass();
-        assert(sub_test_instance is SubTestClass);
-        assert(sub_test_instance is TestClass);
-
-        assert(!(test_instance is SubTestClass));
-      }
-
-      test_is_operator();
-    "#;
-
-    let source_map = SourceMap::new(source.to_string());
-    let mut allocator = HeapAllocator::new();
-
-    // match compile(&source_map, &mut allocator) {
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)

@@ -256,7 +256,10 @@ impl<'a> Assembler<'a> {
             .get(&node_id)
             .ok_or_else(|| {
                 QangCompilerError::new_assembler_error(
-                    "Variable not found in analysis results".to_string(),
+                    format!(
+                        "Variable not found in analysis results for node_id: {:?}",
+                        node_id
+                    ),
                     span,
                 )
             })?;

@@ -139,11 +139,20 @@ impl FunctionContext {
         local_index
     }
 
-    fn find_local(&self, name: StringHandle) -> Option<usize> {
+    fn find_local(&self, name: StringHandle, current_scope_depth: usize) -> Option<usize> {
+        // Search backwards to find the most recent (innermost scope) variable with this name
+        // that is still within the current scope depth
         self.locals
             .iter()
             .enumerate()
-            .find_map(|(i, local)| if local.name == name { Some(i) } else { None })
+            .rev()
+            .find_map(|(i, local)| {
+                if local.name == name && local.scope_depth <= current_scope_depth {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
     }
 
     fn add_upvalue(&mut self, name: StringHandle, index: usize, is_local: bool) -> usize {
@@ -277,7 +286,8 @@ impl<'a> ScopeAnalyzer<'a> {
     ) -> Result<VariableKind, QangCompilerError> {
         // First try to resolve as local variable in current function
         if let Some(function) = self.functions.last() {
-            if let Some(local_index) = function.find_local(name) {
+            let current_scope_depth = self.current_scope_depth();
+            if let Some(local_index) = function.find_local(name, current_scope_depth) {
                 let local = &function.locals[local_index];
                 let variable_kind = VariableKind::Local {
                     scope_depth: local.scope_depth,
@@ -336,7 +346,9 @@ impl<'a> ScopeAnalyzer<'a> {
 
         // Check if it's a local in the immediately enclosing function
         if let Some(enclosing_func) = self.functions.get_mut(current_func_idx - 1) {
-            if let Some(local_index) = enclosing_func.find_local(name) {
+            // For upvalue resolution, we want to find any variable in the enclosing function
+            // regardless of scope depth, since it will be captured
+            if let Some(local_index) = enclosing_func.find_local(name, usize::MAX) {
                 // Mark the local as captured
                 enclosing_func.locals[local_index].is_captured = true;
 
@@ -663,43 +675,22 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             // Declare "super" as a local variable at slot 1 (slot 0 is reserved for 'this' in methods)
             let super_handle = self.strings.intern("super");
 
-            // Add "super" to the current function's locals so it can be resolved
+            // Add "super" to the current function's locals like any other local variable
             let scope_depth = self.current_scope_depth();
-            if let Some(func) = self.functions.last_mut() {
-                let local = LocalVariable {
-                    name: super_handle,
-                    slot: 1, // Hardcode slot 1 for super variable
-                    is_captured: false,
-                    scope_depth,
-                };
-
-                // Make sure we have enough space in the locals list
-                while func.locals.len() <= 1 {
-                    func.locals.push(LocalVariable {
-                        name: self.blank_handle,
-                        slot: func.locals.len(),
-                        is_captured: false,
-                        scope_depth: 0,
-                    });
-                }
-
-                // Set the super variable at slot 1
-                if func.locals.len() > 1 {
-                    func.locals[1] = local;
-                } else {
-                    func.locals.push(local);
-                }
-
-                // Ensure local_count accounts for slots 0 and 1
-                func.local_count = std::cmp::max(func.local_count, 2);
-            }
+            let super_slot = if let Some(func) = self.functions.last_mut() {
+                // Use add_local to get the next available slot instead of hardcoding slot 1
+                let slot_index = func.add_local(super_handle, scope_depth);
+                func.locals[slot_index].slot
+            } else {
+                1 // fallback
+            };
 
             // Also add to scope for consistency
             let var_info = VariableInfo {
                 name: super_handle,
                 kind: VariableKind::Local {
                     scope_depth,
-                    slot: 1,
+                    slot: super_slot,
                 },
                 is_captured: false,
                 span: class_decl.node.span,

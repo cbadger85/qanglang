@@ -165,6 +165,7 @@ pub struct ScopeAnalyzer<'a> {
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
     blank_handle: StringHandle,
+    loop_depth: usize,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -183,6 +184,7 @@ impl<'a> ScopeAnalyzer<'a> {
                 SourceSpan::default(),
             )],
             results: ScopeAnalysis::new(),
+            loop_depth: 0,
         }
     }
 
@@ -368,6 +370,16 @@ impl<'a> ScopeAnalyzer<'a> {
         Ok(None)
     }
 
+    fn begin_loop(&mut self) {
+        self.loop_depth += 1;
+    }
+
+    fn end_loop(&mut self) {
+        if self.loop_depth > 0 {
+            self.loop_depth -= 1;
+        }
+    }
+
     fn begin_function(
         &mut self,
         name: StringHandle,
@@ -387,6 +399,8 @@ impl<'a> ScopeAnalyzer<'a> {
 
         self.functions.push(function);
         self.begin_scope();
+        // Reset loop depth when entering a new function - loops don't cross function boundaries
+        self.loop_depth = 0;
     }
 
     fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
@@ -770,6 +784,56 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         Ok(())
     }
 
+    fn visit_super_expression(
+        &mut self,
+        super_expr: super::typed_node_arena::TypedNodeRef<super::nodes::SuperExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Check if we're in a method or initializer context
+        if let Some(current_function) = &self.functions.last() {
+            if !matches!(
+                current_function.kind,
+                FunctionKind::Method | FunctionKind::Initializer
+            ) {
+                ctx.errors
+                    .report_error(QangCompilerError::new_analysis_error(
+                        "Cannot use 'super' outside of a class method.".to_string(),
+                        super_expr.node.span,
+                    ));
+            }
+        } else {
+            ctx.errors
+                .report_error(QangCompilerError::new_analysis_error(
+                    "Cannot use 'super' outside of a class method.".to_string(),
+                    super_expr.node.span,
+                ));
+        }
+
+        // Resolve the 'super' variable access
+        let super_handle = self.strings.intern("super");
+        self.resolve_variable(super_handle, super_expr.node.span, super_expr.id)?;
+
+        Ok(())
+    }
+
+    fn visit_while_statement(
+        &mut self,
+        while_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::WhileStmtNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Visit condition
+        let condition = ctx.nodes.get_expr_node(while_stmt.node.condition);
+        self.visit_expression(condition, ctx)?;
+
+        // Enter loop context and visit body
+        self.begin_loop();
+        let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
+        self.visit_statement(body, ctx)?;
+        self.end_loop();
+
+        Ok(())
+    }
+
     fn visit_for_statement(
         &mut self,
         for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
@@ -788,38 +852,42 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
         }
 
+        // Enter loop context for the body
+        self.begin_loop();
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
+        self.end_loop();
+
         self.end_scope();
         Ok(())
     }
 
-    fn visit_super_expression(
+    fn visit_break_statement(
         &mut self,
-        super_expr: super::typed_node_arena::TypedNodeRef<super::nodes::SuperExprNode>,
-        _ctx: &mut VisitorContext,
+        break_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BreakStmtNode>,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Check if we're in a method or initializer context
-        if let Some(current_function) = &self.functions.last() {
-            if !matches!(
-                current_function.kind,
-                FunctionKind::Method | FunctionKind::Initializer
-            ) {
-                return Err(QangCompilerError::new_analysis_error(
-                    "Cannot use 'super' outside of a class method.".to_string(),
-                    super_expr.node.span,
+        if self.loop_depth == 0 {
+            ctx.errors
+                .report_error(QangCompilerError::new_analysis_error(
+                    "'break' can only be used inside loops.".to_string(),
+                    break_stmt.node.span,
                 ));
-            }
-        } else {
-            return Err(QangCompilerError::new_analysis_error(
-                "Cannot use 'super' outside of a class method.".to_string(),
-                super_expr.node.span,
-            ));
         }
+        Ok(())
+    }
 
-        // Resolve the 'super' variable access
-        let super_handle = self.strings.intern("super");
-        self.resolve_variable(super_handle, super_expr.node.span, super_expr.id)?;
-
+    fn visit_continue_statement(
+        &mut self,
+        continue_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ContinueStmtNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        if self.loop_depth == 0 {
+            ctx.errors
+                .report_error(QangCompilerError::new_analysis_error(
+                    "'continue' can only be used inside loops.".to_string(),
+                    continue_stmt.node.span,
+                ));
+        }
         Ok(())
     }
 }

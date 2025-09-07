@@ -1107,37 +1107,23 @@ impl<'a> NodeVisitor for Assembler<'a> {
         break_stmt: TypedNodeRef<BreakStmtNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if !self.loop_contexts.is_empty() {
-            let jump = self.emit_jump(OpCode::Jump, break_stmt.node.span);
-            if let Some(loop_context) = self.loop_contexts.last_mut() {
-                loop_context.break_jumps.push(jump);
-            }
-            Ok(())
-        } else {
-            Err(QangCompilerError::new_syntax_error(
-                "'break' can only be used inside loops.".to_string(),
-                break_stmt.node.span,
-            ))
+        let jump = self.emit_jump(OpCode::Jump, break_stmt.node.span);
+        if let Some(loop_context) = self.loop_contexts.last_mut() {
+            loop_context.break_jumps.push(jump);
         }
+        Ok(())
     }
 
     fn visit_continue_statement(
         &mut self,
-        continue_stmt: TypedNodeRef<ContinueStmtNode>,
+        _continue_stmt: TypedNodeRef<ContinueStmtNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if !self.loop_contexts.is_empty() {
-            let continue_position = self.current_chunk_mut().code.len();
-            if let Some(loop_context) = self.loop_contexts.last_mut() {
-                loop_context.continue_jumps.push(continue_position);
-            }
-            Ok(())
-        } else {
-            Err(QangCompilerError::new_syntax_error(
-                "'continue' can only be used inside loops.".to_string(),
-                continue_stmt.node.span,
-            ))
+        let continue_position = self.current_chunk_mut().code.len();
+        if let Some(loop_context) = self.loop_contexts.last_mut() {
+            loop_context.continue_jumps.push(continue_position);
         }
+        Ok(())
     }
 
     fn visit_lambda_declaration(

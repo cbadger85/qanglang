@@ -89,7 +89,13 @@ struct FunctionScope {
 }
 
 impl FunctionScope {
-    fn new(name: StringHandle, arity: usize, span: SourceSpan, kind: FunctionKind, scope_depth: usize) -> Self {
+    fn new(
+        name: StringHandle,
+        arity: usize,
+        span: SourceSpan,
+        kind: FunctionKind,
+        scope_depth: usize,
+    ) -> Self {
         // All functions reserve slot 0 - for 'this' in methods, blank in regular functions
         let local_count = 1;
 
@@ -249,7 +255,7 @@ impl<'a> ScopeAnalyzer<'a> {
     ) -> Result<VariableKind, QangCompilerError> {
         // Get current function scope depth to avoid borrowing issues
         let current_function_scope_depth = self.current_function.as_ref().map(|f| f.scope_depth);
-        
+
         // Check if we have a current function to determine scope boundaries
         if let Some(function_scope_depth) = current_function_scope_depth {
             // Search for the variable in scopes
@@ -268,8 +274,8 @@ impl<'a> ScopeAnalyzer<'a> {
                             };
                             self.results.variables.insert(node_id, var_info_copy);
                             return Ok(var_info.kind.clone());
-                        } else {
-                            // This variable belongs to an enclosing function - mark for upvalue resolution
+                        } else if scope_depth <= function_scope_depth {
+                            // This variable belongs to an enclosing scope - mark for upvalue resolution
                             found_enclosing_var = true;
                             break;
                         }
@@ -286,7 +292,7 @@ impl<'a> ScopeAnalyzer<'a> {
                     }
                 }
             }
-            
+
             // Try upvalue resolution if we found an enclosing variable
             if found_enclosing_var {
                 if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
@@ -339,6 +345,44 @@ impl<'a> ScopeAnalyzer<'a> {
 
         // Take ownership of current_function temporarily to avoid borrowing conflicts
         let mut current_function = self.current_function.take().unwrap();
+
+        // Special case for class methods: they can access class-scope variables as upvalues
+        // even without an enclosing function context
+        if current_function.enclosing.is_none()
+            && matches!(
+                current_function.kind,
+                FunctionKind::Method | FunctionKind::Initializer
+            )
+        {
+            // Search in current scopes for the variable (class scope variables)
+            for scope in self.scopes.iter_mut().rev() {
+                if let Some(var_info) = scope.variables.get_mut(&name) {
+                    // Check if this variable is from a class scope (not the current method's scope)
+                    if let VariableKind::Local { scope_depth, slot } = var_info.kind {
+                        if scope_depth <= current_function.scope_depth {
+                            // Mark the variable as captured
+                            var_info.is_captured = true;
+
+                            // Add as upvalue to current function
+                            let upvalue_index = current_function.upvalues.len();
+                            current_function.upvalues.push(UpvalueInfo {
+                                name,
+                                index: slot,
+                                is_local: true,
+                            });
+
+                            // Restore current_function
+                            self.current_function = Some(current_function);
+
+                            return Ok(Some(VariableKind::Upvalue {
+                                index: upvalue_index,
+                                is_local: true,
+                            }));
+                        }
+                    }
+                }
+            }
+        }
 
         if let Some(enclosing) = &mut current_function.enclosing {
             // First check if it's a local variable in the immediately enclosing function's scopes
@@ -436,7 +480,8 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let mut new_function = FunctionScope::new(name, arity, span, kind, self.current_scope_depth());
+        let mut new_function =
+            FunctionScope::new(name, arity, span, kind, self.current_scope_depth());
 
         if let Some(current) = self.current_function.take() {
             new_function.enclosing = Some(Box::new(current));
@@ -678,10 +723,44 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
         self.declare_variable(name_node)?;
 
-        // Visit superclass if present
-        if let Some(superclass_id) = class_decl.node.superclass {
-            let superclass = ctx.nodes.get_identifier_node(superclass_id);
-            self.visit_identifier(superclass, ctx)?;
+        // Handle inheritance setup
+        let has_superclass = class_decl.node.superclass.is_some();
+        if has_superclass {
+            // Visit superclass identifier
+            if let Some(superclass_id) = class_decl.node.superclass {
+                let superclass = ctx.nodes.get_identifier_node(superclass_id);
+                self.visit_identifier(superclass, ctx)?;
+            }
+
+            // Begin new scope for super variable
+            self.begin_scope();
+
+            // Declare "super" as a local variable at slot 1 (slot 0 is reserved for 'this' in methods)
+            let super_handle = self.strings.intern("super");
+
+            // Special handling for super variable - assign it to slot 1
+            let var_info = VariableInfo {
+                name: super_handle,
+                kind: VariableKind::Local {
+                    scope_depth: self.current_scope_depth(),
+                    slot: 1, // Hardcode slot 1 for super variable
+                },
+                is_captured: false,
+                span: class_decl.node.span,
+            };
+
+            if let Some(current_scope) = self.scopes.last_mut() {
+                current_scope
+                    .variables
+                    .insert(super_handle, var_info.clone());
+            }
+
+            // Also ensure current function's local_count accounts for slot 1
+            if let Some(func) = &mut self.current_function {
+                func.local_count = std::cmp::max(func.local_count, 2); // Ensure slots 0 and 1 are allocated
+            }
+
+            self.results.variables.insert(class_decl.id, var_info);
         }
 
         // Visit members
@@ -746,6 +825,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
+        // End the superclass scope if we created one
+        if has_superclass {
+            self.end_scope();
+        }
+
         Ok(())
     }
 
@@ -788,6 +872,36 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
         self.end_scope();
+        Ok(())
+    }
+
+    fn visit_super_expression(
+        &mut self,
+        super_expr: super::typed_node_arena::TypedNodeRef<super::nodes::SuperExprNode>,
+        _ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Check if we're in a method or initializer context
+        if let Some(current_function) = &self.current_function {
+            if !matches!(
+                current_function.kind,
+                FunctionKind::Method | FunctionKind::Initializer
+            ) {
+                return Err(QangCompilerError::new_analysis_error(
+                    "Cannot use 'super' outside of a class method.".to_string(),
+                    super_expr.node.span,
+                ));
+            }
+        } else {
+            return Err(QangCompilerError::new_analysis_error(
+                "Cannot use 'super' outside of a class method.".to_string(),
+                super_expr.node.span,
+            ));
+        }
+
+        // Resolve the 'super' variable access
+        let super_handle = self.strings.intern("super");
+        self.resolve_variable(super_handle, super_expr.node.span, super_expr.id)?;
+
         Ok(())
     }
 }

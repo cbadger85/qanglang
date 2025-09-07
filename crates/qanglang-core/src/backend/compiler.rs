@@ -313,8 +313,9 @@ impl<'a> Assembler<'a> {
             .cloned()
             .unwrap_or_default();
 
-        // Store compiled function
-        let compiled_function = std::mem::replace(&mut self.current_function, old_function);
+        // Store compiled function and set upvalue count
+        let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
+        compiled_function.upvalue_count = upvalue_captures.len();
         self.current_function_id = old_func_id;
 
         // Allocate function and emit closure
@@ -529,12 +530,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // 'this' is always at local slot 0 for methods/initializers
         self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.node.span);
 
-        // Load 'super' variable onto the stack
-        let super_handle = self.allocator.strings.intern("super");
-        // 'super' should be resolved through scope analysis like any other variable
-        // We need to find the node ID for the super variable access
-        // Since we don't have it directly, we'll use global access as fallback
-        self.emit_global_variable_access(super_handle, false, super_expr.node.span)?;
+        // Load 'super' variable using static analysis results
+        // The scope analysis should have resolved the 'super' variable access
+        self.emit_variable_access(super_expr.id, super_expr.node.span, false)?;
 
         // Get the method name and emit GetSuper instruction
         let method_identifier = ctx.nodes.get_identifier_node(super_expr.node.method);
@@ -1312,9 +1310,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         }
                     }
 
-                    // Load 'super'
-                    let super_handle = self.allocator.strings.intern("super");
-                    self.emit_global_variable_access(super_handle, false, super_expr.span)?;
+                    // Load 'super' using static analysis results
+                    // Find the super identifier node (we need to find the node ID for the super expression)
+                    self.emit_variable_access(callee.id, super_expr.span, false)?;
 
                     // Get method name and emit SuperInvoke
                     let method = ctx.nodes.get_identifier_node(super_expr.method);
@@ -1625,8 +1623,13 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 ));
             }
 
-            // Load the superclass
+            // Load the superclass for inheritance
             self.emit_variable_access(superclass.id, superclass.node.span, false)?;
+
+            // Store superclass in the "super" local variable at slot 1
+            // Based on the working assembler bytecode, the superclass should be stored at local slot 1
+            // (slot 0 is reserved for 'this' in methods)
+            self.emit_opcode_and_byte(OpCode::SetLocal, 1, superclass.node.span);
 
             // Emit inheritance instruction
             self.emit_opcode(OpCode::Inherit, superclass.node.span);

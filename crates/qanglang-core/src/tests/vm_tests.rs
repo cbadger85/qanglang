@@ -673,10 +673,9 @@ fn test_class_inheritance() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
-            // disassemble_program(&allocator);
+            disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
@@ -718,8 +717,7 @@ fn test_class_inheritance_with_constructors() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -806,10 +804,9 @@ fn test_field_declarations_with_inheritance() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
-            disassemble_program(&allocator);
+            // disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
@@ -1114,8 +1111,7 @@ fn test_null_methods() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1971,8 +1967,7 @@ fn test_fifth_method_debug() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // Enable disassembly to see the bytecode
             disassemble_program(&allocator);
@@ -2034,8 +2029,7 @@ fn test_debug_16bit_identifiers() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // Enable disassembly to see the bytecode
             disassemble_program(&allocator);
@@ -2136,8 +2130,7 @@ fn test_simple_16bit_super_call() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
 

@@ -1,6 +1,5 @@
 use crate::{
-    HeapAllocator, SourceMap, Value, Vm, backend::assembler::CompilerPipeline, compile,
-    disassemble_program, memory::ClosureHandle,
+    HeapAllocator, SourceMap, Value, Vm, compile, disassemble_program, memory::ClosureHandle,
 };
 
 #[test]
@@ -1685,7 +1684,6 @@ fn test_map_expression() {
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match compile(&source_map, &mut allocator) {
-        // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -1748,8 +1746,7 @@ fn test_map_expression_with_boolean() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -2079,8 +2076,7 @@ fn test_map_optional_expression() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)

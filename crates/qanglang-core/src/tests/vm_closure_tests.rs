@@ -1,4 +1,4 @@
-use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm, compile, disassemble_program};
+use crate::{HeapAllocator, SourceMap, Vm, compile, disassemble_program};
 
 #[test]
 fn test_three_level_closure_capture_bug() {
@@ -122,7 +122,7 @@ fn test_nested_iefes() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -158,7 +158,7 @@ fn test_map_optional_expression() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)

@@ -905,4 +905,62 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         }
         Ok(())
     }
+
+    fn visit_map_expression(
+        &mut self,
+        map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::MapExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Map expressions are essentially lambda expressions, so treat them the same way
+        let anonymous_name = self.strings.intern("<map>");
+
+        self.begin_function(
+            anonymous_name,
+            1, // Map expressions always take exactly one parameter
+            map_expr.node.span,
+            FunctionKind::Function,
+            ctx.errors,
+        );
+
+        // Declare the parameter
+        let param = ctx.nodes.get_identifier_node(map_expr.node.parameter);
+        self.declare_variable(param)?;
+
+        // Visit the body expression
+        let body = ctx.nodes.get_expr_node(map_expr.node.body);
+        self.visit_expression(body, ctx)?;
+
+        self.end_function(map_expr.id)?;
+
+        Ok(())
+    }
+
+    fn visit_optional_map_expression(
+        &mut self,
+        opt_map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::OptionalMapExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Optional map expressions work the same as regular map expressions
+        let anonymous_name = self.strings.intern("<optional_map>");
+
+        self.begin_function(
+            anonymous_name,
+            1, // Optional map expressions also take exactly one parameter
+            opt_map_expr.node.span,
+            FunctionKind::Function,
+            ctx.errors,
+        );
+
+        // Declare the parameter
+        let param = ctx.nodes.get_identifier_node(opt_map_expr.node.parameter);
+        self.declare_variable(param)?;
+
+        // Visit the body expression
+        let body = ctx.nodes.get_expr_node(opt_map_expr.node.body);
+        self.visit_expression(body, ctx)?;
+
+        self.end_function(opt_map_expr.id)?;
+
+        Ok(())
+    }
 }

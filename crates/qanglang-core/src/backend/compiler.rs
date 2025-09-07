@@ -372,31 +372,75 @@ impl<'a> Assembler<'a> {
         &mut self,
         callee: TypedNodeRef<crate::frontend::typed_node_arena::ExprNode>,
         map_expr: MapExprNode,
+        map_node_id: NodeId, // Add this parameter to identify the map expression node
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
-        // Create a lambda expression from the map expression
-        let parameters = ctx.nodes.array.create();
-        ctx.nodes.array.push(parameters, map_expr.parameter);
-        let lambda_expr = LambdaExprNode {
-            parameters,
-            body: map_expr.body,
-            span: map_expr.span,
-        };
-
-        // Visit the lambda expression (this creates the closure)
-        self.visit_lambda_expression(
-            TypedNodeRef::new(
-                ctx.nodes.create_node(AstNode::LambdaExpr(lambda_expr)),
-                lambda_expr,
-            ),
-            ctx,
-        )?;
+        // Compile the map expression as a closure using static analysis
+        self.compile_map_expression(map_node_id, map_expr, ctx)?;
 
         // Visit the callee (the value being mapped over)
         self.visit_expression(callee, ctx)?;
 
         // Call the lambda with one argument (the callee result)
         self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
+        Ok(())
+    }
+
+    fn compile_map_expression(
+        &mut self,
+        map_node_id: NodeId,
+        map_expr: MapExprNode,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), QangCompilerError> {
+        // Get function info from analysis
+        let map_name_handle = self.allocator.strings.intern("<map>");
+        let func_info = self.get_function_info(map_node_id);
+
+        // Create new function object for the map expression
+        let function = FunctionObject::new(map_name_handle, func_info.arity);
+
+        // Store current function and switch to new one
+        let old_function = std::mem::replace(&mut self.current_function, function);
+        let old_func_id = self.current_function_id;
+        self.current_function_id = Some(map_node_id);
+
+        // For map expressions, the body is always an expression that gets returned
+        let return_node = ReturnStmtNode {
+            value: Some(map_expr.body),
+            span: map_expr.span,
+        };
+        self.visit_return_statement(TypedNodeRef::new(map_expr.body, return_node), ctx)?;
+
+        // Get upvalue info for this map expression
+        let upvalue_captures = self
+            .analysis
+            .scope
+            .upvalue_captures
+            .get(&map_node_id)
+            .cloned()
+            .unwrap_or_default();
+
+        // Store compiled function and set upvalue count
+        let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
+        compiled_function.upvalue_count = upvalue_captures.len();
+        self.current_function_id = old_func_id;
+
+        // Allocate function and emit closure
+        let function_handle = self.allocator.allocate_function(compiled_function);
+        self.emit_constant_opcode(
+            OpCode::Closure,
+            OpCode::Closure16,
+            Value::FunctionDecl(function_handle),
+            map_expr.span,
+        )?;
+
+        // Emit upvalue information for the VM
+        for upvalue in &upvalue_captures {
+            let is_local_byte = if upvalue.is_local { 1 } else { 0 };
+            self.emit_byte(is_local_byte, map_expr.span);
+            self.emit_byte(upvalue.index as u8, map_expr.span);
+        }
+
         Ok(())
     }
 }
@@ -1412,7 +1456,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 Ok(())
             }
             crate::frontend::typed_node_arena::CallOperationNode::Map(map_expr) => {
-                self.handle_map_expression(callee, map_expr, ctx)
+                self.handle_map_expression(callee, map_expr, call_operation.id, ctx)
             }
             crate::frontend::typed_node_arena::CallOperationNode::OptionalMap(map_expr) => {
                 self.visit_expression(callee, ctx)?;
@@ -1425,6 +1469,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         parameter: map_expr.parameter,
                         span: map_expr.span,
                     },
+                    call_operation.id, // Pass the node ID here
                     ctx,
                 )?;
                 self.patch_jump(nil_jump, map_expr.span)?;

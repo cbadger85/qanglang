@@ -71,98 +71,120 @@ impl Scope {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionKind {
+    Global,
     Function,
     Method,
     Initializer,
 }
 
 #[derive(Debug, Clone)]
-struct FunctionScope {
-    name: StringHandle,
-    arity: usize,
-    upvalues: Vec<UpvalueInfo>,
-    local_count: usize,
-    span: SourceSpan,
-    kind: FunctionKind,
-    enclosing: Option<Box<FunctionScope>>,
-    scope_depth: usize, // The scope depth when this function was entered
+pub struct LocalVariable {
+    pub name: StringHandle,
+    pub slot: usize,
+    pub is_captured: bool,
+    pub scope_depth: usize,
 }
 
-impl FunctionScope {
+#[derive(Debug, Clone)]
+struct FunctionContext {
+    pub name: StringHandle,
+    pub arity: usize,
+    pub kind: FunctionKind,
+    pub locals: Vec<LocalVariable>,
+    pub local_count: usize,
+    pub upvalues: Vec<UpvalueInfo>,
+    pub span: SourceSpan,
+}
+
+impl FunctionContext {
     fn new(
-        name: StringHandle,
+        handle: StringHandle,
         arity: usize,
-        span: SourceSpan,
         kind: FunctionKind,
-        scope_depth: usize,
+        blank_handle: StringHandle,
+        span: SourceSpan,
     ) -> Self {
-        // All functions reserve slot 0 - for 'this' in methods, blank in regular functions
-        let local_count = 1;
+        let mut locals = Vec::with_capacity(u8::MAX as usize);
+        locals.push(LocalVariable {
+            name: blank_handle,
+            scope_depth: 0,
+            slot: 0,
+            is_captured: false,
+        });
 
         Self {
-            name,
+            name: handle,
             arity,
-            upvalues: Vec::new(),
-            local_count,
+            locals,
+            local_count: 1,
+            upvalues: Vec::with_capacity(u8::MAX as usize),
             span,
             kind,
-            enclosing: None,
-            scope_depth,
         }
     }
 
-    fn resolve_upvalue(
-        self: &mut FunctionScope,
-        name: StringHandle,
-        span: SourceSpan,
-    ) -> Result<Option<VariableKind>, QangCompilerError> {
-        // Check if this upvalue already exists in the function scope
-        for (index, upvalue) in self.upvalues.iter().enumerate() {
-            if upvalue.name == name {
-                return Ok(Some(VariableKind::Upvalue {
-                    index,
-                    is_local: upvalue.is_local,
-                }));
-            }
-        }
+    fn add_local(&mut self, name: StringHandle, scope_depth: usize) -> usize {
+        let slot = self.local_count;
+        let local_index = self.locals.len();
 
-        if let Some(enclosing) = &mut self.enclosing {
-            // Recursively check the next outer function
-            if let Some(outer_upvalue) = Self::resolve_upvalue(enclosing, name, span)? {
-                if let VariableKind::Upvalue { index, .. } = outer_upvalue {
-                    // Add to current function scope
-                    let upvalue_index = self.upvalues.len();
-                    self.upvalues.push(UpvalueInfo {
-                        name,
-                        index,
-                        is_local: false,
-                    });
+        self.locals.push(LocalVariable {
+            name,
+            scope_depth,
+            slot,
+            is_captured: false,
+        });
 
-                    return Ok(Some(VariableKind::Upvalue {
-                        index: upvalue_index,
-                        is_local: false,
-                    }));
-                }
-            }
-        }
+        self.local_count += 1;
 
-        Ok(None)
+        local_index
+    }
+
+    fn find_local(&self, name: StringHandle) -> Option<usize> {
+        self.locals
+            .iter()
+            .enumerate()
+            .find_map(|(i, local)| if local.name == name { Some(i) } else { None })
+    }
+
+    fn add_upvalue(&mut self, name: StringHandle, index: usize, is_local: bool) -> usize {
+        let upvalue_index = self.upvalues.len();
+
+        self.upvalues.push(UpvalueInfo {
+            name,
+            index,
+            is_local,
+        });
+
+        upvalue_index
     }
 }
 
 pub struct ScopeAnalyzer<'a> {
     strings: &'a mut StringInterner,
     scopes: Vec<Scope>,
-    current_function: Option<FunctionScope>,
+    functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
+    blank_handle: StringHandle,
+    this_handle: StringHandle,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
     pub fn new(strings: &'a mut StringInterner) -> Self {
+        let handle = strings.intern("(script)");
+        let blank_handle = strings.intern("");
+        let this_handle = strings.intern("this");
         Self {
+            blank_handle,
+            this_handle,
             strings,
             scopes: vec![Scope::new()],
-            current_function: None,
+            functions: vec![FunctionContext::new(
+                handle,
+                0,
+                FunctionKind::Global,
+                blank_handle,
+                SourceSpan::default(),
+            )],
             results: ScopeAnalysis::new(),
         }
     }
@@ -199,52 +221,9 @@ impl<'a> ScopeAnalyzer<'a> {
             crate::frontend::nodes::IdentifierNode,
         >,
     ) -> Result<(), QangCompilerError> {
-        if self.current_scope_depth() == 0 {
-            let var_info = VariableInfo {
-                name: identifier.node.name,
-                kind: VariableKind::Global,
-                is_captured: false,
-                span: identifier.node.span,
-            };
-            self.results.variables.insert(identifier.id, var_info);
-            return Ok(());
-        }
-
-        if let Some(current_scope) = self.scopes.last() {
-            if current_scope.variables.contains_key(&identifier.node.name) {
-                return Err(QangCompilerError::new_analysis_error(
-                    "Variable with this name already declared in this scope.".to_string(),
-                    identifier.node.span,
-                ));
-            }
-        }
-
-        let slot = if let Some(func) = &mut self.current_function {
-            let slot = func.local_count;
-            func.local_count += 1;
-            slot
-        } else {
-            0
-        };
-
-        let var_info = VariableInfo {
-            name: identifier.node.name,
-            kind: VariableKind::Local {
-                scope_depth: self.current_scope_depth(),
-                slot,
-            },
-            is_captured: false,
-            span: identifier.node.span,
-        };
-
-        if let Some(current_scope) = self.scopes.last_mut() {
-            current_scope
-                .variables
-                .insert(identifier.node.name, var_info.clone());
-        }
-
-        self.results.variables.insert(identifier.id, var_info);
-        Ok(())
+        // TODO add variable to function scope
+        // TODO add variable to variable results
+        todo!()
     }
 
     fn resolve_variable(
@@ -253,84 +232,7 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         node_id: NodeId,
     ) -> Result<VariableKind, QangCompilerError> {
-        // Get current function scope depth to avoid borrowing issues
-        let current_function_scope_depth = self.current_function.as_ref().map(|f| f.scope_depth);
-
-        // Check if we have a current function to determine scope boundaries
-        if let Some(function_scope_depth) = current_function_scope_depth {
-            // Search for the variable in scopes
-            let mut found_enclosing_var = false;
-            for scope in self.scopes.iter().rev() {
-                if let Some(var_info) = scope.variables.get(&name) {
-                    // Check if this variable belongs to the current function or an enclosing one
-                    if let VariableKind::Local { scope_depth, .. } = var_info.kind {
-                        if scope_depth > function_scope_depth {
-                            // This is a local variable of the current function
-                            let var_info_copy = VariableInfo {
-                                name,
-                                kind: var_info.kind.clone(),
-                                is_captured: var_info.is_captured,
-                                span,
-                            };
-                            self.results.variables.insert(node_id, var_info_copy);
-                            return Ok(var_info.kind.clone());
-                        } else if scope_depth <= function_scope_depth {
-                            // This variable belongs to an enclosing scope - mark for upvalue resolution
-                            found_enclosing_var = true;
-                            break;
-                        }
-                    } else {
-                        // Non-local variable (e.g., global) - handle normally
-                        let var_info_copy = VariableInfo {
-                            name,
-                            kind: var_info.kind.clone(),
-                            is_captured: var_info.is_captured,
-                            span,
-                        };
-                        self.results.variables.insert(node_id, var_info_copy);
-                        return Ok(var_info.kind.clone());
-                    }
-                }
-            }
-
-            // Try upvalue resolution if we found an enclosing variable
-            if found_enclosing_var {
-                if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
-                    let var_info = VariableInfo {
-                        name,
-                        kind: upvalue_kind.clone(),
-                        is_captured: false,
-                        span,
-                    };
-                    self.results.variables.insert(node_id, var_info);
-                    return Ok(upvalue_kind);
-                }
-            }
-        } else {
-            // Global scope - search all scopes
-            for scope in self.scopes.iter().rev() {
-                if let Some(var_info) = scope.variables.get(&name) {
-                    let var_info_copy = VariableInfo {
-                        name,
-                        kind: var_info.kind.clone(),
-                        is_captured: var_info.is_captured,
-                        span,
-                    };
-                    self.results.variables.insert(node_id, var_info_copy);
-                    return Ok(var_info.kind.clone());
-                }
-            }
-        }
-
-        // Global variable
-        let var_info = VariableInfo {
-            name,
-            kind: VariableKind::Global,
-            is_captured: false,
-            span,
-        };
-        self.results.variables.insert(node_id, var_info);
-        Ok(VariableKind::Global)
+        todo!()
     }
 
     fn resolve_upvalue(
@@ -338,131 +240,7 @@ impl<'a> ScopeAnalyzer<'a> {
         name: StringHandle,
         span: SourceSpan,
     ) -> Result<Option<VariableKind>, QangCompilerError> {
-        // We need an enclosing function to have upvalues
-        if self.current_function.is_none() {
-            return Ok(None);
-        }
-
-        // Take ownership of current_function temporarily to avoid borrowing conflicts
-        let mut current_function = self.current_function.take().unwrap();
-
-        // Special case for class methods: they can access class-scope variables as upvalues
-        // even without an enclosing function context
-        if current_function.enclosing.is_none()
-            && matches!(
-                current_function.kind,
-                FunctionKind::Method | FunctionKind::Initializer
-            )
-        {
-            // Search in current scopes for the variable (class scope variables)
-            for scope in self.scopes.iter_mut().rev() {
-                if let Some(var_info) = scope.variables.get_mut(&name) {
-                    // Check if this variable is from a class scope (not the current method's scope)
-                    if let VariableKind::Local { scope_depth, slot } = var_info.kind {
-                        if scope_depth <= current_function.scope_depth {
-                            // Mark the variable as captured
-                            var_info.is_captured = true;
-
-                            // Add as upvalue to current function
-                            let upvalue_index = current_function.upvalues.len();
-                            current_function.upvalues.push(UpvalueInfo {
-                                name,
-                                index: slot,
-                                is_local: true,
-                            });
-
-                            // Restore current_function
-                            self.current_function = Some(current_function);
-
-                            return Ok(Some(VariableKind::Upvalue {
-                                index: upvalue_index,
-                                is_local: true,
-                            }));
-                        }
-                    }
-                }
-            }
-        }
-
-        if let Some(enclosing) = &mut current_function.enclosing {
-            // First check if it's a local variable in the immediately enclosing function's scopes
-            // Search in current scopes for the variable
-            for scope in self.scopes.iter_mut().rev() {
-                if let Some(var_info) = scope.variables.get_mut(&name) {
-                    // Mark the variable as captured
-                    var_info.is_captured = true;
-
-                    // Check if this upvalue already exists
-                    for (upvalue_index, upvalue) in current_function.upvalues.iter().enumerate() {
-                        if upvalue.name == name {
-                            let is_local = upvalue.is_local; // Copy before move
-                            // Restore current_function
-                            self.current_function = Some(current_function);
-                            return Ok(Some(VariableKind::Upvalue {
-                                index: upvalue_index,
-                                is_local,
-                            }));
-                        }
-                    }
-
-                    // Add new upvalue to current function with is_local=true
-                    let upvalue_index = current_function.upvalues.len();
-                    if let VariableKind::Local { slot, .. } = var_info.kind {
-                        current_function.upvalues.push(UpvalueInfo {
-                            name,
-                            index: slot,
-                            is_local: true,
-                        });
-
-                        // Restore current_function
-                        self.current_function = Some(current_function);
-
-                        return Ok(Some(VariableKind::Upvalue {
-                            index: upvalue_index,
-                            is_local: true,
-                        }));
-                    }
-                }
-            }
-
-            // If not found as local, recursively check outer scopes for upvalues
-            if let Some(upvalue_kind) = enclosing.resolve_upvalue(name, span)? {
-                if let VariableKind::Upvalue { index, .. } = upvalue_kind {
-                    // Check if this upvalue already exists
-                    for (upvalue_index, upvalue) in current_function.upvalues.iter().enumerate() {
-                        if upvalue.name == name {
-                            let is_local = upvalue.is_local; // Copy before move
-                            // Restore current_function
-                            self.current_function = Some(current_function);
-                            return Ok(Some(VariableKind::Upvalue {
-                                index: upvalue_index,
-                                is_local,
-                            }));
-                        }
-                    }
-
-                    // Add new upvalue to current function with is_local=false
-                    let upvalue_index = current_function.upvalues.len();
-                    current_function.upvalues.push(UpvalueInfo {
-                        name,
-                        index,
-                        is_local: false,
-                    });
-
-                    // Restore current_function
-                    self.current_function = Some(current_function);
-
-                    return Ok(Some(VariableKind::Upvalue {
-                        index: upvalue_index,
-                        is_local: false,
-                    }));
-                }
-            }
-        }
-
-        // Restore current_function
-        self.current_function = Some(current_function);
-        Ok(None)
+        todo!()
     }
 
     fn begin_function(
@@ -480,40 +258,32 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let mut new_function =
-            FunctionScope::new(name, arity, span, kind, self.current_scope_depth());
+        let function = FunctionContext::new(name, arity, kind, self.blank_handle, span);
 
-        if let Some(current) = self.current_function.take() {
-            new_function.enclosing = Some(Box::new(current));
-        }
-
-        self.current_function = Some(new_function);
+        self.functions.push(function);
         self.begin_scope();
     }
 
     fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
         self.end_scope();
 
-        if let Some(mut function) = self.current_function.take() {
-            let analysis = FunctionInfo {
-                name: function.name,
-                arity: function.arity,
-                upvalues: function.upvalues.clone(),
-                max_locals: function.local_count,
-                span: function.span,
-                kind: function.kind,
-            };
+        let function = self
+            .functions
+            .pop()
+            .expect("Expect function stack not to be empty.");
 
-            self.results.functions.insert(node_id, analysis);
-            self.results
-                .upvalue_captures
-                .insert(node_id, function.upvalues);
-
-            // Restore enclosing function
-            if let Some(enclosing) = function.enclosing.take() {
-                self.current_function = Some(*enclosing);
-            }
-        }
+        let analysis = FunctionInfo {
+            name: function.name,
+            arity: function.arity,
+            upvalues: function.upvalues.clone(),
+            max_locals: function.local_count,
+            span: function.span,
+            kind: function.kind,
+        };
+        self.results.functions.insert(node_id, analysis);
+        self.results
+            .upvalue_captures
+            .insert(node_id, function.upvalues);
 
         Ok(())
     }
@@ -577,6 +347,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let arity = ctx.nodes.array.size(func_expr.node.parameters);
+
         let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
         self.declare_variable(identifier)?;
 
@@ -756,7 +527,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
 
             // Also ensure current function's local_count accounts for slot 1
-            if let Some(func) = &mut self.current_function {
+            if let Some(func) = self.functions.last_mut() {
                 func.local_count = std::cmp::max(func.local_count, 2); // Ensure slots 0 and 1 are allocated
             }
 
@@ -881,7 +652,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         // Check if we're in a method or initializer context
-        if let Some(current_function) = &self.current_function {
+        if let Some(current_function) = &self.functions.last() {
             if !matches!(
                 current_function.kind,
                 FunctionKind::Method | FunctionKind::Initializer

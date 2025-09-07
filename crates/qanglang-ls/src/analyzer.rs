@@ -1,4 +1,6 @@
-use qanglang_core::{Assembler, QangPipelineError, HeapAllocator, Parser, SourceMap, TypedNodeArena};
+use qanglang_core::{
+    AnalysisPipeline, Parser, QangPipelineError, SourceMap, StringInterner, TypedNodeArena,
+};
 
 pub struct Analyzer<'a> {
     source_map: &'a SourceMap,
@@ -10,15 +12,19 @@ impl<'a> Analyzer<'a> {
     }
 
     pub fn analyze(&self) -> Result<(), QangPipelineError> {
-        let mut allocator = HeapAllocator::new();
+        let mut strings = StringInterner::new();
         let nodes = TypedNodeArena::new();
-
-        let mut parser = Parser::new(self.source_map, nodes, &mut allocator.strings);
+        let mut parser = Parser::new(self.source_map, nodes, &mut strings);
         let program = parser.parse();
-        let (errors, mut nodes) = parser.into_parts();
 
-        let _ =
-            Assembler::new(&mut allocator).compile(program, &mut nodes, self.source_map, errors)?;
+        let (mut errors, mut nodes) = parser.into_parts();
+
+        let _ = AnalysisPipeline::new(&mut strings).analyze(
+            program,
+            self.source_map,
+            &mut nodes,
+            &mut errors,
+        )?;
 
         Ok(())
     }

@@ -17,15 +17,15 @@ impl AnalysisResults {
 
 #[derive(Debug, Clone)]
 pub struct AnalysisPipelineConfig {
-    error_message_format: ErrorMessageFormat,
-    strict_mode: bool,
+    pub error_message_format: ErrorMessageFormat,
+    pub strict_mode: bool,
 }
 
 impl Default for AnalysisPipelineConfig {
     fn default() -> Self {
         Self {
             error_message_format: ErrorMessageFormat::Minimal,
-            strict_mode: false,
+            strict_mode: true,
         }
     }
 }

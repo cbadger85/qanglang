@@ -1,4 +1,5 @@
 pub mod alloc_tests;
+pub mod analyzer_regressions;
 pub mod compound_assignment_tests;
 pub mod parse_declarations;
 pub mod parse_expressions;

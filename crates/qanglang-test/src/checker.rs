@@ -1,6 +1,9 @@
 use std::fs;
 
-use qanglang_core::{CompilerPipeline, ErrorMessageFormat, HeapAllocator, SourceMap};
+use qanglang_core::{
+    AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, Parser, SourceMap,
+    StringInterner, TypedNodeArena,
+};
 
 use crate::test_file::SourceFile;
 
@@ -46,7 +49,10 @@ pub fn check_files_from_sources(
 }
 
 /// Checks a single source file for compilation errors
-pub fn check_single_file(source_file: SourceFile, error_format: ErrorMessageFormat) -> CheckResult {
+pub fn check_single_file(
+    source_file: SourceFile,
+    error_message_format: ErrorMessageFormat,
+) -> CheckResult {
     // Read the source file
     let source = match fs::read_to_string(&source_file.file_path) {
         Ok(content) => content,
@@ -57,13 +63,19 @@ pub fn check_single_file(source_file: SourceFile, error_format: ErrorMessageForm
     };
 
     let source_map = SourceMap::new(source);
-    let mut allocator = HeapAllocator::new();
+    let nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+    let mut parser = Parser::new(&source_map, nodes, &mut strings);
+    let program = parser.parse();
+
+    let (mut errors, mut nodes) = parser.into_parts();
+    let analyzer = AnalysisPipeline::new(&mut strings).with_config(AnalysisPipelineConfig {
+        error_message_format,
+        ..Default::default()
+    });
 
     // Try to compile the file
-    match CompilerPipeline::new(source_map, &mut allocator)
-        .error_message_format(error_format)
-        .run()
-    {
+    match analyzer.analyze(program, &source_map, &mut nodes, &mut errors) {
         Ok(_) => CheckResult::success(source_file.display_path),
         Err(compilation_errors) => {
             let error_messages: Vec<String> = compilation_errors

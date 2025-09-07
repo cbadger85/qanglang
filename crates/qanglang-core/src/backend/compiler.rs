@@ -1,6 +1,7 @@
 use crate::{
-    ErrorReporter, FunctionObject, HeapAllocator, NodeId, Parser, QangCompilerError,
-    QangPipelineError, QangProgram, SourceLocation, SourceMap, TypedNodeArena, Value,
+    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionObject, HeapAllocator,
+    NodeId, Parser, QangCompilerError, QangPipelineError, QangProgram, SourceLocation, SourceMap,
+    TypedNodeArena, Value,
     backend::chunk::{Chunk, OpCode},
     frontend::{
         analyzer::{AnalysisPipeline, AnalysisResults},
@@ -11,21 +12,47 @@ use crate::{
     nodes::*,
 };
 
+pub struct CompilerConfig {
+    pub error_message_format: ErrorMessageFormat,
+}
+
+impl Default for CompilerConfig {
+    fn default() -> Self {
+        Self {
+            error_message_format: ErrorMessageFormat::Minimal,
+        }
+    }
+}
+
+impl From<CompilerConfig> for AnalysisPipelineConfig {
+    fn from(value: CompilerConfig) -> Self {
+        Self {
+            error_message_format: value.error_message_format,
+            ..Default::default()
+        }
+    }
+}
+
 pub fn compile(
     source_map: &SourceMap,
     alloc: &mut HeapAllocator,
+) -> Result<QangProgram, QangPipelineError> {
+    compile_with_config(source_map, alloc, CompilerConfig::default())
+}
+
+pub fn compile_with_config(
+    source_map: &SourceMap,
+    alloc: &mut HeapAllocator,
+    config: CompilerConfig,
 ) -> Result<QangProgram, QangPipelineError> {
     let mut parser = Parser::new(source_map, TypedNodeArena::new(), &mut alloc.strings);
     let program = parser.parse();
 
     let (mut errors, mut nodes) = parser.into_parts();
 
-    let result = AnalysisPipeline::new(&mut alloc.strings).analyze(
-        program,
-        source_map,
-        &mut nodes,
-        &mut errors,
-    )?;
+    let result = AnalysisPipeline::new(&mut alloc.strings)
+        .with_config(config.into())
+        .analyze(program, source_map, &mut nodes, &mut errors)?;
 
     let assembler = Assembler::new(source_map, alloc, &result);
     let main_function = assembler.assemble(program, &mut nodes, &mut errors)?;

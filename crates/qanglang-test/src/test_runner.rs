@@ -1,8 +1,6 @@
 use std::fs;
 
-use qanglang_core::{
-    ClosureHandle, CompilerPipeline, HeapAllocator, SourceMap, StringHandle, Value, Vm,
-};
+use qanglang_core::{ClosureHandle, HeapAllocator, SourceMap, StringHandle, Value, Vm, compile};
 use rustc_hash::FxHashMap;
 
 use crate::test_file::SourceFile;
@@ -108,7 +106,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     let mut allocator = HeapAllocator::new();
 
     // Compile the test file
-    let program = match CompilerPipeline::new(source_map, &mut allocator).run() {
+    let program = match compile(&source_map, &mut allocator) {
         Ok(program) => program,
         Err(errors) => {
             let error_messages: Vec<String> = errors

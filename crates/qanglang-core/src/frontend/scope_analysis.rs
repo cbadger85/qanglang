@@ -165,17 +165,14 @@ pub struct ScopeAnalyzer<'a> {
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
     blank_handle: StringHandle,
-    this_handle: StringHandle,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
     pub fn new(strings: &'a mut StringInterner) -> Self {
         let handle = strings.intern("(script)");
         let blank_handle = strings.intern("");
-        let this_handle = strings.intern("this");
         Self {
             blank_handle,
-            this_handle,
             strings,
             scopes: vec![Scope::new()],
             functions: vec![FunctionContext::new(
@@ -637,29 +634,51 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             // Declare "super" as a local variable at slot 1 (slot 0 is reserved for 'this' in methods)
             let super_handle = self.strings.intern("super");
 
-            // Special handling for super variable - assign it to slot 1
+            // Add "super" to the current function's locals so it can be resolved
+            let scope_depth = self.current_scope_depth();
+            if let Some(func) = self.functions.last_mut() {
+                let local = LocalVariable {
+                    name: super_handle,
+                    slot: 1, // Hardcode slot 1 for super variable
+                    is_captured: false,
+                    scope_depth,
+                };
+
+                // Make sure we have enough space in the locals list
+                while func.locals.len() <= 1 {
+                    func.locals.push(LocalVariable {
+                        name: self.blank_handle,
+                        slot: func.locals.len(),
+                        is_captured: false,
+                        scope_depth: 0,
+                    });
+                }
+
+                // Set the super variable at slot 1
+                if func.locals.len() > 1 {
+                    func.locals[1] = local;
+                } else {
+                    func.locals.push(local);
+                }
+
+                // Ensure local_count accounts for slots 0 and 1
+                func.local_count = std::cmp::max(func.local_count, 2);
+            }
+
+            // Also add to scope for consistency
             let var_info = VariableInfo {
                 name: super_handle,
                 kind: VariableKind::Local {
-                    scope_depth: self.current_scope_depth(),
-                    slot: 1, // Hardcode slot 1 for super variable
+                    scope_depth,
+                    slot: 1,
                 },
                 is_captured: false,
                 span: class_decl.node.span,
             };
 
             if let Some(current_scope) = self.scopes.last_mut() {
-                current_scope
-                    .variables
-                    .insert(super_handle, var_info.clone());
+                current_scope.variables.insert(super_handle, var_info);
             }
-
-            // Also ensure current function's local_count accounts for slot 1
-            if let Some(func) = self.functions.last_mut() {
-                func.local_count = std::cmp::max(func.local_count, 2); // Ensure slots 0 and 1 are allocated
-            }
-
-            self.results.variables.insert(class_decl.id, var_info);
         }
 
         // Visit members

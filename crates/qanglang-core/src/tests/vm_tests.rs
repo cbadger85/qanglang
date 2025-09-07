@@ -653,18 +653,20 @@ fn test_classing_fields_that_reference_functions() {
 fn test_class_inheritance() {
     let source = r#"
         class A {
+            c = 1;
+
             a() {
-                return 42;
+                return 41;
             }
         }
 
         class B : A {
             b() {
-                return super.a();
+                return super.a() + super.c;
             }
         }
         var value = B().a();
-        assert_eq(value, 42, "Expected '42', recieved " + (value |> to_string));
+        assert_eq(value, 41, "Expected '41', recieved " + (value |> to_string));
         var value_2 = B().b();
         assert_eq(value_2, 42, "Expected '42', recieved " + (value |> to_string));
     "#;
@@ -672,10 +674,9 @@ fn test_class_inheritance() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
     match compile(&source_map, &mut allocator) {
         Ok(program) => {
-            disassemble_program(&allocator);
+            // disassemble_program(&allocator);
             match Vm::new(allocator)
                 .set_gc_status(false)
                 .set_debug(false)
@@ -976,8 +977,8 @@ fn test_break_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -1005,8 +1006,8 @@ fn test_break_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -1040,8 +1041,8 @@ fn test_continue_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -1069,8 +1070,8 @@ fn test_continue_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
-        // match compile(&source_map, &mut allocator) {
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =

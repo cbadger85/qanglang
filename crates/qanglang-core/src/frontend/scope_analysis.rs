@@ -46,12 +46,41 @@ pub struct ClassInheritanceInfo {
     pub super_slot: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LoopType {
+    For,
+    While,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoopInfo {
+    pub loop_type: LoopType,
+    pub depth: usize,
+    pub span: SourceSpan,
+    pub node_id: NodeId,
+}
+
+#[derive(Debug, Clone)]
+pub struct BreakContinueInfo {
+    pub target_loop: NodeId,
+    pub statement_type: BreakContinueType,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BreakContinueType {
+    Break,
+    Continue,
+}
+
 #[derive(Debug, Clone)]
 pub struct ScopeAnalysis {
     pub variables: FxHashMap<NodeId, VariableInfo>,
     pub functions: FxHashMap<NodeId, FunctionInfo>,
     pub upvalue_captures: FxHashMap<NodeId, Vec<UpvalueInfo>>,
     pub class_inheritance: FxHashMap<NodeId, ClassInheritanceInfo>,
+    pub loops: FxHashMap<NodeId, LoopInfo>,
+    pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
 }
 
 impl ScopeAnalysis {
@@ -61,6 +90,8 @@ impl ScopeAnalysis {
             functions: FxHashMap::with_hasher(FxBuildHasher),
             upvalue_captures: FxHashMap::with_hasher(FxBuildHasher),
             class_inheritance: FxHashMap::with_hasher(FxBuildHasher),
+            loops: FxHashMap::with_hasher(FxBuildHasher),
+            break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 }
@@ -187,6 +218,7 @@ pub struct ScopeAnalyzer<'a> {
     results: ScopeAnalysis,
     blank_handle: StringHandle,
     loop_depth: usize,
+    loop_stack: Vec<NodeId>, // Stack of current loop node IDs
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -206,6 +238,7 @@ impl<'a> ScopeAnalyzer<'a> {
             )],
             results: ScopeAnalysis::new(),
             loop_depth: 0,
+            loop_stack: Vec::new(),
         }
     }
 
@@ -394,14 +427,29 @@ impl<'a> ScopeAnalyzer<'a> {
         Ok(None)
     }
 
-    fn begin_loop(&mut self) {
+    fn begin_loop(&mut self, loop_node_id: NodeId, loop_type: LoopType, span: SourceSpan) {
         self.loop_depth += 1;
+        self.loop_stack.push(loop_node_id);
+        
+        let loop_info = LoopInfo {
+            loop_type,
+            depth: self.loop_depth,
+            span,
+            node_id: loop_node_id,
+        };
+        
+        self.results.loops.insert(loop_node_id, loop_info);
     }
 
     fn end_loop(&mut self) {
         if self.loop_depth > 0 {
             self.loop_depth -= 1;
+            self.loop_stack.pop();
         }
+    }
+
+    fn current_loop(&self) -> Option<NodeId> {
+        self.loop_stack.last().copied()
     }
 
     fn begin_function(
@@ -429,8 +477,9 @@ impl<'a> ScopeAnalyzer<'a> {
 
         self.functions.push(function);
         self.begin_scope();
-        // Reset loop depth when entering a new function - loops don't cross function boundaries
+        // Reset loop depth and stack when entering a new function - loops don't cross function boundaries
         self.loop_depth = 0;
+        self.loop_stack.clear();
     }
 
     fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
@@ -863,7 +912,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         self.visit_expression(condition, ctx)?;
 
         // Enter loop context and visit body
-        self.begin_loop();
+        self.begin_loop(while_stmt.id, LoopType::While, while_stmt.node.span);
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
         self.end_loop();
@@ -890,7 +939,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         }
 
         // Enter loop context for the body
-        self.begin_loop();
+        self.begin_loop(for_stmt.id, LoopType::For, for_stmt.node.span);
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
         self.end_loop();
 
@@ -909,6 +958,14 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                     "'break' can only be used inside loops.".to_string(),
                     break_stmt.node.span,
                 ));
+        } else if let Some(target_loop) = self.current_loop() {
+            // Record this break statement and which loop it targets
+            let break_info = BreakContinueInfo {
+                target_loop,
+                statement_type: BreakContinueType::Break,
+                span: break_stmt.node.span,
+            };
+            self.results.break_continue_statements.insert(break_stmt.id, break_info);
         }
         Ok(())
     }
@@ -924,6 +981,14 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                     "'continue' can only be used inside loops.".to_string(),
                     continue_stmt.node.span,
                 ));
+        } else if let Some(target_loop) = self.current_loop() {
+            // Record this continue statement and which loop it targets
+            let continue_info = BreakContinueInfo {
+                target_loop,
+                statement_type: BreakContinueType::Continue,
+                span: continue_stmt.node.span,
+            };
+            self.results.break_continue_statements.insert(continue_stmt.id, continue_info);
         }
         Ok(())
     }

@@ -328,7 +328,7 @@ impl<'a> Assembler<'a> {
 
         // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
-        
+
         // Store and reset loop contexts - loops don't cross function boundaries
         let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
 
@@ -354,10 +354,10 @@ impl<'a> Assembler<'a> {
         // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = upvalue_captures.len();
-        
+
         // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
-        
+
         self.current_function_id = old_func_id;
 
         // Allocate function and emit closure
@@ -410,6 +410,39 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
+    fn emit_nested_loop_variable_resets(
+        &mut self,
+        for_loop_id: NodeId,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), QangCompilerError> {
+        // Find nested for loops within this loop's body and reset their variables
+        if let Some(crate::frontend::scope_analysis::LoopInfo::For(_)) =
+            self.analysis.scopes.loops.get(&for_loop_id)
+        {
+            // Look for nested loops that need their variables reset
+            for (_, loop_info) in &self.analysis.scopes.loops {
+                if let crate::frontend::scope_analysis::LoopInfo::For(nested_for_info) = loop_info {
+                    // If this nested loop's parent is the current loop, reset its variables
+                    if nested_for_info.scope_info.parent_loop == Some(for_loop_id) {
+                        for var_info in &nested_for_info.scope_info.initializer_variables {
+                            if let Some(initializer_node) = var_info.initializer_node {
+                                let initializer_expr = ctx.nodes.get_expr_node(initializer_node);
+                                self.visit_expression(initializer_expr, ctx)?;
+                                self.emit_opcode_and_byte(
+                                    OpCode::SetLocal,
+                                    var_info.slot as u8,
+                                    initializer_expr.node.span(),
+                                );
+                                self.emit_opcode(OpCode::Pop, initializer_expr.node.span());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn handle_map_expression(
         &mut self,
         callee: TypedNodeRef<crate::frontend::typed_node_arena::ExprNode>,
@@ -443,10 +476,10 @@ impl<'a> Assembler<'a> {
 
         // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
-        
+
         // Store and reset loop contexts - loops don't cross function boundaries
         let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
-        
+
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(map_node_id);
 
@@ -469,10 +502,10 @@ impl<'a> Assembler<'a> {
         // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = upvalue_captures.len();
-        
+
         // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
-        
+
         self.current_function_id = old_func_id;
 
         // Allocate function and emit closure
@@ -1050,14 +1083,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         for_stmt: TypedNodeRef<ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // For statements need scope management but we'll let the static analysis handle that
-        let loop_context = LoopContext {
-            continue_jumps: Vec::new(),
-            break_jumps: Vec::new(),
-            node_id: for_stmt.id,
-        };
-        self.loop_contexts.push(loop_context);
-
         // Handle initializer
         if let Some(initializer_id) = for_stmt.node.initializer {
             let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
@@ -1079,11 +1104,22 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let mut exit_jump: Option<usize> = None;
         let increment_start: Option<usize>;
 
+        // Create loop context AFTER initializer but BEFORE body
+        let loop_context = LoopContext {
+            continue_jumps: Vec::new(),
+            break_jumps: Vec::new(),
+            node_id: for_stmt.id,
+        };
+        self.loop_contexts.push(loop_context);
+
         // Handle condition and body
         if let Some(condition_id) = for_stmt.node.condition {
             let condition = ctx.nodes.get_expr_node(condition_id);
             let condition_jump = self.emit_jump(OpCode::Jump, condition.node.span());
             loop_start = self.current_chunk_mut().code.len();
+
+            // Reset nested loop variables if this is a nested for loop
+            self.emit_nested_loop_variable_resets(for_stmt.id, ctx)?;
 
             let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
             self.visit_statement(body, ctx)?;
@@ -1102,6 +1138,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Pop, condition.node.span());
             self.emit_loop(loop_start, body.node.span())?;
         } else {
+            // Reset nested loop variables if this is a nested for loop
+            self.emit_nested_loop_variable_resets(for_stmt.id, ctx)?;
+
             let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
             self.visit_statement(body, ctx)?;
 
@@ -1149,16 +1188,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(exit_jump, for_stmt.node.span)?;
-            // Patch break jumps to the same location as the exit jump
-            for break_jump in loop_context.break_jumps {
-                self.patch_jump(break_jump, for_stmt.node.span)?;
-            }
             self.emit_opcode(OpCode::Pop, for_stmt.node.span);
-        } else {
-            // For loops without condition, patch break jumps to current position
-            for break_jump in loop_context.break_jumps {
-                self.patch_jump(break_jump, for_stmt.node.span)?;
-            }
+        }
+
+        // Patch break jumps to current position (after scope cleanup)
+        for break_jump in loop_context.break_jumps {
+            self.patch_jump(break_jump, for_stmt.node.span)?;
         }
 
         Ok(())
@@ -1218,22 +1253,33 @@ impl<'a> NodeVisitor for Assembler<'a> {
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let jump = self.emit_jump(OpCode::Jump, break_stmt.node.span);
-        
+
         // Use scope analysis to find the target loop for this break statement
-        let break_info = self.analysis.scopes.break_continue_statements.get(&break_stmt.id)
-            .ok_or_else(|| QangCompilerError::new_assembler_error(
-                "Break statement not found in scope analysis results".to_string(),
-                break_stmt.node.span,
-            ))?;
-        
+        let break_info = self
+            .analysis
+            .scopes
+            .break_continue_statements
+            .get(&break_stmt.id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Break statement not found in scope analysis results".to_string(),
+                    break_stmt.node.span,
+                )
+            })?;
+
         // Find the loop context that matches the target loop from scope analysis
-        let loop_context = self.loop_contexts.iter_mut().rev()
+        let loop_context = self
+            .loop_contexts
+            .iter_mut()
+            .rev()
             .find(|ctx| ctx.node_id == break_info.target_loop)
-            .ok_or_else(|| QangCompilerError::new_assembler_error(
-                "Break statement target loop not found in compiler context".to_string(),
-                break_stmt.node.span,
-            ))?;
-        
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Break statement target loop not found in compiler context".to_string(),
+                    break_stmt.node.span,
+                )
+            })?;
+
         loop_context.break_jumps.push(jump);
         Ok(())
     }
@@ -1244,22 +1290,33 @@ impl<'a> NodeVisitor for Assembler<'a> {
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let continue_position = self.current_chunk_mut().code.len();
-        
+
         // Use scope analysis to find the target loop for this continue statement
-        let continue_info = self.analysis.scopes.break_continue_statements.get(&continue_stmt.id)
-            .ok_or_else(|| QangCompilerError::new_assembler_error(
-                "Continue statement not found in scope analysis results".to_string(),
-                continue_stmt.node.span,
-            ))?;
-        
+        let continue_info = self
+            .analysis
+            .scopes
+            .break_continue_statements
+            .get(&continue_stmt.id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Continue statement not found in scope analysis results".to_string(),
+                    continue_stmt.node.span,
+                )
+            })?;
+
         // Find the loop context that matches the target loop from scope analysis
-        let loop_context = self.loop_contexts.iter_mut().rev()
+        let loop_context = self
+            .loop_contexts
+            .iter_mut()
+            .rev()
             .find(|ctx| ctx.node_id == continue_info.target_loop)
-            .ok_or_else(|| QangCompilerError::new_assembler_error(
-                "Continue statement target loop not found in compiler context".to_string(),
-                continue_stmt.node.span,
-            ))?;
-        
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Continue statement target loop not found in compiler context".to_string(),
+                    continue_stmt.node.span,
+                )
+            })?;
+
         loop_context.continue_jumps.push(continue_position);
         Ok(())
     }
@@ -1324,10 +1381,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
-        
+
         // Store and reset loop contexts - loops don't cross function boundaries
         let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
-        
+
         let old_function_id = self.current_function_id;
         self.current_function_id = Some(lambda_expr.id);
 
@@ -1360,10 +1417,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = upvalue_captures.len();
-        
+
         // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
-        
+
         self.current_function_id = old_function_id;
 
         // Allocate function and emit closure
@@ -1813,12 +1870,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
             // Load the superclass
             self.emit_variable_access(superclass.id, superclass.node.span, false)?;
-            
+
             // Store the superclass in the "super" local variable using the slot from analysis
             self.emit_opcode_and_byte(
-                OpCode::SetLocal, 
-                inheritance_info.super_slot as u8, 
-                superclass.node.span
+                OpCode::SetLocal,
+                inheritance_info.super_slot as u8,
+                superclass.node.span,
             );
 
             // Now emit inheritance instruction

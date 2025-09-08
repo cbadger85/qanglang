@@ -1,4 +1,4 @@
-use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm, compile, disassemble_program};
+use crate::{HeapAllocator, SourceMap, Vm, compile, disassemble_program};
 
 #[test]
 fn test_class_super_keyword() {
@@ -137,8 +137,8 @@ fn test_nested_loops_with_break() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    // match compile(&source_map, &mut allocator) {
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
+        // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)

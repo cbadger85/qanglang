@@ -46,18 +46,41 @@ pub struct ClassInheritanceInfo {
     pub super_slot: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LoopType {
-    For,
-    While,
+#[derive(Debug, Clone)]
+pub enum LoopInfo {
+    While(WhileLoopInfo),
+    For(ForLoopInfo),
 }
 
 #[derive(Debug, Clone)]
-pub struct LoopInfo {
-    pub loop_type: LoopType,
+pub struct WhileLoopInfo {
     pub depth: usize,
     pub span: SourceSpan,
     pub node_id: NodeId,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForLoopInfo {
+    pub depth: usize,
+    pub span: SourceSpan,
+    pub node_id: NodeId,
+    pub scope_info: ForLoopScopeInfo,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForLoopScopeInfo {
+    pub entry_scope_depth: usize,
+    pub body_scope_depth: usize,
+    pub initializer_variables: Vec<LoopVariableInfo>,
+    pub parent_loop: Option<NodeId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoopVariableInfo {
+    pub name: StringHandle,
+    pub slot: usize,
+    pub scope_depth: usize,
+    pub initializer_node: Option<NodeId>,
 }
 
 #[derive(Debug, Clone)]
@@ -427,17 +450,42 @@ impl<'a> ScopeAnalyzer<'a> {
         Ok(None)
     }
 
-    fn begin_loop(&mut self, loop_node_id: NodeId, loop_type: LoopType, span: SourceSpan) {
+    fn begin_while_loop(&mut self, loop_node_id: NodeId, span: SourceSpan) {
         self.loop_depth += 1;
         self.loop_stack.push(loop_node_id);
-        
-        let loop_info = LoopInfo {
-            loop_type,
+
+        let loop_info = LoopInfo::While(WhileLoopInfo {
             depth: self.loop_depth,
             span,
             node_id: loop_node_id,
+        });
+
+        self.results.loops.insert(loop_node_id, loop_info);
+    }
+
+    fn begin_for_loop(&mut self, loop_node_id: NodeId, span: SourceSpan) {
+        self.loop_depth += 1;
+        self.loop_stack.push(loop_node_id);
+
+        let entry_scope_depth = self.current_scope_depth();
+        let parent_loop = if self.loop_stack.len() >= 2 {
+            self.loop_stack.get(self.loop_stack.len() - 2).copied()
+        } else {
+            None
         };
-        
+
+        let loop_info = LoopInfo::For(ForLoopInfo {
+            depth: self.loop_depth,
+            span,
+            node_id: loop_node_id,
+            scope_info: ForLoopScopeInfo {
+                entry_scope_depth,
+                body_scope_depth: entry_scope_depth + 1,
+                initializer_variables: Vec::new(),
+                parent_loop,
+            },
+        });
+
         self.results.loops.insert(loop_node_id, loop_info);
     }
 
@@ -912,7 +960,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         self.visit_expression(condition, ctx)?;
 
         // Enter loop context and visit body
-        self.begin_loop(while_stmt.id, LoopType::While, while_stmt.node.span);
+        self.begin_while_loop(while_stmt.id, while_stmt.node.span);
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
         self.end_loop();
@@ -926,8 +974,45 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         self.begin_scope();
+
+        // Begin for loop tracking
+        self.begin_for_loop(for_stmt.id, for_stmt.node.span);
+
+        // Track initializer variables
         if let Some(initializer_id) = for_stmt.node.initializer {
-            self.visit_for_initializer(ctx.nodes.get_for_initializer_node(initializer_id), ctx)?;
+            let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
+            if let crate::frontend::typed_node_arena::ForInitializerNode::VarDecl(var_decl) =
+                initializer.node
+            {
+                let identifier = ctx.nodes.get_identifier_node(var_decl.target);
+
+                // Visit the initializer first
+                self.visit_for_initializer(initializer, ctx)?;
+
+                // Record the variable info for the loop
+                if let Some(var_info) = self.results.variables.get(&identifier.id) {
+                    if let VariableKind::Local {
+                        slot, scope_depth, ..
+                    } = var_info.kind
+                    {
+                        let loop_var = LoopVariableInfo {
+                            name: identifier.node.name,
+                            slot,
+                            scope_depth,
+                            initializer_node: var_decl.initializer,
+                        };
+
+                        // Add to the for loop's scope info
+                        if let Some(LoopInfo::For(for_info)) =
+                            self.results.loops.get_mut(&for_stmt.id)
+                        {
+                            for_info.scope_info.initializer_variables.push(loop_var);
+                        }
+                    }
+                }
+            } else {
+                self.visit_for_initializer(initializer, ctx)?;
+            }
         }
 
         if let Some(condition_id) = for_stmt.node.condition {
@@ -938,8 +1023,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
         }
 
-        // Enter loop context for the body
-        self.begin_loop(for_stmt.id, LoopType::For, for_stmt.node.span);
+        // Update body scope depth
+        let body_scope_depth = self.current_scope_depth();
+        if let Some(LoopInfo::For(for_info)) = self.results.loops.get_mut(&for_stmt.id) {
+            for_info.scope_info.body_scope_depth = body_scope_depth;
+        }
+
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
         self.end_loop();
 
@@ -965,7 +1054,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 statement_type: BreakContinueType::Break,
                 span: break_stmt.node.span,
             };
-            self.results.break_continue_statements.insert(break_stmt.id, break_info);
+            self.results
+                .break_continue_statements
+                .insert(break_stmt.id, break_info);
         }
         Ok(())
     }
@@ -988,7 +1079,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 statement_type: BreakContinueType::Continue,
                 span: continue_stmt.node.span,
             };
-            self.results.break_continue_statements.insert(continue_stmt.id, continue_info);
+            self.results
+                .break_continue_statements
+                .insert(continue_stmt.id, continue_info);
         }
         Ok(())
     }

@@ -416,25 +416,21 @@ impl<'a> Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
         // Find nested for loops within this loop's body and reset their variables
-        if let Some(crate::frontend::scope_analysis::LoopInfo::For(_)) =
-            self.analysis.scopes.loops.get(&for_loop_id)
-        {
+        if let Some(_) = self.analysis.scopes.for_loops.get(&for_loop_id) {
             // Look for nested loops that need their variables reset
-            for (_, loop_info) in &self.analysis.scopes.loops {
-                if let crate::frontend::scope_analysis::LoopInfo::For(nested_for_info) = loop_info {
-                    // If this nested loop's parent is the current loop, reset its variables
-                    if nested_for_info.scope_info.parent_loop == Some(for_loop_id) {
-                        for var_info in &nested_for_info.scope_info.initializer_variables {
-                            if let Some(initializer_node) = var_info.initializer_node {
-                                let initializer_expr = ctx.nodes.get_expr_node(initializer_node);
-                                self.visit_expression(initializer_expr, ctx)?;
-                                self.emit_opcode_and_byte(
-                                    OpCode::SetLocal,
-                                    var_info.slot as u8,
-                                    initializer_expr.node.span(),
-                                );
-                                self.emit_opcode(OpCode::Pop, initializer_expr.node.span());
-                            }
+            for (_, nested_for_info) in &self.analysis.scopes.for_loops {
+                // If this nested loop's parent is the current loop, reset its variables
+                if nested_for_info.scope_info.parent_loop == Some(for_loop_id) {
+                    for var_info in &nested_for_info.scope_info.initializer_variables {
+                        if let Some(initializer_node) = var_info.initializer_node {
+                            let initializer_expr = ctx.nodes.get_expr_node(initializer_node);
+                            self.visit_expression(initializer_expr, ctx)?;
+                            self.emit_opcode_and_byte(
+                                OpCode::SetLocal,
+                                var_info.slot as u8,
+                                initializer_expr.node.span(),
+                            );
+                            self.emit_opcode(OpCode::Pop, initializer_expr.node.span());
                         }
                     }
                 }

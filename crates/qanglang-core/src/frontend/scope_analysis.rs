@@ -47,19 +47,6 @@ pub struct ClassInheritanceInfo {
 }
 
 #[derive(Debug, Clone)]
-pub enum LoopInfo {
-    While(WhileLoopInfo),
-    For(ForLoopInfo),
-}
-
-#[derive(Debug, Clone)]
-pub struct WhileLoopInfo {
-    pub depth: usize,
-    pub span: SourceSpan,
-    pub node_id: NodeId,
-}
-
-#[derive(Debug, Clone)]
 pub struct ForLoopInfo {
     pub depth: usize,
     pub span: SourceSpan,
@@ -102,7 +89,7 @@ pub struct ScopeAnalysis {
     pub functions: FxHashMap<NodeId, FunctionInfo>,
     pub upvalue_captures: FxHashMap<NodeId, Vec<UpvalueInfo>>,
     pub class_inheritance: FxHashMap<NodeId, ClassInheritanceInfo>,
-    pub loops: FxHashMap<NodeId, LoopInfo>,
+    pub for_loops: FxHashMap<NodeId, ForLoopInfo>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
 }
 
@@ -113,7 +100,7 @@ impl ScopeAnalysis {
             functions: FxHashMap::with_hasher(FxBuildHasher),
             upvalue_captures: FxHashMap::with_hasher(FxBuildHasher),
             class_inheritance: FxHashMap::with_hasher(FxBuildHasher),
-            loops: FxHashMap::with_hasher(FxBuildHasher),
+            for_loops: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
@@ -450,17 +437,9 @@ impl<'a> ScopeAnalyzer<'a> {
         Ok(None)
     }
 
-    fn begin_while_loop(&mut self, loop_node_id: NodeId, span: SourceSpan) {
+    fn begin_while_loop(&mut self, loop_node_id: NodeId) {
         self.loop_depth += 1;
         self.loop_stack.push(loop_node_id);
-
-        let loop_info = LoopInfo::While(WhileLoopInfo {
-            depth: self.loop_depth,
-            span,
-            node_id: loop_node_id,
-        });
-
-        self.results.loops.insert(loop_node_id, loop_info);
     }
 
     fn begin_for_loop(&mut self, loop_node_id: NodeId, span: SourceSpan) {
@@ -474,7 +453,7 @@ impl<'a> ScopeAnalyzer<'a> {
             None
         };
 
-        let loop_info = LoopInfo::For(ForLoopInfo {
+        let loop_info = ForLoopInfo {
             depth: self.loop_depth,
             span,
             node_id: loop_node_id,
@@ -484,9 +463,9 @@ impl<'a> ScopeAnalyzer<'a> {
                 initializer_variables: Vec::new(),
                 parent_loop,
             },
-        });
+        };
 
-        self.results.loops.insert(loop_node_id, loop_info);
+        self.results.for_loops.insert(loop_node_id, loop_info);
     }
 
     fn end_loop(&mut self) {
@@ -960,7 +939,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         self.visit_expression(condition, ctx)?;
 
         // Enter loop context and visit body
-        self.begin_while_loop(while_stmt.id, while_stmt.node.span);
+        self.begin_while_loop(while_stmt.id);
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
         self.end_loop();
@@ -1003,9 +982,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                         };
 
                         // Add to the for loop's scope info
-                        if let Some(LoopInfo::For(for_info)) =
-                            self.results.loops.get_mut(&for_stmt.id)
-                        {
+                        if let Some(for_info) = self.results.for_loops.get_mut(&for_stmt.id) {
                             for_info.scope_info.initializer_variables.push(loop_var);
                         }
                     }
@@ -1025,7 +1002,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         // Update body scope depth
         let body_scope_depth = self.current_scope_depth();
-        if let Some(LoopInfo::For(for_info)) = self.results.loops.get_mut(&for_stmt.id) {
+        if let Some(for_info) = self.results.for_loops.get_mut(&for_stmt.id) {
             for_info.scope_info.body_scope_depth = body_scope_depth;
         }
 

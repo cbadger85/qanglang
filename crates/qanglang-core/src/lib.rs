@@ -5,9 +5,9 @@ mod error;
 mod frontend;
 pub mod memory;
 
-pub use backend::assembler::{Assembler, CompilerPipeline, QangProgram};
+pub use backend::assembler::QangProgram;
 pub use backend::chunk::SourceLocation;
-pub use backend::compiler::{CompilerConfig, compile, compile_with_config};
+pub use backend::compiler::{CompilerConfig, CompilerPipeline};
 pub use backend::value::Value;
 pub use backend::vm::Vm;
 pub use debug::{disassemble_chunk, disassemble_program};

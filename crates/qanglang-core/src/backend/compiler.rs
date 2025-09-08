@@ -12,6 +12,7 @@ use crate::{
     nodes::*,
 };
 
+#[derive(Clone, Copy, Debug)]
 pub struct CompilerConfig {
     pub error_message_format: ErrorMessageFormat,
 }
@@ -33,31 +34,42 @@ impl From<CompilerConfig> for AnalysisPipelineConfig {
     }
 }
 
-pub fn compile(
-    source_map: &SourceMap,
-    alloc: &mut HeapAllocator,
-) -> Result<QangProgram, QangPipelineError> {
-    compile_with_config(source_map, alloc, CompilerConfig::default())
+#[derive(Clone, Debug)]
+pub struct CompilerPipeline {
+    config: CompilerConfig,
 }
 
-pub fn compile_with_config(
-    source_map: &SourceMap,
-    alloc: &mut HeapAllocator,
-    config: CompilerConfig,
-) -> Result<QangProgram, QangPipelineError> {
-    let mut parser = Parser::new(source_map, TypedNodeArena::new(), &mut alloc.strings);
-    let program = parser.parse();
+impl CompilerPipeline {
+    pub fn new() -> Self {
+        return Self {
+            config: CompilerConfig::default(),
+        };
+    }
 
-    let (mut errors, mut nodes) = parser.into_parts();
+    pub fn with_config(mut self, config: CompilerConfig) -> Self {
+        self.config = config;
+        self
+    }
 
-    let result = AnalysisPipeline::new(&mut alloc.strings)
-        .with_config(config.into())
-        .analyze(program, source_map, &mut nodes, &mut errors)?;
+    pub fn compile(
+        &self,
+        source_map: &SourceMap,
+        alloc: &mut HeapAllocator,
+    ) -> Result<QangProgram, QangPipelineError> {
+        let mut parser = Parser::new(source_map, TypedNodeArena::new(), &mut alloc.strings);
+        let program = parser.parse();
 
-    let assembler = Assembler::new(source_map, alloc, &result);
-    let main_function = assembler.assemble(program, &mut nodes, &mut errors)?;
+        let (mut errors, mut nodes) = parser.into_parts();
 
-    Ok(QangProgram::new(alloc.allocate_function(main_function)))
+        let result = AnalysisPipeline::new(&mut alloc.strings)
+            .with_config(self.config.into())
+            .analyze(program, source_map, &mut nodes, &mut errors)?;
+
+        let assembler = Assembler::new(source_map, alloc, &result);
+        let main_function = assembler.assemble(program, &mut nodes, &mut errors)?;
+
+        Ok(QangProgram::new(alloc.allocate_function(main_function)))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -416,11 +428,10 @@ impl<'a> Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
         // Find nested for loops within this loop's body and reset their variables
-        if let Some(_) = self.analysis.scopes.for_loops.get(&for_loop_id) {
+        if let Some(child_loop_ids) = self.analysis.scopes.loop_children.get(&for_loop_id) {
             // Look for nested loops that need their variables reset
-            for (_, nested_for_info) in &self.analysis.scopes.for_loops {
-                // If this nested loop's parent is the current loop, reset its variables
-                if nested_for_info.scope_info.parent_loop == Some(for_loop_id) {
+            for &child_loop_id in child_loop_ids {
+                if let Some(nested_for_info) = self.analysis.scopes.for_loops.get(&child_loop_id) {
                     for var_info in &nested_for_info.scope_info.initializer_variables {
                         if let Some(initializer_node) = var_info.initializer_node {
                             let initializer_expr = ctx.nodes.get_expr_node(initializer_node);

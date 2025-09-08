@@ -90,6 +90,7 @@ pub struct ScopeAnalysis {
     pub upvalue_captures: FxHashMap<NodeId, Vec<UpvalueInfo>>,
     pub class_inheritance: FxHashMap<NodeId, ClassInheritanceInfo>,
     pub for_loops: FxHashMap<NodeId, ForLoopInfo>,
+    pub loop_children: FxHashMap<NodeId, Vec<NodeId>>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
 }
 
@@ -101,6 +102,7 @@ impl ScopeAnalysis {
             upvalue_captures: FxHashMap::with_hasher(FxBuildHasher),
             class_inheritance: FxHashMap::with_hasher(FxBuildHasher),
             for_loops: FxHashMap::with_hasher(FxBuildHasher),
+            loop_children: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
@@ -466,6 +468,14 @@ impl<'a> ScopeAnalyzer<'a> {
         };
 
         self.results.for_loops.insert(loop_node_id, loop_info);
+        
+        // Update children mapping for parent loop
+        if let Some(parent_id) = parent_loop {
+            self.results.loop_children
+                .entry(parent_id)
+                .or_insert_with(Vec::new)
+                .push(loop_node_id);
+        }
     }
 
     fn end_loop(&mut self) {

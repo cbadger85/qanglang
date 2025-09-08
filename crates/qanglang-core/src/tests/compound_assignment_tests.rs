@@ -1,4 +1,4 @@
-use crate::{HeapAllocator, SourceMap, Vm, compile};
+use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm};
 
 #[test]
 fn test_compound_assignment_operators() {
@@ -37,7 +37,7 @@ fn test_compound_assignment_operators() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match compile(&source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
@@ -86,7 +86,7 @@ fn test_compound_assignment_with_properties() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match compile(&source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
@@ -129,7 +129,7 @@ fn test_compound_assignment_with_arrays() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match compile(&source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)

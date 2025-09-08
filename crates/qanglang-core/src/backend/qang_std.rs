@@ -357,8 +357,8 @@ impl Vm {
         let stdlib_source = include_str!("stdlib.ql");
         let source_map = SourceMap::from_source("<stdlib>", stdlib_source.to_owned());
 
-        let program = CompilerPipeline::new(source_map, &mut self.alloc)
-            .run()
+        let program = CompilerPipeline::new()
+            .compile(&source_map, &mut self.alloc)
             .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
 
         // Execute stdlib to populate globals

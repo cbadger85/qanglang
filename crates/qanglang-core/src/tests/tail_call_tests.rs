@@ -18,7 +18,7 @@ fn test_simple_tail_recursion() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -67,7 +67,7 @@ fn test_tail_call_different_function() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
@@ -107,7 +107,7 @@ fn test_non_tail_call_still_works() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
@@ -147,7 +147,7 @@ fn test_tail_call_with_different_arity() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
@@ -188,7 +188,7 @@ fn test_deep_tail_recursion() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new().compile(&source_map, &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)

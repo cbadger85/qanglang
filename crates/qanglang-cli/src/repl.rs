@@ -1,4 +1,4 @@
-use qanglang_core::{HeapAllocator, SourceMap, Vm, compile};
+use qanglang_core::{CompilerPipeline, HeapAllocator, SourceMap, Vm};
 use std::io::{self, Write};
 
 pub fn run_repl(debug: bool) {
@@ -33,7 +33,7 @@ pub fn run_repl(debug: bool) {
 pub fn execute_repl_line(source: &str, vm: &mut Vm) {
     let source_map = SourceMap::new(source.to_string());
 
-    let program = match compile(&source_map, &mut vm.alloc) {
+    let program = match CompilerPipeline::new().compile(&source_map, &mut vm.alloc) {
         Ok(program) => program,
         Err(errors) => {
             for error in errors.all() {

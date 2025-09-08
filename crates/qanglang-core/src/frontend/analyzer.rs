@@ -15,7 +15,7 @@ impl AnalysisResults {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct AnalysisPipelineConfig {
     pub error_message_format: ErrorMessageFormat,
     pub strict_mode: bool,

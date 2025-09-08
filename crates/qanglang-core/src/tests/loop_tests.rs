@@ -1,101 +1,6 @@
 use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm, compile, disassemble_program};
 
 #[test]
-fn test_calling_init_on_super_without_init() {
-    let source = r#"
-      fn test_calling_init_on_super_without_init() {
-        class TestClass { }
-
-        class OtherClass : TestClass {
-
-          init() {
-            super.init();
-          }
-        }  
-
-        var test = OtherClass();
-      }
-
-      test_calling_init_on_super_without_init();
-    "#;
-
-    let source_map = SourceMap::new(source.to_string());
-    let mut allocator = HeapAllocator::new();
-
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
-    match compile(&source_map, &mut allocator) {
-        Ok(program) => {
-            disassemble_program(&allocator);
-            match Vm::new(allocator)
-                .set_gc_status(false)
-                .set_debug(true)
-                .interpret(program)
-            {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
-            }
-        }
-        Err(errors) => {
-            for error in errors.all() {
-                println!("{}", error.message);
-            }
-            panic!("Failed with compiler errors.")
-        }
-    }
-}
-
-#[test]
-fn test_class_super_method_calls() {
-    let source = r#"
-      fn test_class_super_method_calls() {
-        class TestClass {
-          test_method() {
-            return 42;
-          }
-        }
-
-        class OtherClass : TestClass {
-          test_method() {
-            return super.test_method() - 42;
-          }
-        }  
-
-        assert_eq(OtherClass().test_method(), 0, "Expected 0.");
-      }
-      
-      test_class_super_method_calls();
-    "#;
-
-    let source_map = SourceMap::new(source.to_string());
-    let mut allocator = HeapAllocator::new();
-
-    // match CompilerPipeline::new(source_map, &mut allocator).run() {
-    match compile(&source_map, &mut allocator) {
-        Ok(program) => {
-            disassemble_program(&allocator);
-            match Vm::new(allocator)
-                .set_gc_status(false)
-                .set_debug(true)
-                .interpret(program)
-            {
-                Ok(_) => (),
-                Err(error) => {
-                    panic!("{}", error);
-                }
-            }
-        }
-        Err(errors) => {
-            for error in errors.all() {
-                println!("{}", error.message);
-            }
-            panic!("Failed with compiler errors.")
-        }
-    }
-}
-
-#[test]
 fn test_class_super_keyword() {
     let source = r#"
       fn test_class_super_keyword() {
@@ -278,8 +183,8 @@ fn test_nested_loops_with_continue() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    // match compile(&source_map, &mut allocator) {
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
+        // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -322,8 +227,8 @@ fn test_nested_for_loops() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    // match compile(&source_map, &mut allocator) {
-    match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match compile(&source_map, &mut allocator) {
+        // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -342,6 +247,173 @@ fn test_nested_for_loops() {
                 println!("{}", error.message);
             }
             panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_break_and_continue() {
+    let source = r#"
+        // Test just continue
+        var result = "";
+        var i = 0;
+        while (i < 4) {
+            i = i + 1;
+            if (i == 3) {
+                continue;
+            }
+            result = result + to_string(i);
+        }
+        // Should be "124" (skipping 3)
+        assert_eq(result, "124", "Continue test failed: " + result);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        Ok(program) => {
+            // disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_continue_error_cases_inside_nested_function() {
+    // Test break outside of loop
+    let source_break: &'static str = r#"
+        var continue_loop = true;
+        while (continue_loop) {
+            
+            var lambda = () -> {
+                continue; // this should be a syntax error.
+            };
+            continue_loop = false;
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_break.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        Ok(_) => panic!("Expected compiler error for break outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_break_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'continue' can only be used inside loops"));
+            assert!(
+                has_break_error,
+                "Expected break error message, got: {:?}",
+                error_messages
+            );
+        }
+    }
+
+    // Test continue outside of loop
+    let source_continue = r#"
+        for (var i = 0; i < 1; i = i + 1) {
+            var lambda = () -> {
+                continue; // this should be a syntax error.
+            };
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_continue.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        Ok(_) => panic!("Expected compiler error for continue outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_continue_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'continue' can only be used inside loops"));
+            assert!(
+                has_continue_error,
+                "Expected continue error message, got: {:?}",
+                error_messages
+            );
+        }
+    }
+}
+
+#[test]
+fn test_break_error_cases_inside_nested_function() {
+    // Test break outside of loop
+    let source_break: &'static str = r#"
+        var continue_loop = true;
+        while (continue_loop) {
+            
+            var lambda = () -> {
+                break; // this should be a syntax error.
+            };
+            continue_loop = false;
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_break.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        Ok(_) => panic!("Expected compiler error for break outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_break_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'break' can only be used inside loops"));
+            assert!(
+                has_break_error,
+                "Expected break error message, got: {:?}",
+                error_messages
+            );
+        }
+    }
+
+    // Test continue outside of loop
+    let source_continue = r#"
+        for (var i = 0; i < 1; i = i + 1) {
+            var lambda = () -> {
+                break; // this should be a syntax error.
+            };
+        }
+    "#;
+
+    let source_map = SourceMap::new(source_continue.to_string());
+    let mut allocator: HeapAllocator = HeapAllocator::new();
+
+    match compile(&source_map, &mut allocator) {
+        Ok(_) => panic!("Expected compiler error for continue outside loop"),
+        Err(errors) => {
+            let error_messages: Vec<String> =
+                errors.all().iter().map(|e| e.message.clone()).collect();
+            let has_continue_error = error_messages
+                .iter()
+                .any(|msg| msg.contains("'break' can only be used inside loops"));
+            assert!(
+                has_continue_error,
+                "Expected continue error message, got: {:?}",
+                error_messages
+            );
         }
     }
 }

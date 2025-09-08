@@ -1669,22 +1669,37 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 // Local class, no additional instruction needed for definition
             }
             VariableKind::Upvalue { .. } => {
-                unreachable!()
-                // return Err(QangCompilerError::new_assembler_error(
-                //     "Cannot declare upvalue class".to_string(),
-                //     class_decl.node.span,
-                // ));
+                return Err(QangCompilerError::new_assembler_error(
+                    "Cannot declare upvalue class".to_string(),
+                    class_decl.node.span,
+                ));
             }
         }
 
         // Load the class for method/field definitions
-        self.emit_variable_access(name.id, name.node.span, false)?;
+        // The class should be loaded from the same location where it was defined
+        match &var_info.kind {
+            VariableKind::Global => {
+                self.emit_constant_opcode(
+                    OpCode::GetGlobal,
+                    OpCode::GetGlobal16,
+                    Value::String(class_handle),
+                    name.node.span,
+                )?;
+            }
+            VariableKind::Local { slot, .. } => {
+                self.emit_opcode_and_byte(OpCode::GetLocal, *slot as u8, name.node.span);
+            }
+            VariableKind::Upvalue { .. } => {
+                return Err(QangCompilerError::new_assembler_error(
+                    "Cannot access upvalue class for member definition".to_string(),
+                    name.node.span,
+                ));
+            }
+        }
 
-        // Handle inheritance
+        // Handle inheritance using class inheritance analysis
         if let Some(superclass) = superclass {
-            // Load the class again for inheritance setup
-            self.emit_variable_access(name.id, name.node.span, false)?;
-
             // Check for self-inheritance
             if class_handle == superclass.node.name {
                 return Err(QangCompilerError::new_assembler_error(
@@ -1693,15 +1708,52 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 ));
             }
 
-            // Load the superclass for inheritance
+            // Get the inheritance information from static analysis
+            let inheritance_info = self
+                .analysis
+                .scopes
+                .class_inheritance
+                .get(&class_decl.id)
+                .ok_or_else(|| {
+                    QangCompilerError::new_assembler_error(
+                        "Class inheritance info not found in analysis results".to_string(),
+                        class_decl.node.span,
+                    )
+                })?;
+
+            // Load the subclass again (for inheritance)
+            // The class should be loaded from the same location where it was defined
+            match &var_info.kind {
+                VariableKind::Global => {
+                    self.emit_constant_opcode(
+                        OpCode::GetGlobal,
+                        OpCode::GetGlobal16,
+                        Value::String(class_handle),
+                        name.node.span,
+                    )?;
+                }
+                VariableKind::Local { slot, .. } => {
+                    self.emit_opcode_and_byte(OpCode::GetLocal, *slot as u8, name.node.span);
+                }
+                VariableKind::Upvalue { .. } => {
+                    return Err(QangCompilerError::new_assembler_error(
+                        "Cannot access upvalue class for inheritance".to_string(),
+                        name.node.span,
+                    ));
+                }
+            }
+
+            // Load the superclass
             self.emit_variable_access(superclass.id, superclass.node.span, false)?;
+            
+            // Store the superclass in the "super" local variable using the slot from analysis
+            self.emit_opcode_and_byte(
+                OpCode::SetLocal, 
+                inheritance_info.super_slot as u8, 
+                superclass.node.span
+            );
 
-            // Store superclass in the "super" local variable at slot 1
-            // Based on the working assembler bytecode, the superclass should be stored at local slot 1
-            // (slot 0 is reserved for 'this' in methods)
-            self.emit_opcode_and_byte(OpCode::SetLocal, 1, superclass.node.span);
-
-            // Emit inheritance instruction
+            // Now emit inheritance instruction
             self.emit_opcode(OpCode::Inherit, superclass.node.span);
         }
 

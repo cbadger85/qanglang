@@ -40,10 +40,18 @@ pub struct FunctionInfo {
 }
 
 #[derive(Debug, Clone)]
+pub struct ClassInheritanceInfo {
+    pub entry_scope_depth: usize,
+    pub super_scope_depth: usize,
+    pub super_slot: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct ScopeAnalysis {
     pub variables: FxHashMap<NodeId, VariableInfo>,
     pub functions: FxHashMap<NodeId, FunctionInfo>,
     pub upvalue_captures: FxHashMap<NodeId, Vec<UpvalueInfo>>,
+    pub class_inheritance: FxHashMap<NodeId, ClassInheritanceInfo>,
 }
 
 impl ScopeAnalysis {
@@ -52,6 +60,7 @@ impl ScopeAnalysis {
             variables: FxHashMap::with_hasher(FxBuildHasher),
             functions: FxHashMap::with_hasher(FxBuildHasher),
             upvalue_captures: FxHashMap::with_hasher(FxBuildHasher),
+            class_inheritance: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 }
@@ -105,8 +114,15 @@ impl FunctionContext {
         span: SourceSpan,
     ) -> Self {
         let mut locals = Vec::with_capacity(u8::MAX as usize);
+
+        // For methods and initializers, slot 0 is reserved for 'this'
+        let initial_name = match kind {
+            FunctionKind::Method | FunctionKind::Initializer => handle, // Use method name as placeholder
+            _ => blank_handle,
+        };
+
         locals.push(LocalVariable {
-            name: blank_handle,
+            name: initial_name,
             scope_depth: 0,
             slot: 0,
             is_captured: false,
@@ -142,17 +158,13 @@ impl FunctionContext {
     fn find_local(&self, name: StringHandle, current_scope_depth: usize) -> Option<usize> {
         // Search backwards to find the most recent (innermost scope) variable with this name
         // that is still within the current scope depth
-        self.locals
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(i, local)| {
-                if local.name == name && local.scope_depth <= current_scope_depth {
-                    Some(i)
-                } else {
-                    None
-                }
-            })
+        self.locals.iter().enumerate().rev().find_map(|(i, local)| {
+            if local.name == name && local.scope_depth <= current_scope_depth {
+                Some(i)
+            } else {
+                None
+            }
+        })
     }
 
     fn add_upvalue(&mut self, name: StringHandle, index: usize, is_local: bool) -> usize {
@@ -407,7 +419,13 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let function = FunctionContext::new(name, arity, kind, self.blank_handle, span);
+        let mut function = FunctionContext::new(name, arity, kind, self.blank_handle, span);
+
+        // For methods and initializers, properly set up 'this' at slot 0
+        if matches!(kind, FunctionKind::Method | FunctionKind::Initializer) {
+            let this_handle = self.strings.intern("this");
+            function.locals[0].name = this_handle;
+        }
 
         self.functions.push(function);
         self.begin_scope();
@@ -669,36 +687,50 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 self.visit_identifier(superclass, ctx)?;
             }
 
-            // Begin new scope for super variable
+            // Begin new scope for super variable - this creates a scope that methods can capture from
             self.begin_scope();
 
-            // Declare "super" as a local variable at slot 1 (slot 0 is reserved for 'this' in methods)
+            // Create a synthetic local for super by manipulating the current function's local slot allocation
+            // This mimics how the working assembler allocates super as a local in the class compilation context
             let super_handle = self.strings.intern("super");
-
-            // Add "super" to the current function's locals like any other local variable
             let scope_depth = self.current_scope_depth();
+
+            // Add super to current function's locals to properly reserve a slot
             let super_slot = if let Some(func) = self.functions.last_mut() {
-                // Use add_local to get the next available slot instead of hardcoding slot 1
                 let slot_index = func.add_local(super_handle, scope_depth);
                 func.locals[slot_index].slot
             } else {
-                1 // fallback
+                return Err(QangCompilerError::new_analysis_error(
+                    "No function context for super variable".to_string(),
+                    class_decl.node.span,
+                ));
             };
 
-            // Also add to scope for consistency
+            // Add to scope so methods can resolve 'super' as an upvalue
             let var_info = VariableInfo {
                 name: super_handle,
                 kind: VariableKind::Local {
                     scope_depth,
                     slot: super_slot,
                 },
-                is_captured: false,
+                is_captured: false, // Will be marked as captured when methods access it
                 span: class_decl.node.span,
             };
 
             if let Some(current_scope) = self.scopes.last_mut() {
                 current_scope.variables.insert(super_handle, var_info);
             }
+
+            // Record class inheritance information for the compiler backend
+            let inheritance_info = ClassInheritanceInfo {
+                entry_scope_depth: scope_depth - 1, // Scope depth before begin_scope()
+                super_scope_depth: scope_depth,     // Scope depth where super is allocated
+                super_slot,                         // Slot where super should be stored
+            };
+
+            self.results
+                .class_inheritance
+                .insert(class_decl.id, inheritance_info);
         }
 
         // Visit members
@@ -751,9 +783,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                         self.end_function(member_id)?;
                     }
                     super::typed_node_arena::ClassMemberNode::Field(field) => {
-                        let field_name = ctx.nodes.get_identifier_node(field.name);
-                        self.visit_identifier(field_name, ctx)?;
-
+                        // Field names are not variables to be resolved, they are property names
+                        // Only visit the initializer if present
                         if let Some(init_id) = field.initializer {
                             let initializer = ctx.nodes.get_expr_node(init_id);
                             self.visit_expression(initializer, ctx)?;

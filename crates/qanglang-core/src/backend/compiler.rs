@@ -64,6 +64,7 @@ pub fn compile_with_config(
 struct LoopContext {
     continue_jumps: Vec<usize>,
     break_jumps: Vec<usize>,
+    node_id: NodeId,
 }
 
 struct Assembler<'a> {
@@ -327,6 +328,9 @@ impl<'a> Assembler<'a> {
 
         // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
+        
+        // Store and reset loop contexts - loops don't cross function boundaries
+        let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
 
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(func_node_id);
@@ -350,6 +354,10 @@ impl<'a> Assembler<'a> {
         // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = upvalue_captures.len();
+        
+        // Restore the old loop contexts
+        self.loop_contexts = old_loop_contexts;
+        
         self.current_function_id = old_func_id;
 
         // Allocate function and emit closure
@@ -435,6 +443,10 @@ impl<'a> Assembler<'a> {
 
         // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
+        
+        // Store and reset loop contexts - loops don't cross function boundaries
+        let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
+        
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(map_node_id);
 
@@ -457,6 +469,10 @@ impl<'a> Assembler<'a> {
         // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = upvalue_captures.len();
+        
+        // Restore the old loop contexts
+        self.loop_contexts = old_loop_contexts;
+        
         self.current_function_id = old_func_id;
 
         // Allocate function and emit closure
@@ -978,7 +994,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
         while_stmt: TypedNodeRef<WhileStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.loop_contexts.push(LoopContext::default());
+        let mut loop_context = LoopContext {
+            continue_jumps: Vec::new(),
+            break_jumps: Vec::new(),
+            node_id: while_stmt.id,
+        };
+        self.loop_contexts.push(loop_context);
 
         let loop_start = self.current_chunk_mut().code.len();
         let condition = ctx.nodes.get_expr_node(while_stmt.node.condition);
@@ -989,7 +1010,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.emit_opcode(OpCode::Pop, body.node.span());
         self.visit_statement(body, ctx)?;
 
-        let loop_context = self.loop_contexts.pop().expect("Loop context should exist");
+        loop_context = self.loop_contexts.pop().expect("Loop context should exist");
 
         for continue_position in loop_context.continue_jumps {
             let jump_distance = continue_position - loop_start + 3;
@@ -1016,6 +1037,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.patch_jump(exit_jump, body.node.span())?;
         self.emit_opcode(OpCode::Pop, while_stmt.node.span);
 
+        // Patch break jumps to the same location as the exit jump
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, while_stmt.node.span)?;
         }
@@ -1029,7 +1051,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         // For statements need scope management but we'll let the static analysis handle that
-        self.loop_contexts.push(LoopContext::default());
+        let loop_context = LoopContext {
+            continue_jumps: Vec::new(),
+            break_jumps: Vec::new(),
+            node_id: for_stmt.id,
+        };
+        self.loop_contexts.push(loop_context);
 
         // Handle initializer
         if let Some(initializer_id) = for_stmt.node.initializer {
@@ -1122,11 +1149,16 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(exit_jump, for_stmt.node.span)?;
+            // Patch break jumps to the same location as the exit jump
+            for break_jump in loop_context.break_jumps {
+                self.patch_jump(break_jump, for_stmt.node.span)?;
+            }
             self.emit_opcode(OpCode::Pop, for_stmt.node.span);
-        }
-
-        for break_jump in loop_context.break_jumps {
-            self.patch_jump(break_jump, for_stmt.node.span)?;
+        } else {
+            // For loops without condition, patch break jumps to current position
+            for break_jump in loop_context.break_jumps {
+                self.patch_jump(break_jump, for_stmt.node.span)?;
+            }
         }
 
         Ok(())
@@ -1186,21 +1218,49 @@ impl<'a> NodeVisitor for Assembler<'a> {
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let jump = self.emit_jump(OpCode::Jump, break_stmt.node.span);
-        if let Some(loop_context) = self.loop_contexts.last_mut() {
-            loop_context.break_jumps.push(jump);
-        }
+        
+        // Use scope analysis to find the target loop for this break statement
+        let break_info = self.analysis.scopes.break_continue_statements.get(&break_stmt.id)
+            .ok_or_else(|| QangCompilerError::new_assembler_error(
+                "Break statement not found in scope analysis results".to_string(),
+                break_stmt.node.span,
+            ))?;
+        
+        // Find the loop context that matches the target loop from scope analysis
+        let loop_context = self.loop_contexts.iter_mut().rev()
+            .find(|ctx| ctx.node_id == break_info.target_loop)
+            .ok_or_else(|| QangCompilerError::new_assembler_error(
+                "Break statement target loop not found in compiler context".to_string(),
+                break_stmt.node.span,
+            ))?;
+        
+        loop_context.break_jumps.push(jump);
         Ok(())
     }
 
     fn visit_continue_statement(
         &mut self,
-        _continue_stmt: TypedNodeRef<ContinueStmtNode>,
+        continue_stmt: TypedNodeRef<ContinueStmtNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let continue_position = self.current_chunk_mut().code.len();
-        if let Some(loop_context) = self.loop_contexts.last_mut() {
-            loop_context.continue_jumps.push(continue_position);
-        }
+        
+        // Use scope analysis to find the target loop for this continue statement
+        let continue_info = self.analysis.scopes.break_continue_statements.get(&continue_stmt.id)
+            .ok_or_else(|| QangCompilerError::new_assembler_error(
+                "Continue statement not found in scope analysis results".to_string(),
+                continue_stmt.node.span,
+            ))?;
+        
+        // Find the loop context that matches the target loop from scope analysis
+        let loop_context = self.loop_contexts.iter_mut().rev()
+            .find(|ctx| ctx.node_id == continue_info.target_loop)
+            .ok_or_else(|| QangCompilerError::new_assembler_error(
+                "Continue statement target loop not found in compiler context".to_string(),
+                continue_stmt.node.span,
+            ))?;
+        
+        loop_context.continue_jumps.push(continue_position);
         Ok(())
     }
 
@@ -1264,6 +1324,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
+        
+        // Store and reset loop contexts - loops don't cross function boundaries
+        let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
+        
         let old_function_id = self.current_function_id;
         self.current_function_id = Some(lambda_expr.id);
 
@@ -1296,6 +1360,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = upvalue_captures.len();
+        
+        // Restore the old loop contexts
+        self.loop_contexts = old_loop_contexts;
+        
         self.current_function_id = old_function_id;
 
         // Allocate function and emit closure

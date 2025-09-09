@@ -135,6 +135,7 @@ pub struct LocalVariable {
     pub slot: usize,
     pub is_captured: bool,
     pub scope_depth: usize,
+    pub is_initialized: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -169,6 +170,7 @@ impl FunctionContext {
             scope_depth: 0,
             slot: 0,
             is_captured: false,
+            is_initialized: true, // Function names are immediately initialized
         });
 
         Self {
@@ -182,7 +184,7 @@ impl FunctionContext {
         }
     }
 
-    fn add_local(&mut self, name: StringHandle, scope_depth: usize) -> usize {
+    fn add_local(&mut self, name: StringHandle, scope_depth: usize, is_initialized: bool) -> usize {
         let slot = self.local_count;
         let local_index = self.locals.len();
 
@@ -191,11 +193,18 @@ impl FunctionContext {
             scope_depth,
             slot,
             is_captured: false,
+            is_initialized,
         });
 
         self.local_count += 1;
 
         local_index
+    }
+
+    fn mark_initialized(&mut self, local_index: usize) {
+        if let Some(local) = self.locals.get_mut(local_index) {
+            local.is_initialized = true;
+        }
     }
 
     fn find_local(&self, name: StringHandle, current_scope_depth: usize) -> Option<usize> {
@@ -285,43 +294,59 @@ impl<'a> ScopeAnalyzer<'a> {
         identifier: crate::frontend::typed_node_arena::TypedNodeRef<
             crate::frontend::nodes::IdentifierNode,
         >,
-    ) -> Result<(), QangCompilerError> {
+    ) -> Result<Option<usize>, QangCompilerError> {
+        self.declare_variable_with_init(identifier, true) // Default to initialized
+    }
+
+    fn declare_variable_with_init(
+        &mut self,
+        identifier: crate::frontend::typed_node_arena::TypedNodeRef<
+            crate::frontend::nodes::IdentifierNode,
+        >,
+        is_initialized: bool,
+    ) -> Result<Option<usize>, QangCompilerError> {
         let name = identifier.node.name;
         let span = identifier.node.span;
 
-        // Check for duplicate variables in current scope
-        if let Some(current_scope) = self.scopes.last() {
-            if current_scope.variables.contains_key(&name) {
-                return Err(QangCompilerError::new_analysis_error(
-                    "Already a variable with this name in this scope.".to_string(),
-                    span,
-                ));
+        // Check for duplicate variables in current scope (only for local scopes)
+        if self.current_scope_depth() > 0 {
+            if let Some(current_scope) = self.scopes.last() {
+                if current_scope.variables.contains_key(&name) {
+                    return Err(QangCompilerError::new_analysis_error(
+                        "Already a variable with this name in this scope.".to_string(),
+                        span,
+                    ));
+                }
             }
         }
 
-        let variable_info = if self.scopes.len() == 1 {
+        let (variable_info, local_index) = if self.current_scope_depth() == 0 {
             // Global scope
-            VariableInfo {
+            let variable_info = VariableInfo {
                 name,
                 kind: VariableKind::Global,
                 is_captured: false,
                 span,
-            }
+            };
+            (variable_info, None)
         } else {
             // Local scope - add to current function's locals
             let scope_depth = self.current_scope_depth();
-            let slot = if let Some(function) = self.functions.last_mut() {
-                function.add_local(name, scope_depth)
+            let (local_idx, slot) = if let Some(function) = self.functions.last_mut() {
+                let slot = function.local_count; // Get slot before adding
+                let local_idx = function.add_local(name, scope_depth, is_initialized);
+                (local_idx, slot)
             } else {
-                0
+                (0, 0)
             };
 
-            VariableInfo {
+            let variable_info = VariableInfo {
                 name,
                 kind: VariableKind::Local { scope_depth, slot },
                 is_captured: false,
                 span,
-            }
+            };
+            (variable_info, Some(local_idx))
         };
 
         // Add to current scope
@@ -332,7 +357,7 @@ impl<'a> ScopeAnalyzer<'a> {
         // Add to results
         self.results.variables.insert(identifier.id, variable_info);
 
-        Ok(())
+        Ok(local_index)
     }
 
     fn resolve_variable(
@@ -346,6 +371,15 @@ impl<'a> ScopeAnalyzer<'a> {
             let current_scope_depth = self.current_scope_depth();
             if let Some(local_index) = function.find_local(name, current_scope_depth) {
                 let local = &function.locals[local_index];
+
+                // Check if the local variable is initialized
+                if !local.is_initialized {
+                    return Err(QangCompilerError::new_analysis_error(
+                        "Cannot read local variable during its initialization.".to_string(),
+                        span,
+                    ));
+                }
+
                 let variable_kind = VariableKind::Local {
                     scope_depth: local.scope_depth,
                     slot: local.slot,
@@ -468,10 +502,11 @@ impl<'a> ScopeAnalyzer<'a> {
         };
 
         self.results.for_loops.insert(loop_node_id, loop_info);
-        
+
         // Update children mapping for parent loop
         if let Some(parent_id) = parent_loop {
-            self.results.loop_children
+            self.results
+                .loop_children
                 .entry(parent_id)
                 .or_insert_with(Vec::new)
                 .push(loop_node_id);
@@ -554,9 +589,13 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
     fn visit_identifier(
         &mut self,
         identifier: super::typed_node_arena::TypedNodeRef<super::nodes::IdentifierNode>,
-        _ctx: &mut VisitorContext,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.resolve_variable(identifier.node.name, identifier.node.span, identifier.id)?;
+        if let Err(error) =
+            self.resolve_variable(identifier.node.name, identifier.node.span, identifier.id)
+        {
+            ctx.errors.report_error(error);
+        }
         Ok(())
     }
 
@@ -619,7 +658,10 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         let arity = ctx.nodes.array.size(func_expr.node.parameters);
 
         let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
-        self.declare_variable(identifier)?;
+
+        if let Err(error) = self.declare_variable(identifier) {
+            ctx.errors.report_error(error);
+        }
 
         if arity > u8::MAX as usize {
             ctx.errors
@@ -640,7 +682,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         for i in 0..arity {
             if let Some(param_id) = ctx.nodes.array.get_node_id_at(func_expr.node.parameters, i) {
                 let param = ctx.nodes.get_identifier_node(param_id);
-                self.declare_variable(param)?;
+                if let Err(error) = self.declare_variable(param) {
+                    ctx.errors.report_error(error);
+                };
             }
         }
 
@@ -685,7 +729,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 .get_node_id_at(lambda_expr.node.parameters, i)
             {
                 let param = ctx.nodes.get_identifier_node(param_id);
-                self.declare_variable(param)?;
+                if let Err(error) = self.declare_variable(param) {
+                    ctx.errors.report_error(error);
+                };
             }
         }
 
@@ -705,14 +751,27 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(var_decl.node.target);
 
-        // Analyze initializer first (if present)
+        // First declare the variable (but leave it uninitialized for locals)
+        let local_index = match self.declare_variable_with_init(identifier, false) {
+            Ok(index) => index,
+            Err(error) => {
+                ctx.errors.report_error(error);
+                None // Continue analysis but without local index
+            }
+        };
+
+        // Then analyze initializer (if present)
         if let Some(initializer_id) = var_decl.node.initializer {
             let initializer = ctx.nodes.get_expr_node(initializer_id);
             self.visit_expression(initializer, ctx)?;
         }
 
-        // Then declare the variable
-        self.declare_variable(identifier)?;
+        // Finally, mark the variable as initialized (for locals only)
+        if let Some(local_idx) = local_index {
+            if let Some(function) = self.functions.last_mut() {
+                function.mark_initialized(local_idx);
+            }
+        }
 
         Ok(())
     }
@@ -762,7 +821,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
-        self.declare_variable(name_node)?;
+        if let Err(error) = self.declare_variable(name_node) {
+            ctx.errors.report_error(error);
+        }
 
         // Handle inheritance setup
         let has_superclass = class_decl.node.superclass.is_some();
@@ -783,13 +844,16 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
             // Add super to current function's locals to properly reserve a slot
             let super_slot = if let Some(func) = self.functions.last_mut() {
-                let slot_index = func.add_local(super_handle, scope_depth);
+                let slot_index = func.add_local(super_handle, scope_depth, true); // Super should be immediately initialized
                 func.locals[slot_index].slot
             } else {
-                return Err(QangCompilerError::new_analysis_error(
-                    "No function context for super variable".to_string(),
-                    class_decl.node.span,
-                ));
+                ctx.errors
+                    .report_error(QangCompilerError::new_analysis_error(
+                        "No function context for super variable".to_string(),
+                        class_decl.node.span,
+                    ));
+
+                return Ok(());
             };
 
             // Add to scope so methods can resolve 'super' as an upvalue
@@ -858,7 +922,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                                 ctx.nodes.array.get_node_id_at(method.parameters, j)
                             {
                                 let param = ctx.nodes.get_identifier_node(param_id);
-                                self.declare_variable(param)?;
+                                if let Err(error) = self.declare_variable(param) {
+                                    ctx.errors.report_error(error);
+                                };
                             }
                         }
 
@@ -1091,7 +1157,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         // Declare the parameter
         let param = ctx.nodes.get_identifier_node(map_expr.node.parameter);
-        self.declare_variable(param)?;
+        if let Err(error) = self.declare_variable(param) {
+            ctx.errors.report_error(error);
+        };
 
         // Visit the body expression
         let body = ctx.nodes.get_expr_node(map_expr.node.body);
@@ -1120,7 +1188,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         // Declare the parameter
         let param = ctx.nodes.get_identifier_node(opt_map_expr.node.parameter);
-        self.declare_variable(param)?;
+        if let Err(error) = self.declare_variable(param) {
+            ctx.errors.report_error(error);
+        };
 
         // Visit the body expression
         let body = ctx.nodes.get_expr_node(opt_map_expr.node.body);

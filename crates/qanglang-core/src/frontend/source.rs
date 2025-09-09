@@ -1,4 +1,3 @@
-// TODO add script filename to source map. default to (script) otherwise.
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
     pub name: String,

@@ -94,6 +94,12 @@ pub struct ScopeAnalysis {
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
 }
 
+impl Default for ScopeAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScopeAnalysis {
     pub fn new() -> Self {
         Self {
@@ -309,16 +315,14 @@ impl<'a> ScopeAnalyzer<'a> {
         let span = identifier.node.span;
 
         // Check for duplicate variables in current scope (only for local scopes)
-        if self.current_scope_depth() > 0 {
-            if let Some(current_scope) = self.scopes.last() {
-                if current_scope.variables.contains_key(&name) {
+        if self.current_scope_depth() > 0
+            && let Some(current_scope) = self.scopes.last()
+            && current_scope.variables.contains_key(&name) {
                     return Err(QangCompilerError::new_analysis_error(
                         "Already a variable with this name in this scope.".to_string(),
                         span,
                     ));
                 }
-            }
-        }
 
         let (variable_info, local_index) = if self.current_scope_depth() == 0 {
             // Global scope
@@ -426,7 +430,7 @@ impl<'a> ScopeAnalyzer<'a> {
     fn resolve_upvalue(
         &mut self,
         name: StringHandle,
-        span: SourceSpan,
+        _span: SourceSpan,
     ) -> Result<Option<VariableKind>, QangCompilerError> {
         if self.functions.len() < 2 {
             return Ok(None); // No enclosing function to capture from
@@ -456,7 +460,7 @@ impl<'a> ScopeAnalyzer<'a> {
 
         // Recursively check outer scopes by temporarily removing current function
         let current_function = self.functions.pop().unwrap();
-        let upvalue_result = self.resolve_upvalue(name, span)?;
+        let upvalue_result = self.resolve_upvalue(name, _span)?;
         self.functions.push(current_function);
 
         if let Some(VariableKind::Upvalue { index, .. }) = upvalue_result {
@@ -508,7 +512,7 @@ impl<'a> ScopeAnalyzer<'a> {
             self.results
                 .loop_children
                 .entry(parent_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(loop_node_id);
         }
     }
@@ -767,11 +771,10 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         }
 
         // Finally, mark the variable as initialized (for locals only)
-        if let Some(local_idx) = local_index {
-            if let Some(function) = self.functions.last_mut() {
+        if let Some(local_idx) = local_index
+            && let Some(function) = self.functions.last_mut() {
                 function.mark_initialized(local_idx);
             }
-        }
 
         Ok(())
     }
@@ -1048,8 +1051,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 self.visit_for_initializer(initializer, ctx)?;
 
                 // Record the variable info for the loop
-                if let Some(var_info) = self.results.variables.get(&identifier.id) {
-                    if let VariableKind::Local {
+                if let Some(var_info) = self.results.variables.get(&identifier.id)
+                    && let VariableKind::Local {
                         slot, scope_depth, ..
                     } = var_info.kind
                     {
@@ -1065,7 +1068,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                             for_info.scope_info.initializer_variables.push(loop_var);
                         }
                     }
-                }
             } else {
                 self.visit_for_initializer(initializer, ctx)?;
             }

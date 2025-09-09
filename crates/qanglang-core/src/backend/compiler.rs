@@ -55,11 +55,17 @@ pub struct CompilerPipeline {
     config: CompilerConfig,
 }
 
+impl Default for CompilerPipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompilerPipeline {
     pub fn new() -> Self {
-        return Self {
+        Self {
             config: CompilerConfig::default(),
-        };
+        }
     }
 
     pub fn with_config(mut self, config: CompilerConfig) -> Self {
@@ -345,7 +351,7 @@ impl<'a> Assembler<'a> {
         let old_function = std::mem::replace(&mut self.current_function, function);
 
         // Store and reset loop contexts - loops don't cross function boundaries
-        let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
+        let old_loop_contexts = std::mem::take(&mut self.loop_contexts);
 
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(func_node_id);
@@ -488,7 +494,7 @@ impl<'a> Assembler<'a> {
         let old_function = std::mem::replace(&mut self.current_function, function);
 
         // Store and reset loop contexts - loops don't cross function boundaries
-        let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
+        let old_loop_contexts = std::mem::take(&mut self.loop_contexts);
 
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(map_node_id);
@@ -1393,7 +1399,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let old_function = std::mem::replace(&mut self.current_function, function);
 
         // Store and reset loop contexts - loops don't cross function boundaries
-        let old_loop_contexts = std::mem::replace(&mut self.loop_contexts, Vec::new());
+        let old_loop_contexts = std::mem::take(&mut self.loop_contexts);
 
         let old_function_id = self.current_function_id;
         self.current_function_id = Some(lambda_expr.id);
@@ -1529,8 +1535,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 // Handle method calls (optimization for obj.method(args))
                 if let crate::frontend::typed_node_arena::ExprNode::Call(property_call) =
                     callee.node
-                {
-                    if let crate::frontend::typed_node_arena::CallOperationNode::Property(
+                    && let crate::frontend::typed_node_arena::CallOperationNode::Property(
                         method_name,
                     ) = ctx
                         .nodes
@@ -1569,7 +1574,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
                         return Ok(());
                     }
-                }
 
                 // Regular function call
                 self.visit_expression(callee, ctx)?;
@@ -1663,18 +1667,16 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         // Check if this is a special .call() method invocation
                         if let crate::frontend::typed_node_arena::ExprNode::Call(inner_call) =
                             ctx.nodes.get_expr_node(call_expr.callee).node
-                        {
-                            if let crate::frontend::typed_node_arena::CallOperationNode::Property(
+                            && let crate::frontend::typed_node_arena::CallOperationNode::Property(
                                 method_name,
                             ) = ctx.nodes.get_call_operation_node(inner_call.operation).node
+                            && ctx
+                                .nodes
+                                .get_identifier_node(method_name.identifier)
+                                .node
+                                .name
+                                == call_handle
                             {
-                                if ctx
-                                    .nodes
-                                    .get_identifier_node(method_name.identifier)
-                                    .node
-                                    .name
-                                    == call_handle
-                                {
                                     // This is obj.call(args) piped - use invoke optimization
                                     self.visit_expression(
                                         ctx.nodes.get_expr_node(call_expr.callee),
@@ -1694,9 +1696,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                                     )?;
                                     self.emit_byte(1, pipe.node.span);
                                     return Ok(());
-                                }
                             }
-                        }
 
                         // Regular function call with pipe
                         self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;

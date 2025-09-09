@@ -218,7 +218,7 @@ impl ErrorReporter {
     }
 
     pub fn take_errors(&mut self) -> Vec<QangCompilerError> {
-        std::mem::replace(&mut self.errors, Vec::new())
+        std::mem::take(&mut self.errors)
     }
 }
 

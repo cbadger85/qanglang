@@ -468,8 +468,6 @@ mod tests {
         let class_name = allocator.strings.intern("TestClass");
         let class_handle = allocator.allocate_class(class_name);
 
-        // TODO: Add methods to the class when HeapAllocator exposes class method setting
-        // Currently we can't test class methods because HashMapArena is private
         let _method_name = allocator.strings.intern("method");
         let method_function = create_test_function();
         let _method_function_handle = allocator.allocate_function(method_function);
@@ -509,10 +507,6 @@ mod tests {
             field_value,
             Some(Value::Closure(field_value_closure_handle))
         );
-
-        // TODO: Test that class methods are accessible after GC
-        // Currently can't test because HashMapArena table access is private
-        // The GC should keep method closures alive when the class is rooted
     }
 
     #[test]

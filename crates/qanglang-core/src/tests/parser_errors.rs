@@ -39,8 +39,6 @@ fn test_unexpected_token_in_expression() {
     let (_program, errors) = parse_source(&source_map, nodes, strings);
 
     assert!(errors.has_errors());
-
-    // TODO test that the specfied error is in the error reporter
 }
 
 #[test]

@@ -39,7 +39,6 @@ impl Value {
     }
 
     pub fn to_display_string(&self, allocator: &HeapAllocator) -> String {
-        // TODO delete this function later when the `is` operator is implemented.
         match self {
             Value::Nil => "nil".to_string(),
             Value::Number(number) => number.to_string(),

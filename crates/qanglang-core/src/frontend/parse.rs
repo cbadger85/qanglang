@@ -379,6 +379,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.class_declaration()
             }
+            TokenType::Mod => {
+                self.advance();
+                self.import_module_declaration()
+            }
             _ => self.declaration_statement(),
         };
 
@@ -392,6 +396,33 @@ impl<'a> Parser<'a> {
                 None
             }
         }
+    }
+
+    fn import_module_declaration(&mut self) -> ParseResult<NodeId> {
+        let span_start = self.get_previous_span();
+        self.consume(TokenType::String, "Expected import path as string.")?;
+
+        let token = self.previous_token.as_ref().unwrap();
+
+        let value = token.lexeme(&self.source_map);
+
+        let path_as_string = value[1..value.len() - 1].iter().collect::<String>();
+
+        // TODO add the SourceMap for the path to the module_queue
+
+        let path = self.strings.intern(&path_as_string);
+        self.consume(TokenType::From, "Expected import declaration.")?;
+        self.consume(TokenType::Identifier, "Expected module identifier.")?;
+        let name = self.get_identifier()?;
+        let span_end = self.get_previous_span();
+
+        Ok(self
+            .nodes
+            .create_node(AstNode::ImportModuleDecl(ImportModuleDeclNode {
+                path,
+                name,
+                span: SourceSpan::combine(span_start, span_end),
+            })))
     }
 
     fn variable_declaration(&mut self) -> ParseResult<NodeId> {

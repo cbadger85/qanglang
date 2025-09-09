@@ -205,19 +205,6 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
-    fn make_constant(&mut self, value: Value, span: SourceSpan) -> Result<u8, QangCompilerError> {
-        let index = self.current_chunk_mut().add_constant(value);
-
-        if index > u8::MAX as usize {
-            Err(QangCompilerError::new_assembler_error(
-                "Too many constants in function (max 256)".to_string(),
-                span,
-            ))
-        } else {
-            Ok(index as u8)
-        }
-    }
-
     fn emit_constant_opcode(
         &mut self,
         opcode_8: OpCode,
@@ -1772,8 +1759,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         // Emit the class constant and create the class
         let class_handle = name.node.name;
-        let byte = self.make_constant(Value::String(class_handle), name.node.span)?;
-        self.emit_opcode_and_byte(OpCode::Class, byte, name.node.span);
+        self.emit_constant_opcode(
+            OpCode::Class,
+            OpCode::Class16,
+            Value::String(class_handle),
+            name.node.span,
+        )?;
 
         // Define the class variable using static analysis
         let var_info = self

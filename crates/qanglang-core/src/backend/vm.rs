@@ -11,8 +11,8 @@ use crate::{
     NativeFunctionError, NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError,
     Value,
     backend::{
-        assembler::{FRAME_MAX, STACK_MAX},
         chunk::{OpCode, SourceLocation},
+        compiler::{FRAME_MAX, STACK_MAX},
         qang_std::{
             qang_array_concat, qang_array_construct, qang_array_get, qang_array_length,
             qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice, qang_assert,

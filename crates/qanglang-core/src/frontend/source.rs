@@ -121,10 +121,3 @@ impl SourceMap {
         (position - line_start + 1) as u32
     }
 }
-
-pub static DEFALT_SOURCE_MAP: std::sync::LazyLock<SourceMap> =
-    std::sync::LazyLock::new(|| SourceMap {
-        line_indices: Vec::new(),
-        source: Vec::new(),
-        name: String::from("(script)"),
-    });

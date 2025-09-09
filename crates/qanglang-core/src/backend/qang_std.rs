@@ -1,7 +1,7 @@
 use crate::{
     CompilerPipeline, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap, Value, Vm,
     backend::{
-        assembler::STACK_MAX,
+        compiler::STACK_MAX,
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
             NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,

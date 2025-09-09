@@ -1,6 +1,6 @@
 use crate::{
-    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionObject, HeapAllocator,
-    NodeId, Parser, QangCompilerError, QangPipelineError, QangProgram, SourceLocation, SourceMap,
+    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
+    HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError, SourceLocation, SourceMap,
     TypedNodeArena, Value,
     backend::chunk::{Chunk, OpCode},
     frontend::{
@@ -11,6 +11,22 @@ use crate::{
     },
     nodes::*,
 };
+
+pub const FRAME_MAX: usize = 64;
+pub const STACK_MAX: usize = FRAME_MAX * 256;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QangProgram(FunctionHandle);
+
+impl QangProgram {
+    pub fn new(handle: FunctionHandle) -> Self {
+        Self(handle)
+    }
+
+    pub fn into_handle(self) -> FunctionHandle {
+        self.0
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerConfig {

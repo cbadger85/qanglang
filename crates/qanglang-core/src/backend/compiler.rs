@@ -78,10 +78,11 @@ impl CompilerPipeline {
         source_map: SourceMap,
         alloc: &mut HeapAllocator,
     ) -> Result<QangProgram, QangPipelineError> {
-        let mut parser = Parser::new(&source_map, TypedNodeArena::new(), &mut alloc.strings);
+        let mut nodes = TypedNodeArena::new();
+        let mut parser = Parser::new(&source_map, &mut nodes, &mut alloc.strings);
         let program = parser.parse();
 
-        let (mut errors, mut nodes, _modules) = parser.into_parts();
+        let (mut errors, _modules) = parser.into_parts();
 
         let result = AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())

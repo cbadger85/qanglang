@@ -13,11 +13,11 @@ impl<'a> Analyzer<'a> {
 
     pub fn analyze(&self) -> Result<(), QangPipelineError> {
         let mut strings = StringInterner::new();
-        let nodes = TypedNodeArena::new();
-        let mut parser = Parser::new(self.source_map, nodes, &mut strings);
+        let mut nodes = TypedNodeArena::new();
+        let mut parser = Parser::new(self.source_map, &mut nodes, &mut strings);
         let program = parser.parse();
 
-        let (mut errors, mut nodes, _modules) = parser.into_parts();
+        let (mut errors, _modules) = parser.into_parts();
 
         let _ = AnalysisPipeline::new(&mut strings).analyze(
             program,

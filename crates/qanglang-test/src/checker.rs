@@ -63,12 +63,12 @@ pub fn check_single_file(
     };
 
     let source_map = SourceMap::new(source);
-    let nodes = TypedNodeArena::new();
+    let mut nodes = TypedNodeArena::new();
     let mut strings = StringInterner::new();
-    let mut parser = Parser::new(&source_map, nodes, &mut strings);
+    let mut parser = Parser::new(&source_map, &mut nodes, &mut strings);
     let program = parser.parse();
 
-    let (mut errors, mut nodes, _modules) = parser.into_parts();
+    let (mut errors, _modules) = parser.into_parts();
     let analyzer = AnalysisPipeline::new(&mut strings).with_config(AnalysisPipelineConfig {
         error_message_format,
         ..Default::default()

@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
@@ -20,14 +22,15 @@ pub struct Parser<'a> {
     current_token: Option<Token>,
     errors: ErrorReporter,
     strings: &'a mut StringInterner,
-    nodes: TypedNodeArena,
+    nodes: &'a mut TypedNodeArena,
     modules: FxHashMap<StringHandle, SourceMap>,
+    module_queue: VecDeque<SourceMap>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(
         source_map: &'a SourceMap,
-        nodes: TypedNodeArena,
+        nodes: &'a mut TypedNodeArena,
         strings: &'a mut StringInterner,
     ) -> Self {
         let tokens = Tokenizer::new(source_map);
@@ -41,20 +44,15 @@ impl<'a> Parser<'a> {
             nodes,
             strings,
             modules: FxHashMap::with_hasher(FxBuildHasher),
+            module_queue: VecDeque::new(),
         };
 
         parser.advance();
         parser
     }
 
-    pub fn into_parts(
-        self,
-    ) -> (
-        ErrorReporter,
-        TypedNodeArena,
-        FxHashMap<StringHandle, SourceMap>,
-    ) {
-        (self.errors, self.nodes, self.modules)
+    pub fn into_parts(self) -> (ErrorReporter, FxHashMap<StringHandle, SourceMap>) {
+        (self.errors, self.modules)
     }
 
     fn advance(&mut self) {

@@ -13,12 +13,12 @@ pub mod vm_tests;
 
 pub fn parse_source(
     source_map: &crate::SourceMap,
-    nodes: crate::TypedNodeArena,
+    mut nodes: crate::TypedNodeArena,
     mut strings: crate::memory::StringInterner,
 ) -> (crate::NodeId, crate::ErrorReporter) {
-    let mut parser = crate::Parser::new(source_map, nodes, &mut strings);
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
     let program = parser.parse();
-    let (errors, _, _) = parser.into_parts();
+    let (errors, _) = parser.into_parts();
     (program, errors)
 }
 

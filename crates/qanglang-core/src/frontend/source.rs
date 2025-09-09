@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+use rustc_hash::{FxBuildHasher, FxHashMap};
+
+use crate::{NodeId, StringHandle};
+
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
     pub name: String,
@@ -125,5 +129,52 @@ impl SourceMap {
             }
         };
         (position - line_start + 1) as u32
+    }
+}
+
+pub struct ModuleSource {
+    pub module_id: NodeId,
+    pub source_map: SourceMap,
+}
+
+pub struct ModuleMap {
+    modules: FxHashMap<StringHandle, ModuleSource>,
+    main_name: StringHandle,
+}
+
+impl ModuleMap {
+    pub fn new(main_name: StringHandle, main_id: NodeId, source_map: SourceMap) -> Self {
+        let mut modules = FxHashMap::with_hasher(FxBuildHasher);
+        modules.insert(
+            main_name,
+            ModuleSource {
+                module_id: main_id,
+                source_map,
+            },
+        );
+
+        Self { main_name, modules }
+    }
+
+    pub fn get_main(&self) -> &ModuleSource {
+        &self.modules[&self.main_name]
+    }
+
+    pub fn get(&self, name: StringHandle) -> &ModuleSource {
+        &self.modules[&name]
+    }
+
+    pub fn insert(&mut self, name: StringHandle, module_id: NodeId, source_map: SourceMap) {
+        let _ = self.modules.insert(
+            name,
+            ModuleSource {
+                module_id,
+                source_map,
+            },
+        );
+    }
+
+    pub fn has(&self, name: StringHandle) -> bool {
+        self.modules.contains_key(&name)
     }
 }

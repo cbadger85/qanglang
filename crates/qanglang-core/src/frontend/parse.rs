@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, sync::Arc};
 
 use crate::{
-    ErrorReporter, QangCompilerError, SourceMap, StringHandle,
+    ErrorReporter, QangCompilerError, SourceMap,
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
@@ -22,6 +22,7 @@ pub struct Parser<'a> {
     errors: ErrorReporter,
     strings: &'a mut StringInterner,
     nodes: &'a mut TypedNodeArena,
+    module_queue: VecDeque<Arc<SourceMap>>,
 }
 
 impl<'a> Parser<'a> {
@@ -39,6 +40,7 @@ impl<'a> Parser<'a> {
             errors,
             nodes,
             strings,
+            module_queue: VecDeque::new(),
         };
 
         parser.advance();
@@ -47,6 +49,10 @@ impl<'a> Parser<'a> {
 
     pub fn into_errors(self) -> ErrorReporter {
         self.errors
+    }
+
+    fn into_parts(self) -> (ErrorReporter, VecDeque<Arc<SourceMap>>) {
+        (self.errors, self.module_queue)
     }
 
     fn advance(&mut self) {
@@ -313,6 +319,33 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> ModuleMap {
+        let main_id = self.parse_file();
+        let main_name = self.strings.intern(&self.source_map.name);
+        let mut modules = ModuleMap::new(main_name, main_id, self.source_map.clone());
+
+        while let Some(source_map) = self.module_queue.pop_front() {
+            let module_name = self.strings.intern(&source_map.name);
+
+            if modules.has(module_name) {
+                continue;
+            }
+
+            let mut module_parser = Parser::new(source_map.clone(), self.nodes, self.strings);
+
+            let module_id = module_parser.parse_file();
+
+            let (errors, queue) = module_parser.into_parts();
+            self.errors.merge(errors);
+
+            modules.insert(module_name, module_id, source_map);
+
+            self.module_queue.extend(queue);
+        }
+
+        modules
+    }
+
+    fn parse_file(&mut self) -> NodeId {
         let start_span = self.get_current_span();
         let decls = self.nodes.array.create();
 
@@ -324,13 +357,10 @@ impl<'a> Parser<'a> {
 
         let end_span = self.get_current_span();
 
-        let module_id = self.nodes.create_node(AstNode::Module(Module {
+        self.nodes.create_node(AstNode::Module(Module {
             decls,
             span: SourceSpan::combine(start_span, end_span),
-        }));
-
-        let main_name = self.strings.intern(&self.source_map.name);
-        ModuleMap::new(main_name, module_id, self.source_map.clone())
+        }))
     }
 
     fn declaration(&mut self) -> Option<NodeId> {

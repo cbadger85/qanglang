@@ -220,6 +220,10 @@ impl ErrorReporter {
     pub fn take_errors(&mut self) -> Vec<QangCompilerError> {
         std::mem::take(&mut self.errors)
     }
+
+    pub fn merge(&mut self, mut other: Self) {
+        self.errors.extend(other.take_errors());
+    }
 }
 
 /// Pretty print a single error with source context

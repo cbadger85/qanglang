@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use crate::{SourceMap, Token, TokenType, Tokenizer};
 
 /// Tokenizes all source code in the given SourceMap and returns a vector of Tokens.
 fn tokenize_all(source_map: &SourceMap) -> Vec<Token> {
-    let tokenizer = Tokenizer::new(source_map);
+    // TODO maybe fix this so we don't need to clone it
+    let tokenizer = Tokenizer::new(Arc::new(source_map.clone()));
     tokenizer.collect()
 }
 
@@ -470,7 +473,7 @@ fn test_unterminated_string() {
 #[test]
 fn test_unterminated_string_with_following_code() {
     let source_map = SourceMap::new("\"unterminated\nvar x = 5;".to_string());
-    let mut tokenizer = Tokenizer::new(&source_map);
+    let mut tokenizer = Tokenizer::new(Arc::new(source_map));
 
     let first_token = tokenizer.next().unwrap();
     assert_eq!(first_token.token_type, TokenType::Error);
@@ -914,8 +917,10 @@ fn test_line_and_column_tracking() {
 
 #[test]
 fn test_get_line_multiple_lines() {
-    let source_map = SourceMap::new("first line\nsecond line\nthird line".to_string());
-    let tokenizer = Tokenizer::new(&source_map);
+    let source_map = Arc::new(SourceMap::new(
+        "first line\nsecond line\nthird line".to_string(),
+    ));
+    let tokenizer = Tokenizer::new(source_map.clone());
     tokenizer.for_each(drop);
     let line1: String = source_map.get_line(1).iter().collect();
     let line2: String = source_map.get_line(2).iter().collect();

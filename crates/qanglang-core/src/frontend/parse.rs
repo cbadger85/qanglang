@@ -1,12 +1,11 @@
-use std::collections::VecDeque;
-
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use std::{collections::VecDeque, sync::Arc};
 
 use crate::{
     ErrorReporter, QangCompilerError, SourceMap, StringHandle,
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
+        source::ModuleMap,
         tokenizer::{Token, TokenType, Tokenizer},
         typed_node_arena::{ExprNode, NodeId, PrimaryNode, TypedNodeArena},
     },
@@ -16,43 +15,38 @@ use crate::{
 type ParseResult<T> = Result<T, QangCompilerError>;
 
 pub struct Parser<'a> {
-    source_map: &'a SourceMap,
-    tokens: Tokenizer<'a>,
+    source_map: Arc<SourceMap>,
+    tokens: Tokenizer,
     previous_token: Option<Token>,
     current_token: Option<Token>,
     errors: ErrorReporter,
     strings: &'a mut StringInterner,
     nodes: &'a mut TypedNodeArena,
-    modules: FxHashMap<StringHandle, SourceMap>,
-    module_queue: VecDeque<SourceMap>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(
-        source_map: &'a SourceMap,
+        source_map: Arc<SourceMap>,
         nodes: &'a mut TypedNodeArena,
         strings: &'a mut StringInterner,
     ) -> Self {
-        let tokens = Tokenizer::new(source_map);
         let errors = ErrorReporter::new();
         let mut parser = Self {
+            tokens: Tokenizer::new(source_map.clone()),
             source_map,
-            tokens,
             previous_token: None,
             current_token: None,
             errors,
             nodes,
             strings,
-            modules: FxHashMap::with_hasher(FxBuildHasher),
-            module_queue: VecDeque::new(),
         };
 
         parser.advance();
         parser
     }
 
-    pub fn into_parts(self) -> (ErrorReporter, FxHashMap<StringHandle, SourceMap>) {
-        (self.errors, self.modules)
+    pub fn into_errors(self) -> ErrorReporter {
+        self.errors
     }
 
     fn advance(&mut self) {
@@ -145,7 +139,7 @@ impl<'a> Parser<'a> {
             .unwrap_or(SourceSpan { start: 0, end: 0 });
 
         if let Some(token) = token {
-            let name = token.lexeme(self.source_map);
+            let name = token.lexeme(&self.source_map);
             let name = self.strings.intern(&name.iter().collect::<String>());
             let node_id = self
                 .nodes
@@ -318,7 +312,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> NodeId {
+    pub fn parse(&mut self) -> ModuleMap {
         let start_span = self.get_current_span();
         let decls = self.nodes.array.create();
 
@@ -330,10 +324,13 @@ impl<'a> Parser<'a> {
 
         let end_span = self.get_current_span();
 
-        self.nodes.create_node(AstNode::Module(Module {
+        let module_id = self.nodes.create_node(AstNode::Module(Module {
             decls,
             span: SourceSpan::combine(start_span, end_span),
-        }))
+        }));
+
+        let main_name = self.strings.intern(&self.source_map.name);
+        ModuleMap::new(main_name, module_id, self.source_map.clone())
     }
 
     fn declaration(&mut self) -> Option<NodeId> {
@@ -909,7 +906,7 @@ mod expression_parser {
         let span = SourceSpan::from_token(token);
 
         let value = token
-            .lexeme(parser.source_map)
+            .lexeme(&parser.source_map)
             .iter()
             .collect::<String>()
             .parse::<f64>()
@@ -1126,7 +1123,7 @@ mod expression_parser {
     fn string(parser: &mut Parser) -> ParseResult<NodeId> {
         let token = get_previous_token(parser);
 
-        let value = token.lexeme(parser.source_map);
+        let value = token.lexeme(&parser.source_map);
 
         let span = SourceSpan::from_token(token);
 
@@ -1564,7 +1561,7 @@ mod expression_parser {
                 let property_name = parser
                     .previous_token
                     .as_ref()
-                    .map(|t| t.lexeme(parser.source_map))
+                    .map(|t| t.lexeme(&parser.source_map))
                     .unwrap();
                 let property_handle = parser
                     .strings
@@ -1591,7 +1588,7 @@ mod expression_parser {
                 let property_name = parser
                     .previous_token
                     .as_ref()
-                    .map(|t| t.lexeme(parser.source_map))
+                    .map(|t| t.lexeme(&parser.source_map))
                     .unwrap();
                 let property_handle = parser
                     .strings

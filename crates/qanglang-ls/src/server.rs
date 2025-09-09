@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use qanglang_core::SourceMap;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
@@ -6,7 +8,7 @@ use log::info;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::analyzer::Analyzer;
+use crate::analyzer::analyze;
 
 // pub const LEGEND_TYPE: &[SemanticTokenType] = &[
 //     SemanticTokenType::FUNCTION,
@@ -154,10 +156,10 @@ impl Backend {
     async fn on_change(&self, document: TextDocumentItem) {
         info!("=== Starting analysis for: {} ===", document.uri);
 
-        let source_map = SourceMap::new(document.text);
+        let source_map = Arc::new(SourceMap::new(document.text));
         let mut diagnostics = Vec::new();
 
-        let errors = match Analyzer::new(&source_map).analyze() {
+        let errors = match analyze(source_map.clone()) {
             Ok(_) => {
                 info!("✅ Analysis succeeded - no errors found");
                 Vec::new()

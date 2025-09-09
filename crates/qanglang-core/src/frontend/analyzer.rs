@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     ErrorMessageFormat, ErrorReporter, NodeId, QangPipelineError, SourceMap, TypedNodeArena,
     frontend::scope_analysis::{ScopeAnalysis, ScopeAnalyzer},
@@ -51,7 +53,7 @@ impl<'a> AnalysisPipeline<'a> {
     pub fn analyze(
         self,
         program: NodeId,
-        source_map: &SourceMap,
+        source_map: Arc<SourceMap>,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<AnalysisResults, QangPipelineError> {
@@ -67,8 +69,8 @@ impl<'a> AnalysisPipeline<'a> {
                 .into_iter()
                 .map(|error| match self.config.error_message_format {
                     ErrorMessageFormat::Minimal => error,
-                    ErrorMessageFormat::Compact => error.into_short_formatted(source_map),
-                    ErrorMessageFormat::Verbose => error.into_formatted(source_map),
+                    ErrorMessageFormat::Compact => error.into_short_formatted(&source_map),
+                    ErrorMessageFormat::Verbose => error.into_formatted(&source_map),
                 })
                 .collect();
 

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 pub mod alloc_tests;
 pub mod compound_assignment_tests;
 pub mod parse_declarations;
@@ -12,14 +14,15 @@ pub mod vm_closure_tests;
 pub mod vm_tests;
 
 pub fn parse_source(
-    source_map: &crate::SourceMap,
+    source_map: Arc<crate::SourceMap>,
     mut nodes: crate::TypedNodeArena,
     mut strings: crate::memory::StringInterner,
 ) -> (crate::NodeId, crate::ErrorReporter) {
+    // TODO maybe fix this so we don't need to clone it
     let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
-    let program = parser.parse();
-    let (errors, _) = parser.into_parts();
-    (program, errors)
+    let modules = parser.parse();
+    let errors = parser.into_errors();
+    (modules.get_main().module_id, errors)
 }
 
 pub fn assert_no_parse_errors(errors: &crate::ErrorReporter) {

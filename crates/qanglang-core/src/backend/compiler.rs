@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
     HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError, SourceLocation, SourceMap,
@@ -79,17 +81,23 @@ impl CompilerPipeline {
         alloc: &mut HeapAllocator,
     ) -> Result<QangProgram, QangPipelineError> {
         let mut nodes = TypedNodeArena::new();
-        let mut parser = Parser::new(&source_map, &mut nodes, &mut alloc.strings);
-        let program = parser.parse();
+        let mut parser = Parser::new(Arc::new(source_map), &mut nodes, &mut alloc.strings);
+        let modules = parser.parse();
 
-        let (mut errors, _modules) = parser.into_parts();
+        let mut errors = parser.into_errors();
 
         let result = AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())
-            .analyze(program, &source_map, &mut nodes, &mut errors)?;
+            .analyze(
+                modules.get_main().module_id,
+                modules.get_main().source_map.clone(),
+                &mut nodes,
+                &mut errors,
+            )?;
 
-        let assembler = Assembler::new(&source_map, alloc, &result);
-        let main_function = assembler.assemble(program, &mut nodes, &mut errors)?;
+        let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc, &result);
+        let main_function =
+            assembler.assemble(modules.get_main().module_id, &mut nodes, &mut errors)?;
 
         Ok(QangProgram::new(alloc.allocate_function(main_function)))
     }
@@ -103,7 +111,7 @@ struct LoopContext {
 }
 
 struct Assembler<'a> {
-    source_map: &'a SourceMap,
+    source_map: Arc<SourceMap>,
     allocator: &'a mut HeapAllocator,
     analysis: &'a AnalysisResults,
     current_function_id: Option<NodeId>,
@@ -113,7 +121,7 @@ struct Assembler<'a> {
 
 impl<'a> Assembler<'a> {
     pub fn new(
-        source_map: &'a SourceMap,
+        source_map: Arc<SourceMap>,
         allocator: &'a mut HeapAllocator,
         analysis: &'a AnalysisResults,
     ) -> Self {

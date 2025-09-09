@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
@@ -134,7 +134,7 @@ impl SourceMap {
 
 pub struct ModuleSource {
     pub module_id: NodeId,
-    pub source_map: SourceMap,
+    pub source_map: Arc<SourceMap>,
 }
 
 pub struct ModuleMap {
@@ -143,7 +143,7 @@ pub struct ModuleMap {
 }
 
 impl ModuleMap {
-    pub fn new(main_name: StringHandle, main_id: NodeId, source_map: SourceMap) -> Self {
+    pub fn new(main_name: StringHandle, main_id: NodeId, source_map: Arc<SourceMap>) -> Self {
         let mut modules = FxHashMap::with_hasher(FxBuildHasher);
         modules.insert(
             main_name,
@@ -164,7 +164,7 @@ impl ModuleMap {
         &self.modules[&name]
     }
 
-    pub fn insert(&mut self, name: StringHandle, module_id: NodeId, source_map: SourceMap) {
+    pub fn insert(&mut self, name: StringHandle, module_id: NodeId, source_map: Arc<SourceMap>) {
         let _ = self.modules.insert(
             name,
             ModuleSource {

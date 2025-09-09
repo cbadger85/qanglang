@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{assert_parse_error, parse_source};
 use crate::{SourceMap, TypedNodeArena, memory::StringInterner};
 
@@ -8,11 +10,11 @@ fn test_error_recovery() {
             var y = ; // Error here
             var z = 10; // This should still parse
         "#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert!(errors.has_errors());
 }
@@ -20,11 +22,11 @@ fn test_error_recovery() {
 #[test]
 fn test_missing_arrow_in_lambda() {
     let source_code = r#"var func = (x) x + 1;"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Unexpected oprand. Missing operator or ';'.");
 }
@@ -32,11 +34,11 @@ fn test_missing_arrow_in_lambda() {
 #[test]
 fn test_unexpected_token_in_expression() {
     let source_code = r#"var x = 5 @ 3;"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert!(errors.has_errors());
 }
@@ -44,11 +46,11 @@ fn test_unexpected_token_in_expression() {
 #[test]
 fn test_missing_semicolon_error() {
     let source_code = r#"var x = 5"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expect ';'");
 }
@@ -56,11 +58,11 @@ fn test_missing_semicolon_error() {
 #[test]
 fn test_unterminated_string_error() {
     let source_code = r#"var msg = "unterminated string"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert!(errors.has_errors());
 }
@@ -72,11 +74,11 @@ fn test_missing_closing_brace_error() {
                 var x = 5;
                 // Missing closing brace
         "#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expected '}'");
 }
@@ -84,11 +86,11 @@ fn test_missing_closing_brace_error() {
 #[test]
 fn test_invalid_assignment_target_error() {
     let source_code = r#"5 = x;"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Invalid assignment target");
 }
@@ -96,11 +98,11 @@ fn test_invalid_assignment_target_error() {
 #[test]
 fn test_missing_function_name_error() {
     let source_code = r#"fn () { return 42; }"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expect function name");
 }
@@ -108,11 +110,11 @@ fn test_missing_function_name_error() {
 #[test]
 fn test_missing_variable_name_error() {
     let source_code = r#"var = 5;"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expect variable name");
 }
@@ -120,11 +122,11 @@ fn test_missing_variable_name_error() {
 #[test]
 fn test_missing_class_name_error() {
     let source_code = r#"class { }"#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expect class name");
 }
@@ -136,11 +138,11 @@ fn test_missing_parentheses_in_if() {
                 doSomething();
             }
         "#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expected '('");
 }
@@ -152,11 +154,11 @@ fn test_missing_parentheses_in_while() {
                 doSomething();
             }
         "#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expected '('");
 }
@@ -168,11 +170,11 @@ fn test_missing_parentheses_in_for() {
                 print(i);
             }
         "#;
-    let source_map = SourceMap::new(source_code.to_string());
+    let source_map = Arc::new(SourceMap::new(source_code.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
 
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expect '(' after 'for'");
 }
@@ -180,10 +182,10 @@ fn test_missing_parentheses_in_for() {
 #[test]
 fn test_unterminated_array() {
     let source = r#"var array = [1, 2, 3"#;
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = Arc::new(SourceMap::new(source.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expect ']' after array elements.");
 }
@@ -191,10 +193,10 @@ fn test_unterminated_array() {
 #[test]
 fn test_unterminated_with_trailing_comma() {
     let source = r#"var array = [1, 2, 3,"#;
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = Arc::new(SourceMap::new(source.to_string()));
     let nodes = TypedNodeArena::new();
     let strings = StringInterner::new();
-    let (_program, errors) = parse_source(&source_map, nodes, strings);
+    let (_program, errors) = parse_source(source_map, nodes, strings);
 
     assert_parse_error(&errors, "Expected expression.");
 }

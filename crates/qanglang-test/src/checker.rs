@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, sync::Arc};
 
 use qanglang_core::{
     AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, Parser, SourceMap,
@@ -62,20 +62,25 @@ pub fn check_single_file(
         }
     };
 
-    let source_map = SourceMap::new(source);
+    let source_map = Arc::new(SourceMap::new(source));
     let mut nodes = TypedNodeArena::new();
     let mut strings = StringInterner::new();
-    let mut parser = Parser::new(&source_map, &mut nodes, &mut strings);
-    let program = parser.parse();
+    let mut parser = Parser::new(source_map.clone(), &mut nodes, &mut strings);
+    let modules = parser.parse();
 
-    let (mut errors, _modules) = parser.into_parts();
+    let mut errors = parser.into_errors();
     let analyzer = AnalysisPipeline::new(&mut strings).with_config(AnalysisPipelineConfig {
         error_message_format,
         ..Default::default()
     });
 
     // Try to compile the file
-    match analyzer.analyze(program, &source_map, &mut nodes, &mut errors) {
+    match analyzer.analyze(
+        modules.get_main().module_id,
+        source_map,
+        &mut nodes,
+        &mut errors,
+    ) {
         Ok(_) => CheckResult::success(source_file.display_path),
         Err(compilation_errors) => {
             let error_messages: Vec<String> = compilation_errors

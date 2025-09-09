@@ -1,5 +1,7 @@
+use rustc_hash::{FxBuildHasher, FxHashMap};
+
 use crate::{
-    ErrorReporter, QangCompilerError, SourceMap,
+    ErrorReporter, QangCompilerError, SourceMap, StringHandle,
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
@@ -19,6 +21,7 @@ pub struct Parser<'a> {
     errors: ErrorReporter,
     strings: &'a mut StringInterner,
     nodes: TypedNodeArena,
+    modules: FxHashMap<StringHandle, SourceMap>,
 }
 
 impl<'a> Parser<'a> {
@@ -37,14 +40,21 @@ impl<'a> Parser<'a> {
             errors,
             nodes,
             strings,
+            modules: FxHashMap::with_hasher(FxBuildHasher),
         };
 
         parser.advance();
         parser
     }
 
-    pub fn into_parts(self) -> (ErrorReporter, TypedNodeArena) {
-        (self.errors, self.nodes)
+    pub fn into_parts(
+        self,
+    ) -> (
+        ErrorReporter,
+        TypedNodeArena,
+        FxHashMap<StringHandle, SourceMap>,
+    ) {
+        (self.errors, self.nodes, self.modules)
     }
 
     fn advance(&mut self) {
@@ -322,7 +332,7 @@ impl<'a> Parser<'a> {
 
         let end_span = self.get_current_span();
 
-        self.nodes.create_node(AstNode::Program(ProgramNode {
+        self.nodes.create_node(AstNode::Module(Module {
             decls,
             span: SourceSpan::combine(start_span, end_span),
         }))

@@ -17,7 +17,7 @@ impl<'a> Analyzer<'a> {
         let mut parser = Parser::new(self.source_map, nodes, &mut strings);
         let program = parser.parse();
 
-        let (mut errors, mut nodes) = parser.into_parts();
+        let (mut errors, mut nodes, _modules) = parser.into_parts();
 
         let _ = AnalysisPipeline::new(&mut strings).analyze(
             program,

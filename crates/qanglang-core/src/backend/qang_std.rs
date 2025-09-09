@@ -355,10 +355,10 @@ impl Vm {
     fn load_stdlib(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.load_constants();
         let stdlib_source = include_str!("stdlib.ql");
-        let source_map = SourceMap::from_source("<stdlib>", stdlib_source.to_owned());
+        let source_map = SourceMap::new_with_name("<stdlib>", stdlib_source.to_owned());
 
         let program = CompilerPipeline::new()
-            .compile(&source_map, &mut self.alloc)
+            .compile(source_map, &mut self.alloc)
             .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
 
         // Execute stdlib to populate globals

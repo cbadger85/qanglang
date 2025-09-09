@@ -26,7 +26,7 @@ pub trait NodeVisitor {
 
     fn visit_program(
         &mut self,
-        program: TypedNodeRef<ProgramNode>,
+        program: TypedNodeRef<Module>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let length = ctx.nodes.array.size(program.node.decls);

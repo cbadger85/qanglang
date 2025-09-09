@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
     pub name: String,
@@ -7,10 +9,15 @@ pub struct SourceMap {
 
 impl SourceMap {
     pub fn new(source: String) -> Self {
-        Self::from_source("(script)", source)
+        Self::new_with_name("(script)", source)
     }
 
-    pub fn from_source(name: &str, source: String) -> Self {
+    pub fn from_path(name: &str, path: PathBuf) -> std::io::Result<Self> {
+        let source = std::fs::read_to_string(path)?;
+        Ok(Self::new_with_name(&name, source))
+    }
+
+    pub fn new_with_name(name: &str, source: String) -> Self {
         let chars: Vec<char> = source.chars().collect();
         let mut line_indices = Vec::new();
         let mut in_string = false;

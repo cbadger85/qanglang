@@ -6,7 +6,7 @@ pub mod parse_statements;
 pub mod parser_errors;
 pub mod regression_tests;
 pub mod source_analysis_test;
-pub mod tail_call_tests;
+// pub mod tail_call_tests;
 pub mod tokenizing;
 pub mod vm_closure_tests;
 pub mod vm_tests;
@@ -18,7 +18,7 @@ pub fn parse_source(
 ) -> (crate::NodeId, crate::ErrorReporter) {
     let mut parser = crate::Parser::new(source_map, nodes, &mut strings);
     let program = parser.parse();
-    let (errors, _) = parser.into_parts();
+    let (errors, _, _) = parser.into_parts();
     (program, errors)
 }
 

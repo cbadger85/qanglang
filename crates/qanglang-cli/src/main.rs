@@ -193,7 +193,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         .with_config(CompilerConfig {
             error_message_format,
         })
-        .compile(&source_map, &mut allocator)
+        .compile(source_map, &mut allocator)
     {
         Ok(program) => {
             if heap_dump {

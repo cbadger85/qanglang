@@ -68,7 +68,7 @@ pub fn check_single_file(
     let mut parser = Parser::new(&source_map, nodes, &mut strings);
     let program = parser.parse();
 
-    let (mut errors, mut nodes) = parser.into_parts();
+    let (mut errors, mut nodes, _modules) = parser.into_parts();
     let analyzer = AnalysisPipeline::new(&mut strings).with_config(AnalysisPipelineConfig {
         error_message_format,
         ..Default::default()

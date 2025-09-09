@@ -76,7 +76,7 @@ pub enum UnaryOperator {
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum AstNode {
-    Program(ProgramNode),
+    Module(Module),
     Class(ClassDeclNode),
     Function(FunctionDeclNode),
     Identifier(IdentifierNode),
@@ -128,7 +128,7 @@ pub enum AstNode {
 impl AstNode {
     pub fn span(&self) -> SourceSpan {
         match self {
-            AstNode::Program(node) => node.span,
+            AstNode::Module(node) => node.span,
             AstNode::Class(node) => node.span,
             AstNode::Function(node) => node.span,
             AstNode::Identifier(node) => node.span,
@@ -181,7 +181,7 @@ impl AstNode {
 
 /// Root AST node representing a complete program
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub struct ProgramNode {
+pub struct Module {
     pub decls: NodeArrayId, // [DeclNode]
     pub span: SourceSpan,
 }
@@ -257,6 +257,12 @@ pub struct ObjectEntryNode {
     pub key: NodeId,   // IdentifierNode
     pub value: NodeId, // ExprNode
     pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct ImportDeclNode {
+    pub path: StringHandle,
+    pub name: NodeId, // IdentifierNode
 }
 
 /// Class declaration: class IDENTIFIER ( : IDENTIFIER )? { classMember* }

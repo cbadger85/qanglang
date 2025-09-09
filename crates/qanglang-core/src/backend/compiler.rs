@@ -75,19 +75,19 @@ impl CompilerPipeline {
 
     pub fn compile(
         &self,
-        source_map: &SourceMap,
+        source_map: SourceMap,
         alloc: &mut HeapAllocator,
     ) -> Result<QangProgram, QangPipelineError> {
-        let mut parser = Parser::new(source_map, TypedNodeArena::new(), &mut alloc.strings);
+        let mut parser = Parser::new(&source_map, TypedNodeArena::new(), &mut alloc.strings);
         let program = parser.parse();
 
-        let (mut errors, mut nodes) = parser.into_parts();
+        let (mut errors, mut nodes, _modules) = parser.into_parts();
 
         let result = AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())
-            .analyze(program, source_map, &mut nodes, &mut errors)?;
+            .analyze(program, &source_map, &mut nodes, &mut errors)?;
 
-        let assembler = Assembler::new(source_map, alloc, &result);
+        let assembler = Assembler::new(&source_map, alloc, &result);
         let main_function = assembler.assemble(program, &mut nodes, &mut errors)?;
 
         Ok(QangProgram::new(alloc.allocate_function(main_function)))
@@ -1541,39 +1541,39 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         .nodes
                         .get_call_operation_node(property_call.operation)
                         .node
-                    {
-                        // Emit the object
-                        let expr = ctx.nodes.get_expr_node(property_call.callee);
-                        self.visit_expression(expr, ctx)?;
+                {
+                    // Emit the object
+                    let expr = ctx.nodes.get_expr_node(property_call.callee);
+                    self.visit_expression(expr, ctx)?;
 
-                        // Get method handle
-                        let method_handle = ctx
-                            .nodes
-                            .get_identifier_node(method_name.identifier)
-                            .node
-                            .name;
+                    // Get method handle
+                    let method_handle = ctx
+                        .nodes
+                        .get_identifier_node(method_name.identifier)
+                        .node
+                        .name;
 
-                        // Emit arguments
-                        for i in 0..arg_length {
-                            if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
-                                let expr = ctx.nodes.get_expr_node(node_id);
-                                self.visit_expression(expr, ctx)?;
-                            } else {
-                                self.emit_opcode(OpCode::Nil, call.node.span);
-                            }
+                    // Emit arguments
+                    for i in 0..arg_length {
+                        if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
+                            let expr = ctx.nodes.get_expr_node(node_id);
+                            self.visit_expression(expr, ctx)?;
+                        } else {
+                            self.emit_opcode(OpCode::Nil, call.node.span);
                         }
-
-                        // Emit optimized invoke
-                        self.emit_constant_opcode(
-                            OpCode::Invoke,
-                            OpCode::Invoke16,
-                            Value::String(method_handle),
-                            call.node.span,
-                        )?;
-                        self.emit_byte(arg_length as u8, call.node.span);
-
-                        return Ok(());
                     }
+
+                    // Emit optimized invoke
+                    self.emit_constant_opcode(
+                        OpCode::Invoke,
+                        OpCode::Invoke16,
+                        Value::String(method_handle),
+                        call.node.span,
+                    )?;
+                    self.emit_byte(arg_length as u8, call.node.span);
+
+                    return Ok(());
+                }
 
                 // Regular function call
                 self.visit_expression(callee, ctx)?;
@@ -1676,27 +1676,24 @@ impl<'a> NodeVisitor for Assembler<'a> {
                                 .node
                                 .name
                                 == call_handle
-                            {
-                                    // This is obj.call(args) piped - use invoke optimization
-                                    self.visit_expression(
-                                        ctx.nodes.get_expr_node(call_expr.callee),
-                                        ctx,
-                                    )?;
-                                    self.visit_expression(left, ctx)?;
-                                    let method_handle = ctx
-                                        .nodes
-                                        .get_identifier_node(method_name.identifier)
-                                        .node
-                                        .name;
-                                    self.emit_constant_opcode(
-                                        OpCode::Invoke,
-                                        OpCode::Invoke16,
-                                        Value::String(method_handle),
-                                        pipe.node.span,
-                                    )?;
-                                    self.emit_byte(1, pipe.node.span);
-                                    return Ok(());
-                            }
+                        {
+                            // This is obj.call(args) piped - use invoke optimization
+                            self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;
+                            self.visit_expression(left, ctx)?;
+                            let method_handle = ctx
+                                .nodes
+                                .get_identifier_node(method_name.identifier)
+                                .node
+                                .name;
+                            self.emit_constant_opcode(
+                                OpCode::Invoke,
+                                OpCode::Invoke16,
+                                Value::String(method_handle),
+                                pipe.node.span,
+                            )?;
+                            self.emit_byte(1, pipe.node.span);
+                            return Ok(());
+                        }
 
                         // Regular function call with pipe
                         self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;

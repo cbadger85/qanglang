@@ -457,11 +457,11 @@ impl TypedNodeArena {
         }
     }
 
-    pub fn get_program_node(&self, node_id: NodeId) -> TypedNodeRef<ProgramNode> {
+    pub fn get_program_node(&self, node_id: NodeId) -> TypedNodeRef<Module> {
         let node = self.nodes[node_id.get()];
 
         match node {
-            AstNode::Program(program) => TypedNodeRef::new(node_id, program),
+            AstNode::Module(program) => TypedNodeRef::new(node_id, program),
             _ => panic!("Expected ProgramNode"),
         }
     }

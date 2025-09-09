@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use crate::{
     AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
@@ -78,10 +78,11 @@ impl CompilerPipeline {
     pub fn compile(
         &self,
         source_map: SourceMap,
+        root: &Path,
         alloc: &mut HeapAllocator,
     ) -> Result<QangProgram, QangPipelineError> {
         let mut nodes = TypedNodeArena::new();
-        let mut parser = Parser::new(Arc::new(source_map), &mut nodes, &mut alloc.strings);
+        let mut parser = Parser::new(Arc::new(source_map), root, &mut nodes, &mut alloc.strings);
         let modules = parser.parse();
 
         let mut errors = parser.into_errors();

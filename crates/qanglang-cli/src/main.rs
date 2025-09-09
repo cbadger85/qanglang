@@ -6,7 +6,7 @@ use qanglang_core::{
 };
 use qanglang_ls::run_language_server;
 use repl::run_repl;
-use std::fs;
+use std::{fs, path::PathBuf};
 
 use clap::{ArgAction, Parser, Subcommand};
 
@@ -164,6 +164,17 @@ fn main() {
     }
 }
 
+fn resolve_filename_to_path(filename: &str) -> PathBuf {
+    let path = PathBuf::from(filename);
+
+    if path.is_absolute() {
+        path
+    } else {
+        let current_dir = std::env::current_dir().expect("Unable to get cwd.");
+        current_dir.join(path)
+    }
+}
+
 fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &str) {
     let source = match fs::read_to_string(filename) {
         Ok(content) => content,
@@ -193,8 +204,11 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         .with_config(CompilerConfig {
             error_message_format,
         })
-        .compile(source_map, &mut allocator)
-    {
+        .compile(
+            source_map,
+            &resolve_filename_to_path(filename),
+            &mut allocator,
+        ) {
         Ok(program) => {
             if heap_dump {
                 disassemble_program(&allocator);

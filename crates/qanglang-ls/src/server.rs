@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use qanglang_core::SourceMap;
@@ -159,7 +160,8 @@ impl Backend {
         let source_map = Arc::new(SourceMap::new(document.text));
         let mut diagnostics = Vec::new();
 
-        let errors = match analyze(source_map.clone()) {
+        // TODO uhhhh, how should we handle this?
+        let errors = match analyze(source_map.clone(), PathBuf::new().as_path()) {
             Ok(_) => {
                 info!("✅ Analysis succeeded - no errors found");
                 Vec::new()

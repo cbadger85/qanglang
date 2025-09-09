@@ -65,7 +65,12 @@ pub fn check_single_file(
     let source_map = Arc::new(SourceMap::new(source));
     let mut nodes = TypedNodeArena::new();
     let mut strings = StringInterner::new();
-    let mut parser = Parser::new(source_map.clone(), &mut nodes, &mut strings);
+    let mut parser = Parser::new(
+        source_map.clone(),
+        source_file.file_path.as_path(),
+        &mut nodes,
+        &mut strings,
+    );
     let modules = parser.parse();
 
     let mut errors = parser.into_errors();

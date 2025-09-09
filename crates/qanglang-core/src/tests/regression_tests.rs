@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm, disassemble_program};
 
 #[test]
@@ -26,7 +28,7 @@ fn test_class_super_keyword() {
     let mut allocator = HeapAllocator::new();
 
     // match CompilerPipeline::new(source_map, &mut allocator).run() {
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -89,7 +91,7 @@ fn test_class_inheritance() {
     let mut allocator = HeapAllocator::new();
 
     // match CompilerPipeline::new(source_map, &mut allocator).run() {
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -137,7 +139,7 @@ fn test_nested_loops_with_break() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -183,7 +185,7 @@ fn test_nested_loops_with_continue() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -227,7 +229,7 @@ fn test_nested_for_loops() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         // match CompilerPipeline::new(source_map, &mut allocator).run() {
         Ok(program) => {
             disassemble_program(&allocator);
@@ -271,7 +273,7 @@ fn test_break_and_continue() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -311,7 +313,7 @@ fn test_continue_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -339,7 +341,7 @@ fn test_continue_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -373,7 +375,7 @@ fn test_break_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(_) => panic!("Expected compiler error for break outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =
@@ -401,7 +403,7 @@ fn test_break_error_cases_inside_nested_function() {
     let source_map = SourceMap::new(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(_) => panic!("Expected compiler error for continue outside loop"),
         Err(errors) => {
             let error_messages: Vec<String> =

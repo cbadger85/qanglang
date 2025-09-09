@@ -1,4 +1,8 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{
+    collections::VecDeque,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::{
     ErrorReporter, QangCompilerError, SourceMap,
@@ -23,11 +27,13 @@ pub struct Parser<'a> {
     strings: &'a mut StringInterner,
     nodes: &'a mut TypedNodeArena,
     module_queue: VecDeque<Arc<SourceMap>>,
+    root: PathBuf,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(
         source_map: Arc<SourceMap>,
+        root: &Path,
         nodes: &'a mut TypedNodeArena,
         strings: &'a mut StringInterner,
     ) -> Self {
@@ -41,6 +47,7 @@ impl<'a> Parser<'a> {
             nodes,
             strings,
             module_queue: VecDeque::new(),
+            root: root.to_path_buf(),
         };
 
         parser.advance();
@@ -330,7 +337,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            let mut module_parser = Parser::new(source_map.clone(), self.nodes, self.strings);
+            let mut module_parser = Parser::new(
+                source_map.clone(),
+                &self.root.as_path(),
+                self.nodes,
+                self.strings,
+            );
 
             let module_id = module_parser.parse_file();
 
@@ -404,11 +416,22 @@ impl<'a> Parser<'a> {
 
         let token = self.previous_token.as_ref().unwrap();
 
+        let path_span = self.get_previous_span();
+
         let value = token.lexeme(&self.source_map);
 
         let path_as_string = value[1..value.len() - 1].iter().collect::<String>();
 
-        // TODO add the SourceMap for the path to the module_queue
+        let combined_path = self.root.join(Path::new(&path_as_string));
+        match SourceMap::from_path(&path_as_string, combined_path) {
+            Ok(source_map) => self.module_queue.push_back(Arc::new(source_map)),
+            Err(_) => self
+                .errors
+                .report_error(QangCompilerError::new_syntax_error(
+                    "Unable to load module path.".to_string(),
+                    path_span,
+                )),
+        }
 
         let path = self.strings.intern(&path_as_string);
         self.consume(TokenType::From, "Expected import declaration.")?;

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{
     CompilerPipeline, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap, Value, Vm,
     backend::{
@@ -358,7 +360,7 @@ impl Vm {
         let source_map = SourceMap::new_with_name("<stdlib>", stdlib_source.to_owned());
 
         let program = CompilerPipeline::new()
-            .compile(source_map, &mut self.alloc)
+            .compile(source_map, PathBuf::new().as_path(), &mut self.alloc)
             .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
 
         // Execute stdlib to populate globals

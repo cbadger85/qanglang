@@ -108,7 +108,11 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     let mut allocator = HeapAllocator::new();
 
     // Compile the test file
-    let program = match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    let program = match CompilerPipeline::new().compile(
+        source_map,
+        source_file.file_path.as_path(),
+        &mut allocator,
+    ) {
         Ok(program) => program,
         Err(errors) => {
             let error_messages: Vec<String> = errors

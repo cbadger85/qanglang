@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{CompilerPipeline, HeapAllocator, SourceMap};
 
 #[test]
@@ -11,7 +13,7 @@ fn test_initializing_local_variable_with_same_name() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);
@@ -34,7 +36,7 @@ fn test_initializing_local_variable_with_itself() {
     let source_map = SourceMap::new(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);

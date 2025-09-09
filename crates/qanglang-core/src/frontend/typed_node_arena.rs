@@ -28,6 +28,7 @@ pub enum DeclNode {
     Lambda(LambdaDeclNode),
     Variable(VariableDeclNode),
     Stmt(StmtNode),
+    Module(ImportModuleDeclNode),
 }
 
 impl DeclNode {
@@ -38,6 +39,7 @@ impl DeclNode {
             Self::Lambda(lambda_decl) => lambda_decl.span,
             Self::Variable(variable_decl) => variable_decl.span,
             Self::Stmt(stmt) => stmt.span(),
+            Self::Module(import_decl) => import_decl.span,
         }
     }
 }
@@ -51,6 +53,7 @@ impl TryFrom<AstNode> for DeclNode {
             AstNode::FunctionDecl(func_decl) => Ok(DeclNode::Function(func_decl)),
             AstNode::LambdaDecl(lambda_decl) => Ok(DeclNode::Lambda(lambda_decl)),
             AstNode::VariableDecl(var_decl) => Ok(DeclNode::Variable(var_decl)),
+            AstNode::ImportModuleDecl(imprt_decl) => Ok(DeclNode::Module(imprt_decl)),
             _ => Ok(DeclNode::Stmt(StmtNode::try_from(value)?)),
         }
     }

@@ -123,6 +123,7 @@ pub enum AstNode {
     WhileStmt(WhileStmtNode),
     ForStmt(ForStmtNode),
     VariableDecl(VariableDeclNode),
+    ImportModuleDecl(ImportModuleDeclNode),
 }
 
 impl AstNode {
@@ -175,6 +176,7 @@ impl AstNode {
             AstNode::WhileStmt(node) => node.span,
             AstNode::ForStmt(node) => node.span,
             AstNode::VariableDecl(node) => node.span,
+            AstNode::ImportModuleDecl(node) => node.span,
         }
     }
 }
@@ -260,9 +262,10 @@ pub struct ObjectEntryNode {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub struct ImportDeclNode {
+pub struct ImportModuleDeclNode {
     pub path: StringHandle,
     pub name: NodeId, // IdentifierNode
+    pub span: SourceSpan,
 }
 
 /// Class declaration: class IDENTIFIER ( : IDENTIFIER )? { classMember* }

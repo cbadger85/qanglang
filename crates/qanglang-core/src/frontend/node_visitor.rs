@@ -24,7 +24,7 @@ impl<'a> VisitorContext<'a> {
 pub trait NodeVisitor {
     type Error;
 
-    fn visit_program(
+    fn visit_module(
         &mut self,
         program: TypedNodeRef<Module>,
         ctx: &mut VisitorContext,
@@ -59,8 +59,19 @@ pub trait NodeVisitor {
             DeclNode::Variable(var_decl) => {
                 self.visit_variable_declaration(TypedNodeRef::new(decl.id, var_decl), ctx)
             }
+            DeclNode::Module(import_decl) => {
+                self.visit_import_module_declaration(TypedNodeRef::new(decl.id, import_decl), ctx)
+            }
             DeclNode::Stmt(stmt) => self.visit_statement(TypedNodeRef::new(decl.id, stmt), ctx),
         }
+    }
+
+    fn visit_import_module_declaration(
+        &mut self,
+        import_decl: TypedNodeRef<ImportModuleDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(ctx.nodes.get_identifier_node(import_decl.node.name), ctx)
     }
 
     fn visit_class_declaration(

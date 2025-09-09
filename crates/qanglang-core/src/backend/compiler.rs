@@ -146,7 +146,7 @@ impl<'a> Assembler<'a> {
 
         let program_node = ctx.nodes.get_program_node(program);
 
-        self.visit_program(program_node, &mut ctx)
+        self.visit_module(program_node, &mut ctx)
             .map_err(|err| QangPipelineError::new(vec![err]))?;
 
         self.emit_opcode(OpCode::Nil, SourceSpan::default());

@@ -278,7 +278,7 @@ impl<'a> ScopeAnalyzer<'a> {
         let mut ctx = VisitorContext::new(nodes, errors);
         let program_node = ctx.nodes.get_program_node(program);
 
-        let _ = self.visit_program(program_node, &mut ctx);
+        let _ = self.visit_module(program_node, &mut ctx);
 
         self.results
     }
@@ -317,12 +317,13 @@ impl<'a> ScopeAnalyzer<'a> {
         // Check for duplicate variables in current scope (only for local scopes)
         if self.current_scope_depth() > 0
             && let Some(current_scope) = self.scopes.last()
-            && current_scope.variables.contains_key(&name) {
-                    return Err(QangCompilerError::new_analysis_error(
-                        "Already a variable with this name in this scope.".to_string(),
-                        span,
-                    ));
-                }
+            && current_scope.variables.contains_key(&name)
+        {
+            return Err(QangCompilerError::new_analysis_error(
+                "Already a variable with this name in this scope.".to_string(),
+                span,
+            ));
+        }
 
         let (variable_info, local_index) = if self.current_scope_depth() == 0 {
             // Global scope
@@ -772,9 +773,10 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         // Finally, mark the variable as initialized (for locals only)
         if let Some(local_idx) = local_index
-            && let Some(function) = self.functions.last_mut() {
-                function.mark_initialized(local_idx);
-            }
+            && let Some(function) = self.functions.last_mut()
+        {
+            function.mark_initialized(local_idx);
+        }
 
         Ok(())
     }
@@ -1055,19 +1057,19 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                     && let VariableKind::Local {
                         slot, scope_depth, ..
                     } = var_info.kind
-                    {
-                        let loop_var = LoopVariableInfo {
-                            name: identifier.node.name,
-                            slot,
-                            scope_depth,
-                            initializer_node: var_decl.initializer,
-                        };
+                {
+                    let loop_var = LoopVariableInfo {
+                        name: identifier.node.name,
+                        slot,
+                        scope_depth,
+                        initializer_node: var_decl.initializer,
+                    };
 
-                        // Add to the for loop's scope info
-                        if let Some(for_info) = self.results.for_loops.get_mut(&for_stmt.id) {
-                            for_info.scope_info.initializer_variables.push(loop_var);
-                        }
+                    // Add to the for loop's scope info
+                    if let Some(for_info) = self.results.for_loops.get_mut(&for_stmt.id) {
+                        for_info.scope_info.initializer_variables.push(loop_var);
                     }
+                }
             } else {
                 self.visit_for_initializer(initializer, ctx)?;
             }

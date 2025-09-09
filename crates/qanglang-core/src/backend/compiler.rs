@@ -20,7 +20,7 @@ pub struct CompilerConfig {
 impl Default for CompilerConfig {
     fn default() -> Self {
         Self {
-            error_message_format: ErrorMessageFormat::Minimal,
+            error_message_format: ErrorMessageFormat::Compact,
         }
     }
 }

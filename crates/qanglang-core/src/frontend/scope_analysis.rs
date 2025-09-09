@@ -1000,7 +1000,10 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         // Resolve the 'super' variable access
         let super_handle = self.strings.intern("super");
-        self.resolve_variable(super_handle, super_expr.node.span, super_expr.id)?;
+        if let Err(error) = self.resolve_variable(super_handle, super_expr.node.span, super_expr.id)
+        {
+            ctx.errors.report_error(error);
+        }
 
         Ok(())
     }
@@ -1199,5 +1202,48 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         self.end_function(opt_map_expr.id)?;
 
         Ok(())
+    }
+
+    fn visit_call_operation(
+        &mut self,
+        operation: super::typed_node_arena::TypedNodeRef<
+            super::typed_node_arena::CallOperationNode,
+        >,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        use super::typed_node_arena::CallOperationNode;
+
+        match operation.node {
+            CallOperationNode::Call(call) => {
+                let arg_count = ctx.nodes.array.size(call.args);
+                for i in 0..arg_count {
+                    if let Some(arg_id) = ctx.nodes.array.get_node_id_at(call.args, i) {
+                        let arg = ctx.nodes.get_expr_node(arg_id);
+                        self.visit_expression(arg, ctx)?;
+                    }
+                }
+                Ok(())
+            }
+            CallOperationNode::Property(_property) => {
+                // Property names should not be resolved as variables - they are property identifiers
+                // used for property lookup at runtime, not variable resolution at compile time
+                Ok(())
+            }
+            CallOperationNode::OptionalProperty(_optional_property) => {
+                // Same as regular properties - don't resolve property names as variables
+                Ok(())
+            }
+            CallOperationNode::Index(index) => {
+                self.visit_expression(ctx.nodes.get_expr_node(index.index), ctx)
+            }
+            CallOperationNode::Map(map) => self.visit_map_expression(
+                super::typed_node_arena::TypedNodeRef::new(operation.id, map),
+                ctx,
+            ),
+            CallOperationNode::OptionalMap(map) => self.visit_optional_map_expression(
+                super::typed_node_arena::TypedNodeRef::new(operation.id, map),
+                ctx,
+            ),
+        }
     }
 }

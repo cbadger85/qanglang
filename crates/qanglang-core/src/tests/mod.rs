@@ -1,10 +1,10 @@
 pub mod alloc_tests;
 pub mod compound_assignment_tests;
-pub mod loop_tests;
 pub mod parse_declarations;
 pub mod parse_expressions;
 pub mod parse_statements;
 pub mod parser_errors;
+pub mod regression_tests;
 pub mod source_analysis_test;
 pub mod tail_call_tests;
 pub mod tokenizing;

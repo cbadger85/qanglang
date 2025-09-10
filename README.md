@@ -17,7 +17,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>declaration</td>
       <td>=</td>
-      <td>classDecl | fnDecl | lambdaDecl | varDecl | statement</td>
+      <td>classDecl | fnDecl | lambdaDecl | varDecl | moduleDecl | statement</td>
       <td>;</td>
     </tr>
     <tr>
@@ -72,6 +72,12 @@ An embedded scripting language written in Rust 🦀
       <td>varDecl</td>
       <td>=</td>
       <td>"var" ( IDENTIFIER | destructurePattern ) ( "=" expression )? ";"</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>moduleDecl</td>
+      <td>=</td>
+      <td>"mod" IDENTIFIER "from" STRING ";"</td>
       <td>;</td>
     </tr>
     <tr>

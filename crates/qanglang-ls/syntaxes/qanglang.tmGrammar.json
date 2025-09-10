@@ -23,6 +23,9 @@
       "include": "#classes"
     },
     {
+      "include": "#modules"
+    },
+    {
       "include": "#arrays"
     },
     {
@@ -71,7 +74,11 @@
         },
         {
           "name": "storage.type",
-          "match": "\\b(fn|var|class)\\b"
+          "match": "\\b(fn|var|class|mod)\\b"
+        },
+        {
+          "name": "keyword.other.import",
+          "match": "\\bfrom\\b"
         },
         {
           "name": "keyword.operator.logical",
@@ -429,6 +436,28 @@
         {
           "name": "keyword.operator.arrow.qanglang",
           "match": "->"
+        }
+      ]
+    },
+    "modules": {
+      "patterns": [
+        {
+          "name": "meta.module.declaration.qanglang",
+          "match": "\\b(mod)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+(from)\\s+(\"[^\"]*\")",
+          "captures": {
+            "1": {
+              "name": "keyword.declaration.module.qanglang"
+            },
+            "2": {
+              "name": "entity.name.module.qanglang"
+            },
+            "3": {
+              "name": "keyword.other.import.qanglang"
+            },
+            "4": {
+              "name": "string.quoted.double.module.path.qanglang"
+            }
+          }
         }
       ]
     }

@@ -933,9 +933,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     var_decl.node.span,
                 )?;
             }
-            VariableKind::Local { .. } => {
-                // Local variables are automatically placed on the stack
-                // No additional instruction needed for definition
+            VariableKind::Local { slot, .. } => {
+                // Emit OP_SET_LOCAL to store the value in the variable's slot
+                self.emit_opcode_and_byte(OpCode::SetLocal, *slot as u8, var_decl.node.span);
             }
             VariableKind::Upvalue { .. } => {
                 // This shouldn't happen for declarations

@@ -37,7 +37,6 @@ class ArrayIterator : Iterator {
 
 fn iter_array(arr) {
   var iter = ArrayIterator(arr);
-  println(iter);
 
   return iter;
 }

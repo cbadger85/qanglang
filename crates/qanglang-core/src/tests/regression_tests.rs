@@ -419,3 +419,42 @@ fn test_break_error_cases_inside_nested_function() {
         }
     }
 }
+
+#[test]
+fn test_iterator_stdlib() {
+    let source = r#"
+        var arr = [1, 2, 3, 4];
+
+        var new_arr = iter_array(arr) 
+        |> iter_map((item) -> item * 3) 
+        |> iter_filter((item) -> item % 2 == 0) 
+        |> iter_collect();
+        assert_eq(new_arr.length(), 2);
+    "#;
+
+    let source_map = SourceMap::new(source.to_string());
+    let mut allocator = HeapAllocator::new();
+
+    // match CompilerPipeline::new(source_map, &mut allocator).run() {
+    match CompilerPipeline::new().compile(source_map, PathBuf::new().as_path(), &mut allocator) {
+        Ok(program) => {
+            disassemble_program(&allocator);
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(true)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

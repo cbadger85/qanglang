@@ -4,12 +4,14 @@ members = [
     "crates/qanglang-core",
     "crates/qanglang-cli",
     "crates/qanglang-ls",
-    "crates/qanglang-test"
+    "crates/qanglang-test",
+    "crates/qanglang-config"
 ]
 
 [workspace.dependencies]
 rustc-hash = "2.1.1"
 coz = "0.1"
+serde = { version = "1.0", features = ["derive"] }
 
 [profile.release]
 debug = 1

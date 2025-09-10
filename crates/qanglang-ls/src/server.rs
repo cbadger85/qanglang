@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
+use qanglang_config::{QangConfig, find_config_path};
 use qanglang_core::SourceMap;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
@@ -160,8 +160,8 @@ impl Backend {
         let source_map = Arc::new(SourceMap::new(document.text));
         let mut diagnostics = Vec::new();
 
-        // TODO uhhhh, how should we handle this?
-        let errors = match analyze(source_map.clone(), PathBuf::new().as_path()) {
+        let root = &QangConfig::resolve(find_config_path().unwrap_or_default().as_path()).root;
+        let errors = match analyze(source_map.clone(), root) {
             Ok(_) => {
                 info!("✅ Analysis succeeded - no errors found");
                 Vec::new()

@@ -412,6 +412,10 @@ impl<'a> Parser<'a> {
 
     fn import_module_declaration(&mut self) -> ParseResult<NodeId> {
         let span_start = self.get_previous_span();
+        self.consume(TokenType::Identifier, "Expected module identifier.")?;
+        let name = self.get_identifier()?;
+
+        self.consume(TokenType::From, "Expected import declaration.")?;
         self.consume(TokenType::String, "Expected import path as string.")?;
 
         let token = self.previous_token.as_ref().unwrap();
@@ -434,9 +438,7 @@ impl<'a> Parser<'a> {
         }
 
         let path = self.strings.intern(&path_as_string);
-        self.consume(TokenType::From, "Expected import declaration.")?;
-        self.consume(TokenType::Identifier, "Expected module identifier.")?;
-        let name = self.get_identifier()?;
+        self.consume(TokenType::Semicolon, "Expected semicolon.")?;
         let span_end = self.get_previous_span();
 
         Ok(self

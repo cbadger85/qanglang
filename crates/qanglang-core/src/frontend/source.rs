@@ -15,7 +15,17 @@ pub struct SourceMap {
 }
 
 impl SourceMap {
-    pub fn new(source: String) -> Self {
+    pub fn new(source: String, path: PathBuf) -> Self {
+        let (chars, line_indices) = Self::load_source(source);
+
+        Self {
+            path,
+            source: chars,
+            line_indices,
+        }
+    }
+
+    pub fn from_source(source: String) -> Self {
         let (chars, line_indices) = Self::load_source(source);
 
         Self {
@@ -33,10 +43,6 @@ impl SourceMap {
             line_indices,
             source: chars,
         })
-    }
-
-    pub fn set_path(&mut self, path: PathBuf) {
-        self.path = path;
     }
 
     fn load_source(source: String) -> (Vec<char>, Vec<usize>) {

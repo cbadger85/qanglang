@@ -355,7 +355,7 @@ impl Vm {
     fn load_stdlib(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.load_constants();
         let stdlib_source = include_str!("stdlib.ql");
-        let source_map = SourceMap::new(stdlib_source.to_owned());
+        let source_map = SourceMap::from_source(stdlib_source.to_owned());
 
         let program = CompilerPipeline::new()
             .compile(source_map, &mut self.alloc)

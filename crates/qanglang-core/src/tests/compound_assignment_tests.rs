@@ -34,7 +34,7 @@ fn test_compound_assignment_operators() {
         assert_eq(str, "Hello World");
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -83,7 +83,7 @@ fn test_compound_assignment_with_properties() {
         assert_eq(obj.value, 20);
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -126,7 +126,7 @@ fn test_compound_assignment_with_arrays() {
         assert_eq(arr[2], 2);
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {

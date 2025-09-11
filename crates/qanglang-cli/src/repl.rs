@@ -34,8 +34,8 @@ pub fn run_repl(debug: bool) {
 }
 
 pub fn execute_repl_line(source: &str, vm: &mut Vm) {
-    let mut source_map = SourceMap::new(source.to_string());
-    source_map.set_path(
+    let source_map = SourceMap::new(
+        source.to_string(),
         std::env::current_dir()
             .expect("Expect to be ran from a dir.")
             .join(Path::new("./main.ql")),

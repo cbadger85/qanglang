@@ -22,7 +22,7 @@ fn test_class_super_keyword() {
       test_class_super_keyword();
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator = HeapAllocator::new();
 
     // match CompilerPipeline::new(source_map, &mut allocator).run() {
@@ -85,7 +85,7 @@ fn test_class_inheritance() {
       test_class_inheritance();
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator = HeapAllocator::new();
 
     // match CompilerPipeline::new(source_map, &mut allocator).run() {
@@ -134,7 +134,7 @@ fn test_nested_loops_with_break() {
       test_nested_loops_with_break();
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -180,7 +180,7 @@ fn test_nested_loops_with_continue() {
       test_nested_loops_with_continue();
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -224,7 +224,7 @@ fn test_nested_for_loops() {
       test_nested_for_loops();
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -268,7 +268,7 @@ fn test_break_and_continue() {
         assert_eq(result, "124", "Continue test failed: " + result);
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -308,7 +308,7 @@ fn test_continue_error_cases_inside_nested_function() {
         }
     "#;
 
-    let source_map = SourceMap::new(source_break.to_string());
+    let source_map = SourceMap::from_source(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -336,7 +336,7 @@ fn test_continue_error_cases_inside_nested_function() {
         }
     "#;
 
-    let source_map = SourceMap::new(source_continue.to_string());
+    let source_map = SourceMap::from_source(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -370,7 +370,7 @@ fn test_break_error_cases_inside_nested_function() {
         }
     "#;
 
-    let source_map = SourceMap::new(source_break.to_string());
+    let source_map = SourceMap::from_source(source_break.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -398,7 +398,7 @@ fn test_break_error_cases_inside_nested_function() {
         }
     "#;
 
-    let source_map = SourceMap::new(source_continue.to_string());
+    let source_map = SourceMap::from_source(source_continue.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -430,7 +430,7 @@ fn test_iterator_stdlib() {
         assert_eq(new_arr.length(), 2);
     "#;
 
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator = HeapAllocator::new();
 
     // match CompilerPipeline::new(source_map, &mut allocator).run() {

@@ -8,7 +8,7 @@ fn test_initializing_local_variable_with_same_name() {
             var a = "b";
         }
   "#;
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {
@@ -31,7 +31,7 @@ fn test_initializing_local_variable_with_itself() {
             }
         }
   "#;
-    let source_map = SourceMap::new(source.to_string());
+    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
     match CompilerPipeline::new().compile(source_map, &mut allocator) {

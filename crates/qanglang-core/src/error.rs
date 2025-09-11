@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn test_error_reporter_basic_functionality() {
         let source = "var x = 5 +\nvar y = 10;";
-        let source_map = SourceMap::new(source.to_string());
+        let source_map = SourceMap::from_source(source.to_string());
         let mut reporter = ErrorReporter::new();
 
         // Report an error
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn test_multiple_errors() {
         let source = "var x = 5 +\nvar y = 10 *\nvar z;";
-        let source_map = SourceMap::new(source.to_string());
+        let source_map = SourceMap::from_source(source.to_string());
         let mut reporter = ErrorReporter::new();
 
         // Report multiple errors
@@ -381,7 +381,7 @@ mod tests {
     #[test]
     fn test_error_summary_single_errors() {
         let source = "var x = 5;";
-        let source_map = SourceMap::new(source.to_string());
+        let source_map = SourceMap::from_source(source.to_string());
         let mut reporter = ErrorReporter::new();
 
         reporter.report_error(
@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn test_error_summary_multiple_errors() {
         let source = "var x = 5;";
-        let source_map = SourceMap::new(source.to_string());
+        let source_map = SourceMap::from_source(source.to_string());
         let mut reporter = ErrorReporter::new();
 
         reporter.report_error(

@@ -162,8 +162,7 @@ impl Backend {
         };
         info!("=== Starting analysis for: {} ===", document.uri);
 
-        let mut source_map = SourceMap::new(document.text);
-        source_map.set_path(document_filepath);
+        let source_map = SourceMap::new(document.text, document_filepath);
         let source_map = Arc::new(source_map);
         let mut diagnostics = Vec::new();
 

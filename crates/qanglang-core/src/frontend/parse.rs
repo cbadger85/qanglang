@@ -18,6 +18,11 @@ use crate::{
 
 type ParseResult<T> = Result<T, QangCompilerError>;
 
+#[derive(Clone, Default)]
+pub struct ParserConfig {
+    pub skip_modules: bool,
+}
+
 pub struct Parser<'a> {
     source_map: Arc<SourceMap>,
     tokens: Tokenizer,
@@ -27,6 +32,7 @@ pub struct Parser<'a> {
     strings: &'a mut StringInterner,
     nodes: &'a mut TypedNodeArena,
     module_queue: VecDeque<PathBuf>,
+    config: ParserConfig,
 }
 
 impl<'a> Parser<'a> {
@@ -45,10 +51,16 @@ impl<'a> Parser<'a> {
             nodes,
             strings,
             module_queue: VecDeque::new(),
+            config: ParserConfig::default(),
         };
 
         parser.advance();
         parser
+    }
+
+    pub fn with_config(mut self, config: ParserConfig) -> Self {
+        self.config = config;
+        self
     }
 
     pub fn into_errors(self) -> ErrorReporter {
@@ -326,6 +338,10 @@ impl<'a> Parser<'a> {
         let main_id = self.parse_file();
         let mut modules = ModuleMap::new(main_id, self.source_map.clone());
 
+        if self.config.skip_modules {
+            return modules;
+        }
+
         while let Some(module_path) = self.module_queue.pop_front() {
             if modules.has(&module_path) {
                 continue;
@@ -460,9 +476,10 @@ impl<'a> Parser<'a> {
             }
         }
 
+        let combined_path_str = combined_path.to_string_lossy();
+        let path = self.strings.intern(&combined_path_str);
         self.module_queue.push_back(combined_path);
 
-        let path = self.strings.intern(&path_as_string);
         self.consume(TokenType::Semicolon, "Expected semicolon.")?;
         let span_end = self.get_previous_span();
 

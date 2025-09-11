@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use rustc_hash::{FxBuildHasher, FxHashMap};
+
 use crate::{
     AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
     HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError, SourceLocation, SourceMap,
-    TypedNodeArena, Value,
+    StringHandle, TypedNodeArena, Value,
     backend::chunk::{Chunk, OpCode},
     frontend::{
         analyzer::{AnalysisPipeline, AnalysisResults},
@@ -18,15 +20,21 @@ pub const FRAME_MAX: usize = 64;
 pub const STACK_MAX: usize = FRAME_MAX * 256;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct QangProgram(FunctionHandle);
+pub struct QangProgram {
+    function: FunctionHandle,
+    modules: FxHashMap<StringHandle, FunctionHandle>,
+}
 
 impl QangProgram {
-    pub fn new(handle: FunctionHandle) -> Self {
-        Self(handle)
+    pub fn new(handle: FunctionHandle, modules: FxHashMap<StringHandle, FunctionHandle>) -> Self {
+        Self {
+            function: handle,
+            modules,
+        }
     }
 
     pub fn into_handle(self) -> FunctionHandle {
-        self.0
+        self.function
     }
 }
 
@@ -98,7 +106,21 @@ impl CompilerPipeline {
         let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc, &result);
         let main_function = assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
 
-        Ok(QangProgram::new(alloc.allocate_function(main_function)))
+        let mut module_map = FxHashMap::with_hasher(FxBuildHasher);
+        for (path, module) in modules.into_iter() {
+            let path_str = path.to_string_lossy();
+            let path = alloc.strings.intern(&path_str);
+            let assembler = Assembler::new(module.source_map, alloc, &result);
+            let mut module = assembler.assemble(module.node, &mut nodes, &mut errors)?;
+            module.name = path;
+            let function_handle = alloc.allocate_function(module);
+            module_map.insert(path, function_handle);
+        }
+
+        Ok(QangProgram::new(
+            alloc.allocate_function(main_function),
+            module_map,
+        ))
     }
 }
 

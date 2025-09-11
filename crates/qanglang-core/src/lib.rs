@@ -21,7 +21,7 @@ pub use frontend::{
     analyzer::{AnalysisPipeline, AnalysisPipelineConfig, AnalysisResults},
     node_array_arena::NodeArrayId,
     nodes,
-    parse::Parser,
+    parse::{Parser, ParserConfig},
     typed_node_arena::{NodeId, TypedNodeArena},
 };
 pub use memory::{

@@ -194,4 +194,8 @@ impl ModuleMap {
     pub fn has(&self, path: &Path) -> bool {
         self.modules.contains_key(path)
     }
+
+    pub fn into_iter(self) -> impl Iterator<Item = (PathBuf, ModuleSource)> {
+        self.modules.into_iter()
+    }
 }

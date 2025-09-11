@@ -261,7 +261,7 @@ pub struct Vm {
 }
 
 impl Vm {
-    pub fn with_gc_check<T>(&mut self, op: impl FnOnce(&mut HeapAllocator) -> T) -> T {
+    pub(crate) fn with_gc_check<T>(&mut self, op: impl FnOnce(&mut HeapAllocator) -> T) -> T {
         if self.is_gc_enabled && self.alloc.should_collect_garbage() {
             self.collect_garbage();
         }

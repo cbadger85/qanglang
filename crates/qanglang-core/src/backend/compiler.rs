@@ -4,8 +4,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
     AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
-    HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError, SourceLocation, SourceMap,
-    StringHandle, TypedNodeArena, Value,
+    HashMapHandle, HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError,
+    SourceLocation, SourceMap, StringHandle, TypedNodeArena, Value,
     backend::chunk::{Chunk, OpCode},
     frontend::{
         analyzer::{AnalysisPipeline, AnalysisResults},
@@ -19,14 +19,29 @@ use crate::{
 pub const FRAME_MAX: usize = 64;
 pub const STACK_MAX: usize = FRAME_MAX * 256;
 
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
+pub struct RuntimeModule {
+    function: FunctionHandle,
+    instance: Option<HashMapHandle>,
+}
+
+impl RuntimeModule {
+    pub fn new(function: FunctionHandle) -> Self {
+        Self {
+            function,
+            instance: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangProgram {
     function: FunctionHandle,
-    modules: FxHashMap<StringHandle, FunctionHandle>,
+    modules: FxHashMap<StringHandle, RuntimeModule>,
 }
 
 impl QangProgram {
-    pub fn new(handle: FunctionHandle, modules: FxHashMap<StringHandle, FunctionHandle>) -> Self {
+    pub fn new(handle: FunctionHandle, modules: FxHashMap<StringHandle, RuntimeModule>) -> Self {
         Self {
             function: handle,
             modules,
@@ -101,7 +116,7 @@ impl CompilerPipeline {
         let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc, &result);
         let main_function = assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
 
-        let mut module_map = FxHashMap::with_hasher(FxBuildHasher);
+        let mut module_resolver = FxHashMap::with_hasher(FxBuildHasher);
         for (path, module) in modules.into_iter() {
             let path_str = path.to_string_lossy();
             let path = alloc.strings.intern(&path_str);
@@ -109,12 +124,12 @@ impl CompilerPipeline {
             let mut module = assembler.assemble(module.node, &mut nodes, &mut errors)?;
             module.name = path;
             let function_handle = alloc.allocate_function(module);
-            module_map.insert(path, function_handle);
+            module_resolver.insert(path, RuntimeModule::new(function_handle));
         }
 
         Ok(QangProgram::new(
             alloc.allocate_function(main_function),
-            module_map,
+            module_resolver,
         ))
     }
 }

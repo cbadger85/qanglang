@@ -114,7 +114,15 @@ impl ScopeAnalysis {
     }
 
     pub fn merge_with(mut self, other: Self) -> Self {
-        todo!()
+        self.variables.extend(other.variables);
+        self.functions.extend(other.functions);
+        self.upvalue_captures.extend(other.upvalue_captures);
+        self.class_inheritance.extend(other.class_inheritance);
+        self.for_loops.extend(other.for_loops);
+        self.loop_children.extend(other.loop_children);
+        self.break_continue_statements
+            .extend(other.break_continue_statements);
+        self
     }
 }
 

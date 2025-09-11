@@ -5,10 +5,19 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct QangConfig {
     pub root: PathBuf,
-    pub entry_points: Vec<PathBuf>,
 }
 
 impl QangConfig {
+    pub fn new(path: &Path) -> Self {
+        let root = if path.is_dir() {
+            path.to_path_buf()
+        } else {
+            path.parent().unwrap_or(path).to_path_buf()
+        };
+
+        Self { root }
+    }
+
     pub fn resolve(path: &Path) -> Self {
         if let Ok(config_content) = std::fs::read_to_string(path) {
             if let Ok(config) = toml::from_str::<Self>(&config_content) {
@@ -16,16 +25,18 @@ impl QangConfig {
             }
         }
 
-        return Self::default();
+        Self::new(path)
     }
 }
 
-pub fn find_config_path() -> Option<PathBuf> {
-    let start_path: PathBuf = std::env::current_dir().unwrap_or_default();
-    let mut current = if start_path.is_file() {
-        start_path.parent().unwrap_or(start_path.as_path())
+pub fn find_config_path(path: PathBuf) -> Option<PathBuf> {
+    let mut current = if path.is_file() {
+        match path.parent() {
+            Some(path) => path,
+            None => path.as_path(),
+        }
     } else {
-        start_path.as_path()
+        path.as_path()
     };
 
     loop {

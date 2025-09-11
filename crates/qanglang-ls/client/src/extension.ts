@@ -48,7 +48,7 @@ export async function activate(context: ExtensionContext) {
       env: {
         ...process.env,
         // eslint-disable-next-line @typescript-eslint/naming-convention
-        RUST_LOG: "qanglang_ls=error", // Scope logging to only our crate
+        RUST_LOG: "qanglang_ls=info", // Scope logging to only our crate
       },
     },
   };

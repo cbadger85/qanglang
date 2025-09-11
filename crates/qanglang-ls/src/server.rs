@@ -160,8 +160,17 @@ impl Backend {
         let source_map = Arc::new(SourceMap::new(document.text));
         let mut diagnostics = Vec::new();
 
-        let root = &QangConfig::resolve(find_config_path().unwrap_or_default().as_path()).root;
-        let errors = match analyze(source_map.clone(), root) {
+        let document_filepath = match document.uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                return;
+            }
+        };
+        let path = find_config_path(document_filepath.clone());
+        let root = path
+            .map(|p| QangConfig::resolve(p.as_path()).root)
+            .unwrap_or(QangConfig::new(&document_filepath.as_path()).root);
+        let errors = match analyze(source_map.clone(), root.as_path()) {
             Ok(_) => {
                 info!("✅ Analysis succeeded - no errors found");
                 Vec::new()
@@ -210,7 +219,10 @@ impl Backend {
 
 pub fn run_language_server() {
     // Initialize logging for the language server first
-    env_logger::init();
+    // Ensure logs go to stderr, not stdout (which LSP uses)
+    env_logger::Builder::from_default_env()
+        .target(env_logger::Target::Stderr)
+        .init();
     info!("Starting QangLang Language Server...");
 
     // Create a new tokio runtime for the language server

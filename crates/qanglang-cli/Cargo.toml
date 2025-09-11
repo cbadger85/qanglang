@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 qanglang-core = { path = "../qanglang-core" }
+qanglang-config = { path = "../qanglang-config" }
 qanglang-ls = { path = "../qanglang-ls" }
 qanglang-test = { path = "../qanglang-test" }
 clap = {version = "4.5.43", features = ["derive"]}

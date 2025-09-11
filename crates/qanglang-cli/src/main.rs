@@ -6,7 +6,10 @@ use qanglang_core::{
 };
 use qanglang_ls::run_language_server;
 use repl::run_repl;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use clap::{ArgAction, Parser, Subcommand};
 
@@ -165,13 +168,19 @@ fn main() {
 }
 
 fn resolve_filename_to_path(filename: &str) -> PathBuf {
-    let path = PathBuf::from(filename);
+    let path = Path::new(filename);
 
     if path.is_absolute() {
-        path
+        path.parent()
+            .expect("Expected file to be in a directory.")
+            .to_path_buf()
     } else {
         let current_dir = std::env::current_dir().expect("Unable to get cwd.");
-        current_dir.join(path)
+        current_dir
+            .join(path)
+            .parent()
+            .expect("Expected file to be in a directory.")
+            .to_path_buf()
     }
 }
 

@@ -67,7 +67,7 @@ pub fn check_single_file(
     let mut strings = StringInterner::new();
     let mut parser = Parser::new(
         source_map.clone(),
-        source_file.file_path.as_path(),
+        source_file.file_path.parent().unwrap(),
         &mut nodes,
         &mut strings,
     );

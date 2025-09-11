@@ -423,16 +423,19 @@ impl<'a> Parser<'a> {
         let path_span = self.get_previous_span();
 
         let value = token.lexeme(&self.source_map);
-
         let path_as_string = value[1..value.len() - 1].iter().collect::<String>();
 
         let combined_path = self.root.join(Path::new(&path_as_string));
-        match SourceMap::from_path(&path_as_string, combined_path) {
+        // TODO remove this clone
+        match SourceMap::from_path(&path_as_string, combined_path.clone()) {
             Ok(source_map) => self.module_queue.push_back(Arc::new(source_map)),
             Err(_) => self
                 .errors
                 .report_error(QangCompilerError::new_syntax_error(
-                    "Unable to load module path.".to_string(),
+                    format!(
+                        "Unable to load module from path '{}'",
+                        combined_path.display(),
+                    ),
                     path_span,
                 )),
         }

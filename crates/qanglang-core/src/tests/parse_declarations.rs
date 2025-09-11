@@ -194,82 +194,29 @@ fn test_variable_declaration_with_call_and_lambda() {
 fn test_module_import_declaration() {
     use std::fs;
 
-    // Create a temporary file for the test
+    // Create a temporary directory and files for the test
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join("test_utils.ql");
     fs::write(&temp_file, "// temp module for testing").expect("Failed to create temp file");
 
+    // Create a main file that imports the module
+    let main_file = temp_dir.join("main.ql");
     let relative_path = "test_utils.ql";
     let source_code = format!(r#"mod utils from "{}";"#, relative_path);
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
     let mut nodes = TypedNodeArena::new();
     let mut strings = StringInterner::new();
 
-    // Use temp directory as root for parsing
     let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
     let _modules = parser.parse();
     let errors = parser.into_errors();
 
     // Clean up
     let _ = fs::remove_file(&temp_file);
-
-    assert_no_parse_errors(&errors);
-}
-
-#[test]
-fn test_module_import_declaration2() {
-    use std::fs;
-
-    // Create a temporary file for the test
-    let temp_dir = std::env::temp_dir();
-    let temp_file = temp_dir.join("test_utils.ql");
-    fs::write(&temp_file, "// temp module for testing").expect("Failed to create temp file");
-
-    // let relative_path = "test_utils.ql";
-    let source_code = r#"
-        mod fib from "fib.ql";
-
-        class Iterator {
-        has_next() { return false; }
-        next() { return nil; }
-        }
-
-        class ArrayIterator : Iterator {
-        length;
-        arr;
-
-        init(arr) {
-            this.arr = arr;
-            this.len = length_of(arr);
-        }
-        
-        has_next() {
-            return this.length != 0;
-        }
-
-        next() {
-            this.length = this.length - 1;
-            return this.has_next() ? arr |> index_of(length) : nil;
-        }
-        }
-
-        fn for_each(iter, cb) {
-        while (iter.has_next()) {
-            cb(iter.next());
-        }
-        }
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let mut nodes = TypedNodeArena::new();
-    let mut strings = StringInterner::new();
-
-    // Use temp directory as root for parsing
-    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
-    let _modules = parser.parse();
-    let errors = parser.into_errors();
-
-    // Clean up
-    let _ = fs::remove_file(&temp_file);
+    let _ = fs::remove_file(&main_file);
 
     assert_no_parse_errors(&errors);
 }

@@ -34,14 +34,16 @@ impl RuntimeModule {
     }
 }
 
+pub type ModuleResolver = FxHashMap<StringHandle, RuntimeModule>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct QangProgram {
     function: FunctionHandle,
-    modules: FxHashMap<StringHandle, RuntimeModule>,
+    modules: ModuleResolver,
 }
 
 impl QangProgram {
-    pub fn new(handle: FunctionHandle, modules: FxHashMap<StringHandle, RuntimeModule>) -> Self {
+    pub fn new(handle: FunctionHandle, modules: ModuleResolver) -> Self {
         Self {
             function: handle,
             modules,

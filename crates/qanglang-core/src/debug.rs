@@ -180,6 +180,8 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
         }
         OpCode::JumpIfNil => jump_instruction("OP_JUMP_IF_NIL", 1, chunk, offset),
         OpCode::TailCall => byte_instruction("OP_TAIL_CALL", chunk, offset),
+        OpCode::Module => string_constant_instruction("OP_MODULE", chunk, allocator, offset),
+        OpCode::Module16 => string_constant_16_instruction("OP_MODULE", chunk, allocator, offset),
     }
 }
 

@@ -1105,6 +1105,8 @@ impl Vm {
                     }
                     push_value!(self, Value::ObjectLiteral(handle))?;
                 }
+                OpCode::Module => (),
+                OpCode::Module16 => (),
                 OpCode::Return => {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;

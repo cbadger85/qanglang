@@ -18,8 +18,8 @@ enum Entry<T> {
 /// An index (and generation) into an `Arena`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Index {
-    index: u32,
-    generation: u32,
+    pub(crate) index: u32,
+    pub(crate) generation: u32,
 }
 
 impl Index {

@@ -581,6 +581,15 @@ impl HeapAllocator {
                         gray_list.push_back(value);
                     }
                 }
+                Value::Module(handle) => {
+                    debug_log!(self.is_debug, "Marking module: {:?}", handle);
+                    self.tables.mark_hashmap(handle);
+                    debug_log!(self.is_debug, "Blackening module: {:?}", handle);
+                    for (key, value) in self.tables.iter(handle) {
+                        gray_list.push_back(key);
+                        gray_list.push_back(value);
+                    }
+                }
                 _ => (),
             }
         }

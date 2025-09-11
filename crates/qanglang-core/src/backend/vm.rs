@@ -22,7 +22,8 @@ use crate::{
         },
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-            NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+            MODULE_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING,
+            STRING_TYPE_STRING,
         },
     },
     debug_log,
@@ -73,6 +74,7 @@ pub enum Keyword {
     Init,
     Call,
     Apply,
+    Module,
 }
 
 #[macro_export]
@@ -323,6 +325,12 @@ impl Vm {
         globals.insert(
             alloc.strings.intern("ARRAY"),
             Value::String(array_type_value_handle),
+        );
+        let module_type_value_handle = alloc.strings.intern(MODULE_TYPE_STRING);
+        keywords.insert(Keyword::Module, module_type_value_handle);
+        globals.insert(
+            alloc.strings.intern("MODULE"),
+            Value::String(module_type_value_handle),
         );
 
         let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);

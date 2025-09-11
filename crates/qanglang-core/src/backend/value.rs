@@ -1,6 +1,7 @@
 use crate::{
     BoundMethodHandle, ClassHandle, HashMapHandle, HeapAllocator, InstanceHandle,
     NativeFunctionHandle,
+    arena::Index,
     memory::{ArrayHandle, ClosureHandle, FunctionHandle, StringHandle},
 };
 
@@ -13,6 +14,7 @@ pub const FUNCTION_TYPE_STRING: &str = "function";
 pub const CLASS_TYPE_STRING: &str = "class";
 pub const OBJECT_TYPE_STRING: &str = "object";
 pub const ARRAY_TYPE_STRING: &str = "array";
+pub const MODULE_TYPE_STRING: &str = "module";
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]
@@ -31,6 +33,7 @@ pub enum Value {
     BoundIntrinsic(BoundMethodHandle),
     Array(ArrayHandle),
     ObjectLiteral(HashMapHandle),
+    Module(HashMapHandle),
 }
 
 impl Value {
@@ -110,6 +113,9 @@ impl Value {
                 string.push_str("}}");
                 string
             }
+            Value::Module(handle) => {
+                format!("module#{}", handle)
+            }
         }
     }
 
@@ -129,6 +135,7 @@ impl Value {
             Value::BoundIntrinsic(_) => FUNCTION_TYPE_STRING,
             Value::Array(_) => ARRAY_TYPE_STRING,
             Value::ObjectLiteral(_) => OBJECT_TYPE_STRING,
+            Value::Module(_) => MODULE_TYPE_STRING,
         }
     }
 
@@ -153,9 +160,16 @@ impl Value {
             Value::BoundIntrinsic(handle) => handle.hash(&mut hasher),
             Value::Array(handle) => handle.hash(&mut hasher),
             Value::ObjectLiteral(handle) => handle.hash(&mut hasher),
+            Value::Module(handle) => handle.hash(&mut hasher),
             Value::Nil | Value::True | Value::False => (),
         }
         hasher.finish()
+    }
+}
+
+impl std::fmt::Display for Index {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.index)
     }
 }
 

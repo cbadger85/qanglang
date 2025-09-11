@@ -4,7 +4,8 @@ use crate::{
         compiler::STACK_MAX,
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
-            NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING, STRING_TYPE_STRING,
+            MODULE_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING,
+            STRING_TYPE_STRING,
         },
         vm::RuntimeResult,
     },
@@ -400,6 +401,8 @@ impl Vm {
         self.alloc.strings.intern(OBJECT_TYPE_STRING);
         self.alloc.strings.intern("ARRAY");
         self.alloc.strings.intern(ARRAY_TYPE_STRING);
+        self.alloc.strings.intern(MODULE_TYPE_STRING);
+        self.alloc.strings.intern("MODULE");
     }
 
     pub(crate) fn handle_function_intrinsic_call(

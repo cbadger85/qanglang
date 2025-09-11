@@ -1,8 +1,9 @@
-use std::sync::Arc;
-
 use crate::{
-    ErrorMessageFormat, ErrorReporter, NodeId, QangPipelineError, SourceMap, TypedNodeArena,
-    frontend::scope_analysis::{ScopeAnalysis, ScopeAnalyzer},
+    ErrorMessageFormat, ErrorReporter, QangPipelineError, TypedNodeArena,
+    frontend::{
+        scope_analysis::{ScopeAnalysis, ScopeAnalyzer},
+        source::ModuleMap,
+    },
     memory::StringInterner,
 };
 
@@ -52,13 +53,18 @@ impl<'a> AnalysisPipeline<'a> {
 
     pub fn analyze(
         self,
-        program: NodeId,
-        source_map: Arc<SourceMap>,
+        modules: &ModuleMap,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<AnalysisResults, QangPipelineError> {
         let scope_analyzer = ScopeAnalyzer::new(self.strings);
-        let scope_analysis = scope_analyzer.analyze(program, nodes, errors);
+        let mut scope_analysis = scope_analyzer.analyze(modules.get_main().node, nodes, errors);
+
+        for (_, module) in modules.iter() {
+            let scope_analyzer = ScopeAnalyzer::new(self.strings);
+            scope_analysis =
+                scope_analysis.merge_with(scope_analyzer.analyze(module.node, nodes, errors));
+        }
 
         let result = AnalysisResults::new(scope_analysis);
 
@@ -69,8 +75,12 @@ impl<'a> AnalysisPipeline<'a> {
                 .into_iter()
                 .map(|error| match self.config.error_message_format {
                     ErrorMessageFormat::Minimal => error,
-                    ErrorMessageFormat::Compact => error.into_short_formatted(&source_map),
-                    ErrorMessageFormat::Verbose => error.into_formatted(&source_map),
+                    ErrorMessageFormat::Compact => {
+                        error.into_short_formatted(&modules.get_main().source_map)
+                    }
+                    ErrorMessageFormat::Verbose => {
+                        error.into_formatted(&modules.get_main().source_map)
+                    }
                 })
                 .collect();
 

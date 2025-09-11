@@ -96,12 +96,7 @@ impl CompilerPipeline {
 
         let result = AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())
-            .analyze(
-                modules.get_main().node,
-                modules.get_main().source_map.clone(),
-                &mut nodes,
-                &mut errors,
-            )?;
+            .analyze(&modules, &mut nodes, &mut errors)?;
 
         let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc, &result);
         let main_function = assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;

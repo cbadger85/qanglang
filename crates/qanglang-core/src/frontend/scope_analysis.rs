@@ -112,6 +112,10 @@ impl ScopeAnalysis {
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
+
+    pub fn merge_with(mut self, other: Self) -> Self {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone)]

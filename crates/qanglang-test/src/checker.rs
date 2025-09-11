@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use qanglang_core::{
-    AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, Parser, SourceMap,
+    AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, Parser, ParserConfig, SourceMap,
     StringInterner, TypedNodeArena,
 };
 
@@ -67,7 +67,8 @@ pub fn check_single_file(
     let source_map = Arc::new(source_map);
     let mut nodes = TypedNodeArena::new();
     let mut strings = StringInterner::new();
-    let mut parser = Parser::new(source_map.clone(), &mut nodes, &mut strings);
+    let mut parser = Parser::new(source_map, &mut nodes, &mut strings)
+        .with_config(ParserConfig { skip_modules: true });
     let modules = parser.parse();
 
     let mut errors = parser.into_errors();
@@ -77,7 +78,7 @@ pub fn check_single_file(
     });
 
     // Try to compile the file
-    match analyzer.analyze(modules.get_main().node, source_map, &mut nodes, &mut errors) {
+    match analyzer.analyze(&modules, &mut nodes, &mut errors) {
         Ok(_) => CheckResult::success(source_file.display_path),
         Err(compilation_errors) => {
             let error_messages: Vec<String> = compilation_errors

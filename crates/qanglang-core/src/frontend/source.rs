@@ -198,4 +198,8 @@ impl ModuleMap {
     pub fn into_iter(self) -> impl Iterator<Item = (PathBuf, ModuleSource)> {
         self.modules.into_iter()
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
+        self.modules.iter().map(|(k, v)| (k.as_path(), v))
+    }
 }

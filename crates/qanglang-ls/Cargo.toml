@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 qanglang-core = { path = "../qanglang-core" }
-qanglang-config = { path = "../qanglang-config" }
 serde = { workspace = true }
 serde_json = "1.0.78"
 tokio = { version = "1.17.0", features = ["rt", "rt-multi-thread", "io-std", "macros"] }

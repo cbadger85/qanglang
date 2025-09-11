@@ -1,27 +1,45 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use crate::{NodeId, StringHandle};
+use crate::NodeId;
 
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
-    pub name: String,
     source: Vec<char>,
     line_indices: Vec<usize>,
+    path: PathBuf,
 }
 
 impl SourceMap {
     pub fn new(source: String) -> Self {
-        Self::new_with_name("(script)", source)
+        let (chars, line_indices) = Self::load_source(source);
+
+        Self {
+            path: PathBuf::new(),
+            source: chars,
+            line_indices,
+        }
     }
 
-    pub fn from_path(name: &str, path: PathBuf) -> std::io::Result<Self> {
+    pub fn from_path(path: &Path) -> std::io::Result<Self> {
         let source = std::fs::read_to_string(path)?;
-        Ok(Self::new_with_name(&name, source))
+        let (chars, line_indices) = Self::load_source(source);
+        Ok(Self {
+            path: path.to_path_buf(),
+            line_indices,
+            source: chars,
+        })
     }
 
-    pub fn new_with_name(name: &str, source: String) -> Self {
+    pub fn set_path(&mut self, path: PathBuf) {
+        self.path = path;
+    }
+
+    fn load_source(source: String) -> (Vec<char>, Vec<usize>) {
         let chars: Vec<char> = source.chars().collect();
         let mut line_indices = Vec::new();
         let mut in_string = false;
@@ -51,11 +69,11 @@ impl SourceMap {
             i += 1;
         }
 
-        Self {
-            name: name.to_string(),
-            source: chars,
-            line_indices,
-        }
+        (chars, line_indices)
+    }
+
+    pub fn get_path(&self) -> &Path {
+        self.path.as_path()
     }
 
     /// Returns the source code as a vector of characters.
@@ -133,48 +151,41 @@ impl SourceMap {
 }
 
 pub struct ModuleSource {
-    pub module_id: NodeId,
+    pub node: NodeId,
     pub source_map: Arc<SourceMap>,
 }
 
 pub struct ModuleMap {
-    modules: FxHashMap<StringHandle, ModuleSource>,
-    main_name: StringHandle,
+    modules: FxHashMap<PathBuf, ModuleSource>,
+    main: ModuleSource,
 }
 
 impl ModuleMap {
-    pub fn new(main_name: StringHandle, main_id: NodeId, source_map: Arc<SourceMap>) -> Self {
-        let mut modules = FxHashMap::with_hasher(FxBuildHasher);
-        modules.insert(
-            main_name,
-            ModuleSource {
-                module_id: main_id,
+    pub fn new(main_id: NodeId, source_map: Arc<SourceMap>) -> Self {
+        Self {
+            main: ModuleSource {
+                node: main_id,
                 source_map,
             },
-        );
-
-        Self { main_name, modules }
+            modules: FxHashMap::with_hasher(FxBuildHasher),
+        }
     }
 
     pub fn get_main(&self) -> &ModuleSource {
-        &self.modules[&self.main_name]
+        &self.main
     }
 
-    pub fn get(&self, name: StringHandle) -> &ModuleSource {
-        &self.modules[&name]
+    pub fn get(&self, path: &Path) -> &ModuleSource {
+        &self.modules[path]
     }
 
-    pub fn insert(&mut self, name: StringHandle, module_id: NodeId, source_map: Arc<SourceMap>) {
-        let _ = self.modules.insert(
-            name,
-            ModuleSource {
-                module_id,
-                source_map,
-            },
-        );
+    pub fn insert(&mut self, path: &Path, node: NodeId, source_map: Arc<SourceMap>) {
+        let _ = self
+            .modules
+            .insert(path.to_path_buf(), ModuleSource { node, source_map });
     }
 
-    pub fn has(&self, name: StringHandle) -> bool {
-        self.modules.contains_key(&name)
+    pub fn has(&self, path: &Path) -> bool {
+        self.modules.contains_key(path)
     }
 }

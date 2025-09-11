@@ -206,7 +206,7 @@ fn test_module_import_declaration() {
     let mut strings = StringInterner::new();
 
     // Use temp directory as root for parsing
-    let mut parser = crate::Parser::new(source_map, temp_dir.as_path(), &mut nodes, &mut strings);
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
     let _modules = parser.parse();
     let errors = parser.into_errors();
 
@@ -264,7 +264,7 @@ fn test_module_import_declaration2() {
     let mut strings = StringInterner::new();
 
     // Use temp directory as root for parsing
-    let mut parser = crate::Parser::new(source_map, temp_dir.as_path(), &mut nodes, &mut strings);
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
     let _modules = parser.parse();
     let errors = parser.into_errors();
 

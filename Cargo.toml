@@ -4,8 +4,7 @@ members = [
     "crates/qanglang-core",
     "crates/qanglang-cli",
     "crates/qanglang-ls",
-    "crates/qanglang-test",
-    "crates/qanglang-config"
+    "crates/qanglang-test"
 ]
 
 [workspace.dependencies]

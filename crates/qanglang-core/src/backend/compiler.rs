@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
@@ -78,11 +78,10 @@ impl CompilerPipeline {
     pub fn compile(
         &self,
         source_map: SourceMap,
-        root: &Path,
         alloc: &mut HeapAllocator,
     ) -> Result<QangProgram, QangPipelineError> {
         let mut nodes = TypedNodeArena::new();
-        let mut parser = Parser::new(Arc::new(source_map), root, &mut nodes, &mut alloc.strings);
+        let mut parser = Parser::new(Arc::new(source_map), &mut nodes, &mut alloc.strings);
         let modules = parser.parse();
 
         let mut errors = parser.into_errors();
@@ -90,15 +89,14 @@ impl CompilerPipeline {
         let result = AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())
             .analyze(
-                modules.get_main().module_id,
+                modules.get_main().node,
                 modules.get_main().source_map.clone(),
                 &mut nodes,
                 &mut errors,
             )?;
 
         let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc, &result);
-        let main_function =
-            assembler.assemble(modules.get_main().module_id, &mut nodes, &mut errors)?;
+        let main_function = assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
 
         Ok(QangProgram::new(alloc.allocate_function(main_function)))
     }
@@ -126,7 +124,7 @@ impl<'a> Assembler<'a> {
         allocator: &'a mut HeapAllocator,
         analysis: &'a AnalysisResults,
     ) -> Self {
-        let handle = allocator.strings.intern(&source_map.name);
+        let handle = allocator.strings.intern("");
         Self {
             source_map,
             allocator,

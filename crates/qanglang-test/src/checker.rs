@@ -1,4 +1,4 @@
-use std::{fs, sync::Arc};
+use std::sync::Arc;
 
 use qanglang_core::{
     AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, Parser, SourceMap,
@@ -53,24 +53,21 @@ pub fn check_single_file(
     source_file: SourceFile,
     error_message_format: ErrorMessageFormat,
 ) -> CheckResult {
-    // Read the source file
-    let source = match fs::read_to_string(&source_file.file_path) {
+    let source_map = match SourceMap::from_path(&source_file.file_path) {
         Ok(content) => content,
         Err(err) => {
-            let error = format!("Error reading file: {}", err);
-            return CheckResult::failure(source_file.display_path, vec![error]);
+            eprintln!(
+                "Error reading file '{}': {}",
+                source_file.file_path.display(),
+                err
+            );
+            std::process::exit(1);
         }
     };
-
-    let source_map = Arc::new(SourceMap::new(source));
+    let source_map = Arc::new(source_map);
     let mut nodes = TypedNodeArena::new();
     let mut strings = StringInterner::new();
-    let mut parser = Parser::new(
-        source_map.clone(),
-        source_file.file_path.parent().unwrap(),
-        &mut nodes,
-        &mut strings,
-    );
+    let mut parser = Parser::new(source_map.clone(), &mut nodes, &mut strings);
     let modules = parser.parse();
 
     let mut errors = parser.into_errors();
@@ -80,12 +77,7 @@ pub fn check_single_file(
     });
 
     // Try to compile the file
-    match analyzer.analyze(
-        modules.get_main().module_id,
-        source_map,
-        &mut nodes,
-        &mut errors,
-    ) {
+    match analyzer.analyze(modules.get_main().node, source_map, &mut nodes, &mut errors) {
         Ok(_) => CheckResult::success(source_file.display_path),
         Err(compilation_errors) => {
             let error_messages: Vec<String> = compilation_errors

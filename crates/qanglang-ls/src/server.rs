@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use qanglang_config::{QangConfig, find_config_path};
 use qanglang_core::SourceMap;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
@@ -155,22 +154,20 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn on_change(&self, document: TextDocumentItem) {
-        info!("=== Starting analysis for: {} ===", document.uri);
-
-        let source_map = Arc::new(SourceMap::new(document.text));
-        let mut diagnostics = Vec::new();
-
         let document_filepath = match document.uri.to_file_path() {
             Ok(path) => path,
             Err(_) => {
                 return;
             }
         };
-        let path = find_config_path(document_filepath.clone());
-        let root = path
-            .map(|p| QangConfig::resolve(p.as_path()).root)
-            .unwrap_or(QangConfig::new(&document_filepath.as_path()).root);
-        let errors = match analyze(source_map.clone(), root.as_path()) {
+        info!("=== Starting analysis for: {} ===", document.uri);
+
+        let mut source_map = SourceMap::new(document.text);
+        source_map.set_path(document_filepath);
+        let source_map = Arc::new(source_map);
+        let mut diagnostics = Vec::new();
+
+        let errors = match analyze(source_map.clone()) {
             Ok(_) => {
                 info!("✅ Analysis succeeded - no errors found");
                 Vec::new()

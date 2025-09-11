@@ -6,10 +6,7 @@ use qanglang_core::{
 };
 use qanglang_ls::run_language_server;
 use repl::run_repl;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use clap::{ArgAction, Parser, Subcommand};
 
@@ -167,33 +164,24 @@ fn main() {
     }
 }
 
-fn resolve_filename_to_path(filename: &str) -> PathBuf {
-    let path = Path::new(filename);
-
-    if path.is_absolute() {
-        path.parent()
-            .expect("Expected file to be in a directory.")
-            .to_path_buf()
-    } else {
-        let current_dir = std::env::current_dir().expect("Unable to get cwd.");
-        current_dir
-            .join(path)
-            .parent()
-            .expect("Expected file to be in a directory.")
-            .to_path_buf()
-    }
-}
-
 fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &str) {
-    let source = match fs::read_to_string(filename) {
+    let path = PathBuf::from(filename);
+
+    let path = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .expect("Expect to be ran from a directory")
+            .join(path)
+    };
+
+    let source_map = match SourceMap::from_path(path.as_path()) {
         Ok(content) => content,
         Err(err) => {
             eprintln!("Error reading file '{}': {}", filename, err);
             std::process::exit(1);
         }
     };
-
-    let source_map = SourceMap::new(source.to_string());
     let mut allocator = HeapAllocator::new();
 
     let error_message_format = match error_format.to_lowercase().as_str() {
@@ -213,11 +201,8 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         .with_config(CompilerConfig {
             error_message_format,
         })
-        .compile(
-            source_map,
-            &resolve_filename_to_path(filename),
-            &mut allocator,
-        ) {
+        .compile(source_map, &mut allocator)
+    {
         Ok(program) => {
             if heap_dump {
                 disassemble_program(&allocator);

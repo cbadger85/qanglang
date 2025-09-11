@@ -26,14 +26,12 @@ pub struct Parser<'a> {
     errors: ErrorReporter,
     strings: &'a mut StringInterner,
     nodes: &'a mut TypedNodeArena,
-    module_queue: VecDeque<Arc<SourceMap>>,
-    root: PathBuf,
+    module_queue: VecDeque<PathBuf>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(
         source_map: Arc<SourceMap>,
-        root: &Path,
         nodes: &'a mut TypedNodeArena,
         strings: &'a mut StringInterner,
     ) -> Self {
@@ -47,7 +45,6 @@ impl<'a> Parser<'a> {
             nodes,
             strings,
             module_queue: VecDeque::new(),
-            root: root.to_path_buf(),
         };
 
         parser.advance();
@@ -58,7 +55,7 @@ impl<'a> Parser<'a> {
         self.errors
     }
 
-    fn into_parts(self) -> (ErrorReporter, VecDeque<Arc<SourceMap>>) {
+    fn into_parts(self) -> (ErrorReporter, VecDeque<PathBuf>) {
         (self.errors, self.module_queue)
     }
 
@@ -327,29 +324,35 @@ impl<'a> Parser<'a> {
 
     pub fn parse(&mut self) -> ModuleMap {
         let main_id = self.parse_file();
-        let main_name = self.strings.intern(&self.source_map.name);
-        let mut modules = ModuleMap::new(main_name, main_id, self.source_map.clone());
+        let mut modules = ModuleMap::new(main_id, self.source_map.clone());
 
-        while let Some(source_map) = self.module_queue.pop_front() {
-            let module_name = self.strings.intern(&source_map.name);
-
-            if modules.has(module_name) {
+        while let Some(module_path) = self.module_queue.pop_front() {
+            if modules.has(&module_path) {
                 continue;
             }
 
-            let mut module_parser = Parser::new(
-                source_map.clone(),
-                &self.root.as_path(),
-                self.nodes,
-                self.strings,
-            );
+            let source_map = match SourceMap::from_path(&module_path) {
+                Ok(source_map) => source_map,
+                Err(err) => {
+                    self.errors
+                        .report_error(QangCompilerError::new_analysis_error(
+                            format!("Error loading module '{}': {}", module_path.display(), err),
+                            SourceSpan::default(),
+                        ));
+                    continue;
+                }
+            };
+
+            let source_map = Arc::new(source_map);
+
+            let mut module_parser = Parser::new(source_map.clone(), self.nodes, self.strings);
 
             let module_id = module_parser.parse_file();
 
             let (errors, queue) = module_parser.into_parts();
             self.errors.merge(errors);
 
-            modules.insert(module_name, module_id, source_map);
+            modules.insert(module_path.as_path(), module_id, source_map);
 
             self.module_queue.extend(queue);
         }
@@ -425,20 +428,39 @@ impl<'a> Parser<'a> {
         let value = token.lexeme(&self.source_map);
         let path_as_string = value[1..value.len() - 1].iter().collect::<String>();
 
-        let combined_path = self.root.join(Path::new(&path_as_string));
-        // TODO remove this clone
-        match SourceMap::from_path(&path_as_string, combined_path.clone()) {
-            Ok(source_map) => self.module_queue.push_back(Arc::new(source_map)),
-            Err(_) => self
-                .errors
-                .report_error(QangCompilerError::new_syntax_error(
-                    format!(
-                        "Unable to load module from path '{}'",
-                        combined_path.display(),
-                    ),
-                    path_span,
-                )),
+        let current_dir = self
+            .source_map
+            .get_path()
+            .parent()
+            .expect("Expected path to be file and to be within a dir");
+        let combined_path = current_dir.join(Path::new(&path_as_string));
+
+        match std::fs::exists(combined_path.as_path()) {
+            Ok(exists) => {
+                if !exists {
+                    self.errors
+                        .report_error(QangCompilerError::new_syntax_error(
+                            format!(
+                                "module at path '{}' does not exist.",
+                                combined_path.as_path().display(),
+                            ),
+                            path_span,
+                        ));
+                }
+            }
+            Err(_) => {
+                self.errors
+                    .report_error(QangCompilerError::new_syntax_error(
+                        format!(
+                            "Unable to load module from path '{}'",
+                            combined_path.as_path().display(),
+                        ),
+                        path_span,
+                    ));
+            }
         }
+
+        self.module_queue.push_back(combined_path);
 
         let path = self.strings.intern(&path_as_string);
         self.consume(TokenType::Semicolon, "Expected semicolon.")?;

@@ -1,3 +1,5 @@
+mod fib from "./fib.ql";
+
 class Iterator {
   has_next() { return false; }
   next() { return nil; }

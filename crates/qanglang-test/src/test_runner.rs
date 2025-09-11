@@ -1,5 +1,3 @@
-use std::fs;
-
 use qanglang_core::{
     ClosureHandle, CompilerPipeline, HeapAllocator, SourceMap, StringHandle, Value, Vm,
 };
@@ -92,27 +90,21 @@ pub fn run_tests_from_files(
 /// Runs a single test file and returns the results. Allows an optional lambda to be used to modify the runtime,
 pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -> TestSuiteResult {
     // Read the test file
-    let source = match fs::read_to_string(&source_file.file_path) {
+    let source_map = match SourceMap::from_path(&source_file.file_path) {
         Ok(content) => content,
         Err(err) => {
-            let error = format!(
+            eprintln!(
                 "Error reading file '{}': {}",
                 source_file.file_path.display(),
                 err
             );
-            return TestSuiteResult::failure(source_file.display_path, error);
+            std::process::exit(1);
         }
     };
-
-    let source_map = SourceMap::new(source);
     let mut allocator = HeapAllocator::new();
 
     // Compile the test file
-    let program = match CompilerPipeline::new().compile(
-        source_map,
-        source_file.file_path.as_path(),
-        &mut allocator,
-    ) {
+    let program = match CompilerPipeline::new().compile(source_map, &mut allocator) {
         Ok(program) => program,
         Err(errors) => {
             let error_messages: Vec<String> = errors

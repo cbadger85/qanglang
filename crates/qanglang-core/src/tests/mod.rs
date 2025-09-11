@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 pub mod alloc_tests;
 pub mod compound_assignment_tests;
@@ -18,16 +18,10 @@ pub fn parse_source(
     mut nodes: crate::TypedNodeArena,
     mut strings: crate::memory::StringInterner,
 ) -> (crate::NodeId, crate::ErrorReporter) {
-    // TODO maybe fix this so we don't need to clone it
-    let mut parser = crate::Parser::new(
-        source_map,
-        PathBuf::new().as_path(),
-        &mut nodes,
-        &mut strings,
-    );
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
     let modules = parser.parse();
     let errors = parser.into_errors();
-    (modules.get_main().module_id, errors)
+    (modules.get_main().node, errors)
 }
 
 pub fn assert_no_parse_errors(errors: &crate::ErrorReporter) {

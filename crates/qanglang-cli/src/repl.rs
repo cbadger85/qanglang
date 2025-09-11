@@ -1,7 +1,7 @@
 use qanglang_core::{CompilerPipeline, HeapAllocator, SourceMap, Vm};
 use std::{
-    env,
     io::{self, Write},
+    path::Path,
 };
 
 pub fn run_repl(debug: bool) {
@@ -34,19 +34,22 @@ pub fn run_repl(debug: bool) {
 }
 
 pub fn execute_repl_line(source: &str, vm: &mut Vm) {
-    let source_map = SourceMap::new(source.to_string());
+    let mut source_map = SourceMap::new(source.to_string());
+    source_map.set_path(
+        std::env::current_dir()
+            .expect("Expect to be ran from a dir.")
+            .join(Path::new("./main.ql")),
+    );
 
-    let current_dir = env::current_dir().expect("Unable to get cwd.");
-    let program =
-        match CompilerPipeline::new().compile(source_map, current_dir.as_path(), &mut vm.alloc) {
-            Ok(program) => program,
-            Err(errors) => {
-                for error in errors.all() {
-                    eprintln!("Compile error: {}", error.message);
-                }
-                return;
+    let program = match CompilerPipeline::new().compile(source_map, &mut vm.alloc) {
+        Ok(program) => program,
+        Err(errors) => {
+            for error in errors.all() {
+                eprintln!("Compile error: {}", error.message);
             }
-        };
+            return;
+        }
+    };
 
     match vm.interpret(program) {
         Ok(_) => (),

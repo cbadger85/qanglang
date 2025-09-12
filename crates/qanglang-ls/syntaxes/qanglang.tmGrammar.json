@@ -78,7 +78,7 @@
         },
         {
           "name": "keyword.other.import",
-          "match": "\\bfrom\\b"
+          "match": "\\bimport\\b"
         },
         {
           "name": "keyword.operator.logical",
@@ -443,7 +443,7 @@
       "patterns": [
         {
           "name": "meta.module.declaration.qanglang",
-          "match": "\\b(mod)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+(from)\\s+(\"[^\"]*\")",
+          "match": "\\b(mod)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)\\s*(import)\\s*\\(\\s*(\"[^\"]*\")\\s*\\)",
           "captures": {
             "1": {
               "name": "keyword.declaration.module.qanglang"
@@ -452,9 +452,12 @@
               "name": "entity.name.module.qanglang"
             },
             "3": {
-              "name": "keyword.other.import.qanglang"
+              "name": "keyword.operator.assignment.qanglang"
             },
             "4": {
+              "name": "support.function.import.qanglang"
+            },
+            "5": {
               "name": "string.quoted.double.module.path.qanglang"
             }
           }

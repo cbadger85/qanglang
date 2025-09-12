@@ -1,4 +1,4 @@
-mod math from "./math.ql";
+mod math = import("./math.ql");
 
 println(math.sum(1, 2));
 

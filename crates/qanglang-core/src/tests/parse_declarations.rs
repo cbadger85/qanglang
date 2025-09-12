@@ -202,7 +202,7 @@ fn test_module_import_declaration() {
     // Create a main file that imports the module
     let main_file = temp_dir.join("main.ql");
     let relative_path = "test_utils.ql";
-    let source_code = format!(r#"mod utils from "{}";"#, relative_path);
+    let source_code = format!(r#"mod utils = import("{}");"#, relative_path);
     fs::write(&main_file, &source_code).expect("Failed to create main file");
 
     // Use the main file path for the source map

@@ -434,7 +434,9 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::Identifier, "Expected module identifier.")?;
         let name = self.get_identifier()?;
 
-        self.consume(TokenType::From, "Expected import declaration.")?;
+        self.consume(TokenType::Equals, "Expected equals.")?;
+        self.consume(TokenType::Import, "Expected import declaration.")?;
+        self.consume(TokenType::LeftParen, "Expected open parentheses.")?;
         self.consume(TokenType::String, "Expected import path as string.")?;
 
         let token = self.previous_token.as_ref().unwrap();
@@ -480,6 +482,7 @@ impl<'a> Parser<'a> {
         let path = self.strings.intern(&combined_path_str);
         self.module_queue.push_back(combined_path);
 
+        self.consume(TokenType::RightParen, "Expected closing parentheses.")?;
         self.consume(TokenType::Semicolon, "Expected semicolon.")?;
         let span_end = self.get_previous_span();
 

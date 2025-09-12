@@ -66,7 +66,7 @@ pub enum TokenType {
     SlashAssign,        // /=
     ModuloAssign,       // /%
     Mod,                // mod
-    From,               // from,
+    Import,             // import,
     Error,              // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -97,7 +97,7 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "return" => TokenType::Return,
     "is" => TokenType::Is,
     "mod" => TokenType::Mod,
-    "from" => TokenType::From,
+    "import" => TokenType::Import,
 };
 
 #[derive(PartialEq, Clone, Debug)]

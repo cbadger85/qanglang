@@ -967,6 +967,59 @@ impl<'a> NodeVisitor for Assembler<'a> {
         Ok(())
     }
 
+    fn visit_import_module_declaration(
+        &mut self,
+        import_decl: TypedNodeRef<ImportModuleDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let identifier = ctx.nodes.get_identifier_node(import_decl.node.name);
+
+        // Emit module declaration
+        self.emit_constant_opcode(
+            OpCode::Module,
+            OpCode::Module16,
+            Value::String(import_decl.node.path),
+            import_decl.node.span,
+        )?;
+
+        // Use static analysis to determine how to define the variable
+        let var_info = self
+            .analysis
+            .scopes
+            .variables
+            .get(&identifier.id)
+            .ok_or_else(|| {
+                QangCompilerError::new_assembler_error(
+                    "Variable not found in analysis results".to_string(),
+                    identifier.node.span,
+                )
+            })?;
+
+        match &var_info.kind {
+            VariableKind::Global => {
+                self.emit_constant_opcode(
+                    OpCode::DefineGlobal,
+                    OpCode::DefineGlobal16,
+                    Value::String(identifier.node.name),
+                    import_decl.node.span,
+                )?;
+            }
+            VariableKind::Local { slot, .. } => {
+                // Emit OP_SET_LOCAL to store the value in the variable's slot
+                self.emit_opcode_and_byte(OpCode::SetLocal, *slot as u8, import_decl.node.span);
+            }
+            VariableKind::Upvalue { .. } => {
+                // This shouldn't happen for declarations
+                return Err(QangCompilerError::new_assembler_error(
+                    "Cannot declare upvalue variable".to_string(),
+                    import_decl.node.span,
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     fn visit_identifier(
         &mut self,
         identifier: TypedNodeRef<IdentifierNode>,

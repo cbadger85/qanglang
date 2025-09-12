@@ -312,8 +312,9 @@ impl<'a> ScopeAnalyzer<'a> {
         identifier: crate::frontend::typed_node_arena::TypedNodeRef<
             crate::frontend::nodes::IdentifierNode,
         >,
-    ) -> Result<Option<usize>, QangCompilerError> {
-        self.declare_variable_with_init(identifier, true) // Default to initialized
+    ) -> Result<(), QangCompilerError> {
+        self.declare_variable_with_init(identifier, true)?; // Default to initialized
+        Ok(())
     }
 
     fn declare_variable_with_init(
@@ -790,6 +791,18 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             function.mark_initialized(local_idx);
         }
 
+        Ok(())
+    }
+
+    fn visit_import_module_declaration(
+        &mut self,
+        import_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ImportModuleDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let identifier = ctx.nodes.get_identifier_node(import_decl.node.name);
+        if let Err(error) = self.declare_variable(identifier) {
+            ctx.errors.report_error(error);
+        }
         Ok(())
     }
 

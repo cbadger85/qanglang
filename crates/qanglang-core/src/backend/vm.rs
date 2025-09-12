@@ -1229,7 +1229,6 @@ impl Vm {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
 
-                    // Check if we need to restore module context
                     let previous_module_target =
                         self.state.frames[self.state.frame_count - 1].previous_module_target;
 
@@ -1239,23 +1238,22 @@ impl Vm {
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    if let Some(previous_target) = previous_module_target {
-                        // We're returning from a module call - push the module instance onto the stack
+                    let is_module_return = previous_module_target.is_some()
+                        || (previous_module_target.is_none()
+                            && self.state.module_export_target.is_some());
+
+                    if is_module_return {
                         let module_instance = self
                             .state
                             .module_export_target
                             .expect("Module should have export target");
-                        self.state.stack[value_slot] = Value::Module(module_instance);
 
-                        // Restore the previous module context
-                        self.state.module_export_target = Some(previous_target);
+                        self.state.stack[self.state.stack_top - 1] = Value::Module(module_instance);
+
+                        self.state.module_export_target = previous_module_target;
                     } else {
-                        // Regular function return - use the actual return value
                         self.state.stack[value_slot] = result;
-                        self.state.module_export_target = None;
                     }
-                    // If previous_module_target is None and wasn't set, leave module_export_target unchanged
-                    // (handles regular function calls within modules)
 
                     if self.state.frame_count == 0 {
                         return Ok(result);
@@ -1266,54 +1264,47 @@ impl Vm {
                     let previous_function = self.alloc.get_function(previous_closure.function);
                     self.state.current_function_ptr = previous_function as *const FunctionObject;
 
-                    self.state.stack_top = value_slot + 1;
-                    self.state.stack[value_slot] = result;
+                    if !is_module_return {
+                        self.state.stack_top = value_slot + 1;
+                        self.state.stack[value_slot] = result;
+                    }
                 }
             };
         }
     }
 
     fn load_module(&mut self, module_path: StringHandle) -> RuntimeResult<()> {
-        // Check if module is already instantiated
         if let Some(instance_handle) = self.state.modules.get_instance_handle(module_path) {
             push_value!(self, Value::Module(instance_handle))?;
             return Ok(());
         }
 
-        // Get the compiled module function
         let module_function = self
             .state
             .modules
             .get_module_handle(module_path, self.state.get_previous_loc())?;
 
-        // Create the final module instance
         let module_instance = self.alloc.tables.new_hashmap();
 
-        // Cache it immediately (prevents infinite recursion in circular imports)
         self.state
             .modules
             .add_instance(module_path, module_instance);
 
-        // Create closure for module execution
         let module_closure = self.with_gc_check(|alloc| {
             alloc
                 .closures
                 .allocate_closure(ClosureObject::new(module_function, 0))
         });
 
-        // Save current module context before calling
         let previous_module_target = self.state.module_export_target;
 
-        // Update current module context BEFORE calling
-        self.state.module_export_target = Some(module_instance);
-
-        // Set up the module call
-        push_value!(self, Value::Closure(module_closure))?;
-        self.call(module_closure, 0)?;
-
-        // Store the previous context in the call frame for restoration on return
         self.state.frames[self.state.frame_count - 1].previous_module_target =
             previous_module_target;
+
+        self.state.module_export_target = Some(module_instance);
+
+        push_value!(self, Value::Closure(module_closure))?;
+        self.call(module_closure, 0)?;
 
         Ok(())
     }
@@ -2030,7 +2021,7 @@ impl Vm {
                     push_value!(self, Value::Nil)?;
                 } else {
                     return Err(QangRuntimeError::new(
-                        format!("Cannot access properties from {}.", object.to_type_string()),
+                        format!("Cannot access property on {}.", object.to_type_string()),
                         self.state.get_previous_loc(),
                     ));
                 }
@@ -2071,7 +2062,7 @@ impl Vm {
                     push_value!(self, Value::Nil)?;
                 } else {
                     return Err(QangRuntimeError::new(
-                        format!("Cannot access properties from {}.", object.to_type_string()),
+                        format!("Cannot access property on {}", object.to_type_string()),
                         self.state.get_previous_loc(),
                     ));
                 }
@@ -2104,7 +2095,7 @@ impl Vm {
             }
             _ => {
                 return Err(QangRuntimeError::new(
-                    format!("Cannot access properties on {}.", instance.to_type_string()),
+                    format!("Cannot set property on {}.", instance.to_type_string()),
                     self.state.get_previous_loc(),
                 ));
             }

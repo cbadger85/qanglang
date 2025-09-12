@@ -1526,9 +1526,9 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            Value::ObjectLiteral(obj_handle) => {
+            Value::ObjectLiteral(handle) | Value::Module(handle) => {
                 let key = Value::String(method_handle);
-                if let Some(method_value) = self.alloc.tables.get(obj_handle, &key) {
+                if let Some(method_value) = self.alloc.tables.get(handle, &key) {
                     self.state.stack[self.state.stack_top - arg_count - 1] = method_value;
                     self.call_value(method_value, arg_count)
                 } else {
@@ -1875,13 +1875,9 @@ impl Vm {
                     self.bind_method(instance.clazz, key)?;
                 }
             }
-            Value::ObjectLiteral(obj_handle) => {
+            Value::ObjectLiteral(handle) | Value::Module(handle) => {
                 let key = Value::String(identifier);
-                let value = self
-                    .alloc
-                    .tables
-                    .get(obj_handle, &key)
-                    .unwrap_or(Value::Nil);
+                let value = self.alloc.tables.get(handle, &key).unwrap_or(Value::Nil);
                 pop_value!(self);
                 push_value!(self, value)?;
             }

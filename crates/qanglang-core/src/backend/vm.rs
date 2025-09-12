@@ -13,6 +13,7 @@ use crate::{
     backend::{
         chunk::{OpCode, SourceLocation},
         compiler::{FRAME_MAX, STACK_MAX},
+        module_resolver::ModuleResolver,
         qang_std::{
             qang_array_concat, qang_array_construct, qang_array_get, qang_array_length,
             qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice, qang_assert,
@@ -161,6 +162,7 @@ pub(crate) struct VmState {
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
     keywords: FxHashMap<Keyword, StringHandle>,
+    modules: ModuleResolver,
 }
 
 impl VmState {
@@ -179,6 +181,7 @@ impl VmState {
             open_upvalues: Vec::with_capacity(8),
             current_function_ptr: std::ptr::null(),
             keywords,
+            modules: ModuleResolver::default(),
         }
     }
 
@@ -1985,24 +1988,25 @@ impl Vm {
         let capacity = self.state.stack_top
             + self.globals().len()
             + self.state.frame_count
-            + self.state.open_upvalues.len();
-        let mut closure_roots = VecDeque::with_capacity(capacity);
-        closure_roots.extend(&self.state.stack[..self.state.stack_top]);
-        closure_roots.extend(self.globals().values());
+            + self.state.open_upvalues.len()
+            + self.state.modules.count();
+        let mut roots = VecDeque::with_capacity(capacity);
+        roots.extend(&self.state.stack[..self.state.stack_top]);
+        roots.extend(self.globals().values());
 
         for frame in &self.state.frames[..self.state.frame_count] {
-            closure_roots.push_back(Value::Closure(frame.closure));
+            roots.push_back(Value::Closure(frame.closure));
         }
 
         for (_, upvalue_ref) in &self.state.open_upvalues {
             for (closure_handle, _) in upvalue_ref.iter() {
-                closure_roots.push_back(Value::Closure(closure_handle));
+                roots.push_back(Value::Closure(closure_handle));
             }
-
-            // Note: overflow closures are now handled by ClosureArena internally
         }
 
-        closure_roots
+        self.state.modules.gather_roots(&mut roots);
+
+        roots
     }
 
     pub fn collect_garbage(&mut self) {

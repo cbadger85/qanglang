@@ -239,7 +239,7 @@ fn test_calling_functions_from_native() {
 
             let function_handle = find_function_handle("identity", &mut vm);
 
-            match vm.call_function(function_handle, vec![Value::Number(42.0)]) {
+            match vm.call_function(function_handle, &vec![Value::Number(42.0)]) {
                 Ok(Value::Number(number)) => {
                     assert_eq!(number, 42.0);
                 }
@@ -252,7 +252,7 @@ fn test_calling_functions_from_native() {
 
             let foo = vm.alloc.strings.intern("foo".into());
 
-            match vm.call_function(function_handle, vec![Value::String(foo)]) {
+            match vm.call_function(function_handle, &vec![Value::String(foo)]) {
                 Ok(Value::String(handle)) => {
                     let string = vm.alloc.strings.get_string(handle);
                     assert_eq!("foo".to_string(), string.to_string());
@@ -264,7 +264,7 @@ fn test_calling_functions_from_native() {
                 _ => panic!("Unexpected type conversion."),
             }
 
-            match vm.call_function(function_handle, vec![]) {
+            match vm.call_function(function_handle, &vec![]) {
                 Ok(Value::Nil) => (),
                 Err(error) => {
                     println!("{}", error.message);

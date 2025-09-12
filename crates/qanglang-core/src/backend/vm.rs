@@ -149,6 +149,7 @@ struct CallFrame {
     closure: ClosureHandle,
     ip: usize,
     value_slot: usize,
+    previous_module_target: Option<HashMapHandle>,
 }
 
 #[derive(Clone)]
@@ -469,7 +470,8 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
-        let function_handle = program.into_handle();
+        let function_handle = program.get_handle();
+        self.state.modules = program.into_modules();
         let upvalue_count = self.alloc.get_function(function_handle).upvalue_count;
 
         let handle = self
@@ -1229,12 +1231,25 @@ impl Vm {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
 
-                    self.close_upvalue(value_slot);
+                    // Check if we need to restore module context
+                    let previous_module_target =
+                        self.state.frames[self.state.frame_count - 1].previous_module_target;
 
+                    self.close_upvalue(value_slot);
                     self.state.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
+
+                    // Restore module context if this was a module call
+                    if let Some(previous_target) = previous_module_target {
+                        self.state.module_export_target = Some(previous_target);
+                    } else if previous_module_target.is_some() {
+                        // This frame had module context tracking, so clear it
+                        self.state.module_export_target = None;
+                    }
+                    // If previous_module_target is None and wasn't set, leave module_export_target unchanged
+                    // (handles regular function calls within modules)
 
                     if self.state.frame_count == 0 {
                         return Ok(result);
@@ -1279,58 +1294,21 @@ impl Vm {
                 .allocate_closure(ClosureObject::new(module_function, 0))
         });
 
-        // Execute module with zero-allocation export redirection
-        self.execute_module_with_redirected_globals(module_closure, module_instance, module_path)?;
+        // Save current module context before calling
+        let previous_module_target = self.state.module_export_target;
+
+        // Set up the module call
+        push_value!(self, Value::Closure(module_closure))?;
+        self.call(module_closure, 0)?;
+
+        // Store the previous context in the call frame for restoration on return
+        self.state.frames[self.state.frame_count - 1].previous_module_target =
+            previous_module_target;
+
+        // Update current module context
+        self.state.module_export_target = Some(module_instance);
 
         Ok(module_instance)
-    }
-
-    fn execute_module_with_redirected_globals(
-        &mut self,
-        module_closure: ClosureHandle,
-        target_instance: HashMapHandle,
-        module_path: StringHandle,
-    ) -> RuntimeResult<()> {
-        // Save current VM state - NO new hashmap allocation!
-        let saved_stack_top = self.state.stack_top;
-        let saved_frame_count = self.state.frame_count;
-        let saved_function_ptr = self.state.current_function_ptr;
-        let saved_export_target = self.state.module_export_target;
-
-        // Redirect global operations to the module instance
-        self.state.module_export_target = Some(target_instance);
-
-        // Execute module - all DefineGlobal operations will write to module_export_target
-        let execution_result = {
-            push_value!(self, Value::Closure(module_closure))?;
-            self.call(module_closure, 0)?;
-            self.run()
-        };
-
-        // Handle execution result
-        let result = match execution_result {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                // Remove the failed module from cache
-                self.state.modules.remove_instance(module_path);
-
-                let module_path_str = self.alloc.strings.get_string(module_path);
-                let enhanced_error = QangRuntimeError::new(
-                    format!("Error in module '{}': {}", module_path_str, e.message),
-                    self.state.get_previous_loc(),
-                )
-                .with_stack_trace(e.stack_trace);
-                Err(enhanced_error)
-            }
-        };
-
-        // Always restore VM state
-        self.state.stack_top = saved_stack_top;
-        self.state.frame_count = saved_frame_count;
-        self.state.current_function_ptr = saved_function_ptr;
-        self.state.module_export_target = saved_export_target;
-
-        result
     }
 
     fn create_closure(&mut self, constant: Value) -> RuntimeResult<()> {
@@ -1872,11 +1850,7 @@ impl Vm {
         Ok(())
     }
 
-    pub fn call_function(
-        &mut self,
-        handle: ClosureHandle,
-        args: Vec<Value>,
-    ) -> RuntimeResult<Value> {
+    pub fn call_function(&mut self, handle: ClosureHandle, args: &[Value]) -> RuntimeResult<Value> {
         let saved_stack_top = self.state.stack_top;
         let saved_frame_count = self.state.frame_count;
         let saved_function_ptr = self.state.current_function_ptr;
@@ -1884,7 +1858,7 @@ impl Vm {
 
         push_value!(self, Value::Closure(handle))?;
 
-        for value in &args {
+        for value in args {
             push_value!(self, *value)?;
         }
 

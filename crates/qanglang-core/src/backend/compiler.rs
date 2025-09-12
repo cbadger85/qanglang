@@ -36,8 +36,12 @@ impl QangProgram {
         }
     }
 
-    pub fn into_handle(self) -> FunctionHandle {
+    pub fn get_handle(&self) -> FunctionHandle {
         self.function
+    }
+
+    pub fn into_modules(self) -> ModuleResolver {
+        self.modules
     }
 }
 

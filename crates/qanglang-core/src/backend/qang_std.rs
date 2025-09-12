@@ -68,7 +68,7 @@ pub fn qang_assert_throws(
         _ => return Err("First argument must be a function.".into()),
     };
 
-    let result = vm.call_function(function_handle, Vec::new());
+    let result = vm.call_function(function_handle, &[Value::Nil; 0]);
 
     match result {
         Ok(_) => {

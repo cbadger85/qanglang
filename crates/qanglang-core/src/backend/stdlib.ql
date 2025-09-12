@@ -124,3 +124,24 @@ fn iter_collect(iter) {
 
   return arr;
 }
+
+class Range : Iterator {
+  init(start, end) {
+    this.current = start;
+    this.end = end;
+  }
+
+  has_next() {
+    return this.current < this.end;
+  }
+
+  next() {
+    if (this.has_next()) {
+      var current = this.current;
+      this.current += 1;
+      return current;
+    }
+
+    return nil;
+  }
+}

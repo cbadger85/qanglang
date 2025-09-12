@@ -1219,13 +1219,11 @@ impl Vm {
                 }
                 OpCode::Module => {
                     let module_path = read_string!(self);
-                    let module_handle = self.load_module(module_path)?;
-                    push_value!(self, Value::Module(module_handle))?;
+                    self.load_module(module_path)?;
                 }
                 OpCode::Module16 => {
                     let module_path = read_string_16!(self);
-                    let module_handle = self.load_module(module_path)?;
-                    push_value!(self, Value::Module(module_handle))?;
+                    self.load_module(module_path)?;
                 }
                 OpCode::Return => {
                     let result = pop_value!(self);
@@ -1241,11 +1239,19 @@ impl Vm {
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    // Restore module context if this was a module call
                     if let Some(previous_target) = previous_module_target {
+                        // We're returning from a module call - push the module instance onto the stack
+                        let module_instance = self
+                            .state
+                            .module_export_target
+                            .expect("Module should have export target");
+                        self.state.stack[value_slot] = Value::Module(module_instance);
+
+                        // Restore the previous module context
                         self.state.module_export_target = Some(previous_target);
-                    } else if previous_module_target.is_some() {
-                        // This frame had module context tracking, so clear it
+                    } else {
+                        // Regular function return - use the actual return value
+                        self.state.stack[value_slot] = result;
                         self.state.module_export_target = None;
                     }
                     // If previous_module_target is None and wasn't set, leave module_export_target unchanged
@@ -1267,10 +1273,11 @@ impl Vm {
         }
     }
 
-    fn load_module(&mut self, module_path: StringHandle) -> RuntimeResult<HashMapHandle> {
+    fn load_module(&mut self, module_path: StringHandle) -> RuntimeResult<()> {
         // Check if module is already instantiated
         if let Some(instance_handle) = self.state.modules.get_instance_handle(module_path) {
-            return Ok(instance_handle);
+            push_value!(self, Value::Module(instance_handle))?;
+            return Ok(());
         }
 
         // Get the compiled module function
@@ -1297,6 +1304,9 @@ impl Vm {
         // Save current module context before calling
         let previous_module_target = self.state.module_export_target;
 
+        // Update current module context BEFORE calling
+        self.state.module_export_target = Some(module_instance);
+
         // Set up the module call
         push_value!(self, Value::Closure(module_closure))?;
         self.call(module_closure, 0)?;
@@ -1305,10 +1315,7 @@ impl Vm {
         self.state.frames[self.state.frame_count - 1].previous_module_target =
             previous_module_target;
 
-        // Update current module context
-        self.state.module_export_target = Some(module_instance);
-
-        Ok(module_instance)
+        Ok(())
     }
 
     fn create_closure(&mut self, constant: Value) -> RuntimeResult<()> {

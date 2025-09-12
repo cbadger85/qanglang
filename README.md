@@ -77,7 +77,7 @@ An embedded scripting language written in Rust 🦀
     <tr>
       <td>moduleDecl</td>
       <td>=</td>
-      <td>"mod" IDENTIFIER "from" STRING ";"</td>
+      <td>"mod" IDENTIFIER "=" "import" "(" STRING ")" ";"</td>
       <td>;</td>
     </tr>
     <tr>

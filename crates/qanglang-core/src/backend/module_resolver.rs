@@ -41,6 +41,13 @@ impl ModuleResolver {
         self.modules.get(&module_id).and_then(|m| m.instance)
     }
 
+    pub fn remove_instance(&mut self, module_id: StringHandle) {
+        if let Some(module) = self.modules.get_mut(&module_id) {
+            module.instance = None;
+            self.count -= 1;
+        }
+    }
+
     pub fn get_module_handle(
         &self,
         module_id: StringHandle,

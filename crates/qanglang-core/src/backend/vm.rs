@@ -2012,125 +2012,103 @@ impl Vm {
     }
 
     fn get_global(&self, identifier_handle: StringHandle) -> RuntimeResult<Value> {
-        if let Some(function_context) = self.state.function_module_context {
-            // Look in function's module first
-            Ok(self.alloc
-                .tables
-                .get(function_context, &Value::String(identifier_handle))
-                .unwrap_or_else(|| {
-                    // Fall back to module loading context
-                    if let Some(module_target) = self.state.module_export_target {
-                        self.alloc
-                            .tables
-                            .get(module_target, &Value::String(identifier_handle))
-                            .unwrap_or_else(|| {
-                                // Fall back to actual globals for built-ins/imports
-                                *self
-                                    .state
-                                    .globals
-                                    .get(&identifier_handle)
-                                    .unwrap_or(&Value::Nil)
-                            })
-                    } else {
-                        // Fall back to actual globals for built-ins/imports
-                        *self
-                            .state
-                            .globals
-                            .get(&identifier_handle)
-                            .unwrap_or(&Value::Nil)
-                    }
-                }))
-        } else if let Some(module_target) = self.state.module_export_target {
-            // Look in module exports first
-            Ok(self.alloc
-                .tables
-                .get(module_target, &Value::String(identifier_handle))
-                .unwrap_or_else(|| {
-                    // Fall back to actual globals for built-ins/imports
-                    *self
-                        .state
-                        .globals
-                        .get(&identifier_handle)
-                        .unwrap_or(&Value::Nil)
-                }))
+        let key = Value::String(identifier_handle);
+
+        // Try to get from function module context first
+        if let Some(function_context) = self.state.function_module_context
+            && let Some(value) = self.try_get_from_table(function_context, &key) {
+                return Ok(value);
+            }
+
+        // Try to get from module export target
+        if let Some(module_target) = self.state.module_export_target
+            && let Some(value) = self.try_get_from_table(module_target, &key) {
+                return Ok(value);
+            }
+
+        // Try to get from globals, with different behavior based on context
+        if self.has_module_context() {
+            // In module context, fall back to globals or return Nil
+            Ok(self.get_from_globals_or_nil(identifier_handle))
         } else {
-            // Normal global lookup
-            self.state.globals.get(&identifier_handle).copied().ok_or_else(|| {
-                let loc = self.state.get_previous_loc();
-                let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                QangRuntimeError::new(
-                    format!("Undefined variable: {}.", identifier_name),
-                    loc,
-                )
-            })
+            // In normal context, error if not found in globals
+            self.try_get_from_globals_strict(identifier_handle)
         }
     }
 
+    fn try_get_from_table(&self, table_handle: HashMapHandle, key: &Value) -> Option<Value> {
+        self.alloc.tables.get(table_handle, key)
+    }
+
+    fn has_module_context(&self) -> bool {
+        self.state.function_module_context.is_some() || self.state.module_export_target.is_some()
+    }
+
+    fn get_from_globals_or_nil(&self, identifier_handle: StringHandle) -> Value {
+        self.state.globals.get(&identifier_handle).copied().unwrap_or(Value::Nil)
+    }
+
+    fn try_get_from_globals_strict(&self, identifier_handle: StringHandle) -> RuntimeResult<Value> {
+        self.state.globals.get(&identifier_handle).copied().ok_or_else(|| {
+            let loc = self.state.get_previous_loc();
+            let identifier_name = self.alloc.strings.get_string(identifier_handle);
+            QangRuntimeError::new(
+                format!("Undefined variable: {}.", identifier_name),
+                loc,
+            )
+        })
+    }
+
     fn set_global(&mut self, identifier_handle: StringHandle) -> RuntimeResult<()> {
-        if let Some(function_context) = self.state.function_module_context {
-            // Check if variable exists in function's module first
-            let key = Value::String(identifier_handle);
-            if self.alloc.tables.get(function_context, &key).is_some() {
-                let value = peek_value!(self, 0);
-                self.alloc.tables.insert(function_context, key, value);
-            } else if let Some(module_target) = self.state.module_export_target {
-                // Check in module loading context
-                if self.alloc.tables.get(module_target, &key).is_some() {
-                    let value = peek_value!(self, 0);
-                    self.alloc.tables.insert(module_target, key, value);
-                } else if self.state.globals.contains_key(&identifier_handle) {
-                    let value = peek_value!(self, 0);
-                    self.state.globals.insert(identifier_handle, value);
-                } else {
-                    let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                    let loc = self.state.get_previous_loc();
-                    return Err(QangRuntimeError::new(
-                        format!("Undefined variable: {}.", identifier_name).to_string(),
-                        loc,
-                    ));
-                }
-            } else if self.state.globals.contains_key(&identifier_handle) {
-                let value = peek_value!(self, 0);
-                self.state.globals.insert(identifier_handle, value);
-            } else {
-                let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                let loc = self.state.get_previous_loc();
-                return Err(QangRuntimeError::new(
-                    format!("Undefined variable: {}.", identifier_name).to_string(),
-                    loc,
-                ));
+        let value = peek_value!(self, 0);
+        let key = Value::String(identifier_handle);
+
+        // Try to set in function module context first
+        if let Some(function_context) = self.state.function_module_context
+            && self.try_set_in_table(function_context, &key, value) {
+                return Ok(());
             }
-        } else if let Some(module_target) = self.state.module_export_target {
-            // Check if variable exists in module or globals, then update it
-            let key = Value::String(identifier_handle);
-            if self.alloc.tables.get(module_target, &key).is_some() {
-                let value = peek_value!(self, 0);
-                self.alloc.tables.insert(module_target, key, value);
-            } else if self.state.globals.contains_key(&identifier_handle) {
-                let value = peek_value!(self, 0);
-                self.state.globals.insert(identifier_handle, value);
-            } else {
-                let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                let loc = self.state.get_previous_loc();
-                return Err(QangRuntimeError::new(
-                    format!("Undefined variable: {}.", identifier_name).to_string(),
-                    loc,
-                ));
+
+        // Try to set in module export target
+        if let Some(module_target) = self.state.module_export_target
+            && self.try_set_in_table(module_target, &key, value) {
+                return Ok(());
             }
-        } else {
-            // Normal global assignment
-            if !self.state.globals.contains_key(&identifier_handle) {
-                let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                let loc = self.state.get_previous_loc();
-                return Err(QangRuntimeError::new(
-                    format!("Undefined variable: {}.", identifier_name).to_string(),
-                    loc,
-                ));
-            }
-            let value = peek_value!(self, 0);
-            self.state.globals.insert(identifier_handle, value);
+
+        // Try to set in globals
+        if self.try_set_in_globals(identifier_handle, value) {
+            return Ok(());
         }
-        Ok(())
+
+        // Variable not found anywhere
+        self.undefined_variable_error(identifier_handle)
+    }
+
+    fn try_set_in_table(&mut self, table_handle: HashMapHandle, key: &Value, value: Value) -> bool {
+        if self.alloc.tables.get(table_handle, key).is_some() {
+            self.alloc.tables.insert(table_handle, *key, value);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn try_set_in_globals(&mut self, identifier_handle: StringHandle, value: Value) -> bool {
+        if let std::collections::hash_map::Entry::Occupied(mut e) = self.state.globals.entry(identifier_handle) {
+            e.insert(value);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn undefined_variable_error(&self, identifier_handle: StringHandle) -> RuntimeResult<()> {
+        let identifier_name = self.alloc.strings.get_string(identifier_handle);
+        let loc = self.state.get_previous_loc();
+        Err(QangRuntimeError::new(
+            format!("Undefined variable: {}.", identifier_name),
+            loc,
+        ))
     }
 
     fn invoke_super(&mut self, method_handle: StringHandle) -> RuntimeResult<()> {

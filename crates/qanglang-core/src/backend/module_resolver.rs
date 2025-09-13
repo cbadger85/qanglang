@@ -74,10 +74,10 @@ impl ModuleResolver {
     }
 }
 
-impl Into<ModuleResolver> for FxHashMap<StringHandle, RuntimeModule> {
-    fn into(self) -> ModuleResolver {
+impl From<FxHashMap<StringHandle, RuntimeModule>> for ModuleResolver {
+    fn from(val: FxHashMap<StringHandle, RuntimeModule>) -> Self {
         ModuleResolver {
-            modules: self,
+            modules: val,
             count: 0,
         }
     }

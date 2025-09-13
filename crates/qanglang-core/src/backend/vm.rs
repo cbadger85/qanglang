@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Range};
+use std::collections::VecDeque;
 
 #[cfg(feature = "profiler")]
 use coz;
@@ -28,7 +28,6 @@ use crate::{
         },
     },
     debug_log,
-    error::Trace,
     memory::{
         ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, StringHandle,
         UpvalueSlot,
@@ -88,8 +87,7 @@ macro_rules! push_value {
                     STACK_MAX
                 ),
                 $vm.state.get_current_loc(),
-            )
-            .with_stack_trace($vm.get_stack_trace()))
+            ))
         } else {
             $vm.state.stack[$vm.state.stack_top] = $value;
             $vm.state.stack_top += 1;
@@ -146,12 +144,12 @@ macro_rules! read_string_16 {
 }
 
 #[derive(Debug, Clone, Default)]
-struct CallFrame {
-    closure: ClosureHandle,
-    ip: usize,
-    value_slot: usize,
-    previous_module_target: Option<HashMapHandle>,
-    previous_function_module_context: Option<HashMapHandle>,
+pub(crate) struct CallFrame {
+    pub closure: ClosureHandle,
+    pub ip: usize,
+    pub value_slot: usize,
+    pub previous_module_target: Option<HashMapHandle>,
+    pub previous_function_module_context: Option<HashMapHandle>,
 }
 
 #[derive(Clone)]
@@ -159,13 +157,13 @@ pub(crate) struct VmState {
     pub stack_top: usize,
     pub frame_count: usize,
     pub stack: Vec<Value>,
-    frames: [CallFrame; FRAME_MAX],
+    pub frames: [CallFrame; FRAME_MAX],
     globals: FxHashMap<StringHandle, Value>,
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
     keywords: FxHashMap<Keyword, StringHandle>,
-    modules: ModuleResolver,
+    pub modules: ModuleResolver,
     module_export_target: Option<HashMapHandle>,
     function_module_context: Option<HashMapHandle>,
 }
@@ -2206,64 +2204,6 @@ impl Vm {
 
     pub fn globals(&self) -> &FxHashMap<StringHandle, Value> {
         &self.state.globals
-    }
-
-    pub fn get_stack_trace(&self) -> Vec<Trace> {
-        self.get_stack_trace_from_frames(0..self.state.frame_count)
-    }
-
-    fn get_stack_trace_from_frames(&self, frame_id_range: Range<usize>) -> Vec<Trace> {
-        let mut traces = Vec::new();
-        let mut previous_module: Option<String> = None;
-
-        for frame_idx in frame_id_range {
-            let frame = &self.state.frames[frame_idx];
-            let closure = self.alloc.closures.get_closure(frame.closure);
-            let function = self.alloc.get_function(closure.function);
-
-            let name = self.alloc.strings.get_string(function.name);
-
-            let loc = if frame.ip > 0 {
-                function
-                    .chunk
-                    .locs
-                    .get(frame.ip - 1)
-                    .copied()
-                    .unwrap_or_default()
-            } else {
-                SourceLocation::default()
-            };
-
-            // Get current module name if closure has module context
-            let current_module = closure.module_context.map(|module_handle| {
-                let module_string_handle = self.state.modules.get_module_id(module_handle);
-                self.alloc
-                    .strings
-                    .get_string(module_string_handle)
-                    .to_string()
-            });
-
-            // Only include module name if it's different from the previous frame
-            let should_show_module = match (&previous_module, &current_module) {
-                (None, Some(_)) => true,                  // First module encountered
-                (Some(prev), Some(curr)) => prev != curr, // Module changed
-                _ => false,                               // No module or same module
-            };
-
-            if should_show_module {
-                if let Some(module_name) = &current_module {
-                    traces.push(Trace::new_with_module(name, module_name, loc));
-                } else {
-                    traces.push(Trace::new(name, loc));
-                }
-            } else {
-                traces.push(Trace::new(name, loc));
-            }
-
-            previous_module = current_module;
-        }
-
-        traces
     }
 
     #[cfg(debug_assertions)]

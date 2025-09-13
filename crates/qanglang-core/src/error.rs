@@ -327,6 +327,84 @@ fn create_error_pointer(
     pointer
 }
 
+impl Vm {
+    pub fn get_stack_trace(&self) -> Vec<Trace> {
+        self.get_stack_trace_from_frames(0..self.state.frame_count)
+    }
+
+    fn get_stack_trace_from_frames(&self, frame_id_range: Range<usize>) -> Vec<Trace> {
+        let mut traces = Vec::new();
+        let mut previous_module: Option<String> = None;
+
+        for frame_idx in frame_id_range {
+            let frame = &self.state.frames[frame_idx];
+            let closure = self.alloc.closures.get_closure(frame.closure);
+            let function = self.alloc.get_function(closure.function);
+
+            // this will clean the canonical path if it has a matching prefix,otherwise return the input value.
+            // Because functions syntatically cannot start with a `/` or `.`, this will not modify declared function names.
+            let name = &clean_canonicalized_path(self.alloc.strings.get_string(function.name));
+
+            let loc = if frame.ip > 0 {
+                function
+                    .chunk
+                    .locs
+                    .get(frame.ip - 1)
+                    .copied()
+                    .unwrap_or_default()
+            } else {
+                SourceLocation::default()
+            };
+
+            // Get current module name if closure has module context
+            let current_module = closure.module_context.map(|module_handle| {
+                let module_string_handle = self.state.modules.get_module_id(module_handle);
+                let raw_path = self.alloc.strings.get_string(module_string_handle);
+                clean_canonicalized_path(raw_path)
+            });
+
+            // Only include module name if it's different from the previous frame
+            let should_show_module = match (&previous_module, &current_module) {
+                (None, Some(_)) => true,                  // First module encountered
+                (Some(prev), Some(curr)) => prev != curr, // Module changed
+                _ => false,                               // No module or same module
+            };
+
+            if should_show_module {
+                if let Some(module_name) = &current_module {
+                    traces.push(Trace::new_with_module(name, module_name, loc));
+                } else {
+                    traces.push(Trace::new(name, loc));
+                }
+            } else {
+                traces.push(Trace::new(name, loc));
+            }
+
+            previous_module = current_module;
+        }
+
+        traces
+    }
+}
+
+/// Cleans path artifacts from canonicalized paths that are added by the OS.
+/// Removes Windows UNC prefix (`\\?\`) and leading `./` on Unix systems.
+fn clean_canonicalized_path(path: &str) -> String {
+    // Remove Windows UNC prefix
+    #[cfg(target_os = "windows")]
+    if path.starts_with(r"\\?\") {
+        return path[4..].to_string();
+    }
+
+    // Remove leading "./" on Unix systems
+    #[cfg(not(target_os = "windows"))]
+    if path.starts_with("./") {
+        return path[2..].to_string();
+    }
+
+    path.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,80 +518,4 @@ mod tests {
         let summary = error_summary(reporter.errors());
         assert!(summary.contains("Found 2 errors."));
     }
-}
-
-impl Vm {
-    pub fn get_stack_trace(&self) -> Vec<Trace> {
-        self.get_stack_trace_from_frames(0..self.state.frame_count)
-    }
-
-    fn get_stack_trace_from_frames(&self, frame_id_range: Range<usize>) -> Vec<Trace> {
-        let mut traces = Vec::new();
-        let mut previous_module: Option<String> = None;
-
-        for frame_idx in frame_id_range {
-            let frame = &self.state.frames[frame_idx];
-            let closure = self.alloc.closures.get_closure(frame.closure);
-            let function = self.alloc.get_function(closure.function);
-
-            let name = self.alloc.strings.get_string(function.name);
-
-            let loc = if frame.ip > 0 {
-                function
-                    .chunk
-                    .locs
-                    .get(frame.ip - 1)
-                    .copied()
-                    .unwrap_or_default()
-            } else {
-                SourceLocation::default()
-            };
-
-            // Get current module name if closure has module context
-            let current_module = closure.module_context.map(|module_handle| {
-                let module_string_handle = self.state.modules.get_module_id(module_handle);
-                let raw_path = self.alloc.strings.get_string(module_string_handle);
-                clean_canonicalized_path(raw_path)
-            });
-
-            // Only include module name if it's different from the previous frame
-            let should_show_module = match (&previous_module, &current_module) {
-                (None, Some(_)) => true,                  // First module encountered
-                (Some(prev), Some(curr)) => prev != curr, // Module changed
-                _ => false,                               // No module or same module
-            };
-
-            if should_show_module {
-                if let Some(module_name) = &current_module {
-                    traces.push(Trace::new_with_module(name, module_name, loc));
-                } else {
-                    traces.push(Trace::new(name, loc));
-                }
-            } else {
-                traces.push(Trace::new(name, loc));
-            }
-
-            previous_module = current_module;
-        }
-
-        traces
-    }
-}
-
-/// Cleans path artifacts from canonicalized paths that are added by the OS.
-/// Removes Windows UNC prefix (`\\?\`) and leading `./` on Unix systems.
-fn clean_canonicalized_path(path: &str) -> String {
-    // Remove Windows UNC prefix
-    #[cfg(target_os = "windows")]
-    if path.starts_with(r"\\?\") {
-        return path[4..].to_string();
-    }
-
-    // Remove leading "./" on Unix systems
-    #[cfg(not(target_os = "windows"))]
-    if path.starts_with("./") {
-        return path[2..].to_string();
-    }
-
-    path.to_string()
 }

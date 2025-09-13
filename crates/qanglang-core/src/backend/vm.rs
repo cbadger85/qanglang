@@ -9,7 +9,7 @@ use crate::debug::disassemble_instruction;
 use crate::{
     BoundIntrinsicObject, BoundMethodObject, ClassHandle, HashMapHandle, HeapAllocator, NativeFn,
     NativeFunctionError, NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError,
-    Value,
+    Value, ValueKind,
     backend::{
         chunk::{OpCode, SourceLocation},
         compiler::{FRAME_MAX, STACK_MAX},
@@ -116,9 +116,9 @@ macro_rules! peek_value {
                 .stack
                 .get($vm.state.stack_top - 1 - $distance)
                 .copied()
-                .unwrap_or(Value::Nil)
+                .unwrap_or(Value::nil())
         } else {
-            Value::Nil
+            Value::nil()
         }
     };
 }
@@ -126,8 +126,8 @@ macro_rules! peek_value {
 #[macro_export]
 macro_rules! read_string {
     ($vm:expr) => {
-        match $vm.state.read_constant() {
-            Value::String(handle) => handle,
+        match $vm.state.read_constant().as_string() {
+            Some(handle) => handle,
             _ => panic!("Expected string constant"),
         }
     };
@@ -136,8 +136,8 @@ macro_rules! read_string {
 #[macro_export]
 macro_rules! read_string_16 {
     ($vm:expr) => {
-        match $vm.state.read_constant_16() {
-            Value::String(handle) => handle,
+        match $vm.state.read_constant_16().as_string() {
+            Some(handle) => handle,
             _ => panic!("Expected string constant"),
         }
     };
@@ -177,7 +177,7 @@ impl VmState {
         Self {
             frame_count: 0,
             stack_top: 0,
-            stack: vec![Value::Nil; STACK_MAX],
+            stack: vec![Value::default(); STACK_MAX],
             frames: std::array::from_fn(|_| CallFrame::default()),
             globals,
             intrinsics,
@@ -290,55 +290,55 @@ impl Vm {
         keywords.insert(Keyword::Nil, nil_type_value_handle);
         globals.insert(
             alloc.strings.intern("NIL"),
-            Value::String(nil_type_value_handle),
+            Value::string(nil_type_value_handle),
         );
         let boolean_type_value_handle = alloc.strings.intern(BOOLEAN_TYPE_STRING);
         keywords.insert(Keyword::Boolean, boolean_type_value_handle);
         globals.insert(
             alloc.strings.intern("BOOLEAN"),
-            Value::String(boolean_type_value_handle),
+            Value::string(boolean_type_value_handle),
         );
         let number_type_value_handle = alloc.strings.intern(NUMBER_TYPE_STRING);
         keywords.insert(Keyword::Number, number_type_value_handle);
         globals.insert(
             alloc.strings.intern("NUMBER"),
-            Value::String(number_type_value_handle),
+            Value::string(number_type_value_handle),
         );
         let string_type_value_handle = alloc.strings.intern(STRING_TYPE_STRING);
         keywords.insert(Keyword::String, string_type_value_handle);
         globals.insert(
             alloc.strings.intern("STRING"),
-            Value::String(string_type_value_handle),
+            Value::string(string_type_value_handle),
         );
         let function_type_value_handle = alloc.strings.intern(FUNCTION_TYPE_STRING);
         keywords.insert(Keyword::Function, function_type_value_handle);
         globals.insert(
             alloc.strings.intern("FUNCTION"),
-            Value::String(function_type_value_handle),
+            Value::string(function_type_value_handle),
         );
         let class_type_value_handle = alloc.strings.intern(CLASS_TYPE_STRING);
         keywords.insert(Keyword::Class, class_type_value_handle);
         globals.insert(
             alloc.strings.intern("CLASS"),
-            Value::String(class_type_value_handle),
+            Value::string(class_type_value_handle),
         );
         let object_type_value_handle = alloc.strings.intern(OBJECT_TYPE_STRING);
         keywords.insert(Keyword::Object, object_type_value_handle);
         globals.insert(
             alloc.strings.intern("OBJECT"),
-            Value::String(object_type_value_handle),
+            Value::string(object_type_value_handle),
         );
         let array_type_value_handle = alloc.strings.intern(ARRAY_TYPE_STRING);
         keywords.insert(Keyword::Array, array_type_value_handle);
         globals.insert(
             alloc.strings.intern("ARRAY"),
-            Value::String(array_type_value_handle),
+            Value::string(array_type_value_handle),
         );
         let module_type_value_handle = alloc.strings.intern(MODULE_TYPE_STRING);
         keywords.insert(Keyword::Module, module_type_value_handle);
         globals.insert(
             alloc.strings.intern("MODULE"),
-            Value::String(module_type_value_handle),
+            Value::string(module_type_value_handle),
         );
 
         let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
@@ -466,7 +466,7 @@ impl Vm {
 
         self.state
             .globals
-            .insert(identifier_handle, Value::NativeFunction(handle));
+            .insert(identifier_handle, Value::native_function(handle));
 
         self
     }
@@ -481,7 +481,7 @@ impl Vm {
             upvalue_count,
             None,
         ));
-        push_value!(self, Value::Closure(handle))?;
+        push_value!(self, Value::closure(handle))?;
         self.call(handle, 0)?;
 
         #[cfg(feature = "profiler")]
@@ -521,11 +521,11 @@ impl Vm {
                     push_value!(self, constant)?;
                 }
                 OpCode::Negate => {
-                    if let Value::Number(number) = peek_value!(self, 0) {
+                    if let Some(number) = peek_value!(self, 0).as_number() {
                         if let Some(stack_value) =
                             self.state.stack.get_mut(self.state.stack_top - 1)
                         {
-                            *stack_value = Value::Number(-number);
+                            *stack_value = Value::number(-number);
                         }
                     } else {
                         return Err(QangRuntimeError::new(
@@ -541,55 +541,55 @@ impl Vm {
                     }
                 }
                 OpCode::True => {
-                    push_value!(self, Value::True)?;
+                    push_value!(self, Value::boolean(true))?;
                 }
                 OpCode::False => {
-                    push_value!(self, Value::False)?;
+                    push_value!(self, Value::boolean(false))?;
                 }
                 OpCode::Nil => {
-                    push_value!(self, Value::Nil)?;
+                    push_value!(self, Value::nil())?;
                 }
                 OpCode::Add => {
-                    self.binary_operation(|a, b, alloc| match (&a, &b) {
-                        (Value::Number(num1), Value::Number(num2)) => {
-                            Ok(Value::Number(num1 + num2))
+                    self.binary_operation(|a, b, alloc| match (a.kind(), b.kind()) {
+                        (ValueKind::Number(num1), ValueKind::Number(num2)) => {
+                            Ok(Value::number(num1 + num2))
                         }
-                        (Value::String(handle1), Value::String(handle2)) => {
+                        (ValueKind::String(handle1), ValueKind::String(handle2)) => {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
-                            Ok(Value::String(
-                                alloc.strings.concat_strings(*handle1, *handle2),
+                            Ok(Value::string(
+                                alloc.strings.concat_strings(handle1, handle2),
                             ))
                         }
-                        (Value::Array(handle1), Value::Array(handle2)) => {
-                            Ok(Value::Array(alloc.arrays.concat(*handle1, *handle2)))
+                        (ValueKind::Array(handle1), ValueKind::Array(handle2)) => {
+                            Ok(Value::array(alloc.arrays.concat(handle1, handle2)))
                         }
-                        (Value::Number(_), _) => {
+                        (ValueKind::Number(_), _) => {
                             Err(format!("Cannot add number to {}.", b.to_type_string())
                                 .as_str()
                                 .into())
                         }
-                        (Value::String(_), _) => {
+                        (ValueKind::String(_), _) => {
                             Err(format!("Cannot add string to {}.", b.to_type_string())
                                 .as_str()
                                 .into())
                         }
-                        (Value::Array(_), _) => {
+                        (ValueKind::Array(_), _) => {
                             Err(format!("Cannot add an array to {}.", b.to_type_string())
                                 .as_str()
                                 .into())
                         }
-                        (_, Value::Number(_)) => {
+                        (_, ValueKind::Number(_)) => {
                             Err(format!("Cannot add {} to number.", a.to_type_string())
                                 .as_str()
                                 .into())
                         }
-                        (_, Value::String(_)) => {
+                        (_, ValueKind::String(_)) => {
                             Err(format!("Cannot add {} to string.", a.to_type_string())
                                 .as_str()
                                 .into())
                         }
-                        (_, Value::Array(_)) => {
+                        (_, ValueKind::Array(_)) => {
                             Err(format!("Cannot add {} to an array.", a.to_type_string())
                                 .as_str()
                                 .into())
@@ -597,53 +597,67 @@ impl Vm {
                         _ => Err("Both operands must be a numbers, strings or arrays.".into()),
                     })?;
                 }
-                OpCode::Subtract => self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 - num2).into()),
-                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
-                })?,
-                OpCode::Multiply => self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 * num2).into()),
-                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
-                })?,
-                OpCode::Divide => self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                    (Value::Number(num1), Value::Number(num2)) => {
-                        if num2 == &0.0 {
-                            Err(BinaryOperationError::new("Cannot divide by zero."))
-                        } else {
-                            Ok((num1 / num2).into())
-                        }
+                OpCode::Subtract => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => Ok((num1 - num2).into()),
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                     }
-                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
                 })?,
-                OpCode::Modulo => self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 % num2).into()),
-                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                OpCode::Multiply => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => Ok((num1 * num2).into()),
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    }
+                })?,
+                OpCode::Divide => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => {
+                            if num2 == 0.0 {
+                                Err(BinaryOperationError::new("Cannot divide by zero."))
+                            } else {
+                                Ok((num1 / num2).into())
+                            }
+                        }
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    }
+                })?,
+                OpCode::Modulo => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => Ok((num1 % num2).into()),
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    }
                 })?,
                 OpCode::Equal => self.binary_operation(|a, b, _allocator| Ok((a == b).into()))?,
-                OpCode::Greater => self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 > num2).into()),
-                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
-                })?,
-                OpCode::GreaterEqual => {
-                    self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                        (Value::Number(num1), Value::Number(num2)) => Ok((num1 >= num2).into()),
+                OpCode::Greater => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => Ok((num1 > num2).into()),
                         _ => Err(BinaryOperationError::new("Both operands must be a number.")),
-                    })?
-                }
-                OpCode::Less => self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 < num2).into()),
-                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    }
                 })?,
-                OpCode::LessEqual => self.binary_operation(|a, b, _allocator| match (&a, &b) {
-                    (Value::Number(num1), Value::Number(num2)) => Ok((num1 <= num2).into()),
-                    _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                OpCode::GreaterEqual => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => Ok((num1 >= num2).into()),
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    }
+                })?,
+                OpCode::Less => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => Ok((num1 < num2).into()),
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    }
+                })?,
+                OpCode::LessEqual => self.binary_operation(|a, b, _allocator| {
+                    match (a.as_number(), b.as_number()) {
+                        (Some(num1), Some(num2)) => Ok((num1 <= num2).into()),
+                        _ => Err(BinaryOperationError::new("Both operands must be a number.")),
+                    }
                 })?,
                 OpCode::Is => {
                     let b = pop_value!(self);
                     let a = pop_value!(self);
 
-                    let result = match (a, b) {
-                        (Value::Array(_), Value::String(string_handle)) => {
+                    let result = match (a.kind(), b.kind()) {
+                        (ValueKind::Array(_), ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -651,7 +665,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::Number(_), Value::String(string_handle)) => {
+                        (ValueKind::Number(_), ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -659,7 +673,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::String(_), Value::String(string_handle)) => {
+                        (ValueKind::String(_), ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -667,7 +681,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::Nil, Value::String(string_handle)) => {
+                        (ValueKind::Nil, ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -675,7 +689,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::True | Value::False, Value::String(string_handle)) => {
+                        (ValueKind::True | ValueKind::False, ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -683,7 +697,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::Class(_), Value::String(string_handle)) => {
+                        (ValueKind::Class(_), ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -691,7 +705,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::ObjectLiteral(_), Value::String(string_handle)) => {
+                        (ValueKind::ObjectLiteral(_), ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -700,12 +714,12 @@ impl Vm {
                             keyword_handle == string_handle
                         }
                         (
-                            Value::FunctionDecl(_)
-                            | Value::NativeFunction(_)
-                            | Value::Closure(_)
-                            | Value::BoundMethod(_)
-                            | Value::BoundIntrinsic(_),
-                            Value::String(string_handle),
+                            ValueKind::FunctionDecl(_)
+                            | ValueKind::NativeFunction(_)
+                            | ValueKind::Closure(_)
+                            | ValueKind::BoundMethod(_)
+                            | ValueKind::BoundIntrinsic(_),
+                            ValueKind::String(string_handle),
                         ) => {
                             let keyword_handle = *self
                                 .state
@@ -714,7 +728,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::Instance(_), Value::String(string_handle)) => {
+                        (ValueKind::Instance(_), ValueKind::String(string_handle)) => {
                             let keyword_handle = *self
                                 .state
                                 .keywords
@@ -722,7 +736,7 @@ impl Vm {
                                 .expect("expected keyword");
                             keyword_handle == string_handle
                         }
-                        (Value::Instance(instance_handle), Value::Class(clazz_handle)) => {
+                        (ValueKind::Instance(instance_handle), ValueKind::Class(clazz_handle)) => {
                             let instance_of_handle = self.alloc.get_instance(instance_handle).clazz;
 
                             if instance_of_handle == clazz_handle {
@@ -758,7 +772,7 @@ impl Vm {
                         // Redirect to module exports
                         self.alloc.tables.insert(
                             module_target,
-                            Value::String(identifier_handle),
+                            Value::string(identifier_handle),
                             value,
                         );
                     } else {
@@ -775,7 +789,7 @@ impl Vm {
                         // Redirect to module exports
                         self.alloc.tables.insert(
                             module_target,
-                            Value::String(identifier_handle),
+                            Value::string(identifier_handle),
                             value,
                         );
                     } else {
@@ -832,7 +846,7 @@ impl Vm {
                 }
                 OpCode::JumpIfNil => {
                     let offset = self.state.read_short();
-                    if matches!(peek_value!(self, 0), Value::Nil) {
+                    if peek_value!(self, 0).is_nil() {
                         self.state.frames[self.state.frame_count - 1].ip += offset;
                     }
                 }
@@ -911,13 +925,13 @@ impl Vm {
                     let identifier_handle = read_string!(self);
                     let class_handle: crate::arena::Index =
                         self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
-                    push_value!(self, Value::Class(class_handle))?
+                    push_value!(self, Value::class(class_handle))?
                 }
                 OpCode::Class16 => {
                     let identifier_handle = read_string_16!(self);
                     let class_handle: crate::arena::Index =
                         self.with_gc_check(|alloc| alloc.allocate_class(identifier_handle));
-                    push_value!(self, Value::Class(class_handle))?
+                    push_value!(self, Value::class(class_handle))?
                 }
                 OpCode::GetProperty => {
                     let object = peek_value!(self, 0);
@@ -995,8 +1009,8 @@ impl Vm {
                     let superclass = peek_value!(self, 0);
                     let subclass = peek_value!(self, 1);
 
-                    match (superclass, subclass) {
-                        (Value::Class(superclass_handle), Value::Class(subclass_handle)) => {
+                    match (superclass.as_class(), subclass.as_class()) {
+                        (Some(superclass_handle), Some(subclass_handle)) => {
                             let subclass = self.alloc.get_class_mut(subclass_handle);
                             subclass.super_clazz = Some(superclass_handle);
                             let subclass = self.alloc.get_class(subclass_handle);
@@ -1014,11 +1028,11 @@ impl Vm {
                             pop_value!(self);
                             Ok(())
                         }
-                        (Value::Class(_), _) => Err(QangRuntimeError::new(
+                        (Some(_), _) => Err(QangRuntimeError::new(
                             "Invalid subclass.".to_string(),
                             self.state.get_previous_loc(),
                         )),
-                        (_, Value::Class(_)) => Err(QangRuntimeError::new(
+                        (_, Some(_)) => Err(QangRuntimeError::new(
                             "Super class must be a class.".to_string(),
                             self.state.get_previous_loc(),
                         )),
@@ -1035,23 +1049,23 @@ impl Vm {
                         let value = pop_value!(self);
                         self.alloc.arrays.insert(array, i, value);
                     }
-                    push_value!(self, Value::Array(array))?;
+                    push_value!(self, Value::array(array))?;
                 }
                 OpCode::GetArrayIndex => {
                     let index = pop_value!(self);
-                    match (index, peek_value!(self, 0)) {
-                        (Value::Number(index), Value::Array(handle)) => {
+                    match (index.as_number(), peek_value!(self, 0).as_array()) {
+                        (Some(index), Some(handle)) => {
                             let value = self.alloc.arrays.get(handle, index.trunc() as isize);
                             pop_value!(self);
                             push_value!(self, value)?;
                         }
-                        (_, Value::Array(_)) => {
+                        (_, Some(_)) => {
                             return Err(QangRuntimeError::new(
                                 "An array can only be indexed by a number.".to_string(),
                                 self.state.get_previous_loc(),
                             ));
                         }
-                        (Value::Number(_), _) => {
+                        (Some(_), _) => {
                             return Err(QangRuntimeError::new(
                                 "Only arrays can be indexed.".to_string(),
                                 self.state.get_previous_loc(),
@@ -1068,8 +1082,8 @@ impl Vm {
                 OpCode::SetArrayIndex => {
                     let value = pop_value!(self);
                     let index = pop_value!(self);
-                    match (index, peek_value!(self, 0)) {
-                        (Value::Number(index), Value::Array(handle)) => {
+                    match (index.as_number(), peek_value!(self, 0).as_array()) {
+                        (Some(index), Some(handle)) => {
                             let is_within_bounds =
                                 self.alloc
                                     .arrays
@@ -1084,13 +1098,13 @@ impl Vm {
                             pop_value!(self);
                             push_value!(self, value)?;
                         }
-                        (_, Value::Array(_)) => {
+                        (_, Some(_)) => {
                             return Err(QangRuntimeError::new(
                                 "An array can only be indexed by a number.".to_string(),
                                 self.state.get_previous_loc(),
                             ));
                         }
-                        (Value::Number(_), _) => {
+                        (Some(_), _) => {
                             return Err(QangRuntimeError::new(
                                 "Only arrays can be indexed.".to_string(),
                                 self.state.get_previous_loc(),
@@ -1112,7 +1126,7 @@ impl Vm {
                         let key = pop_value!(self);
                         self.alloc.tables.insert(handle, key, value);
                     }
-                    push_value!(self, Value::ObjectLiteral(handle))?;
+                    push_value!(self, Value::object_literal(handle))?;
                 }
                 OpCode::Module => {
                     let module_path = read_string!(self);
@@ -1148,7 +1162,7 @@ impl Vm {
                             .module_export_target
                             .expect("Module should have export target");
 
-                        self.state.stack[self.state.stack_top - 1] = Value::Module(module_instance);
+                        self.state.stack[self.state.stack_top - 1] = Value::module(module_instance);
 
                         self.state.module_export_target = previous_module_target;
                     } else {
@@ -1176,7 +1190,7 @@ impl Vm {
 
     fn load_module(&mut self, module_path: StringHandle) -> RuntimeResult<()> {
         if let Some(instance_handle) = self.state.modules.get_instance_handle(module_path) {
-            push_value!(self, Value::Module(instance_handle))?;
+            push_value!(self, Value::module(instance_handle))?;
             return Ok(());
         }
 
@@ -1204,15 +1218,15 @@ impl Vm {
 
         self.state.module_export_target = Some(module_instance);
 
-        push_value!(self, Value::Closure(module_closure))?;
+        push_value!(self, Value::closure(module_closure))?;
         self.call(module_closure, 0)?;
 
         Ok(())
     }
 
     fn create_closure(&mut self, constant: Value) -> RuntimeResult<()> {
-        let handle = match constant {
-            Value::FunctionDecl(handle) => handle,
+        let handle = match constant.as_function() {
+            Some(handle) => handle,
             _ => {
                 return Err(QangRuntimeError::new(
                     "Expected function.".to_string(),
@@ -1231,7 +1245,7 @@ impl Vm {
         });
 
         // Push closure to stack immediately to ensure GC can see it as reachable
-        push_value!(self, Value::Closure(closure_handle))?;
+        push_value!(self, Value::closure(closure_handle))?;
 
         for i in 0..self
             .alloc
@@ -1263,14 +1277,14 @@ impl Vm {
     }
 
     fn define_method(&mut self, name: StringHandle) -> RuntimeResult<()> {
-        if let Value::Closure(method) = peek_value!(self, 0)
-            && let Value::Class(clazz_handle) = peek_value!(self, 1)
+        if let Some(method) = peek_value!(self, 0).as_closure()
+            && let Some(clazz_handle) = peek_value!(self, 1).as_class()
         {
             let clazz = self.alloc.get_class(clazz_handle);
             self.alloc.set_class_method(
                 clazz.method_table,
-                Value::String(name),
-                Value::Closure(method),
+                Value::string(name),
+                Value::closure(method),
             );
             pop_value!(self);
         }
@@ -1279,10 +1293,10 @@ impl Vm {
     }
 
     fn init_field(&mut self, field_name: StringHandle, value: Value) -> RuntimeResult<()> {
-        if let Value::Class(clazz_handle) = peek_value!(self, 0) {
+        if let Some(clazz_handle) = peek_value!(self, 0).as_class() {
             let clazz = self.alloc.get_class(clazz_handle);
             self.alloc
-                .set_class_method(clazz.value_table, Value::String(field_name), value);
+                .set_class_method(clazz.value_table, Value::string(field_name), value);
         }
 
         Ok(())
@@ -1290,7 +1304,7 @@ impl Vm {
 
     fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
         // Prevent binding init method to instances
-        if let Value::String(method_handle) = method_name {
+        if let Some(method_handle) = method_name.as_string() {
             let init_handle = *self
                 .state
                 .keywords
@@ -1298,23 +1312,25 @@ impl Vm {
                 .expect("Expected keyword.");
             if method_handle == init_handle {
                 pop_value!(self);
-                push_value!(self, Value::Nil)?;
+                push_value!(self, Value::nil())?;
                 return Ok(());
             }
         }
 
         let clazz = self.alloc.get_class(clazz_handle);
-        if let Some(Value::Closure(closure)) =
-            self.alloc.get_class_method(clazz.method_table, method_name)
+        if let Some(closure) = self
+            .alloc
+            .get_class_method(clazz.method_table, method_name)
+            .and_then(|v| v.as_closure())
         {
             let receiver = peek_value!(self, 0);
             let bound = BoundMethodObject::new(receiver, closure);
             let handle = self.with_gc_check(|alloc| alloc.allocate_bound_method(bound));
             pop_value!(self);
-            push_value!(self, Value::BoundMethod(handle))?;
+            push_value!(self, Value::bound_method(handle))?;
         } else {
             pop_value!(self);
-            push_value!(self, Value::Nil)?;
+            push_value!(self, Value::nil())?;
         }
         Ok(())
     }
@@ -1333,7 +1349,7 @@ impl Vm {
         })?;
 
         // Use nil-safe variants for call and apply when receiver is nil
-        let final_intrinsic = if receiver == Value::Nil {
+        let final_intrinsic = if receiver.is_nil() {
             match intrinsic {
                 IntrinsicMethod::Call => IntrinsicMethod::NilSafeCall,
                 IntrinsicMethod::Apply => IntrinsicMethod::NilSafeApply,
@@ -1346,7 +1362,7 @@ impl Vm {
         let bound = BoundIntrinsicObject::new(receiver, final_intrinsic, method_name);
         let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
         pop_value!(self);
-        push_value!(self, Value::BoundIntrinsic(handle))?;
+        push_value!(self, Value::bound_intrinsic(handle))?;
         Ok(())
     }
 
@@ -1355,15 +1371,16 @@ impl Vm {
         method_table_handle: HashMapHandle,
         method_name: StringHandle,
     ) -> RuntimeResult<bool> {
-        if let Some(Value::Closure(closure)) = self
+        if let Some(closure) = self
             .alloc
-            .get_class_method(method_table_handle, Value::String(method_name))
+            .get_class_method(method_table_handle, Value::string(method_name))
+            .and_then(|v| v.as_closure())
         {
             let receiver = peek_value!(self, 0);
             let bound = BoundMethodObject::new(receiver, closure);
             let handle = self.with_gc_check(|alloc| alloc.allocate_bound_method(bound));
             pop_value!(self); // Pop 'this'
-            push_value!(self, Value::BoundMethod(handle))?;
+            push_value!(self, Value::bound_method(handle))?;
             Ok(true)
         } else {
             Ok(false)
@@ -1465,16 +1482,16 @@ impl Vm {
     }
 
     pub(crate) fn call_value(&mut self, value: Value, arg_count: usize) -> RuntimeResult<()> {
-        match value {
-            Value::Closure(handle) => self.call(handle, arg_count),
-            Value::NativeFunction(function) => self.call_native_function(function, arg_count),
-            Value::Class(handle) => {
+        match value.kind() {
+            ValueKind::Closure(handle) => self.call(handle, arg_count),
+            ValueKind::NativeFunction(function) => self.call_native_function(function, arg_count),
+            ValueKind::Class(handle) => {
                 let clazz = self.alloc.get_class(handle);
                 let clazz_method_table = clazz.method_table;
                 let clazz_value_table = clazz.value_table;
                 let instance_handle = self.with_gc_check(|alloc| alloc.allocate_instance(handle));
                 self.state.stack[self.state.stack_top - arg_count - 1] =
-                    Value::Instance(instance_handle);
+                    Value::instance(instance_handle);
                 let instance_table = self.alloc.get_instance(instance_handle).table;
 
                 self.alloc
@@ -1486,9 +1503,10 @@ impl Vm {
                     .keywords
                     .get(&Keyword::Init)
                     .expect("Expected keyword.");
-                if let Some(Value::Closure(constructor)) = self
+                if let Some(constructor) = self
                     .alloc
-                    .get_class_method(clazz_method_table, Value::String(constructor_handle))
+                    .get_class_method(clazz_method_table, Value::string(constructor_handle))
+                    .and_then(|v| v.as_closure())
                 {
                     self.call(constructor, arg_count)?;
                 } else {
@@ -1499,13 +1517,13 @@ impl Vm {
                 }
                 Ok(())
             }
-            Value::BoundMethod(handle) => {
+            ValueKind::BoundMethod(handle) => {
                 let bound_method = self.alloc.get_bound_method(handle);
 
                 self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.receiver;
                 self.call(bound_method.closure, arg_count)
             }
-            Value::BoundIntrinsic(handle) => {
+            ValueKind::BoundIntrinsic(handle) => {
                 let bound_intrinsic = self.alloc.get_bound_intrinsic(handle);
                 self.call_intrinsic_method(
                     bound_intrinsic.receiver,
@@ -1525,13 +1543,13 @@ impl Vm {
 
     fn invoke(&mut self, method_handle: StringHandle, arg_count: usize) -> RuntimeResult<()> {
         let receiver = peek_value!(self, arg_count);
-        match receiver {
-            Value::Instance(instance_handle) => {
+        match receiver.kind() {
+            ValueKind::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);
 
                 if let Some(value) = self
                     .alloc
-                    .get_instance_field(instance.table, Value::String(method_handle))
+                    .get_instance_field(instance.table, Value::string(method_handle))
                 {
                     self.state.stack[self.state.stack_top - arg_count - 1] = value;
                     return self.call_value(value, arg_count);
@@ -1552,7 +1570,7 @@ impl Vm {
 
                 self.invoke_from_class(instance.clazz, method_handle, arg_count)
             }
-            Value::String(_) => {
+            ValueKind::String(_) => {
                 let intrinsic = *self
                     .state
                     .intrinsics
@@ -1565,7 +1583,7 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            Value::Array(_) => {
+            ValueKind::Array(_) => {
                 let intrinsic = *self
                     .state
                     .intrinsics
@@ -1578,10 +1596,10 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            Value::Closure(_)
-            | Value::NativeFunction(_)
-            | Value::BoundIntrinsic(_)
-            | Value::BoundMethod(_) => {
+            ValueKind::Closure(_)
+            | ValueKind::NativeFunction(_)
+            | ValueKind::BoundIntrinsic(_)
+            | ValueKind::BoundMethod(_) => {
                 let intrinsic = *self
                     .state
                     .intrinsics
@@ -1594,8 +1612,8 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            Value::ObjectLiteral(handle) | Value::Module(handle) => {
-                let key = Value::String(method_handle);
+            ValueKind::ObjectLiteral(handle) | ValueKind::Module(handle) => {
+                let key = Value::string(method_handle);
                 if let Some(method_value) = self.alloc.tables.get(handle, &key) {
                     self.state.stack[self.state.stack_top - arg_count - 1] = method_value;
                     self.call_value(method_value, arg_count)
@@ -1633,7 +1651,7 @@ impl Vm {
             if arg_count < function.arity {
                 let arity = function.arity;
                 for _ in arg_count..arity {
-                    push_value!(self, Value::Nil)?;
+                    push_value!(self, Value::nil())?;
                 }
                 arity
             } else {
@@ -1677,21 +1695,21 @@ impl Vm {
     }
 
     fn tail_call_value(&mut self, callee: Value, arg_count: usize) -> RuntimeResult<()> {
-        match callee {
-            Value::Closure(closure_handle) => self.tail_call(closure_handle, arg_count),
-            Value::NativeFunction(handle) => {
+        match callee.kind() {
+            ValueKind::Closure(closure_handle) => self.tail_call(closure_handle, arg_count),
+            ValueKind::NativeFunction(handle) => {
                 // Native functions can't be tail-optimized, fall back to regular call
                 self.call_native_function(handle, arg_count)
             }
-            Value::Class(_handle) => {
+            ValueKind::Class(_handle) => {
                 panic!("Cannot tail call optimize class instancing.")
             }
-            Value::BoundMethod(handle) => {
+            ValueKind::BoundMethod(handle) => {
                 let bound_method = self.alloc.get_bound_method(handle);
                 self.state.stack[self.state.stack_top - arg_count - 1] = bound_method.receiver;
                 self.tail_call(bound_method.closure, arg_count)
             }
-            Value::BoundIntrinsic(handle) => {
+            ValueKind::BoundIntrinsic(handle) => {
                 // Intrinsic methods can't be tail-optimized, fall back to regular call
                 let bound_intrinsic = self.alloc.get_bound_intrinsic(handle);
                 self.call_intrinsic_method(
@@ -1718,7 +1736,7 @@ impl Vm {
         // Pad arguments if needed
         let final_arg_count = if arg_count < function_arity {
             for _ in arg_count..function_arity {
-                push_value!(self, Value::Nil)?;
+                push_value!(self, Value::nil())?;
             }
             function_arity
         } else {
@@ -1765,7 +1783,7 @@ impl Vm {
         let saved_function_ptr = self.state.current_function_ptr;
         let saved_export_target = self.state.module_export_target;
 
-        push_value!(self, Value::Closure(handle))?;
+        push_value!(self, Value::closure(handle))?;
 
         for value in args {
             push_value!(self, *value)?;
@@ -1789,7 +1807,7 @@ impl Vm {
         arg_count: usize,
     ) -> RuntimeResult<()> {
         let function = self.alloc.get_native_function(handle);
-        let mut args = [Value::Nil; 256];
+        let mut args = [Value::default(); 256];
 
         for i in (0..arg_count).rev() {
             if i < function.arity {
@@ -1821,7 +1839,7 @@ impl Vm {
     ) -> RuntimeResult<()> {
         match method {
             IntrinsicMethod::Native { function, arity } => {
-                let mut args = [Value::Nil; 256];
+                let mut args = [Value::default(); 256];
 
                 for i in (0..arg_count).rev() {
                     if i < arity {
@@ -1852,7 +1870,7 @@ impl Vm {
                     pop_value!(self);
                 }
                 pop_value!(self); // pop the bound method
-                push_value!(self, Value::Nil)?;
+                push_value!(self, Value::nil())?;
                 Ok(())
             }
         }
@@ -1865,9 +1883,10 @@ impl Vm {
         arg_count: usize,
     ) -> RuntimeResult<()> {
         let clazz = self.alloc.get_class(clazz_handle);
-        if let Some(Value::Closure(method)) = self
+        if let Some(method) = self
             .alloc
-            .get_class_method(clazz.method_table, Value::String(method_handle))
+            .get_class_method(clazz.method_table, Value::string(method_handle))
+            .and_then(|v| v.as_closure())
         {
             self.call(method, arg_count)
         } else {
@@ -1883,14 +1902,14 @@ impl Vm {
                     pop_value!(self);
                 }
                 // Push nil as return value
-                push_value!(self, Value::Nil)?;
+                push_value!(self, Value::nil())?;
                 Ok(())
             } else {
                 Err(QangRuntimeError::new(
                     format!(
                         "{} does not exist on class {}.",
-                        Value::String(method_handle).to_display_string(&self.alloc),
-                        Value::Class(clazz_handle).to_display_string(&self.alloc),
+                        Value::string(method_handle).to_display_string(&self.alloc),
+                        Value::class(clazz_handle).to_display_string(&self.alloc),
                     ),
                     self.state.get_previous_loc(),
                 ))
@@ -1904,8 +1923,8 @@ impl Vm {
         optional: bool,
         identifier: StringHandle,
     ) -> RuntimeResult<()> {
-        match object {
-            Value::Nil => {
+        match object.kind() {
+            ValueKind::Nil => {
                 let call_handle = *self
                     .state
                     .keywords
@@ -1926,10 +1945,10 @@ impl Vm {
                     let bound = BoundIntrinsicObject::new(object, method, identifier);
                     let handle = self.with_gc_check(|alloc| alloc.allocate_bound_intrinsic(bound));
                     pop_value!(self);
-                    push_value!(self, Value::BoundIntrinsic(handle))?;
+                    push_value!(self, Value::bound_intrinsic(handle))?;
                 } else if optional {
                     pop_value!(self);
-                    push_value!(self, Value::Nil)?;
+                    push_value!(self, Value::nil())?;
                 } else {
                     return Err(QangRuntimeError::new(
                         format!("Cannot access property on {}.", object.to_type_string()),
@@ -1937,9 +1956,9 @@ impl Vm {
                     ));
                 }
             }
-            Value::Instance(instance_handle) => {
+            ValueKind::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);
-                let key = Value::String(identifier);
+                let key = Value::string(identifier);
 
                 if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
                     pop_value!(self);
@@ -1948,19 +1967,19 @@ impl Vm {
                     self.bind_method(instance.clazz, key)?;
                 }
             }
-            Value::ObjectLiteral(handle) | Value::Module(handle) => {
-                let key = Value::String(identifier);
-                let value = self.alloc.tables.get(handle, &key).unwrap_or(Value::Nil);
+            ValueKind::ObjectLiteral(handle) | ValueKind::Module(handle) => {
+                let key = Value::string(identifier);
+                let value = self.alloc.tables.get(handle, &key).unwrap_or(Value::nil());
                 pop_value!(self);
                 push_value!(self, value)?;
             }
-            Value::String(_) => {
+            ValueKind::String(_) => {
                 self.bind_intrinsic_method(identifier, IntrinsicKind::String(identifier), object)?;
             }
-            Value::Array(_) => {
+            ValueKind::Array(_) => {
                 self.bind_intrinsic_method(identifier, IntrinsicKind::Array(identifier), object)?;
             }
-            Value::Closure(_) | Value::BoundMethod(_) => {
+            ValueKind::Closure(_) | ValueKind::BoundMethod(_) => {
                 self.bind_intrinsic_method(
                     identifier,
                     IntrinsicKind::Function(identifier),
@@ -1970,7 +1989,7 @@ impl Vm {
             _ => {
                 if optional {
                     pop_value!(self);
-                    push_value!(self, Value::Nil)?;
+                    push_value!(self, Value::nil())?;
                 } else {
                     return Err(QangRuntimeError::new(
                         format!("Cannot access property on {}", object.to_type_string()),
@@ -1984,10 +2003,10 @@ impl Vm {
 
     fn set_property(&mut self, identifier: StringHandle) -> RuntimeResult<()> {
         let instance = peek_value!(self, 1);
-        match instance {
-            Value::Instance(instance_handle) => {
+        match instance.kind() {
+            ValueKind::Instance(instance_handle) => {
                 let instance_table = self.alloc.get_instance(instance_handle).table;
-                let constant = Value::String(identifier);
+                let constant = Value::string(identifier);
                 let value = peek_value!(self, 0);
                 self.with_gc_check(|alloc| {
                     alloc.set_instance_field(instance_table, constant, value)
@@ -1996,8 +2015,8 @@ impl Vm {
                 pop_value!(self); // instance
                 push_value!(self, value)?; // push assigned value to top of stack
             }
-            Value::ObjectLiteral(obj_handle) => {
-                let constant = Value::String(identifier);
+            ValueKind::ObjectLiteral(obj_handle) => {
+                let constant = Value::string(identifier);
                 let value = peek_value!(self, 0);
                 self.with_gc_check(|alloc| alloc.tables.insert(obj_handle, constant, value));
                 let value = pop_value!(self); // value to assign
@@ -2015,7 +2034,7 @@ impl Vm {
     }
 
     fn get_global(&self, identifier_handle: StringHandle) -> RuntimeResult<Value> {
-        let key = Value::String(identifier_handle);
+        let key = Value::string(identifier_handle);
 
         // Try to get from function module context first
         if let Some(function_context) = self.state.function_module_context
@@ -2054,7 +2073,7 @@ impl Vm {
             .globals
             .get(&identifier_handle)
             .copied()
-            .unwrap_or(Value::Nil)
+            .unwrap_or(Value::nil())
     }
 
     fn try_get_from_globals_strict(&self, identifier_handle: StringHandle) -> RuntimeResult<Value> {
@@ -2071,7 +2090,7 @@ impl Vm {
 
     fn set_global(&mut self, identifier_handle: StringHandle) -> RuntimeResult<()> {
         let value = peek_value!(self, 0);
-        let key = Value::String(identifier_handle);
+        let key = Value::string(identifier_handle);
 
         // Try to set in function module context first
         if let Some(function_context) = self.state.function_module_context
@@ -2129,7 +2148,7 @@ impl Vm {
         let arg_count = self.state.read_byte() as usize;
         let superclass = pop_value!(self);
 
-        if let Value::Class(superclass_handle) = superclass {
+        if let Some(superclass_handle) = superclass.as_class() {
             self.invoke_from_class(superclass_handle, method_handle, arg_count)
         } else {
             Err(QangRuntimeError::new(
@@ -2142,17 +2161,17 @@ impl Vm {
     fn get_super(&mut self, property_handle: StringHandle) -> RuntimeResult<()> {
         let superclass = pop_value!(self);
 
-        if let Value::Class(superclass_handle) = superclass {
+        if let Some(superclass_handle) = superclass.as_class() {
             let superclass_obj = self.alloc.get_class(superclass_handle);
 
             if let Some(field_value) = self
                 .alloc
-                .get_class_method(superclass_obj.value_table, Value::String(property_handle))
+                .get_class_method(superclass_obj.value_table, Value::string(property_handle))
             {
                 self.state.stack[self.state.stack_top - 1] = field_value; // replace 'this' with the value of the field.
             } else if !self.bind_super_method(superclass_obj.method_table, property_handle)? {
                 pop_value!(self); // Pop 'this'
-                push_value!(self, Value::Nil)?;
+                push_value!(self, Value::nil())?;
             }
 
             Ok(())
@@ -2175,12 +2194,12 @@ impl Vm {
         roots.extend(self.globals().values());
 
         for frame in &self.state.frames[..self.state.frame_count] {
-            roots.push_back(Value::Closure(frame.closure));
+            roots.push_back(Value::closure(frame.closure));
         }
 
         for (_, upvalue_ref) in &self.state.open_upvalues {
             for (closure_handle, _) in upvalue_ref.iter() {
-                roots.push_back(Value::Closure(closure_handle));
+                roots.push_back(Value::closure(closure_handle));
             }
         }
 

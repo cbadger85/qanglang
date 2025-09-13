@@ -221,8 +221,8 @@ fn test_calling_functions_from_native() {
             .find(|(handle, _value)| **handle == function_identifier_handle)
             .unwrap();
 
-        match value {
-            Value::Closure(handle) => *handle,
+        match value.as_closure() {
+            Some(handle) => handle,
             _ => panic!("Identity function not found!"),
         }
     }
@@ -239,8 +239,11 @@ fn test_calling_functions_from_native() {
 
             let function_handle = find_function_handle("identity", &mut vm);
 
-            match vm.call_function(function_handle, &vec![Value::Number(42.0)]) {
-                Ok(Value::Number(number)) => {
+            match vm
+                .call_function(function_handle, &vec![Value::number(42.0)])
+                .map(|v| v.as_number())
+            {
+                Ok(Some(number)) => {
                     assert_eq!(number, 42.0);
                 }
                 Err(error) => {
@@ -252,8 +255,11 @@ fn test_calling_functions_from_native() {
 
             let foo = vm.alloc.strings.intern("foo".into());
 
-            match vm.call_function(function_handle, &vec![Value::String(foo)]) {
-                Ok(Value::String(handle)) => {
+            match vm
+                .call_function(function_handle, &vec![Value::string(foo)])
+                .map(|v| v.as_string())
+            {
+                Ok(Some(handle)) => {
                     let string = vm.alloc.strings.get_string(handle);
                     assert_eq!("foo".to_string(), string.to_string());
                 }
@@ -264,13 +270,12 @@ fn test_calling_functions_from_native() {
                 _ => panic!("Unexpected type conversion."),
             }
 
-            match vm.call_function(function_handle, &vec![]) {
-                Ok(Value::Nil) => (),
-                Err(error) => {
-                    println!("{}", error.message);
-                    panic!("Operation failed")
-                }
-                _ => panic!("Unexpected type conversion."),
+            if !vm
+                .call_function(function_handle, &vec![])
+                .map(|v| v.is_nil())
+                .unwrap_or(false)
+            {
+                panic!("Operation failed")
             }
         }
         Err(errors) => {

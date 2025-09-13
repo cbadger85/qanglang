@@ -358,14 +358,14 @@ impl<'a> Assembler<'a> {
             self.emit_constant_opcode(
                 OpCode::SetGlobal,
                 OpCode::SetGlobal16,
-                Value::String(handle),
+                Value::string(handle),
                 span,
             )
         } else {
             self.emit_constant_opcode(
                 OpCode::GetGlobal,
                 OpCode::GetGlobal16,
-                Value::String(handle),
+                Value::string(handle),
                 span,
             )
         }
@@ -423,7 +423,7 @@ impl<'a> Assembler<'a> {
         self.emit_constant_opcode(
             OpCode::Closure,
             OpCode::Closure16,
-            Value::FunctionDecl(function_handle),
+            Value::function(function_handle),
             func_expr.span,
         )?;
 
@@ -566,7 +566,7 @@ impl<'a> Assembler<'a> {
         self.emit_constant_opcode(
             OpCode::Closure,
             OpCode::Closure16,
-            Value::FunctionDecl(function_handle),
+            Value::function(function_handle),
             map_expr.span,
         )?;
 
@@ -640,7 +640,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         string: TypedNodeRef<StringLiteralNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.emit_constant(Value::String(string.node.value), string.node.span)
+        self.emit_constant(Value::string(string.node.value), string.node.span)
     }
 
     fn visit_boolean_literal(
@@ -719,7 +719,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.emit_constant_opcode(
             OpCode::GetSuper,
             OpCode::GetSuper16,
-            Value::String(method_identifier.node.name),
+            Value::string(method_identifier.node.name),
             super_expr.node.span,
         )?;
 
@@ -820,7 +820,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.emit_constant_opcode(
                         OpCode::SetProperty,
                         OpCode::SetProperty16,
-                        Value::String(identifier_handle),
+                        Value::string(identifier_handle),
                         property.span,
                     )?;
                 }
@@ -858,7 +858,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.emit_constant_opcode(
                         OpCode::GetProperty,
                         OpCode::GetProperty16,
-                        Value::String(identifier_handle),
+                        Value::string(identifier_handle),
                         property.span,
                     )?;
 
@@ -871,7 +871,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.emit_constant_opcode(
                         OpCode::SetProperty,
                         OpCode::SetProperty16,
-                        Value::String(identifier_handle),
+                        Value::string(identifier_handle),
                         property.span,
                     )?;
                 }
@@ -956,7 +956,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::DefineGlobal,
                     OpCode::DefineGlobal16,
-                    Value::String(identifier.node.name),
+                    Value::string(identifier.node.name),
                     var_decl.node.span,
                 )?;
             }
@@ -987,7 +987,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.emit_constant_opcode(
             OpCode::Module,
             OpCode::Module16,
-            Value::String(import_decl.node.path),
+            Value::string(import_decl.node.path),
             import_decl.node.span,
         )?;
 
@@ -1009,7 +1009,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::DefineGlobal,
                     OpCode::DefineGlobal16,
-                    Value::String(identifier.node.name),
+                    Value::string(identifier.node.name),
                     import_decl.node.span,
                 )?;
             }
@@ -1335,7 +1335,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::DefineGlobal,
                     OpCode::DefineGlobal16,
-                    Value::String(identifier.node.name),
+                    Value::string(identifier.node.name),
                     func_decl.node.span,
                 )?;
             }
@@ -1456,7 +1456,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::DefineGlobal,
                     OpCode::DefineGlobal16,
-                    Value::String(identifier.node.name),
+                    Value::string(identifier.node.name),
                     lambda_decl.node.span,
                 )?;
             }
@@ -1534,7 +1534,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.emit_constant_opcode(
             OpCode::Closure,
             OpCode::Closure16,
-            Value::FunctionDecl(function_handle),
+            Value::function(function_handle),
             lambda_expr.node.span,
         )?;
 
@@ -1614,7 +1614,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.emit_constant_opcode(
                         OpCode::SuperInvoke,
                         OpCode::SuperInvoke16,
-                        Value::String(method.node.name),
+                        Value::string(method.node.name),
                         call.node.span,
                     )?;
                     self.emit_byte(arg_length as u8, call.node.span);
@@ -1657,7 +1657,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.emit_constant_opcode(
                         OpCode::Invoke,
                         OpCode::Invoke16,
-                        Value::String(method_handle),
+                        Value::string(method_handle),
                         call.node.span,
                     )?;
                     self.emit_byte(arg_length as u8, call.node.span);
@@ -1691,7 +1691,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::GetProperty,
                     OpCode::GetProperty16,
-                    Value::String(identifier_handle),
+                    Value::string(identifier_handle),
                     call.node.span,
                 )?;
                 Ok(())
@@ -1713,7 +1713,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::GetOptionalProperty,
                     OpCode::GetOptionalProperty16,
-                    Value::String(identifier_handle),
+                    Value::string(identifier_handle),
                     call.node.span,
                 )?;
                 Ok(())
@@ -1778,7 +1778,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                             self.emit_constant_opcode(
                                 OpCode::Invoke,
                                 OpCode::Invoke16,
-                                Value::String(method_handle),
+                                Value::string(method_handle),
                                 pipe.node.span,
                             )?;
                             self.emit_byte(1, pipe.node.span);
@@ -1825,7 +1825,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         self.emit_constant_opcode(
                             OpCode::Invoke,
                             OpCode::Invoke16,
-                            Value::String(method_handle),
+                            Value::string(method_handle),
                             pipe.node.span,
                         )?;
                         self.emit_byte(1, pipe.node.span);
@@ -1865,7 +1865,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.emit_constant_opcode(
             OpCode::Class,
             OpCode::Class16,
-            Value::String(class_handle),
+            Value::string(class_handle),
             name.node.span,
         )?;
 
@@ -1887,7 +1887,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::DefineGlobal,
                     OpCode::DefineGlobal16,
-                    Value::String(class_handle),
+                    Value::string(class_handle),
                     name.node.span,
                 )?;
             }
@@ -1909,7 +1909,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_constant_opcode(
                     OpCode::GetGlobal,
                     OpCode::GetGlobal16,
-                    Value::String(class_handle),
+                    Value::string(class_handle),
                     name.node.span,
                 )?;
             }
@@ -1954,7 +1954,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.emit_constant_opcode(
                         OpCode::GetGlobal,
                         OpCode::GetGlobal16,
-                        Value::String(class_handle),
+                        Value::string(class_handle),
                         name.node.span,
                     )?;
                 }
@@ -2000,7 +2000,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         self.emit_constant_opcode(
                             OpCode::Method,
                             OpCode::Method16,
-                            Value::String(method_name.node.name),
+                            Value::string(method_name.node.name),
                             function.span,
                         )?;
                     }
@@ -2019,7 +2019,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         self.emit_constant_opcode(
                             OpCode::InitField,
                             OpCode::InitField16,
-                            Value::String(field_name.node.name),
+                            Value::string(field_name.node.name),
                             field_name.node.span,
                         )?;
                     }
@@ -2091,7 +2091,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let identifier_node = ctx.nodes.get_identifier_node(entry.node.key).node;
         let identifier_handle = identifier_node.name;
-        self.emit_constant(Value::String(identifier_handle), identifier_node.span)?;
+        self.emit_constant(Value::string(identifier_handle), identifier_node.span)?;
         let value = ctx.nodes.get_expr_node(entry.node.value);
         self.visit_expression(value, ctx)?;
         Ok(())

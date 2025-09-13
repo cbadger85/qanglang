@@ -1,4 +1,3 @@
-use crate::StringHandle;
 use crate::arena::{Arena, Index};
 use crate::memory::UpvalueOverflowArena;
 use crate::memory::array_arena::ArrayArena;
@@ -9,6 +8,7 @@ use crate::memory::object::{
 };
 use crate::memory::string_interner::StringInterner;
 use crate::{FunctionObject, Upvalue, Value, debug_log};
+use crate::{StringHandle, ValueKind};
 use std::collections::VecDeque;
 
 pub type UpvalueHandle = Index;
@@ -460,8 +460,8 @@ impl HeapAllocator {
 
     fn trace_references(&mut self, mut gray_list: VecDeque<Value>) {
         while let Some(value) = gray_list.pop_front() {
-            match value {
-                Value::Closure(handle) => {
+            match value.kind() {
+                ValueKind::Closure(handle) => {
                     self.closures
                         .trace_closure_references(handle, &mut |upvalue_handle| {
                             let upvalue = &mut self.upvalues[upvalue_handle];
@@ -477,7 +477,7 @@ impl HeapAllocator {
                             }
                         });
                 }
-                Value::Class(handle) => {
+                ValueKind::Class(handle) => {
                     let clazz = &mut self.classes[handle];
                     if !clazz.is_marked {
                         debug_log!(self.is_debug, "Marking class: {:?}", handle);
@@ -525,7 +525,7 @@ impl HeapAllocator {
                         );
                     }
                 }
-                Value::Instance(handle) => {
+                ValueKind::Instance(handle) => {
                     let instance = &mut self.instances[handle];
                     if !instance.is_marked {
                         debug_log!(self.is_debug, "Marking instance: {:?}", handle);
@@ -534,14 +534,14 @@ impl HeapAllocator {
                         debug_log!(self.is_debug, "Marking table: {:?}", instance.table);
                         self.tables.mark_hashmap(instance.table);
                         debug_log!(self.is_debug, "Blackening table: {:?}", instance.table);
-                        gray_list.push_back(Value::Class(instance.clazz));
+                        gray_list.push_back(Value::class(instance.clazz));
                         for (key, value) in self.tables.iter(instance.table) {
                             gray_list.push_back(key);
                             gray_list.push_back(value);
                         }
                     }
                 }
-                Value::BoundMethod(handle) => {
+                ValueKind::BoundMethod(handle) => {
                     let method_binding = &mut self.bound_methods[handle];
 
                     if !method_binding.is_marked {
@@ -549,10 +549,10 @@ impl HeapAllocator {
                         method_binding.is_marked = true;
                         debug_log!(self.is_debug, "Blackening method: {:?}", handle);
                         gray_list.push_back(method_binding.receiver);
-                        gray_list.push_back(Value::Closure(method_binding.closure));
+                        gray_list.push_back(Value::closure(method_binding.closure));
                     }
                 }
-                Value::BoundIntrinsic(handle) => {
+                ValueKind::BoundIntrinsic(handle) => {
                     let intrinsic_binding = &mut self.bound_intrinsics[handle];
 
                     if !intrinsic_binding.is_marked {
@@ -562,7 +562,7 @@ impl HeapAllocator {
                         gray_list.push_back(intrinsic_binding.receiver);
                     }
                 }
-                Value::Array(handle) => {
+                ValueKind::Array(handle) => {
                     if !self.arrays.check_is_marked(handle) {
                         debug_log!(self.is_debug, "Marking array: {:?}", handle);
                         self.arrays.mark_array(handle);
@@ -572,7 +572,7 @@ impl HeapAllocator {
                         }
                     }
                 }
-                Value::ObjectLiteral(handle) => {
+                ValueKind::ObjectLiteral(handle) => {
                     debug_log!(self.is_debug, "Marking object: {:?}", handle);
                     self.tables.mark_hashmap(handle);
                     debug_log!(self.is_debug, "Blackening object: {:?}", handle);
@@ -581,7 +581,7 @@ impl HeapAllocator {
                         gray_list.push_back(value);
                     }
                 }
-                Value::Module(handle) => {
+                ValueKind::Module(handle) => {
                     debug_log!(self.is_debug, "Marking module: {:?}", handle);
                     self.tables.mark_hashmap(handle);
                     debug_log!(self.is_debug, "Blackening module: {:?}", handle);

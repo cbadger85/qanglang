@@ -418,7 +418,8 @@ impl HashMapArena {
     ) {
         let chunk_data = if let Some(chunk) = self.chunks.get(chunk_handle.0) {
             // Use fixed-size array to avoid heap allocation entirely
-            let mut pairs: [(Value, Value); CHUNK_SIZE] = [(Value::Nil, Value::Nil); CHUNK_SIZE];
+            let mut pairs: [(Value, Value); CHUNK_SIZE] =
+                [(Value::nil(), Value::nil()); CHUNK_SIZE];
             let mut count = 0;
 
             for bucket in &chunk.buckets {
@@ -544,7 +545,7 @@ mod tests {
     use super::*;
 
     fn create_test_value(n: i32) -> Value {
-        Value::Number(n as f64)
+        Value::number(n as f64)
     }
 
     #[test]
@@ -727,8 +728,8 @@ mod tests {
 
         // Collect iterator results
         let mut collected: Vec<_> = arena.iter(handle).collect();
-        collected.sort_by_key(|(k, _)| match k {
-            Value::Number(n) => *n as i32,
+        collected.sort_by_key(|(k, _)| match k.as_number() {
+            Some(n) => n as i32,
             _ => 0,
         });
 
@@ -765,8 +766,8 @@ mod tests {
 
         // Collect remaining items
         let mut collected: Vec<_> = arena.iter(handle).collect();
-        collected.sort_by_key(|(k, _)| match k {
-            Value::Number(n) => *n as i32,
+        collected.sort_by_key(|(k, _)| match k.as_number() {
+            Some(n) => n as i32,
             _ => 0,
         });
 
@@ -828,13 +829,16 @@ mod tests {
         let handle = arena.new_hashmap();
 
         // Test different value types
-        arena.insert(handle, Value::Nil, Value::True);
-        arena.insert(handle, Value::False, Value::Number(42.0));
-        arena.insert(handle, Value::Number(123.0), Value::Nil);
+        arena.insert(handle, Value::nil(), Value::boolean(true));
+        arena.insert(handle, Value::boolean(false), Value::number(42.0));
+        arena.insert(handle, Value::number(123.0), Value::nil());
 
-        assert_eq!(arena.get(handle, &Value::Nil), Some(Value::True));
-        assert_eq!(arena.get(handle, &Value::False), Some(Value::Number(42.0)));
-        assert_eq!(arena.get(handle, &Value::Number(123.0)), Some(Value::Nil));
+        assert_eq!(arena.get(handle, &Value::nil()), Some(Value::boolean(true)));
+        assert_eq!(
+            arena.get(handle, &Value::boolean(false)),
+            Some(Value::number(42.0))
+        );
+        assert_eq!(arena.get(handle, &Value::number(123.0)), Some(Value::nil()));
 
         assert_eq!(arena.len(handle), 3);
     }

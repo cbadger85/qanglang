@@ -1,5 +1,5 @@
 use qanglang_core::{
-    ClosureHandle, CompilerPipeline, HeapAllocator, SourceMap, StringHandle, Value, Vm,
+    ClosureHandle, CompilerPipeline, HeapAllocator, SourceMap, StringHandle, Value, ValueKind, Vm,
 };
 use rustc_hash::FxHashMap;
 
@@ -135,7 +135,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
 
     // Run each test function
     let mut test_results = Vec::new();
-    let args = [Value::Nil; 0];
+    let args = [Value::default(); 0];
     for (test_name, function_handle) in test_functions {
         match vm.call_function(function_handle, &args) {
             Ok(_) => {
@@ -162,17 +162,17 @@ fn extract_test_info(
         // Get the identifier name for this global
         let identifier = allocator.strings.get_string(*handle);
 
-        match value {
+        match value.kind() {
             // Check if this is a test function (starts with "test_")
-            Value::Closure(func_handle) => {
+            ValueKind::Closure(func_handle) => {
                 if identifier.starts_with("test_") {
-                    test_functions.push((identifier.to_string(), *func_handle));
+                    test_functions.push((identifier.to_string(), func_handle));
                 }
             }
             // Check if this is the test description
-            Value::String(string_handle) => {
+            ValueKind::String(string_handle) => {
                 if identifier == "test_description" {
-                    description = Some(allocator.strings.get_string(*string_handle).to_string());
+                    description = Some(allocator.strings.get_string(string_handle).to_string());
                 }
             }
             _ => {}

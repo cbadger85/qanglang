@@ -33,7 +33,7 @@ impl ModuleResolver {
     pub fn gather_roots(&self, roots: &mut VecDeque<Value>) {
         for (_, module) in self.modules.iter() {
             if let Some(handle) = module.instance {
-                roots.push_front(Value::Module(handle));
+                roots.push_front(Value::module(handle));
             }
         }
     }

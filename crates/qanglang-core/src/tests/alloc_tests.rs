@@ -91,28 +91,28 @@ mod tests {
     #[test]
     fn test_allocate_upvalue() {
         let mut allocator = HeapAllocator::new();
-        let value = Value::Number(42.0);
+        let value = Value::number(42.0);
 
         let handle = allocator.allocate_upvalue(value);
 
         let retrieved = allocator.get_upvalue(handle);
-        assert_eq!(*retrieved, Value::Number(42.0));
+        assert_eq!(*retrieved, Value::number(42.0));
     }
 
     #[test]
     fn test_upvalue_mutability() {
         let mut allocator = HeapAllocator::new();
-        let value = Value::Number(42.0);
+        let value = Value::number(42.0);
 
         let handle = allocator.allocate_upvalue(value);
 
         {
             let upvalue_mut = allocator.get_upvalue_mut(handle);
-            *upvalue_mut = Value::Number(100.0);
+            *upvalue_mut = Value::number(100.0);
         }
 
         let retrieved = allocator.get_upvalue(handle);
-        assert_eq!(*retrieved, Value::Number(100.0));
+        assert_eq!(*retrieved, Value::number(100.0));
     }
 
     #[test]
@@ -148,14 +148,14 @@ mod tests {
         let instance_handle = allocator.allocate_instance(class_handle);
 
         let field_name = allocator.strings.intern("field1");
-        let field_value = Value::Number(42.0);
+        let field_value = Value::number(42.0);
 
-        allocator.set_instance_field(instance_handle, Value::String(field_name), field_value);
+        allocator.set_instance_field(instance_handle, Value::string(field_name), field_value);
 
-        let retrieved = allocator.get_instance_field(instance_handle, Value::String(field_name));
+        let retrieved = allocator.get_instance_field(instance_handle, Value::string(field_name));
         assert_eq!(retrieved, Some(field_value));
 
-        let non_existent = allocator.get_instance_field(instance_handle, Value::Number(999.0));
+        let non_existent = allocator.get_instance_field(instance_handle, Value::number(999.0));
         assert_eq!(non_existent, None);
     }
 
@@ -169,7 +169,7 @@ mod tests {
         let _function_handle = allocator.allocate_function(function);
 
         let string_handle = allocator.strings.intern("test");
-        let value = Value::String(string_handle);
+        let value = Value::string(string_handle);
         let _upvalue_handle = allocator.allocate_upvalue(value);
 
         // Allocate class and instance to test the fixed calculation
@@ -205,7 +205,7 @@ mod tests {
         let closure = create_test_closure(function_handle);
         let _closure_handle = allocator.closures.allocate_closure(closure);
 
-        let value = Value::Number(42.0);
+        let value = Value::number(42.0);
         let _upvalue_handle = allocator.allocate_upvalue(value);
 
         let _bytes_before = allocator.total_allocated_bytes();
@@ -231,12 +231,12 @@ mod tests {
         let closure_handle = allocator.closures.allocate_closure(closure);
 
         // Create an upvalue that should be collected
-        let value = Value::Number(42.0);
+        let value = Value::number(42.0);
         let _upvalue_handle = allocator.allocate_upvalue(value);
 
         // Keep the closure alive by making it a root
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Closure(closure_handle));
+        roots.push_back(Value::closure(closure_handle));
 
         allocator.collect_garbage(roots);
 
@@ -252,7 +252,7 @@ mod tests {
         let function = create_test_function();
         let function_handle = allocator.allocate_function(function);
 
-        let upvalue = Value::Number(42.0);
+        let upvalue = Value::number(42.0);
         let upvalue_handle = allocator.allocate_upvalue(upvalue);
 
         let closure = ClosureObject::new(function_handle, 1, None);
@@ -270,7 +270,7 @@ mod tests {
         if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle, 0)
         {
             let upvalue_value = allocator.get_upvalue(handle);
-            assert_eq!(*upvalue_value, Value::Number(42.0));
+            assert_eq!(*upvalue_value, Value::number(42.0));
         } else {
             panic!("Expected closed upvalue reference");
         }
@@ -283,7 +283,7 @@ mod tests {
         let function = create_test_function();
         let function_handle = allocator.allocate_function(function);
 
-        let upvalue = Value::Number(42.0);
+        let upvalue = Value::number(42.0);
         let upvalue_handle = allocator.allocate_upvalue(upvalue);
 
         let closure = ClosureObject::new(function_handle, 1, None);
@@ -296,7 +296,7 @@ mod tests {
 
         // Make the closure a root - this should keep the upvalue alive too
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Closure(closure_handle));
+        roots.push_back(Value::closure(closure_handle));
 
         allocator.collect_garbage(roots);
 
@@ -304,7 +304,7 @@ mod tests {
         if let Some(UpvalueSlot::Closed(handle)) = allocator.closures.get_upvalue(closure_handle, 0)
         {
             let upvalue_value = allocator.get_upvalue(handle);
-            assert_eq!(*upvalue_value, Value::Number(42.0));
+            assert_eq!(*upvalue_value, Value::number(42.0));
         }
     }
 
@@ -320,13 +320,13 @@ mod tests {
         let field_name = allocator.strings.intern("field1");
         allocator.set_instance_field(
             instance_handle,
-            Value::String(field_name),
-            Value::Number(42.0),
+            Value::string(field_name),
+            Value::number(42.0),
         );
 
         // Make the instance a root - this should keep the class alive too
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Instance(instance_handle));
+        roots.push_back(Value::instance(instance_handle));
 
         allocator.collect_garbage(roots);
 
@@ -338,8 +338,8 @@ mod tests {
         assert_eq!(retrieved_class.name, class_name);
 
         // Field should still be accessible
-        let field_value = allocator.get_instance_field(instance_handle, Value::String(field_name));
-        assert_eq!(field_value, Some(Value::Number(42.0)));
+        let field_value = allocator.get_instance_field(instance_handle, Value::string(field_name));
+        assert_eq!(field_value, Some(Value::number(42.0)));
     }
 
     #[test]
@@ -383,13 +383,13 @@ mod tests {
         // Create second closure
         let closure2 = ClosureObject::new(function_handle2, 1, None);
         let closure_handle2 = allocator.closures.allocate_closure(closure2);
-        let upvalue1 = allocator.allocate_upvalue(Value::Closure(closure_handle1));
+        let upvalue1 = allocator.allocate_upvalue(Value::closure(closure_handle1));
         allocator
             .closures
             .set_upvalue(closure_handle2, 0, UpvalueSlot::Closed(upvalue1));
 
         // Create third level - upvalue pointing to second closure
-        let upvalue2 = allocator.allocate_upvalue(Value::Closure(closure_handle2));
+        let upvalue2 = allocator.allocate_upvalue(Value::closure(closure_handle2));
 
         // Only root the deepest upvalue (by creating a closure that references it)
         let function3 = create_test_function();
@@ -401,19 +401,19 @@ mod tests {
             .set_upvalue(root_closure_handle, 0, UpvalueSlot::Closed(upvalue2));
 
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Closure(root_closure_handle));
+        roots.push_back(Value::closure(root_closure_handle));
 
         allocator.collect_garbage(roots);
 
         // All objects should still be accessible through the reference chain
         let retrieved_upvalue2 = allocator.get_upvalue(upvalue2);
-        if let Value::Closure(handle) = *retrieved_upvalue2 {
+        if let Some(handle) = retrieved_upvalue2.as_closure() {
             assert_eq!(handle, closure_handle2);
             if let Some(UpvalueSlot::Closed(upvalue_handle)) =
                 allocator.closures.get_upvalue(handle, 0)
             {
                 let retrieved_upvalue1 = allocator.get_upvalue(upvalue_handle);
-                if let Value::Closure(inner_handle) = *retrieved_upvalue1 {
+                if let Some(inner_handle) = retrieved_upvalue1.as_closure() {
                     assert_eq!(inner_handle, closure_handle1);
                 }
             }
@@ -430,7 +430,7 @@ mod tests {
         let closure = create_test_closure(function_handle);
         let _orphaned_closure = allocator.closures.allocate_closure(closure);
 
-        let _orphaned_upvalue = allocator.allocate_upvalue(Value::Number(42.0));
+        let _orphaned_upvalue = allocator.allocate_upvalue(Value::number(42.0));
 
         let class_name = allocator.strings.intern("OrphanedClass");
         let orphaned_class = allocator.allocate_class(class_name);
@@ -446,7 +446,7 @@ mod tests {
 
         // Collect garbage with only the root closure
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Closure(root_closure_handle));
+        roots.push_back(Value::closure(root_closure_handle));
         allocator.collect_garbage(roots);
 
         let bytes_after = allocator.total_allocated_bytes();
@@ -484,13 +484,13 @@ mod tests {
         let field_name = allocator.strings.intern("field");
         allocator.set_instance_field(
             instance_handle,
-            Value::String(field_name),
-            Value::Closure(field_value_closure_handle),
+            Value::string(field_name),
+            Value::closure(field_value_closure_handle),
         );
 
         // Root only the instance
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Instance(instance_handle));
+        roots.push_back(Value::instance(instance_handle));
 
         allocator.collect_garbage(roots);
 
@@ -502,10 +502,10 @@ mod tests {
         assert_eq!(retrieved_class.name, class_name);
 
         // Instance field should still be accessible
-        let field_value = allocator.get_instance_field(instance_handle, Value::String(field_name));
+        let field_value = allocator.get_instance_field(instance_handle, Value::string(field_name));
         assert_eq!(
             field_value,
-            Some(Value::Closure(field_value_closure_handle))
+            Some(Value::closure(field_value_closure_handle))
         );
     }
 
@@ -525,8 +525,8 @@ mod tests {
         let closure_handle2 = allocator.closures.allocate_closure(closure2);
 
         // Create upvalues that create circular reference
-        let upvalue1 = allocator.allocate_upvalue(Value::Closure(closure_handle2));
-        let upvalue2 = allocator.allocate_upvalue(Value::Closure(closure_handle1));
+        let upvalue1 = allocator.allocate_upvalue(Value::closure(closure_handle2));
+        let upvalue2 = allocator.allocate_upvalue(Value::closure(closure_handle1));
 
         // Update closures to reference the upvalues
         allocator
@@ -547,7 +547,7 @@ mod tests {
 
         // Root one of the closures - should keep the entire cycle alive
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Closure(closure_handle1));
+        roots.push_back(Value::closure(closure_handle1));
 
         allocator.collect_garbage(roots);
 
@@ -563,7 +563,7 @@ mod tests {
             allocator.closures.get_upvalue(closure_handle1, 0)
         {
             let upvalue_val = allocator.get_upvalue(handle);
-            if let Value::Closure(closure_handle) = *upvalue_val {
+            if let Some(closure_handle) = upvalue_val.as_closure() {
                 assert_eq!(closure_handle, closure_handle2);
             }
         }
@@ -586,7 +586,7 @@ mod tests {
             let temp_closure = create_test_closure(temp_function_handle);
             let _temp_closure_handle = allocator.closures.allocate_closure(temp_closure);
 
-            let _temp_upvalue = allocator.allocate_upvalue(Value::Number(i as f64));
+            let _temp_upvalue = allocator.allocate_upvalue(Value::number(i as f64));
 
             let temp_class_name = allocator.strings.intern(&format!("TempClass{}", i));
             let temp_class = allocator.allocate_class(temp_class_name);
@@ -594,7 +594,7 @@ mod tests {
 
             // Collect garbage, keeping only the persistent closure
             let mut roots = VecDeque::new();
-            roots.push_back(Value::Closure(persistent_closure_handle));
+            roots.push_back(Value::closure(persistent_closure_handle));
 
             allocator.collect_garbage(roots);
 
@@ -623,7 +623,7 @@ mod tests {
         let closure = create_test_closure(function_handle1);
         let _closure_handle = allocator.closures.allocate_closure(closure);
 
-        let _upvalue_handle = allocator.allocate_upvalue(Value::String(string1));
+        let _upvalue_handle = allocator.allocate_upvalue(Value::string(string1));
 
         // Record initial total bytes (functions and strings are immortal)
         let bytes_before_gc = allocator.total_allocated_bytes();
@@ -678,7 +678,7 @@ mod tests {
                 let _function_handle = allocator.allocate_function(function);
                 let closure = create_test_closure(0);
                 let _closure_handle = allocator.allocate_closure(closure);
-                let _upvalue = allocator.allocate_upvalue(Value::Number(42.0));
+                let _upvalue = allocator.allocate_upvalue(Value::number(42.0));
             }
 
             // Should now need collection
@@ -700,7 +700,7 @@ mod tests {
 
         // Collect garbage with the closure as root
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Closure(closure_handle));
+        roots.push_back(Value::closure(closure_handle));
         allocator.collect_garbage(roots);
 
         // After GC, threshold should be updated based on current allocated bytes
@@ -744,23 +744,23 @@ mod tests {
 
         allocator.set_instance_field(
             instance1_handle,
-            Value::String(field_name1),
-            Value::Closure(method1_closure_handle),
+            Value::string(field_name1),
+            Value::closure(method1_closure_handle),
         );
         allocator.set_instance_field(
             instance1_handle,
-            Value::String(field_name2),
-            Value::Closure(method2_closure_handle),
+            Value::string(field_name2),
+            Value::closure(method2_closure_handle),
         );
         allocator.set_instance_field(
             instance1_handle,
-            Value::String(field_name3),
-            Value::Instance(instance2_handle),
+            Value::string(field_name3),
+            Value::instance(instance2_handle),
         );
         allocator.set_instance_field(
             instance2_handle,
-            Value::String(field_name3),
-            Value::Instance(instance1_handle),
+            Value::string(field_name3),
+            Value::instance(instance1_handle),
         );
 
         // Create orphaned objects that should be collected
@@ -777,15 +777,15 @@ mod tests {
         let orphaned_field = allocator.strings.intern("orphaned_field");
         allocator.set_instance_field(
             orphaned_instance_handle,
-            Value::String(orphaned_field),
-            Value::Number(999.0),
+            Value::string(orphaned_field),
+            Value::number(999.0),
         );
 
         let total_bytes_before = allocator.total_allocated_bytes();
 
         // Root only instance1 - this should keep instance1, instance2, and closures referenced by tables alive
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Instance(instance1_handle));
+        roots.push_back(Value::instance(instance1_handle));
 
         allocator.collect_garbage(roots);
 
@@ -808,20 +808,20 @@ mod tests {
 
         // Fields should still be accessible and point to correct objects
         let method1_field =
-            allocator.get_instance_field(instance1_handle, Value::String(field_name1));
-        assert_eq!(method1_field, Some(Value::Closure(method1_closure_handle)));
+            allocator.get_instance_field(instance1_handle, Value::string(field_name1));
+        assert_eq!(method1_field, Some(Value::closure(method1_closure_handle)));
 
         let method2_field =
-            allocator.get_instance_field(instance1_handle, Value::String(field_name2));
-        assert_eq!(method2_field, Some(Value::Closure(method2_closure_handle)));
+            allocator.get_instance_field(instance1_handle, Value::string(field_name2));
+        assert_eq!(method2_field, Some(Value::closure(method2_closure_handle)));
 
         let sibling_field =
-            allocator.get_instance_field(instance1_handle, Value::String(field_name3));
-        assert_eq!(sibling_field, Some(Value::Instance(instance2_handle)));
+            allocator.get_instance_field(instance1_handle, Value::string(field_name3));
+        assert_eq!(sibling_field, Some(Value::instance(instance2_handle)));
 
         let reverse_sibling =
-            allocator.get_instance_field(instance2_handle, Value::String(field_name3));
-        assert_eq!(reverse_sibling, Some(Value::Instance(instance1_handle)));
+            allocator.get_instance_field(instance2_handle, Value::string(field_name3));
+        assert_eq!(reverse_sibling, Some(Value::instance(instance1_handle)));
 
         // Referenced closures should still be accessible (kept alive by table references)
         let retrieved_method1 = allocator.closures.get_closure(method1_closure_handle);
@@ -852,8 +852,8 @@ mod tests {
             let field_name = allocator.strings.intern(&format!("closure_{}", i));
             allocator.set_instance_field(
                 instance_handle,
-                Value::String(field_name),
-                Value::Closure(closure_handle),
+                Value::string(field_name),
+                Value::closure(closure_handle),
             );
         }
 
@@ -861,8 +861,8 @@ mod tests {
         for i in 0..3 {
             let field_name = allocator.strings.intern(&format!("closure_{}", i));
             let field_value =
-                allocator.get_instance_field(instance_handle, Value::String(field_name));
-            assert_eq!(field_value, Some(Value::Closure(closure_handles[i])));
+                allocator.get_instance_field(instance_handle, Value::string(field_name));
+            assert_eq!(field_value, Some(Value::closure(closure_handles[i])));
         }
 
         let total_bytes_before = allocator.total_allocated_bytes();
@@ -916,18 +916,18 @@ mod tests {
 
         allocator.set_instance_field(
             container_instance,
-            Value::String(closure_field),
-            Value::Closure(target_closure_handle),
+            Value::string(closure_field),
+            Value::closure(target_closure_handle),
         );
         allocator.set_instance_field(
             container_instance,
-            Value::String(instance_field),
-            Value::Instance(target_instance_handle),
+            Value::string(instance_field),
+            Value::instance(target_instance_handle),
         );
         allocator.set_instance_field(
             container_instance,
-            Value::String(class_field),
-            Value::Class(target_class_handle),
+            Value::string(class_field),
+            Value::class(target_class_handle),
         );
 
         // Create truly orphaned objects that should be collected
@@ -940,7 +940,7 @@ mod tests {
 
         // Root only the container instance - objects in its table should be kept alive
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Instance(container_instance));
+        roots.push_back(Value::instance(container_instance));
 
         allocator.collect_garbage(roots);
 
@@ -956,26 +956,26 @@ mod tests {
 
         // Objects referenced by the table should still be accessible through field access
         let closure_ref =
-            allocator.get_instance_field(container_instance, Value::String(closure_field));
+            allocator.get_instance_field(container_instance, Value::string(closure_field));
         assert_eq!(
             closure_ref,
-            Some(Value::Closure(target_closure_handle)),
+            Some(Value::closure(target_closure_handle)),
             "Closure referenced by table should still be accessible"
         );
 
         let instance_ref =
-            allocator.get_instance_field(container_instance, Value::String(instance_field));
+            allocator.get_instance_field(container_instance, Value::string(instance_field));
         assert_eq!(
             instance_ref,
-            Some(Value::Instance(target_instance_handle)),
+            Some(Value::instance(target_instance_handle)),
             "Instance referenced by table should still be accessible"
         );
 
         let class_ref =
-            allocator.get_instance_field(container_instance, Value::String(class_field));
+            allocator.get_instance_field(container_instance, Value::string(class_field));
         assert_eq!(
             class_ref,
-            Some(Value::Class(target_class_handle)),
+            Some(Value::class(target_class_handle)),
             "Class referenced by table should still be accessible"
         );
 
@@ -1017,13 +1017,13 @@ mod tests {
         let closure_handle1 = allocator.closures.allocate_closure(closure1);
 
         // First upvalue points to base instance
-        let upvalue1 = allocator.allocate_upvalue(Value::Instance(base_instance));
+        let upvalue1 = allocator.allocate_upvalue(Value::instance(base_instance));
         allocator
             .closures
             .set_upvalue(closure_handle1, 0, UpvalueSlot::Closed(upvalue1));
 
         // Second upvalue points to derived instance
-        let upvalue2 = allocator.allocate_upvalue(Value::Instance(derived_instance));
+        let upvalue2 = allocator.allocate_upvalue(Value::instance(derived_instance));
         allocator
             .closures
             .set_upvalue(closure_handle1, 1, UpvalueSlot::Closed(upvalue2));
@@ -1034,18 +1034,18 @@ mod tests {
 
         allocator.set_instance_field(
             base_instance,
-            Value::String(field_name1),
-            Value::Instance(derived_instance),
+            Value::string(field_name1),
+            Value::instance(derived_instance),
         );
         allocator.set_instance_field(
             derived_instance,
-            Value::String(field_name1),
-            Value::Instance(base_instance),
+            Value::string(field_name1),
+            Value::instance(base_instance),
         );
         allocator.set_instance_field(
             base_instance,
-            Value::String(field_name2),
-            Value::Closure(closure_handle1),
+            Value::string(field_name2),
+            Value::closure(closure_handle1),
         );
 
         // Create some objects that should be collected
@@ -1054,13 +1054,13 @@ mod tests {
         let orphaned_closure = create_test_closure(orphaned_function_handle);
         let _orphaned_closure_handle = allocator.closures.allocate_closure(orphaned_closure);
 
-        let _orphaned_upvalue = allocator.allocate_upvalue(Value::Number(999.0));
+        let _orphaned_upvalue = allocator.allocate_upvalue(Value::number(999.0));
 
         let bytes_before = allocator.total_allocated_bytes();
 
         // Root only the base instance - should keep everything in the connected graph alive
         let mut roots = VecDeque::new();
-        roots.push_back(Value::Instance(base_instance));
+        roots.push_back(Value::instance(base_instance));
 
         allocator.collect_garbage(roots);
 
@@ -1077,15 +1077,15 @@ mod tests {
         assert_eq!(retrieved_derived.clazz, derived_class);
 
         // Cross-references should be intact
-        let base_ref = allocator.get_instance_field(base_instance, Value::String(field_name1));
-        assert_eq!(base_ref, Some(Value::Instance(derived_instance)));
+        let base_ref = allocator.get_instance_field(base_instance, Value::string(field_name1));
+        assert_eq!(base_ref, Some(Value::instance(derived_instance)));
 
         let derived_ref =
-            allocator.get_instance_field(derived_instance, Value::String(field_name1));
-        assert_eq!(derived_ref, Some(Value::Instance(base_instance)));
+            allocator.get_instance_field(derived_instance, Value::string(field_name1));
+        assert_eq!(derived_ref, Some(Value::instance(base_instance)));
 
-        let method_ref = allocator.get_instance_field(base_instance, Value::String(field_name2));
-        assert_eq!(method_ref, Some(Value::Closure(closure_handle1)));
+        let method_ref = allocator.get_instance_field(base_instance, Value::string(field_name2));
+        assert_eq!(method_ref, Some(Value::closure(closure_handle1)));
 
         // Closure and its upvalues should be accessible
         let retrieved_closure = allocator.closures.get_closure(closure_handle1);
@@ -1095,14 +1095,14 @@ mod tests {
             allocator.closures.get_upvalue(closure_handle1, 0)
         {
             let upvalue_val = allocator.get_upvalue(handle);
-            assert_eq!(*upvalue_val, Value::Instance(base_instance));
+            assert_eq!(*upvalue_val, Value::instance(base_instance));
         }
 
         if let Some(UpvalueSlot::Closed(handle)) =
             allocator.closures.get_upvalue(closure_handle1, 1)
         {
             let upvalue_val = allocator.get_upvalue(handle);
-            assert_eq!(*upvalue_val, Value::Instance(derived_instance));
+            assert_eq!(*upvalue_val, Value::instance(derived_instance));
         }
     }
 }

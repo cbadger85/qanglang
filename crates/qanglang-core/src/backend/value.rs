@@ -60,10 +60,10 @@ pub enum ValueKind {
     Module(Index),
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
-pub struct SmallValue(f64);
+#[derive(Debug, Clone, Copy)]
+pub struct Value(f64);
 
-impl SmallValue {
+impl Value {
     pub fn nil() -> Self {
         Self(f64::from_bits(NIL_NAN))
     }
@@ -89,7 +89,7 @@ impl SmallValue {
     }
 
     pub fn as_number(&self) -> Option<f64> {
-        Some(self.0)
+        if !self.0.is_nan() { Some(self.0) } else { None }
     }
 
     pub fn string(handle: StringHandle) -> Self {
@@ -148,14 +148,6 @@ impl SmallValue {
         } else {
             None
         }
-
-        /*
-        BoundMethod(Index),
-        BoundIntrinsic(Index),
-        Array(Index),
-        ObjectLiteral(Index),
-        Module(Index),
-             */
     }
 
     pub fn class(handle: ClassHandle) -> Self {
@@ -392,7 +384,7 @@ impl SmallValue {
                 format!(
                     "{}.{}",
                     method_binding.receiver.to_display_string(allocator),
-                    Value::Closure(method_binding.closure).to_display_string(allocator)
+                    Value::closure(method_binding.closure).to_display_string(allocator)
                 )
             }
             ValueKind::BoundIntrinsic(handle) => {
@@ -400,7 +392,7 @@ impl SmallValue {
                 format!(
                     "{}.{}",
                     intrinsic_binding.receiver.to_type_string(),
-                    Value::String(intrinsic_binding.name_handle).to_display_string(allocator)
+                    Value::string(intrinsic_binding.name_handle).to_display_string(allocator)
                 )
             }
             ValueKind::Array(handle) => {
@@ -462,251 +454,51 @@ impl SmallValue {
     }
 }
 
-impl From<f64> for SmallValue {
+impl From<f64> for Value {
     fn from(num: f64) -> Self {
-        SmallValue::number(num)
+        Value::number(num)
     }
 }
 
-impl From<u64> for SmallValue {
+impl From<u64> for Value {
     fn from(num: u64) -> Self {
-        SmallValue::number(num as f64)
+        Value::number(num as f64)
     }
 }
 
-impl From<usize> for SmallValue {
+impl From<usize> for Value {
     fn from(num: usize) -> Self {
-        SmallValue::number(num as f64)
+        Value::number(num as f64)
     }
 }
 
-impl From<bool> for SmallValue {
+impl From<bool> for Value {
     fn from(value: bool) -> Self {
-        SmallValue::boolean(value)
+        Value::boolean(value)
     }
 }
 
-impl Default for SmallValue {
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        // For regular numbers (not NaN), use direct comparison
+        if !self.0.is_nan() && !other.0.is_nan() {
+            return self.0 == other.0;
+        }
+
+        // For NaN patterns, compare the bit representation directly
+        // This ensures different NaN values (nil, booleans, strings, etc.) compare correctly
+        self.0.to_bits() == other.0.to_bits()
+    }
+}
+
+impl Default for Value {
     fn default() -> Self {
-        SmallValue::nil()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Copy)]
-#[repr(u8)]
-pub enum Value {
-    Nil,
-    True,
-    False,
-    Number(f64),
-    String(StringHandle),
-    Closure(ClosureHandle),
-    NativeFunction(NativeFunctionHandle),
-    FunctionDecl(FunctionHandle),
-    Class(ClassHandle),
-    Instance(InstanceHandle),
-    BoundMethod(BoundMethodHandle),
-    BoundIntrinsic(BoundMethodHandle),
-    Array(ArrayHandle),
-    ObjectLiteral(HashMapHandle),
-    Module(HashMapHandle),
-}
-
-impl Value {
-    pub fn print(&self, allocator: &HeapAllocator) {
-        print!("{}", self.to_display_string(allocator));
-    }
-
-    pub fn to_display_string(&self, allocator: &HeapAllocator) -> String {
-        match self {
-            Value::Nil => "nil".to_string(),
-            Value::Number(number) => number.to_string(),
-            Value::String(handle) => allocator.strings.get_string(*handle).to_string(),
-            Value::True => "true".to_string(),
-            Value::False => "false".to_string(),
-            Value::FunctionDecl(function_handle) => {
-                let function = allocator.get_function(*function_handle);
-                let identifier = allocator.strings.get_string(function.name);
-                format!("{}<function>", identifier)
-            }
-            Value::Closure(handle) => {
-                let closure = allocator.closures.get_closure(*handle);
-                let function = allocator.get_function(closure.function);
-                let identifier = allocator.strings.get_string(function.name);
-                format!("{}<function>", identifier)
-            }
-            Value::NativeFunction(handle) => {
-                let function = allocator.get_native_function(*handle);
-                let identifier = allocator.strings.get_string(function.name_handle);
-                format!("{}<function>", identifier)
-            }
-            Value::Class(handle) => {
-                let clazz = allocator.get_class(*handle);
-                let identifier = allocator.strings.get_string(clazz.name);
-                format!("{}<class>", identifier)
-            }
-            Value::Instance(handle) => {
-                let instance = allocator.get_instance(*handle);
-                let clazz = allocator.get_class(instance.clazz);
-                let identifier = allocator.strings.get_string(clazz.name);
-                format!("instanceof {}", identifier)
-            }
-            Value::BoundMethod(handle) => {
-                let method_binding = allocator.get_bound_method(*handle);
-                format!(
-                    "{}.{}",
-                    method_binding.receiver.to_display_string(allocator),
-                    Value::Closure(method_binding.closure).to_display_string(allocator)
-                )
-            }
-            Value::BoundIntrinsic(handle) => {
-                let intrinsic_binding = allocator.get_bound_intrinsic(*handle);
-                format!(
-                    "{}.{}",
-                    intrinsic_binding.receiver.to_type_string(),
-                    Value::String(intrinsic_binding.name_handle).to_display_string(allocator)
-                )
-            }
-            Value::Array(handle) => {
-                let mut string = String::from("[");
-                for item in allocator.arrays.iter(*handle) {
-                    string.push_str(&item.to_display_string(allocator));
-                    string.push(',');
-                }
-                string.push(']');
-                string
-            }
-            Value::ObjectLiteral(handle) => {
-                let mut string = String::from("{{");
-                for (key, value) in allocator.tables.iter(*handle) {
-                    string.push(' ');
-                    string.push_str(&key.to_display_string(allocator));
-                    string.push('=');
-                    string.push_str(&value.to_display_string(allocator));
-                    string.push(',');
-                    string.push(' ');
-                }
-                string.push_str("}}");
-                string
-            }
-            Value::Module(handle) => {
-                format!("module#{}", handle)
-            }
-        }
-    }
-
-    pub const fn to_type_string(&self) -> &'static str {
-        match self {
-            Value::Nil => NIL_TYPE_STRING,
-            Value::True => BOOLEAN_TYPE_STRING,
-            Value::False => BOOLEAN_TYPE_STRING,
-            Value::Number(_) => NUMBER_TYPE_STRING,
-            Value::String(_) => STRING_TYPE_STRING,
-            Value::Closure(_) => FUNCTION_TYPE_STRING,
-            Value::NativeFunction(_) => FUNCTION_TYPE_STRING,
-            Value::FunctionDecl(_) => FUNCTION_TYPE_STRING,
-            Value::Class(_) => CLASS_TYPE_STRING,
-            Value::Instance(_) => OBJECT_TYPE_STRING,
-            Value::BoundMethod(_) => FUNCTION_TYPE_STRING,
-            Value::BoundIntrinsic(_) => FUNCTION_TYPE_STRING,
-            Value::Array(_) => ARRAY_TYPE_STRING,
-            Value::ObjectLiteral(_) => OBJECT_TYPE_STRING,
-            Value::Module(_) => MODULE_TYPE_STRING,
-        }
-    }
-
-    pub fn is_truthy(&self) -> bool {
-        !matches!(self, Value::Nil | Value::False)
-    }
-
-    pub fn hash(&self) -> u64 {
-        use rustc_hash::FxHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = FxHasher::default();
-        std::mem::discriminant(self).hash(&mut hasher);
-        match self {
-            Value::Number(n) => n.to_bits().hash(&mut hasher),
-            Value::String(handle) => handle.hash(&mut hasher),
-            Value::Closure(handle) => handle.hash(&mut hasher),
-            Value::NativeFunction(handle) => handle.hash(&mut hasher),
-            Value::FunctionDecl(handle) => handle.hash(&mut hasher),
-            Value::Class(handle) => handle.hash(&mut hasher),
-            Value::Instance(handle) => handle.hash(&mut hasher),
-            Value::BoundMethod(handle) => handle.hash(&mut hasher),
-            Value::BoundIntrinsic(handle) => handle.hash(&mut hasher),
-            Value::Array(handle) => handle.hash(&mut hasher),
-            Value::ObjectLiteral(handle) => handle.hash(&mut hasher),
-            Value::Module(handle) => handle.hash(&mut hasher),
-            Value::Nil | Value::True | Value::False => (),
-        }
-        hasher.finish()
+        Value::nil()
     }
 }
 
 impl std::fmt::Display for Index {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.index)
-    }
-}
-
-impl From<f64> for Value {
-    fn from(num: f64) -> Self {
-        Value::Number(num)
-    }
-}
-
-impl From<u64> for Value {
-    fn from(num: u64) -> Self {
-        Value::Number(num as f64)
-    }
-}
-
-impl From<usize> for Value {
-    fn from(num: usize) -> Self {
-        Value::Number(num as f64)
-    }
-}
-
-impl From<bool> for Value {
-    fn from(value: bool) -> Self {
-        if value { Value::True } else { Value::False }
-    }
-}
-
-impl Default for Value {
-    fn default() -> Self {
-        Self::Nil
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::arena::Index;
-
-    #[test]
-    fn test_hash_different_variants_have_different_hashes() {
-        let string_value = Value::String(42);
-        let function_value = Value::FunctionDecl(42);
-        let closure_value = Value::Closure(Index::new(42, 0));
-        let class_value = Value::Class(Index::new(42, 0));
-        let native_fn_value = Value::NativeFunction(42);
-
-        assert_ne!(string_value.hash(), function_value.hash());
-        assert_ne!(string_value.hash(), closure_value.hash());
-        assert_ne!(string_value.hash(), class_value.hash());
-        assert_ne!(string_value.hash(), native_fn_value.hash());
-        assert_ne!(function_value.hash(), closure_value.hash());
-        assert_ne!(function_value.hash(), class_value.hash());
-        assert_ne!(closure_value.hash(), class_value.hash());
-    }
-
-    #[test]
-    fn test_hash_same_values_have_same_hashes() {
-        assert_eq!(Value::Nil.hash(), Value::Nil.hash());
-        assert_eq!(Value::True.hash(), Value::True.hash());
-        assert_eq!(Value::False.hash(), Value::False.hash());
-        assert_eq!(Value::Number(42.0).hash(), Value::Number(42.0).hash());
-        assert_eq!(Value::String(123).hash(), Value::String(123).hash());
     }
 }

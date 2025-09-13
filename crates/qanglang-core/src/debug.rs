@@ -1,5 +1,5 @@
 use crate::{
-    HeapAllocator, Value,
+    HeapAllocator,
     backend::chunk::{Chunk, OpCode},
 };
 
@@ -76,8 +76,8 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
             print!("{:<16} {:4} '", "OP_CLOSURE", constant);
             let value = chunk.constants[constant as usize];
             println!("{}'", value.to_display_string(allocator));
-            let function_obj = match value {
-                Value::FunctionDecl(handle) => Some(allocator.get_function(handle)),
+            let function_obj = match value.as_function() {
+                Some(handle) => Some(allocator.get_function(handle)),
                 _ => None,
             };
 
@@ -111,8 +111,8 @@ pub fn disassemble_instruction(chunk: &Chunk, allocator: &HeapAllocator, offset:
             print!("{:<16} {:4} '", "OP_CLOSURE16", constant);
             let value = chunk.constants[constant];
             println!("{}'", value.to_display_string(allocator));
-            let function_obj = match value {
-                Value::FunctionDecl(handle) => Some(allocator.get_function(handle)),
+            let function_obj = match value.as_function() {
+                Some(handle) => Some(allocator.get_function(handle)),
                 _ => None,
             };
 
@@ -215,9 +215,9 @@ fn string_constant_instruction(
     print!("{:<16} {:4} '", name, constant);
 
     if let Some(value) = chunk.constants.get(constant) {
-        match value {
-            Value::String(handle) => {
-                let string_value = allocator.strings.get_string(*handle);
+        match value.as_string() {
+            Some(handle) => {
+                let string_value = allocator.strings.get_string(handle);
                 print!("{}", string_value);
             }
             _ => {
@@ -283,9 +283,9 @@ fn invoke_instruction(
     print!("{:<16} ({} args) {:4} '", name, arg_count, constant);
 
     if let Some(value) = chunk.constants.get(constant as usize) {
-        match value {
-            Value::String(handle) => {
-                let string_value = allocator.strings.get_string(*handle);
+        match value.as_string() {
+            Some(handle) => {
+                let string_value = allocator.strings.get_string(handle);
                 print!("{}", string_value);
             }
             _ => {
@@ -312,9 +312,9 @@ fn string_constant_16_instruction(
     print!("{:<16} {:4} '", name, constant);
 
     if let Some(value) = chunk.constants.get(constant) {
-        match value {
-            Value::String(handle) => {
-                let string_value = allocator.strings.get_string(*handle);
+        match value.as_string() {
+            Some(handle) => {
+                let string_value = allocator.strings.get_string(handle);
                 print!("{}", string_value);
             }
             _ => {
@@ -342,9 +342,9 @@ fn invoke_16_instruction(
     print!("{:<16} ({} args) {:4} '", name, arg_count, constant);
 
     if let Some(value) = chunk.constants.get(constant) {
-        match value {
-            Value::String(handle) => {
-                let string_value = allocator.strings.get_string(*handle);
+        match value.as_string() {
+            Some(handle) => {
+                let string_value = allocator.strings.get_string(handle);
                 print!("{}", string_value);
             }
             _ => {

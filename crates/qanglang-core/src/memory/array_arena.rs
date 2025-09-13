@@ -128,7 +128,7 @@ impl ArrayArena {
 
         // Check bounds - negative index too large or positive index out of bounds
         if actual_index < 0 || actual_index >= length {
-            return Value::Nil;
+            return Value::nil();
         }
 
         let actual_index = actual_index as usize;
@@ -142,14 +142,14 @@ impl ArrayArena {
             if let Some(chunk_handle) = current_chunk {
                 current_chunk = self.chunks[chunk_handle].next_chunk;
             } else {
-                return Value::Nil;
+                return Value::nil();
             }
         }
 
         if let Some(chunk_handle) = current_chunk {
-            self.chunks[chunk_handle].data[slot_index].unwrap_or(Value::Nil)
+            self.chunks[chunk_handle].data[slot_index].unwrap_or(Value::nil())
         } else {
-            Value::Nil
+            Value::nil()
         }
     }
 
@@ -178,7 +178,7 @@ impl ArrayArena {
             // Extract the value
             let value = self.chunks[chunk_handle].data[slot_index]
                 .take()
-                .unwrap_or(Value::Nil);
+                .unwrap_or(Value::nil());
 
             if self.chunks[chunk_handle].used > 0 {
                 self.chunks[chunk_handle].used -= 1;
@@ -450,7 +450,7 @@ impl<'a> Iterator for ArrayIterator<'a> {
             self.current_index += 1;
 
             // Skip Nil values (empty slots)
-            if !matches!(value, Value::Nil) {
+            if !value.is_nil() {
                 return Some(value);
             }
         }
@@ -472,7 +472,7 @@ impl<'a> DoubleEndedIterator for ArrayIterator<'a> {
                 .get(self.handle, self.current_back_index as isize);
 
             // Skip Nil values (empty slots)
-            if !matches!(value, Value::Nil) {
+            if !value.is_nil() {
                 return Some(value);
             }
         }
@@ -489,7 +489,7 @@ mod tests {
         let mut arena = ArrayArena::new();
         let handle = arena.create_array(0);
         assert_eq!(arena.length(handle), 0);
-        assert_eq!(arena.get(handle, 0), Value::Nil);
+        assert_eq!(arena.get(handle, 0), Value::nil());
     }
 
     #[test]
@@ -500,7 +500,7 @@ mod tests {
 
         // All elements should be Nil initially
         for i in 0..5 {
-            assert_eq!(arena.get(handle, i), Value::Nil);
+            assert_eq!(arena.get(handle, i), Value::nil());
         }
     }
 
@@ -509,8 +509,8 @@ mod tests {
         let mut arena = ArrayArena::new();
         let handle = arena.create_array(100);
         assert_eq!(arena.length(handle), 100);
-        assert_eq!(arena.get(handle, 99), Value::Nil);
-        assert_eq!(arena.get(handle, 100), Value::Nil); // Out of bounds
+        assert_eq!(arena.get(handle, 99), Value::nil());
+        assert_eq!(arena.get(handle, 100), Value::nil()); // Out of bounds
     }
 
     #[test]
@@ -518,13 +518,13 @@ mod tests {
         let mut arena = ArrayArena::new();
         let handle = arena.create_array(3);
 
-        assert!(arena.insert(handle, 0, Value::Number(1.0)));
-        assert!(arena.insert(handle, 1, Value::Number(2.0)));
-        assert!(arena.insert(handle, 2, Value::Number(3.0)));
+        assert!(arena.insert(handle, 0, Value::number(1.0)));
+        assert!(arena.insert(handle, 1, Value::number(2.0)));
+        assert!(arena.insert(handle, 2, Value::number(3.0)));
 
-        assert_eq!(arena.get(handle, 0), Value::Number(1.0));
-        assert_eq!(arena.get(handle, 1), Value::Number(2.0));
-        assert_eq!(arena.get(handle, 2), Value::Number(3.0));
+        assert_eq!(arena.get(handle, 0), Value::number(1.0));
+        assert_eq!(arena.get(handle, 1), Value::number(2.0));
+        assert_eq!(arena.get(handle, 2), Value::number(3.0));
     }
 
     #[test]
@@ -532,9 +532,9 @@ mod tests {
         let mut arena = ArrayArena::new();
         let handle = arena.create_array(2);
 
-        assert!(arena.insert(handle, 0, Value::Number(1.0)));
-        assert!(!arena.insert(handle, 2, Value::Number(3.0))); // Out of bounds
-        assert!(!arena.insert(handle, 10, Value::Number(10.0))); // Way out of bounds
+        assert!(arena.insert(handle, 0, Value::number(1.0)));
+        assert!(!arena.insert(handle, 2, Value::number(3.0))); // Out of bounds
+        assert!(!arena.insert(handle, 10, Value::number(10.0))); // Way out of bounds
     }
 
     #[test]
@@ -543,21 +543,21 @@ mod tests {
         let handle = arena.create_array(0);
 
         // Push some values
-        arena.push(handle, Value::Number(1.0));
-        arena.push(handle, Value::Number(2.0));
-        arena.push(handle, Value::Number(3.0));
+        arena.push(handle, Value::number(1.0));
+        arena.push(handle, Value::number(2.0));
+        arena.push(handle, Value::number(3.0));
 
         assert_eq!(arena.length(handle), 3);
-        assert_eq!(arena.get(handle, 0), Value::Number(1.0));
-        assert_eq!(arena.get(handle, 1), Value::Number(2.0));
-        assert_eq!(arena.get(handle, 2), Value::Number(3.0));
+        assert_eq!(arena.get(handle, 0), Value::number(1.0));
+        assert_eq!(arena.get(handle, 1), Value::number(2.0));
+        assert_eq!(arena.get(handle, 2), Value::number(3.0));
 
         // Pop values
-        assert_eq!(arena.pop(handle), Some(Value::Number(3.0)));
-        assert_eq!(arena.pop(handle), Some(Value::Number(2.0)));
+        assert_eq!(arena.pop(handle), Some(Value::number(3.0)));
+        assert_eq!(arena.pop(handle), Some(Value::number(2.0)));
         assert_eq!(arena.length(handle), 1);
 
-        assert_eq!(arena.pop(handle), Some(Value::Number(1.0)));
+        assert_eq!(arena.pop(handle), Some(Value::number(1.0)));
         assert_eq!(arena.length(handle), 0);
 
         // Pop from empty array
@@ -571,19 +571,19 @@ mod tests {
 
         // Push more than one chunk worth of data
         for i in 0..50 {
-            arena.push(handle, Value::Number(i as f64));
+            arena.push(handle, Value::number(i as f64));
         }
 
         assert_eq!(arena.length(handle), 50);
 
         // Verify values across chunks
         for i in 0..50 {
-            assert_eq!(arena.get(handle, i), Value::Number(i as f64));
+            assert_eq!(arena.get(handle, i), Value::number(i as f64));
         }
 
         // Pop from multiple chunks
         for i in (0..50).rev() {
-            assert_eq!(arena.pop(handle), Some(Value::Number(i as f64)));
+            assert_eq!(arena.pop(handle), Some(Value::number(i as f64)));
         }
 
         assert_eq!(arena.length(handle), 0);
@@ -596,14 +596,14 @@ mod tests {
 
         // Insert values
         for i in 0..5 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         arena.reverse(handle);
 
         // Check reversed values
         for i in 0..5 {
-            assert_eq!(arena.get(handle, i), Value::Number((4 - i) as f64));
+            assert_eq!(arena.get(handle, i), Value::number((4 - i) as f64));
         }
     }
 
@@ -614,14 +614,14 @@ mod tests {
 
         // Push values across multiple chunks
         for i in 0..70 {
-            arena.push(handle, Value::Number(i as f64));
+            arena.push(handle, Value::number(i as f64));
         }
 
         arena.reverse(handle);
 
         // Check reversed values
         for i in 0..70 {
-            assert_eq!(arena.get(handle, i), Value::Number((69 - i) as f64));
+            assert_eq!(arena.get(handle, i), Value::number((69 - i) as f64));
         }
     }
 
@@ -633,21 +633,21 @@ mod tests {
         let handle2 = arena.create_array(2);
 
         // Fill arrays
-        arena.insert(handle1, 0, Value::Number(1.0));
-        arena.insert(handle1, 1, Value::Number(2.0));
-        arena.insert(handle1, 2, Value::Number(3.0));
+        arena.insert(handle1, 0, Value::number(1.0));
+        arena.insert(handle1, 1, Value::number(2.0));
+        arena.insert(handle1, 2, Value::number(3.0));
 
-        arena.insert(handle2, 0, Value::Number(4.0));
-        arena.insert(handle2, 1, Value::Number(5.0));
+        arena.insert(handle2, 0, Value::number(4.0));
+        arena.insert(handle2, 1, Value::number(5.0));
 
         let concat_handle = arena.concat(handle1, handle2);
 
         assert_eq!(arena.length(concat_handle), 5);
-        assert_eq!(arena.get(concat_handle, 0), Value::Number(1.0));
-        assert_eq!(arena.get(concat_handle, 1), Value::Number(2.0));
-        assert_eq!(arena.get(concat_handle, 2), Value::Number(3.0));
-        assert_eq!(arena.get(concat_handle, 3), Value::Number(4.0));
-        assert_eq!(arena.get(concat_handle, 4), Value::Number(5.0));
+        assert_eq!(arena.get(concat_handle, 0), Value::number(1.0));
+        assert_eq!(arena.get(concat_handle, 1), Value::number(2.0));
+        assert_eq!(arena.get(concat_handle, 2), Value::number(3.0));
+        assert_eq!(arena.get(concat_handle, 3), Value::number(4.0));
+        assert_eq!(arena.get(concat_handle, 4), Value::number(5.0));
     }
 
     #[test]
@@ -657,14 +657,14 @@ mod tests {
 
         // Fill array
         for i in 0..10 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         let slice_handle = arena.slice(handle, 2, Some(7));
 
         assert_eq!(arena.length(slice_handle), 5);
         for i in 0..5 {
-            assert_eq!(arena.get(slice_handle, i), Value::Number((i + 2) as f64));
+            assert_eq!(arena.get(slice_handle, i), Value::number((i + 2) as f64));
         }
     }
 
@@ -674,7 +674,7 @@ mod tests {
         let handle = arena.create_array(5);
 
         for i in 0..5 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         // Test various boundary conditions
@@ -683,7 +683,7 @@ mod tests {
 
         let slice2 = arena.slice(handle, 2, Some(10)); // End beyond bounds
         assert_eq!(arena.length(slice2), 3);
-        assert_eq!(arena.get(slice2, 0), Value::Number(2.0));
+        assert_eq!(arena.get(slice2, 0), Value::number(2.0));
 
         let slice3 = arena.slice(handle, 3, Some(2)); // Start > end
         assert_eq!(arena.length(slice3), 0);
@@ -696,7 +696,7 @@ mod tests {
 
         // Fill array
         for i in 0..8 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         // Test slice from index 3 to end
@@ -704,14 +704,14 @@ mod tests {
 
         assert_eq!(arena.length(slice_handle), 5);
         for i in 0..5 {
-            assert_eq!(arena.get(slice_handle, i), Value::Number((i + 3) as f64));
+            assert_eq!(arena.get(slice_handle, i), Value::number((i + 3) as f64));
         }
 
         // Test slice from index 0 to end (full copy)
         let full_slice = arena.slice(handle, 0, None);
         assert_eq!(arena.length(full_slice), 8);
         for i in 0..8 {
-            assert_eq!(arena.get(full_slice, i), Value::Number(i as f64));
+            assert_eq!(arena.get(full_slice, i), Value::number(i as f64));
         }
 
         // Test slice from beyond bounds to end
@@ -726,29 +726,29 @@ mod tests {
 
         // Fill array with values [0, 1, 2, 3, 4]
         for i in 0..5 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         // Test negative indices
-        assert_eq!(arena.get(handle, -1), Value::Number(4.0)); // Last element
-        assert_eq!(arena.get(handle, -2), Value::Number(3.0)); // Second to last
-        assert_eq!(arena.get(handle, -3), Value::Number(2.0)); // Third to last
-        assert_eq!(arena.get(handle, -4), Value::Number(1.0)); // Fourth to last
-        assert_eq!(arena.get(handle, -5), Value::Number(0.0)); // First element
+        assert_eq!(arena.get(handle, -1), Value::number(4.0)); // Last element
+        assert_eq!(arena.get(handle, -2), Value::number(3.0)); // Second to last
+        assert_eq!(arena.get(handle, -3), Value::number(2.0)); // Third to last
+        assert_eq!(arena.get(handle, -4), Value::number(1.0)); // Fourth to last
+        assert_eq!(arena.get(handle, -5), Value::number(0.0)); // First element
 
         // Test out of bounds negative indices
-        assert_eq!(arena.get(handle, -6), Value::Nil); // Beyond bounds
-        assert_eq!(arena.get(handle, -10), Value::Nil); // Way beyond bounds
+        assert_eq!(arena.get(handle, -6), Value::nil()); // Beyond bounds
+        assert_eq!(arena.get(handle, -10), Value::nil()); // Way beyond bounds
 
         // Test positive indices still work
-        assert_eq!(arena.get(handle, 0), Value::Number(0.0));
-        assert_eq!(arena.get(handle, 4), Value::Number(4.0));
-        assert_eq!(arena.get(handle, 5), Value::Nil); // Out of bounds positive
+        assert_eq!(arena.get(handle, 0), Value::number(0.0));
+        assert_eq!(arena.get(handle, 4), Value::number(4.0));
+        assert_eq!(arena.get(handle, 5), Value::nil()); // Out of bounds positive
 
         // Test empty array
         let empty_handle = arena.create_array(0);
-        assert_eq!(arena.get(empty_handle, -1), Value::Nil);
-        assert_eq!(arena.get(empty_handle, 0), Value::Nil);
+        assert_eq!(arena.get(empty_handle, -1), Value::nil());
+        assert_eq!(arena.get(empty_handle, 0), Value::nil());
     }
 
     #[test]
@@ -765,15 +765,15 @@ mod tests {
         let mut arena = ArrayArena::new();
         let handle = arena.create_array(3);
 
-        arena.insert(handle, 0, Value::Number(1.0));
-        arena.insert(handle, 1, Value::Number(2.0));
-        arena.insert(handle, 2, Value::Number(3.0));
+        arena.insert(handle, 0, Value::number(1.0));
+        arena.insert(handle, 1, Value::number(2.0));
+        arena.insert(handle, 2, Value::number(3.0));
 
         let values: Vec<Value> = arena.iter(handle).collect();
         assert_eq!(values.len(), 3);
-        assert_eq!(values[0], Value::Number(1.0));
-        assert_eq!(values[1], Value::Number(2.0));
-        assert_eq!(values[2], Value::Number(3.0));
+        assert_eq!(values[0], Value::number(1.0));
+        assert_eq!(values[1], Value::number(2.0));
+        assert_eq!(values[2], Value::number(3.0));
     }
 
     #[test]
@@ -782,15 +782,15 @@ mod tests {
         let handle = arena.create_array(5);
 
         // Only fill some slots
-        arena.insert(handle, 0, Value::Number(1.0));
-        arena.insert(handle, 2, Value::Number(3.0));
-        arena.insert(handle, 4, Value::Number(5.0));
+        arena.insert(handle, 0, Value::number(1.0));
+        arena.insert(handle, 2, Value::number(3.0));
+        arena.insert(handle, 4, Value::number(5.0));
 
         let values: Vec<Value> = arena.iter(handle).collect();
         assert_eq!(values.len(), 3);
-        assert_eq!(values[0], Value::Number(1.0));
-        assert_eq!(values[1], Value::Number(3.0));
-        assert_eq!(values[2], Value::Number(5.0));
+        assert_eq!(values[0], Value::number(1.0));
+        assert_eq!(values[1], Value::number(3.0));
+        assert_eq!(values[2], Value::number(5.0));
     }
 
     #[test]
@@ -800,14 +800,14 @@ mod tests {
 
         // Push values across multiple chunks
         for i in 0..50 {
-            arena.push(handle, Value::Number(i as f64));
+            arena.push(handle, Value::number(i as f64));
         }
 
         let values: Vec<Value> = arena.iter(handle).collect();
         assert_eq!(values.len(), 50);
 
         for (i, value) in values.iter().enumerate() {
-            assert_eq!(*value, Value::Number(i as f64));
+            assert_eq!(*value, Value::number(i as f64));
         }
     }
 
@@ -817,12 +817,12 @@ mod tests {
         let handle = arena.create_array(0);
 
         for i in 0..10 {
-            arena.push(handle, Value::Number(i as f64));
+            arena.push(handle, Value::number(i as f64));
         }
 
         let mut expected = 0.0;
         for value in arena.iter(handle) {
-            assert_eq!(value, Value::Number(expected));
+            assert_eq!(value, Value::number(expected));
             expected += 1.0;
         }
 
@@ -834,9 +834,9 @@ mod tests {
         let mut arena = ArrayArena::new();
         let handle = arena.create_array(5);
 
-        arena.insert(handle, 0, Value::Number(1.0));
-        arena.insert(handle, 1, Value::Number(2.0));
-        arena.insert(handle, 4, Value::Number(5.0));
+        arena.insert(handle, 0, Value::number(1.0));
+        arena.insert(handle, 1, Value::number(2.0));
+        arena.insert(handle, 4, Value::number(5.0));
 
         let iter = arena.iter(handle);
         let (lower, upper) = iter.size_hint();
@@ -851,18 +851,18 @@ mod tests {
         let handle = arena.create_array(0);
 
         // Push, pop, and push again
-        arena.push(handle, Value::Number(1.0));
-        arena.push(handle, Value::Number(2.0));
-        arena.push(handle, Value::Number(3.0));
+        arena.push(handle, Value::number(1.0));
+        arena.push(handle, Value::number(2.0));
+        arena.push(handle, Value::number(3.0));
 
         arena.pop(handle);
-        arena.push(handle, Value::Number(4.0));
+        arena.push(handle, Value::number(4.0));
 
         let values: Vec<Value> = arena.iter(handle).collect();
         assert_eq!(values.len(), 3);
-        assert_eq!(values[0], Value::Number(1.0));
-        assert_eq!(values[1], Value::Number(2.0));
-        assert_eq!(values[2], Value::Number(4.0));
+        assert_eq!(values[0], Value::number(1.0));
+        assert_eq!(values[1], Value::number(2.0));
+        assert_eq!(values[2], Value::number(4.0));
     }
 
     #[test]
@@ -872,7 +872,7 @@ mod tests {
 
         // Push values across multiple chunks
         for i in 0..40 {
-            arena.push(handle, Value::Number(i as f64));
+            arena.push(handle, Value::number(i as f64));
         }
 
         // Initially nothing should be marked
@@ -900,10 +900,10 @@ mod tests {
 
         // Fill arrays
         for i in 0..5 {
-            arena.insert(handle1, i, Value::Number(i as f64));
+            arena.insert(handle1, i, Value::number(i as f64));
         }
         for i in 0..3 {
-            arena.insert(handle2, i, Value::Number((i + 10) as f64));
+            arena.insert(handle2, i, Value::number((i + 10) as f64));
         }
 
         // Mark only the first array
@@ -914,7 +914,7 @@ mod tests {
 
         // First array should still exist and be accessible
         assert_eq!(arena.length(handle1), 5);
-        assert_eq!(arena.get(handle1, 0), Value::Number(0.0));
+        assert_eq!(arena.get(handle1, 0), Value::number(0.0));
 
         // Array should be unmarked after GC
         assert!(!arena.heads[handle1].is_marked);
@@ -930,8 +930,8 @@ mod tests {
         let handle2 = arena.create_array(3);
 
         // Fill arrays
-        arena.insert(handle1, 0, Value::Number(1.0));
-        arena.insert(handle2, 0, Value::Number(2.0));
+        arena.insert(handle1, 0, Value::number(1.0));
+        arena.insert(handle2, 0, Value::number(2.0));
 
         // Don't mark anything - simulate no roots
         arena.collect_garbage();
@@ -948,8 +948,8 @@ mod tests {
 
         // Create arrays with multiple chunks
         for i in 0..35 {
-            arena.push(handle1, Value::Number(i as f64));
-            arena.push(handle2, Value::Number((i + 100) as f64));
+            arena.push(handle1, Value::number(i as f64));
+            arena.push(handle2, Value::number((i + 100) as f64));
         }
 
         // Mark only handle1
@@ -973,8 +973,8 @@ mod tests {
         arena.collect_garbage();
 
         // Should still be accessible
-        assert_eq!(arena.get(handle1, 0), Value::Number(0.0));
-        assert_eq!(arena.get(handle1, 34), Value::Number(34.0));
+        assert_eq!(arena.get(handle1, 0), Value::number(0.0));
+        assert_eq!(arena.get(handle1, 34), Value::number(34.0));
     }
 
     #[test]
@@ -992,7 +992,7 @@ mod tests {
 
         // Create array spanning multiple chunks
         for i in 0..50 {
-            arena.push(handle, Value::Number(i as f64));
+            arena.push(handle, Value::number(i as f64));
         }
 
         // Mark the array
@@ -1003,7 +1003,7 @@ mod tests {
 
         // All data should still be accessible
         for i in 0..50 {
-            assert_eq!(arena.get(handle, i), Value::Number(i as f64));
+            assert_eq!(arena.get(handle, i), Value::number(i as f64));
         }
 
         // Iterator should still work
@@ -1018,34 +1018,34 @@ mod tests {
 
         // Fill array with values [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         for i in 0..10 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         // Test negative start index
         let slice1 = arena.slice(handle, -3, None); // Last 3 elements [7, 8, 9]
         assert_eq!(arena.length(slice1), 3);
-        assert_eq!(arena.get(slice1, 0), Value::Number(7.0));
-        assert_eq!(arena.get(slice1, 1), Value::Number(8.0));
-        assert_eq!(arena.get(slice1, 2), Value::Number(9.0));
+        assert_eq!(arena.get(slice1, 0), Value::number(7.0));
+        assert_eq!(arena.get(slice1, 1), Value::number(8.0));
+        assert_eq!(arena.get(slice1, 2), Value::number(9.0));
 
         // Test negative end index
         let slice2 = arena.slice(handle, 2, Some(-2)); // Elements from index 2 to -2 (exclusive) [2, 3, 4, 5, 6, 7]
         assert_eq!(arena.length(slice2), 6);
-        assert_eq!(arena.get(slice2, 0), Value::Number(2.0));
-        assert_eq!(arena.get(slice2, 5), Value::Number(7.0));
+        assert_eq!(arena.get(slice2, 0), Value::number(2.0));
+        assert_eq!(arena.get(slice2, 5), Value::number(7.0));
 
         // Test both negative indices
         let slice3 = arena.slice(handle, -5, Some(-2)); // Elements from -5 to -2 [5, 6, 7]
         assert_eq!(arena.length(slice3), 3);
-        assert_eq!(arena.get(slice3, 0), Value::Number(5.0));
-        assert_eq!(arena.get(slice3, 1), Value::Number(6.0));
-        assert_eq!(arena.get(slice3, 2), Value::Number(7.0));
+        assert_eq!(arena.get(slice3, 0), Value::number(5.0));
+        assert_eq!(arena.get(slice3, 1), Value::number(6.0));
+        assert_eq!(arena.get(slice3, 2), Value::number(7.0));
 
         // Test negative index beyond bounds
         let slice4 = arena.slice(handle, -15, Some(5)); // Should clamp to start
         assert_eq!(arena.length(slice4), 5);
-        assert_eq!(arena.get(slice4, 0), Value::Number(0.0));
-        assert_eq!(arena.get(slice4, 4), Value::Number(4.0));
+        assert_eq!(arena.get(slice4, 0), Value::number(0.0));
+        assert_eq!(arena.get(slice4, 4), Value::number(4.0));
 
         // Test negative end index beyond bounds
         let slice5 = arena.slice(handle, 3, Some(-15)); // Should return empty array
@@ -1059,7 +1059,7 @@ mod tests {
 
         // Fill array
         for i in 0..10 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         // Test where negative begin resolves to index greater than end
@@ -1082,31 +1082,31 @@ mod tests {
 
         // Fill array with [0, 1, 2, 3, 4]
         for i in 0..5 {
-            arena.insert(handle, i, Value::Number(i as f64));
+            arena.insert(handle, i, Value::number(i as f64));
         }
 
         // Test -1 to end (last element)
         let slice1 = arena.slice(handle, -1, None);
         assert_eq!(arena.length(slice1), 1);
-        assert_eq!(arena.get(slice1, 0), Value::Number(4.0));
+        assert_eq!(arena.get(slice1, 0), Value::number(4.0));
 
         // Test start to -1 (all but last element)
         let slice2 = arena.slice(handle, 0, Some(-1));
         assert_eq!(arena.length(slice2), 4);
-        assert_eq!(arena.get(slice2, 0), Value::Number(0.0));
-        assert_eq!(arena.get(slice2, 3), Value::Number(3.0));
+        assert_eq!(arena.get(slice2, 0), Value::number(0.0));
+        assert_eq!(arena.get(slice2, 3), Value::number(3.0));
 
         // Test entire array with negative indices
         let slice3 = arena.slice(handle, -5, None); // Should be equivalent to 0 to end
         assert_eq!(arena.length(slice3), 5);
         for i in 0..5 {
-            assert_eq!(arena.get(slice3, i), Value::Number(i as f64));
+            assert_eq!(arena.get(slice3, i), Value::number(i as f64));
         }
 
         // Test single element slice with negative indices
         let slice4 = arena.slice(handle, -3, Some(-2)); // Element at index 2
         assert_eq!(arena.length(slice4), 1);
-        assert_eq!(arena.get(slice4, 0), Value::Number(2.0));
+        assert_eq!(arena.get(slice4, 0), Value::number(2.0));
     }
 
     #[test]
@@ -1132,7 +1132,7 @@ mod tests {
 
         // Fill original array with values [0, 1, 2, 3, 4]
         for i in 0..5 {
-            arena.insert(original, i, Value::Number(i as f64));
+            arena.insert(original, i, Value::number(i as f64));
         }
 
         // Create a shallow clone
@@ -1143,19 +1143,19 @@ mod tests {
 
         // Verify all values are copied correctly
         for i in 0..5 {
-            assert_eq!(arena.get(cloned, i), Value::Number(i as f64));
+            assert_eq!(arena.get(cloned, i), Value::number(i as f64));
             assert_eq!(arena.get(original, i), arena.get(cloned, i));
         }
 
         // Verify they are separate arrays - modifying original doesn't affect clone
-        arena.insert(original, 2, Value::Number(99.0));
-        assert_eq!(arena.get(original, 2), Value::Number(99.0));
-        assert_eq!(arena.get(cloned, 2), Value::Number(2.0));
+        arena.insert(original, 2, Value::number(99.0));
+        assert_eq!(arena.get(original, 2), Value::number(99.0));
+        assert_eq!(arena.get(cloned, 2), Value::number(2.0));
 
         // Verify they are separate arrays - modifying clone doesn't affect original
-        arena.insert(cloned, 1, Value::Number(88.0));
-        assert_eq!(arena.get(cloned, 1), Value::Number(88.0));
-        assert_eq!(arena.get(original, 1), Value::Number(1.0));
+        arena.insert(cloned, 1, Value::number(88.0));
+        assert_eq!(arena.get(cloned, 1), Value::number(88.0));
+        assert_eq!(arena.get(original, 1), Value::number(1.0));
     }
 
     #[test]
@@ -1166,7 +1166,7 @@ mod tests {
         let cloned = arena.shallow_copy(original);
 
         assert_eq!(arena.length(cloned), 0);
-        assert_eq!(arena.get(cloned, 0), Value::Nil);
+        assert_eq!(arena.get(cloned, 0), Value::nil());
     }
 
     #[test]
@@ -1176,7 +1176,7 @@ mod tests {
 
         // Push values across multiple chunks
         for i in 0..100 {
-            arena.push(original, Value::Number(i as f64));
+            arena.push(original, Value::number(i as f64));
         }
 
         let cloned = arena.shallow_copy(original);
@@ -1185,15 +1185,15 @@ mod tests {
 
         // Verify all values are copied correctly
         for i in 0..100 {
-            assert_eq!(arena.get(cloned, i), Value::Number(i as f64));
+            assert_eq!(arena.get(cloned, i), Value::number(i as f64));
         }
 
         // Verify they are independent
-        arena.push(original, Value::Number(999.0));
+        arena.push(original, Value::number(999.0));
         assert_eq!(arena.length(original), 101);
         assert_eq!(arena.length(cloned), 100);
-        assert_eq!(arena.get(original, 100), Value::Number(999.0));
-        assert_eq!(arena.get(cloned, 100), Value::Nil);
+        assert_eq!(arena.get(original, 100), Value::number(999.0));
+        assert_eq!(arena.get(cloned, 100), Value::nil());
     }
 
     #[test]
@@ -1202,23 +1202,23 @@ mod tests {
         let original = arena.create_array(5);
 
         // Fill only some slots
-        arena.insert(original, 0, Value::Number(1.0));
-        arena.insert(original, 2, Value::Number(3.0));
-        arena.insert(original, 4, Value::Number(5.0));
+        arena.insert(original, 0, Value::number(1.0));
+        arena.insert(original, 2, Value::number(3.0));
+        arena.insert(original, 4, Value::number(5.0));
 
         let cloned = arena.shallow_copy(original);
 
         assert_eq!(arena.length(cloned), 5);
-        assert_eq!(arena.get(cloned, 0), Value::Number(1.0));
-        assert_eq!(arena.get(cloned, 1), Value::Nil);
-        assert_eq!(arena.get(cloned, 2), Value::Number(3.0));
-        assert_eq!(arena.get(cloned, 3), Value::Nil);
-        assert_eq!(arena.get(cloned, 4), Value::Number(5.0));
+        assert_eq!(arena.get(cloned, 0), Value::number(1.0));
+        assert_eq!(arena.get(cloned, 1), Value::nil());
+        assert_eq!(arena.get(cloned, 2), Value::number(3.0));
+        assert_eq!(arena.get(cloned, 3), Value::nil());
+        assert_eq!(arena.get(cloned, 4), Value::number(5.0));
 
         // Verify independence
-        arena.insert(original, 1, Value::Number(2.0));
-        assert_eq!(arena.get(original, 1), Value::Number(2.0));
-        assert_eq!(arena.get(cloned, 1), Value::Nil);
+        arena.insert(original, 1, Value::number(2.0));
+        assert_eq!(arena.get(original, 1), Value::number(2.0));
+        assert_eq!(arena.get(cloned, 1), Value::nil());
     }
 
     #[test]
@@ -1228,17 +1228,17 @@ mod tests {
 
         // Fill array with values [1, 2, 3, 4, 5]
         for i in 0..5 {
-            arena.insert(handle, i, Value::Number((i + 1) as f64));
+            arena.insert(handle, i, Value::number((i + 1) as f64));
         }
 
         // Test reverse iteration
         let values: Vec<Value> = arena.iter(handle).rev().collect();
         assert_eq!(values.len(), 5);
-        assert_eq!(values[0], Value::Number(5.0));
-        assert_eq!(values[1], Value::Number(4.0));
-        assert_eq!(values[2], Value::Number(3.0));
-        assert_eq!(values[3], Value::Number(2.0));
-        assert_eq!(values[4], Value::Number(1.0));
+        assert_eq!(values[0], Value::number(5.0));
+        assert_eq!(values[1], Value::number(4.0));
+        assert_eq!(values[2], Value::number(3.0));
+        assert_eq!(values[3], Value::number(2.0));
+        assert_eq!(values[4], Value::number(1.0));
     }
 
     #[test]
@@ -1247,16 +1247,16 @@ mod tests {
         let handle = arena.create_array(6);
 
         // Fill only some slots
-        arena.insert(handle, 0, Value::Number(1.0));
-        arena.insert(handle, 2, Value::Number(3.0));
-        arena.insert(handle, 5, Value::Number(6.0));
+        arena.insert(handle, 0, Value::number(1.0));
+        arena.insert(handle, 2, Value::number(3.0));
+        arena.insert(handle, 5, Value::number(6.0));
 
         // Test reverse iteration (should skip Nil values)
         let values: Vec<Value> = arena.iter(handle).rev().collect();
         assert_eq!(values.len(), 3);
-        assert_eq!(values[0], Value::Number(6.0));
-        assert_eq!(values[1], Value::Number(3.0));
-        assert_eq!(values[2], Value::Number(1.0));
+        assert_eq!(values[0], Value::number(6.0));
+        assert_eq!(values[1], Value::number(3.0));
+        assert_eq!(values[2], Value::number(1.0));
     }
 
     #[test]
@@ -1266,7 +1266,7 @@ mod tests {
 
         // Push values across multiple chunks
         for i in 0..50 {
-            arena.push(handle, Value::Number(i as f64));
+            arena.push(handle, Value::number(i as f64));
         }
 
         // Test reverse iteration
@@ -1274,7 +1274,7 @@ mod tests {
         assert_eq!(values.len(), 50);
 
         for (i, value) in values.iter().enumerate() {
-            assert_eq!(*value, Value::Number((49 - i) as f64));
+            assert_eq!(*value, Value::number((49 - i) as f64));
         }
     }
 }

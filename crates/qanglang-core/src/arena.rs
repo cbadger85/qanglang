@@ -4,7 +4,7 @@ use core::mem;
 #[derive(Clone, Debug)]
 pub struct Arena<T> {
     items: Vec<Entry<T>>,
-    generation: u32,
+    generation: u16,
     free_list_head: Option<u32>,
     len: usize,
 }
@@ -12,19 +12,31 @@ pub struct Arena<T> {
 #[derive(Clone, Debug)]
 enum Entry<T> {
     Free { next_free: Option<u32> },
-    Occupied { generation: u32, value: T },
+    Occupied { generation: u16, value: T },
 }
 
 /// An index (and generation) into an `Arena`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Index {
     pub(crate) index: u32,
-    pub(crate) generation: u32,
+    pub(crate) generation: u16,
 }
 
 impl Index {
-    pub fn new(index: u32, generation: u32) -> Self {
+    pub fn new(index: u32, generation: u16) -> Self {
         Self { index, generation }
+    }
+
+    pub fn pack_for_nan(self) -> u64 {
+        assert!(self.index < (1 << 28), "Index too large for NaN boxing");
+        ((self.generation as u64) << 28) | (self.index as u64)
+    }
+
+    pub fn unpack_from_nan(packed: u64) -> Self {
+        Self {
+            index: (packed & 0x0FFF_FFFF) as u32,
+            generation: (packed >> 28) as u16,
+        }
     }
 }
 
@@ -32,7 +44,7 @@ impl Default for Index {
     fn default() -> Self {
         Index {
             index: u32::MAX,
-            generation: u32::MAX,
+            generation: u16::MAX,
         }
     }
 }
@@ -496,7 +508,7 @@ mod tests {
     fn test_index_default() {
         let idx = Index::default();
         assert_eq!(idx.index, u32::MAX);
-        assert_eq!(idx.generation, u32::MAX);
+        assert_eq!(idx.generation, u16::MAX);
     }
 
     #[test]

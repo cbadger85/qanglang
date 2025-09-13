@@ -451,7 +451,15 @@ impl<'a> Parser<'a> {
             .get_path()
             .parent()
             .expect("Expected path to be file and to be within a dir");
-        let combined_path = current_dir.join(Path::new(&path_as_string));
+        let combined_path = match current_dir.join(Path::new(&path_as_string)).canonicalize() {
+            Ok(combined_path) => combined_path,
+            Err(_) => {
+                return Err(QangCompilerError::new_syntax_error(
+                    "Unable to get module path.".to_string(),
+                    path_span,
+                ));
+            }
+        };
 
         match std::fs::exists(combined_path.as_path()) {
             Ok(exists) => {

@@ -106,7 +106,12 @@ impl CompilerPipeline {
             .analyze(&modules, &mut nodes, &mut errors)?;
 
         let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc, &result);
-        let main_function = assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
+        let mut main_function =
+            assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
+        let main_module_id = alloc
+            .strings
+            .intern(&modules.get_main().source_map.get_path().to_string_lossy());
+        main_function.name = main_module_id;
 
         let mut module_map = FxHashMap::with_hasher(FxBuildHasher);
         for (path, module) in modules.into_iter() {

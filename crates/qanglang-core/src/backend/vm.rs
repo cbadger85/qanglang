@@ -88,7 +88,8 @@ macro_rules! push_value {
                     STACK_MAX
                 ),
                 $vm.state.get_current_loc(),
-            ).with_stack_trace($vm.get_stack_trace()))
+            )
+            .with_stack_trace($vm.get_stack_trace()))
         } else {
             $vm.state.stack[$vm.state.stack_top] = $value;
             $vm.state.stack_top += 1;
@@ -477,10 +478,11 @@ impl Vm {
         self.state.modules = program.into_modules();
         let upvalue_count = self.alloc.get_function(function_handle).upvalue_count;
 
-        let handle = self
-            .alloc
-            .closures
-            .allocate_closure(ClosureObject::new(function_handle, upvalue_count, None));
+        let handle = self.alloc.closures.allocate_closure(ClosureObject::new(
+            function_handle,
+            upvalue_count,
+            None,
+        ));
         push_value!(self, Value::Closure(handle))?;
         self.call(handle, 0)?;
 
@@ -1128,8 +1130,9 @@ impl Vm {
 
                     let previous_module_target =
                         self.state.frames[self.state.frame_count - 1].previous_module_target;
-                    let previous_function_module_context =
-                        self.state.frames[self.state.frame_count - 1].previous_function_module_context;
+                    let previous_function_module_context = self.state.frames
+                        [self.state.frame_count - 1]
+                        .previous_function_module_context;
 
                     self.close_upvalue(value_slot);
                     self.state.frame_count -= 1;
@@ -1222,9 +1225,11 @@ impl Vm {
         let upvalue_count = self.alloc.get_function(handle).upvalue_count;
         let module_context = self.state.module_export_target;
         let closure_handle = self.with_gc_check(|alloc| {
-            alloc
-                .closures
-                .allocate_closure(ClosureObject::new(handle, upvalue_count, module_context))
+            alloc.closures.allocate_closure(ClosureObject::new(
+                handle,
+                upvalue_count,
+                module_context,
+            ))
         });
 
         // Push closure to stack immediately to ensure GC can see it as reachable
@@ -2016,15 +2021,17 @@ impl Vm {
 
         // Try to get from function module context first
         if let Some(function_context) = self.state.function_module_context
-            && let Some(value) = self.try_get_from_table(function_context, &key) {
-                return Ok(value);
-            }
+            && let Some(value) = self.try_get_from_table(function_context, &key)
+        {
+            return Ok(value);
+        }
 
         // Try to get from module export target
         if let Some(module_target) = self.state.module_export_target
-            && let Some(value) = self.try_get_from_table(module_target, &key) {
-                return Ok(value);
-            }
+            && let Some(value) = self.try_get_from_table(module_target, &key)
+        {
+            return Ok(value);
+        }
 
         // Try to get from globals, with different behavior based on context
         if self.has_module_context() {
@@ -2045,18 +2052,23 @@ impl Vm {
     }
 
     fn get_from_globals_or_nil(&self, identifier_handle: StringHandle) -> Value {
-        self.state.globals.get(&identifier_handle).copied().unwrap_or(Value::Nil)
+        self.state
+            .globals
+            .get(&identifier_handle)
+            .copied()
+            .unwrap_or(Value::Nil)
     }
 
     fn try_get_from_globals_strict(&self, identifier_handle: StringHandle) -> RuntimeResult<Value> {
-        self.state.globals.get(&identifier_handle).copied().ok_or_else(|| {
-            let loc = self.state.get_previous_loc();
-            let identifier_name = self.alloc.strings.get_string(identifier_handle);
-            QangRuntimeError::new(
-                format!("Undefined variable: {}.", identifier_name),
-                loc,
-            )
-        })
+        self.state
+            .globals
+            .get(&identifier_handle)
+            .copied()
+            .ok_or_else(|| {
+                let loc = self.state.get_previous_loc();
+                let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                QangRuntimeError::new(format!("Undefined variable: {}.", identifier_name), loc)
+            })
     }
 
     fn set_global(&mut self, identifier_handle: StringHandle) -> RuntimeResult<()> {
@@ -2065,15 +2077,17 @@ impl Vm {
 
         // Try to set in function module context first
         if let Some(function_context) = self.state.function_module_context
-            && self.try_set_in_table(function_context, &key, value) {
-                return Ok(());
-            }
+            && self.try_set_in_table(function_context, &key, value)
+        {
+            return Ok(());
+        }
 
         // Try to set in module export target
         if let Some(module_target) = self.state.module_export_target
-            && self.try_set_in_table(module_target, &key, value) {
-                return Ok(());
-            }
+            && self.try_set_in_table(module_target, &key, value)
+        {
+            return Ok(());
+        }
 
         // Try to set in globals
         if self.try_set_in_globals(identifier_handle, value) {
@@ -2094,7 +2108,9 @@ impl Vm {
     }
 
     fn try_set_in_globals(&mut self, identifier_handle: StringHandle, value: Value) -> bool {
-        if let std::collections::hash_map::Entry::Occupied(mut e) = self.state.globals.entry(identifier_handle) {
+        if let std::collections::hash_map::Entry::Occupied(mut e) =
+            self.state.globals.entry(identifier_handle)
+        {
             e.insert(value);
             true
         } else {
@@ -2206,7 +2222,6 @@ impl Vm {
             let function = self.alloc.get_function(closure.function);
 
             let name = self.alloc.strings.get_string(function.name);
-            let name = if name.is_empty() { "(script)" } else { name };
 
             let loc = if frame.ip > 0 {
                 function
@@ -2222,14 +2237,17 @@ impl Vm {
             // Get current module name if closure has module context
             let current_module = closure.module_context.map(|module_handle| {
                 let module_string_handle = self.state.modules.get_module_id(module_handle);
-                self.alloc.strings.get_string(module_string_handle).to_string()
+                self.alloc
+                    .strings
+                    .get_string(module_string_handle)
+                    .to_string()
             });
 
             // Only include module name if it's different from the previous frame
             let should_show_module = match (&previous_module, &current_module) {
-                (None, Some(_)) => true,  // First module encountered
-                (Some(prev), Some(curr)) => prev != curr,  // Module changed
-                _ => false,  // No module or same module
+                (None, Some(_)) => true,                  // First module encountered
+                (Some(prev), Some(curr)) => prev != curr, // Module changed
+                _ => false,                               // No module or same module
             };
 
             if should_show_module {

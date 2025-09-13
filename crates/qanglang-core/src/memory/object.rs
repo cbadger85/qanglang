@@ -46,7 +46,11 @@ pub struct ClosureObject {
 }
 
 impl ClosureObject {
-    pub fn new(function: FunctionHandle, upvalue_count: usize, module_context: Option<HashMapHandle>) -> Self {
+    pub fn new(
+        function: FunctionHandle,
+        upvalue_count: usize,
+        module_context: Option<HashMapHandle>,
+    ) -> Self {
         Self {
             function,
             upvalue_count,

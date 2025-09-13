@@ -147,7 +147,7 @@ impl ArrayArena {
         }
 
         if let Some(chunk_handle) = current_chunk {
-            self.chunks[chunk_handle].data[slot_index].unwrap_or(Value::nil())
+            self.chunks[chunk_handle].data[slot_index].unwrap_or_default()
         } else {
             Value::nil()
         }
@@ -178,7 +178,7 @@ impl ArrayArena {
             // Extract the value
             let value = self.chunks[chunk_handle].data[slot_index]
                 .take()
-                .unwrap_or(Value::nil());
+                .unwrap_or_default();
 
             if self.chunks[chunk_handle].used > 0 {
                 self.chunks[chunk_handle].used -= 1;

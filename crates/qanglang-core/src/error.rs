@@ -392,14 +392,14 @@ impl Vm {
 fn clean_canonicalized_path(path: &str) -> String {
     // Remove Windows UNC prefix
     #[cfg(target_os = "windows")]
-    if path.starts_with(r"\\?\") {
-        return path[4..].to_string();
+    if let Some(stripped) = path.strip_prefix(r"\\?\") {
+        return stripped.to_string();
     }
 
     // Remove leading "./" on Unix systems
     #[cfg(not(target_os = "windows"))]
-    if path.starts_with("./") {
-        return path[2..].to_string();
+    if let Some(stripped) = path.strip_prefix("./") {
+        return stripped.to_string();
     }
 
     path.to_string()

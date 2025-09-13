@@ -1969,7 +1969,7 @@ impl Vm {
             }
             ValueKind::ObjectLiteral(handle) | ValueKind::Module(handle) => {
                 let key = Value::string(identifier);
-                let value = self.alloc.tables.get(handle, &key).unwrap_or(Value::nil());
+                let value = self.alloc.tables.get(handle, &key).unwrap_or_default();
                 pop_value!(self);
                 push_value!(self, value)?;
             }

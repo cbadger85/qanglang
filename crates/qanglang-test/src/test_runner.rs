@@ -135,7 +135,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
 
     // Run each test function
     let mut test_results = Vec::new();
-    let args = [Value::default(); 0];
+    let args: [qanglang_core::Value; 0] = [];
     for (test_name, function_handle) in test_functions {
         match vm.call_function(function_handle, &args) {
             Ok(_) => {

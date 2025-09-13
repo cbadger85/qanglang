@@ -41,16 +41,18 @@ pub struct ClosureObject {
     pub upvalue_count: usize,
     pub inline_upvalues: [UpvalueSlot; INLINE_UPVALUE_COUNT],
     pub overflow_handle: Option<OverflowHandle>,
+    pub module_context: Option<HashMapHandle>,
     pub is_marked: bool,
 }
 
 impl ClosureObject {
-    pub fn new(function: FunctionHandle, upvalue_count: usize) -> Self {
+    pub fn new(function: FunctionHandle, upvalue_count: usize, module_context: Option<HashMapHandle>) -> Self {
         Self {
             function,
             upvalue_count,
             inline_upvalues: [UpvalueSlot::default(); INLINE_UPVALUE_COUNT],
             overflow_handle: None,
+            module_context,
             is_marked: false,
         }
     }

@@ -150,6 +150,7 @@ struct CallFrame {
     ip: usize,
     value_slot: usize,
     previous_module_target: Option<HashMapHandle>,
+    previous_function_module_context: Option<HashMapHandle>,
 }
 
 #[derive(Clone)]
@@ -165,6 +166,7 @@ pub(crate) struct VmState {
     keywords: FxHashMap<Keyword, StringHandle>,
     modules: ModuleResolver,
     module_export_target: Option<HashMapHandle>,
+    function_module_context: Option<HashMapHandle>,
 }
 
 impl VmState {
@@ -185,6 +187,7 @@ impl VmState {
             keywords,
             modules: ModuleResolver::default(),
             module_export_target: None,
+            function_module_context: None,
         }
     }
 
@@ -477,7 +480,7 @@ impl Vm {
         let handle = self
             .alloc
             .closures
-            .allocate_closure(ClosureObject::new(function_handle, upvalue_count));
+            .allocate_closure(ClosureObject::new(function_handle, upvalue_count, None));
         push_value!(self, Value::Closure(handle))?;
         self.call(handle, 0)?;
 
@@ -782,128 +785,22 @@ impl Vm {
                 }
                 OpCode::SetGlobal => {
                     let identifier_handle = read_string!(self);
-
-                    if let Some(module_target) = self.state.module_export_target {
-                        // Check if variable exists in module or globals, then update it
-                        let key = Value::String(identifier_handle);
-                        if self.alloc.tables.get(module_target, &key).is_some() {
-                            let value = peek_value!(self, 0);
-                            self.alloc.tables.insert(module_target, key, value);
-                        } else if self.state.globals.contains_key(&identifier_handle) {
-                            let value = peek_value!(self, 0);
-                            self.state.globals.insert(identifier_handle, value);
-                        } else {
-                            let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                            let loc = self.state.get_previous_loc();
-                            return Err(QangRuntimeError::new(
-                                format!("Undefined variable: {}.", identifier_name).to_string(),
-                                loc,
-                            ));
-                        }
-                    } else {
-                        // Normal global assignment
-                        if !self.state.globals.contains_key(&identifier_handle) {
-                            let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                            let loc = self.state.get_previous_loc();
-                            return Err(QangRuntimeError::new(
-                                format!("Undefined variable: {}.", identifier_name).to_string(),
-                                loc,
-                            ));
-                        }
-                        let value = peek_value!(self, 0);
-                        self.state.globals.insert(identifier_handle, value);
-                    }
+                    self.set_global(identifier_handle)?;
                 }
 
                 OpCode::SetGlobal16 => {
                     let identifier_handle = read_string_16!(self);
-
-                    if let Some(module_target) = self.state.module_export_target {
-                        // Check if variable exists in module or globals, then update it
-                        let key = Value::String(identifier_handle);
-                        if self.alloc.tables.get(module_target, &key).is_some() {
-                            let value = peek_value!(self, 0);
-                            self.alloc.tables.insert(module_target, key, value);
-                        } else if self.state.globals.contains_key(&identifier_handle) {
-                            let value = peek_value!(self, 0);
-                            self.state.globals.insert(identifier_handle, value);
-                        } else {
-                            let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                            let loc = self.state.get_previous_loc();
-                            return Err(QangRuntimeError::new(
-                                format!("Undefined variable: {}.", identifier_name).to_string(),
-                                loc,
-                            ));
-                        }
-                    } else {
-                        // Normal global assignment
-                        if !self.state.globals.contains_key(&identifier_handle) {
-                            let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                            let loc = self.state.get_previous_loc();
-                            return Err(QangRuntimeError::new(
-                                format!("Undefined variable: {}.", identifier_name).to_string(),
-                                loc,
-                            ));
-                        }
-                        let value = peek_value!(self, 0);
-                        self.state.globals.insert(identifier_handle, value);
-                    }
+                    self.set_global(identifier_handle)?;
                 }
                 OpCode::GetGlobal => {
                     let identifier_handle = read_string!(self);
-                    let value = if let Some(module_target) = self.state.module_export_target {
-                        // Look in module exports first
-                        self.alloc
-                            .tables
-                            .get(module_target, &Value::String(identifier_handle))
-                            .unwrap_or_else(|| {
-                                // Fall back to actual globals for built-ins/imports
-                                *self
-                                    .state
-                                    .globals
-                                    .get(&identifier_handle)
-                                    .unwrap_or(&Value::Nil)
-                            })
-                    } else {
-                        // Normal global lookup
-                        *self.state.globals.get(&identifier_handle).ok_or_else(|| {
-                            let loc = self.state.get_previous_loc();
-                            let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                            QangRuntimeError::new(
-                                format!("Undefined variable: {}.", identifier_name),
-                                loc,
-                            )
-                        })?
-                    };
+                    let value = self.get_global(identifier_handle)?;
                     push_value!(self, value)?;
                 }
 
                 OpCode::GetGlobal16 => {
                     let identifier_handle = read_string_16!(self);
-                    let value = if let Some(module_target) = self.state.module_export_target {
-                        // Look in module exports first
-                        self.alloc
-                            .tables
-                            .get(module_target, &Value::String(identifier_handle))
-                            .unwrap_or_else(|| {
-                                // Fall back to actual globals for built-ins/imports
-                                *self
-                                    .state
-                                    .globals
-                                    .get(&identifier_handle)
-                                    .unwrap_or(&Value::Nil)
-                            })
-                    } else {
-                        // Normal global lookup
-                        *self.state.globals.get(&identifier_handle).ok_or_else(|| {
-                            let loc = self.state.get_previous_loc();
-                            let identifier_name = self.alloc.strings.get_string(identifier_handle);
-                            QangRuntimeError::new(
-                                format!("Undefined variable: {}.", identifier_name),
-                                loc,
-                            )
-                        })?
-                    };
+                    let value = self.get_global(identifier_handle)?;
                     push_value!(self, value)?;
                 }
                 OpCode::GetLocal => {
@@ -1231,6 +1128,8 @@ impl Vm {
 
                     let previous_module_target =
                         self.state.frames[self.state.frame_count - 1].previous_module_target;
+                    let previous_function_module_context =
+                        self.state.frames[self.state.frame_count - 1].previous_function_module_context;
 
                     self.close_upvalue(value_slot);
                     self.state.frame_count -= 1;
@@ -1252,7 +1151,8 @@ impl Vm {
 
                         self.state.module_export_target = previous_module_target;
                     } else {
-                        self.state.stack[value_slot] = result;
+                        // Restore function module context for regular function returns
+                        self.state.function_module_context = previous_function_module_context;
                     }
 
                     if self.state.frame_count == 0 {
@@ -1293,7 +1193,7 @@ impl Vm {
         let module_closure = self.with_gc_check(|alloc| {
             alloc
                 .closures
-                .allocate_closure(ClosureObject::new(module_function, 0))
+                .allocate_closure(ClosureObject::new(module_function, 0, None))
         });
 
         let previous_module_target = self.state.module_export_target;
@@ -1320,10 +1220,11 @@ impl Vm {
             }
         };
         let upvalue_count = self.alloc.get_function(handle).upvalue_count;
+        let module_context = self.state.module_export_target;
         let closure_handle = self.with_gc_check(|alloc| {
             alloc
                 .closures
-                .allocate_closure(ClosureObject::new(handle, upvalue_count))
+                .allocate_closure(ClosureObject::new(handle, upvalue_count, module_context))
         });
 
         // Push closure to stack immediately to ensure GC can see it as reachable
@@ -1757,7 +1658,14 @@ impl Vm {
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
+        call_frame.previous_module_target = None; // Only used for module loading
+        call_frame.previous_function_module_context = self.state.function_module_context;
         self.state.current_function_ptr = function as *const FunctionObject;
+
+        // Set function module context if the closure has one
+        if let Some(module_context) = closure.module_context {
+            self.state.function_module_context = Some(module_context);
+        }
 
         #[cfg(feature = "profiler")]
         coz::progress!("after_call");
@@ -2099,6 +2007,128 @@ impl Vm {
                     self.state.get_previous_loc(),
                 ));
             }
+        }
+        Ok(())
+    }
+
+    fn get_global(&self, identifier_handle: StringHandle) -> RuntimeResult<Value> {
+        if let Some(function_context) = self.state.function_module_context {
+            // Look in function's module first
+            Ok(self.alloc
+                .tables
+                .get(function_context, &Value::String(identifier_handle))
+                .unwrap_or_else(|| {
+                    // Fall back to module loading context
+                    if let Some(module_target) = self.state.module_export_target {
+                        self.alloc
+                            .tables
+                            .get(module_target, &Value::String(identifier_handle))
+                            .unwrap_or_else(|| {
+                                // Fall back to actual globals for built-ins/imports
+                                *self
+                                    .state
+                                    .globals
+                                    .get(&identifier_handle)
+                                    .unwrap_or(&Value::Nil)
+                            })
+                    } else {
+                        // Fall back to actual globals for built-ins/imports
+                        *self
+                            .state
+                            .globals
+                            .get(&identifier_handle)
+                            .unwrap_or(&Value::Nil)
+                    }
+                }))
+        } else if let Some(module_target) = self.state.module_export_target {
+            // Look in module exports first
+            Ok(self.alloc
+                .tables
+                .get(module_target, &Value::String(identifier_handle))
+                .unwrap_or_else(|| {
+                    // Fall back to actual globals for built-ins/imports
+                    *self
+                        .state
+                        .globals
+                        .get(&identifier_handle)
+                        .unwrap_or(&Value::Nil)
+                }))
+        } else {
+            // Normal global lookup
+            self.state.globals.get(&identifier_handle).copied().ok_or_else(|| {
+                let loc = self.state.get_previous_loc();
+                let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                QangRuntimeError::new(
+                    format!("Undefined variable: {}.", identifier_name),
+                    loc,
+                )
+            })
+        }
+    }
+
+    fn set_global(&mut self, identifier_handle: StringHandle) -> RuntimeResult<()> {
+        if let Some(function_context) = self.state.function_module_context {
+            // Check if variable exists in function's module first
+            let key = Value::String(identifier_handle);
+            if self.alloc.tables.get(function_context, &key).is_some() {
+                let value = peek_value!(self, 0);
+                self.alloc.tables.insert(function_context, key, value);
+            } else if let Some(module_target) = self.state.module_export_target {
+                // Check in module loading context
+                if self.alloc.tables.get(module_target, &key).is_some() {
+                    let value = peek_value!(self, 0);
+                    self.alloc.tables.insert(module_target, key, value);
+                } else if self.state.globals.contains_key(&identifier_handle) {
+                    let value = peek_value!(self, 0);
+                    self.state.globals.insert(identifier_handle, value);
+                } else {
+                    let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                    let loc = self.state.get_previous_loc();
+                    return Err(QangRuntimeError::new(
+                        format!("Undefined variable: {}.", identifier_name).to_string(),
+                        loc,
+                    ));
+                }
+            } else if self.state.globals.contains_key(&identifier_handle) {
+                let value = peek_value!(self, 0);
+                self.state.globals.insert(identifier_handle, value);
+            } else {
+                let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                let loc = self.state.get_previous_loc();
+                return Err(QangRuntimeError::new(
+                    format!("Undefined variable: {}.", identifier_name).to_string(),
+                    loc,
+                ));
+            }
+        } else if let Some(module_target) = self.state.module_export_target {
+            // Check if variable exists in module or globals, then update it
+            let key = Value::String(identifier_handle);
+            if self.alloc.tables.get(module_target, &key).is_some() {
+                let value = peek_value!(self, 0);
+                self.alloc.tables.insert(module_target, key, value);
+            } else if self.state.globals.contains_key(&identifier_handle) {
+                let value = peek_value!(self, 0);
+                self.state.globals.insert(identifier_handle, value);
+            } else {
+                let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                let loc = self.state.get_previous_loc();
+                return Err(QangRuntimeError::new(
+                    format!("Undefined variable: {}.", identifier_name).to_string(),
+                    loc,
+                ));
+            }
+        } else {
+            // Normal global assignment
+            if !self.state.globals.contains_key(&identifier_handle) {
+                let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                let loc = self.state.get_previous_loc();
+                return Err(QangRuntimeError::new(
+                    format!("Undefined variable: {}.", identifier_name).to_string(),
+                    loc,
+                ));
+            }
+            let value = peek_value!(self, 0);
+            self.state.globals.insert(identifier_handle, value);
         }
         Ok(())
     }

@@ -14,7 +14,7 @@ mod tests {
     }
 
     fn create_test_closure(function_handle: u32) -> ClosureObject {
-        ClosureObject::new(function_handle, 0)
+        ClosureObject::new(function_handle, 0, None)
     }
 
     #[test]
@@ -255,7 +255,7 @@ mod tests {
         let upvalue = Value::Number(42.0);
         let upvalue_handle = allocator.allocate_upvalue(upvalue);
 
-        let closure = ClosureObject::new(function_handle, 1);
+        let closure = ClosureObject::new(function_handle, 1, None);
         let closure_handle = allocator.closures.allocate_closure(closure);
 
         // Set upvalue using the new API
@@ -286,7 +286,7 @@ mod tests {
         let upvalue = Value::Number(42.0);
         let upvalue_handle = allocator.allocate_upvalue(upvalue);
 
-        let closure = ClosureObject::new(function_handle, 1);
+        let closure = ClosureObject::new(function_handle, 1, None);
         let closure_handle = allocator.closures.allocate_closure(closure);
 
         // Set upvalue using the new API
@@ -381,7 +381,7 @@ mod tests {
         let closure_handle1 = allocator.closures.allocate_closure(closure1);
 
         // Create second closure
-        let closure2 = ClosureObject::new(function_handle2, 1);
+        let closure2 = ClosureObject::new(function_handle2, 1, None);
         let closure_handle2 = allocator.closures.allocate_closure(closure2);
         let upvalue1 = allocator.allocate_upvalue(Value::Closure(closure_handle1));
         allocator
@@ -394,7 +394,7 @@ mod tests {
         // Only root the deepest upvalue (by creating a closure that references it)
         let function3 = create_test_function();
         let function_handle3 = allocator.allocate_function(function3);
-        let root_closure = ClosureObject::new(function_handle3, 1);
+        let root_closure = ClosureObject::new(function_handle3, 1, None);
         let root_closure_handle = allocator.closures.allocate_closure(root_closure);
         allocator
             .closures
@@ -1013,7 +1013,7 @@ mod tests {
         // Create closures with complex upvalue chains
         let function1 = create_test_function();
         let function_handle1 = allocator.allocate_function(function1);
-        let closure1 = ClosureObject::new(function_handle1, 2);
+        let closure1 = ClosureObject::new(function_handle1, 2, None);
         let closure_handle1 = allocator.closures.allocate_closure(closure1);
 
         // First upvalue points to base instance

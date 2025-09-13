@@ -171,8 +171,8 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         path
     } else {
         std::env::current_dir()
-            .expect("Expect to be ran from a directory")
-            .join(path)
+            .and_then(|p| p.join(path).canonicalize())
+            .expect("Expect to be ran from a dir.")
     };
 
     let source_map = match SourceMap::from_path(path.as_path()) {

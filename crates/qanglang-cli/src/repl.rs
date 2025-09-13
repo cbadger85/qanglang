@@ -37,8 +37,8 @@ pub fn execute_repl_line(source: &str, vm: &mut Vm) {
     let source_map = SourceMap::new(
         source.to_string(),
         std::env::current_dir()
-            .expect("Expect to be ran from a dir.")
-            .join(Path::new("./main.ql")),
+            .and_then(|p| p.join(Path::new("./repl")).canonicalize())
+            .expect("Expect to be ran from a dir."),
     );
 
     let program = match CompilerPipeline::new().compile(source_map, &mut vm.alloc) {

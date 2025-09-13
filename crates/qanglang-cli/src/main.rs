@@ -220,7 +220,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
     match Vm::new(allocator).set_debug(debug_mode).interpret(program) {
         Ok(_) => (),
         Err(error) => {
-            eprintln!("Runtime error: {}", error.message);
+            eprintln!("Runtime error: {}", error);
         }
     }
 }

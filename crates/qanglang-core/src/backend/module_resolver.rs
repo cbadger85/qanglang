@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
     FunctionHandle, HashMapHandle, QangRuntimeError, SourceLocation, StringHandle, Value,
@@ -25,6 +25,7 @@ impl RuntimeModule {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ModuleResolver {
     modules: FxHashMap<StringHandle, RuntimeModule>,
+    module_names: FxHashMap<HashMapHandle, StringHandle>,
     count: usize,
 }
 
@@ -66,7 +67,12 @@ impl ModuleResolver {
         if let Some(module) = self.modules.get_mut(&module_id) {
             module.instance = Some(handle);
             self.count += 1;
+            self.module_names.insert(handle, module_id);
         }
+    }
+
+    pub fn get_module_id(&self, handle: HashMapHandle) -> StringHandle {
+        self.module_names[&handle]
     }
 
     pub fn count(&self) -> usize {
@@ -76,9 +82,11 @@ impl ModuleResolver {
 
 impl From<FxHashMap<StringHandle, RuntimeModule>> for ModuleResolver {
     fn from(val: FxHashMap<StringHandle, RuntimeModule>) -> Self {
+        let capacity = val.capacity();
         ModuleResolver {
             modules: val,
             count: 0,
+            module_names: FxHashMap::with_capacity_and_hasher(capacity, FxBuildHasher),
         }
     }
 }

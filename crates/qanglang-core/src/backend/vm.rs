@@ -88,7 +88,7 @@ macro_rules! push_value {
                     STACK_MAX
                 ),
                 $vm.state.get_current_loc(),
-            ))
+            ).with_stack_trace($vm.get_stack_trace()))
         } else {
             $vm.state.stack[$vm.state.stack_top] = $value;
             $vm.state.stack_top += 1;
@@ -2192,12 +2192,13 @@ impl Vm {
         &self.state.globals
     }
 
-    fn get_stack_trace(&self) -> Vec<Trace> {
+    pub fn get_stack_trace(&self) -> Vec<Trace> {
         self.get_stack_trace_from_frames(0..self.state.frame_count)
     }
 
     fn get_stack_trace_from_frames(&self, frame_id_range: Range<usize>) -> Vec<Trace> {
         let mut traces = Vec::new();
+        let mut previous_module: Option<String> = None;
 
         for frame_idx in frame_id_range {
             let frame = &self.state.frames[frame_idx];
@@ -2205,6 +2206,7 @@ impl Vm {
             let function = self.alloc.get_function(closure.function);
 
             let name = self.alloc.strings.get_string(function.name);
+            let name = if name.is_empty() { "(script)" } else { name };
 
             let loc = if frame.ip > 0 {
                 function
@@ -2217,7 +2219,30 @@ impl Vm {
                 SourceLocation::default()
             };
 
-            traces.push(Trace::new(name, loc));
+            // Get current module name if closure has module context
+            let current_module = closure.module_context.map(|module_handle| {
+                let module_string_handle = self.state.modules.get_module_id(module_handle);
+                self.alloc.strings.get_string(module_string_handle).to_string()
+            });
+
+            // Only include module name if it's different from the previous frame
+            let should_show_module = match (&previous_module, &current_module) {
+                (None, Some(_)) => true,  // First module encountered
+                (Some(prev), Some(curr)) => prev != curr,  // Module changed
+                _ => false,  // No module or same module
+            };
+
+            if should_show_module {
+                if let Some(module_name) = &current_module {
+                    traces.push(Trace::new_with_module(name, module_name, loc));
+                } else {
+                    traces.push(Trace::new(name, loc));
+                }
+            } else {
+                traces.push(Trace::new(name, loc));
+            }
+
+            previous_module = current_module;
         }
 
         traces

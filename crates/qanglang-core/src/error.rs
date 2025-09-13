@@ -130,6 +130,7 @@ impl From<&'static str> for NativeFunctionError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Trace {
     callee: String,
+    module: Option<String>,
     loc: SourceLocation,
 }
 
@@ -137,6 +138,15 @@ impl Trace {
     pub fn new(callee: &str, loc: SourceLocation) -> Self {
         Self {
             callee: callee.to_string(),
+            module: None,
+            loc,
+        }
+    }
+
+    pub fn new_with_module(callee: &str, module: &str, loc: SourceLocation) -> Self {
+        Self {
+            callee: callee.to_string(),
+            module: Some(module.to_string()),
             loc,
         }
     }
@@ -144,11 +154,19 @@ impl Trace {
 
 impl std::fmt::Display for Trace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "  at {} (line {}, column {})",
-            self.callee, self.loc.line, self.loc.col
-        )
+        if let Some(module) = &self.module {
+            write!(
+                f,
+                "  at {} in {} (line {}, column {})",
+                self.callee, module, self.loc.line, self.loc.col
+            )
+        } else {
+            write!(
+                f,
+                "  at {} (line {}, column {})",
+                self.callee, self.loc.line, self.loc.col
+            )
+        }
     }
 }
 

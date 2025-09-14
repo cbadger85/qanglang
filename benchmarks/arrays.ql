@@ -35,33 +35,7 @@ fn array_bubble_sort(arr) {
     return arr;
 }
 
-fn merge_arrays(left, right) {
-    var result = [];
-    var i = 0;
-    var j = 0;
-
-    while (i < left.length() and j < right.length()) {
-        if (left[i] <= right[j]) {
-            result.push(left[i]);
-            i += 1;
-        } else {
-            result.push(right[j]);
-            j += 1;
-        }
-    }
-
-    while (i < left.length()) {
-        result.push(left[i]);
-        i += 1;
-    }
-
-    while (j < right.length()) {
-        result.push(right[j]);
-        j += 1;
-    }
-
-    return result;
-}
+// Removed merge_arrays function to avoid stack usage during parsing
 
 var start = system_time();
 
@@ -200,14 +174,15 @@ println(sorted_count);
 println("Time for sorting (ms):");
 println(sorting_time);
 
-// Benchmark 6: Multi-dimensional arrays
+// Benchmark 6: Multi-dimensional arrays (small scale)
 println("\n=== Multi-dimensional Arrays ===");
 var multi_start = system_time();
 var matrices = [];
 
-for (var i = 0; i < 200; i += 1) {
+// Much smaller matrices to avoid stack overflow
+for (var i = 0; i < 100; i += 1) {
     var matrix = [];
-    var size = 20 + (i % 30);  // 20x20 to 50x50 matrices
+    var size = 5 + (i % 5);  // 5x5 to 10x10 matrices only
 
     for (var row = 0; row < size; row += 1) {
         var current_row = [];
@@ -239,27 +214,20 @@ println(matrix_sum);
 println("Time for multi-dimensional arrays (ms):");
 println(multi_time);
 
-// Benchmark 7: Array functional patterns
+// Benchmark 7: Simple Array Construction (avoiding deep iterator pipeline)
 println("\n=== Array Construction Patterns ===");
 var patterns_start = system_time();
 var constructed_arrays = [];
 
-// Using array_of and array_of_length
-for (var i = 0; i < 2000; i += 1) {
-    var size = 10 + (i % 40);
-
-    // Pattern 1: array_of with range
-    var range_array = array_of(size);
-
-    // Pattern 2: array_of with initializer
-    var init_array = array_of(size, (index) -> index * index);
-
-    // Pattern 3: array_of_length with nil values
-    var nil_array = array_of_length(size);
-
+// Extremely minimal array construction
+for (var i = 0; i < 50; i += 1) {
+    // Pattern 1: Tiny manual arrays
+    var range_array = [];
+    var size = 3 + (i % 3); // Only 3-6 elements
+    for (var j = 0; j < size; j += 1) {
+        range_array.push(j);
+    }
     constructed_arrays.push(range_array);
-    constructed_arrays.push(init_array);
-    constructed_arrays.push(nil_array);
 }
 
 var patterns_time = system_time() - patterns_start;

@@ -19,7 +19,7 @@ use crate::{
     nodes::*,
 };
 
-pub const FRAME_MAX: usize = 256;
+pub const FRAME_MAX: usize = 64;
 pub const STACK_MAX: usize = FRAME_MAX * 256;
 
 #[derive(Debug, Clone, PartialEq)]

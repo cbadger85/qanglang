@@ -1443,26 +1443,36 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let length = ctx.nodes.array.size(block_stmt.node.decls);
 
-        // Count how many variable declarations are in this block
-        let mut local_var_count = 0;
-
         for i in 0..length {
             if let Some(node_id) = ctx.nodes.array.get_node_id_at(block_stmt.node.decls, i) {
                 let decl = ctx.nodes.get_decl_node(node_id);
-
-                // Count variable declarations (not function declarations)
-                if matches!(decl.node, crate::frontend::typed_node_arena::DeclNode::Variable(_)) {
-                    local_var_count += 1;
-                }
-
                 self.visit_declaration(decl, ctx)?;
             }
         }
 
-        // Clean up local variables declared in this block scope
-        // Each variable declaration creates one local slot that needs cleanup
-        for _ in 0..local_var_count {
-            self.emit_opcode(OpCode::Pop, block_stmt.node.span);
+        // Clean up local variables declared in this block scope using scope analysis
+        // Get variables declared in this scope in LIFO order (reverse declaration order)
+        let scope_variables = self.analysis.scopes.get_scope_variables(block_stmt.id);
+        let mut var_cleanup_info: Vec<(usize, bool)> = Vec::new(); // (declaration_order, is_captured)
+
+        for var_id in scope_variables {
+            if let Some(var_info) = self.analysis.scopes.variables.get(&var_id) {
+                if let crate::frontend::scope_analysis::VariableKind::Local { .. } = var_info.kind {
+                    var_cleanup_info.push((var_info.declaration_order, var_info.is_captured));
+                }
+            }
+        }
+
+        // Sort by declaration order descending (LIFO cleanup)
+        var_cleanup_info.sort_by(|a, b| b.0.cmp(&a.0));
+
+        // Emit cleanup instructions
+        for (_order, is_captured) in var_cleanup_info {
+            if is_captured {
+                self.emit_opcode(OpCode::CloseUpvalue, block_stmt.node.span);
+            } else {
+                self.emit_opcode(OpCode::Pop, block_stmt.node.span);
+            }
         }
 
         Ok(())

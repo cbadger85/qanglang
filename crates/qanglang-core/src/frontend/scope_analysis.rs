@@ -20,6 +20,8 @@ pub struct VariableInfo {
     pub kind: VariableKind,
     pub is_captured: bool,
     pub span: SourceSpan,
+    pub declaring_scope: Option<NodeId>, // NEW: Which scope declared this variable
+    pub declaration_order: usize, // NEW: Order within scope (for LIFO cleanup)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -83,6 +85,25 @@ pub enum BreakContinueType {
     Continue,
 }
 
+// NEW: Unified scope information for all scope types
+#[derive(Debug, Clone)]
+pub struct ScopeInfo {
+    pub scope_type: ScopeType,
+    pub declared_variables: Vec<NodeId>, // Variables declared directly in this scope (LIFO order)
+    pub scope_depth: usize,
+    pub parent_scope: Option<NodeId>, // For nested scope queries
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub enum ScopeType {
+    Block(NodeId), // Block statements
+    ForLoop(NodeId), // For loop bodies
+    Function(NodeId), // Function bodies
+    Class(NodeId), // Class bodies
+    Lambda(NodeId), // Lambda expressions
+}
+
 #[derive(Debug, Clone)]
 pub struct ScopeAnalysis {
     pub variables: FxHashMap<NodeId, VariableInfo>,
@@ -92,6 +113,7 @@ pub struct ScopeAnalysis {
     pub for_loops: FxHashMap<NodeId, ForLoopInfo>,
     pub loop_children: FxHashMap<NodeId, Vec<NodeId>>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
+    pub scopes: FxHashMap<NodeId, ScopeInfo>, // NEW: Unified scope tracking
 }
 
 impl Default for ScopeAnalysis {
@@ -110,6 +132,7 @@ impl ScopeAnalysis {
             for_loops: FxHashMap::with_hasher(FxBuildHasher),
             loop_children: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
+            scopes: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 
@@ -122,7 +145,38 @@ impl ScopeAnalysis {
         self.loop_children.extend(other.loop_children);
         self.break_continue_statements
             .extend(other.break_continue_statements);
+        self.scopes.extend(other.scopes);
         self
+    }
+
+    // NEW: Helper methods for scope queries
+    pub fn get_scope_variables(&self, scope_id: NodeId) -> Vec<NodeId> {
+        if let Some(scope_info) = self.scopes.get(&scope_id) {
+            scope_info.declared_variables.clone()
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub fn get_variable_scope(&self, var_id: NodeId) -> Option<NodeId> {
+        if let Some(var_info) = self.variables.get(&var_id) {
+            var_info.declaring_scope
+        } else {
+            None
+        }
+    }
+
+    pub fn get_nested_scopes(&self, scope_id: NodeId) -> Vec<NodeId> {
+        self.scopes
+            .iter()
+            .filter_map(|(id, scope_info)| {
+                if scope_info.parent_scope == Some(scope_id) {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -258,6 +312,8 @@ pub struct ScopeAnalyzer<'a> {
     blank_handle: StringHandle,
     loop_depth: usize,
     loop_stack: Vec<NodeId>, // Stack of current loop node IDs
+    scope_stack: Vec<NodeId>, // NEW: Stack of current scope node IDs for unified tracking
+    declaration_order_counter: usize, // NEW: Global counter for declaration order
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -278,6 +334,8 @@ impl<'a> ScopeAnalyzer<'a> {
             results: ScopeAnalysis::new(),
             loop_depth: 0,
             loop_stack: Vec::new(),
+            scope_stack: Vec::new(),
+            declaration_order_counter: 0,
         }
     }
 
@@ -305,6 +363,45 @@ impl<'a> ScopeAnalyzer<'a> {
 
     fn end_scope(&mut self) {
         self.scopes.pop();
+    }
+
+    // NEW: Unified scope tracking methods
+    fn begin_tracked_scope(&mut self, scope_type: ScopeType, scope_id: NodeId, span: SourceSpan) {
+        let scope_depth = self.current_scope_depth();
+        let parent_scope = self.scope_stack.last().copied();
+
+        let scope_info = ScopeInfo {
+            scope_type,
+            declared_variables: Vec::new(),
+            scope_depth,
+            parent_scope,
+            span,
+        };
+
+        self.results.scopes.insert(scope_id, scope_info);
+        self.scope_stack.push(scope_id);
+        self.begin_scope();
+    }
+
+    fn end_tracked_scope(&mut self) {
+        self.scope_stack.pop();
+        self.end_scope();
+    }
+
+    fn declare_variable_in_current_scope(&mut self, var_id: NodeId) {
+        if let Some(&current_scope_id) = self.scope_stack.last() {
+            // Add to scope's declared_variables list
+            if let Some(scope_info) = self.results.scopes.get_mut(&current_scope_id) {
+                scope_info.declared_variables.push(var_id);
+            }
+
+            // Update variable's declaring_scope and declaration_order
+            if let Some(var_info) = self.results.variables.get_mut(&var_id) {
+                var_info.declaring_scope = Some(current_scope_id);
+                var_info.declaration_order = self.declaration_order_counter;
+                self.declaration_order_counter += 1;
+            }
+        }
     }
 
     fn declare_variable(
@@ -345,6 +442,8 @@ impl<'a> ScopeAnalyzer<'a> {
                 kind: VariableKind::Global,
                 is_captured: false,
                 span,
+                declaring_scope: None, // Global variables don't have a scope
+                declaration_order: 0,
             };
             (variable_info, None)
         } else {
@@ -363,6 +462,8 @@ impl<'a> ScopeAnalyzer<'a> {
                 kind: VariableKind::Local { scope_depth, slot },
                 is_captured: false,
                 span,
+                declaring_scope: None, // Will be set by declare_variable_in_current_scope
+                declaration_order: 0, // Will be set by declare_variable_in_current_scope
             };
             (variable_info, Some(local_idx))
         };
@@ -374,6 +475,11 @@ impl<'a> ScopeAnalyzer<'a> {
 
         // Add to results
         self.results.variables.insert(identifier.id, variable_info);
+
+        // Track in current scope if it's a local variable
+        if self.current_scope_depth() > 0 {
+            self.declare_variable_in_current_scope(identifier.id);
+        }
 
         Ok(local_index)
     }
@@ -409,6 +515,8 @@ impl<'a> ScopeAnalyzer<'a> {
                     kind: variable_kind.clone(),
                     is_captured: local.is_captured,
                     span,
+                    declaring_scope: None, // Variable references don't have declaring scope info
+                    declaration_order: 0,
                 };
                 self.results.variables.insert(node_id, variable_info);
 
@@ -423,6 +531,8 @@ impl<'a> ScopeAnalyzer<'a> {
                 kind: upvalue_kind.clone(),
                 is_captured: false,
                 span,
+                declaring_scope: None, // Variable references don't have declaring scope info
+                declaration_order: 0,
             };
             self.results.variables.insert(node_id, variable_info);
             return Ok(upvalue_kind);
@@ -435,6 +545,8 @@ impl<'a> ScopeAnalyzer<'a> {
             kind: variable_kind.clone(),
             is_captured: false,
             span,
+            declaring_scope: None, // Variable references don't have declaring scope info
+            declaration_order: 0,
         };
         self.results.variables.insert(node_id, variable_info);
 
@@ -549,6 +661,20 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         kind: FunctionKind,
         errors: &mut ErrorReporter,
+        function_id: NodeId,
+    ) {
+        self.begin_function_with_scope_type(name, arity, span, kind, errors, function_id, ScopeType::Function(function_id));
+    }
+
+    fn begin_function_with_scope_type(
+        &mut self,
+        name: StringHandle,
+        arity: usize,
+        span: SourceSpan,
+        kind: FunctionKind,
+        errors: &mut ErrorReporter,
+        function_id: NodeId,
+        scope_type: ScopeType,
     ) {
         if arity > 255 {
             errors.report_error(QangCompilerError::new_analysis_error(
@@ -566,14 +692,17 @@ impl<'a> ScopeAnalyzer<'a> {
         }
 
         self.functions.push(function);
-        self.begin_scope();
+
+        // Track function scope using unified tracking
+        self.begin_tracked_scope(scope_type, function_id, span);
+
         // Reset loop depth and stack when entering a new function - loops don't cross function boundaries
         self.loop_depth = 0;
         self.loop_stack.clear();
     }
 
     fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
-        self.end_scope();
+        self.end_tracked_scope();
 
         let function = self
             .functions
@@ -695,6 +824,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             func_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
+            func_expr.id,
         );
 
         for i in 0..arity {
@@ -732,12 +862,14 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         let anonymous_name = self.strings.intern("<lambda>");
 
-        self.begin_function(
+        self.begin_function_with_scope_type(
             anonymous_name,
             arity,
             lambda_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
+            lambda_expr.id,
+            ScopeType::Lambda(lambda_expr.id),
         );
 
         for i in 0..arity {
@@ -895,6 +1027,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 },
                 is_captured: false, // Will be marked as captured when methods access it
                 span: class_decl.node.span,
+                declaring_scope: None, // Super is a special synthetic variable
+                declaration_order: 0,
             };
 
             if let Some(current_scope) = self.scopes.last_mut() {
@@ -944,6 +1078,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                                 FunctionKind::Method
                             },
                             ctx.errors,
+                            member_id,
                         );
 
                         // Visit parameters
@@ -989,7 +1124,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         block_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BlockStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.begin_scope();
+        // Use unified scope tracking
+        self.begin_tracked_scope(ScopeType::Block(block_stmt.id), block_stmt.id, block_stmt.node.span);
 
         let decl_count = ctx.nodes.array.size(block_stmt.node.decls);
         for i in 0..decl_count {
@@ -999,7 +1135,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
-        self.end_scope();
+        self.end_tracked_scope();
         Ok(())
     }
 
@@ -1061,9 +1197,10 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.begin_scope();
+        // Use unified scope tracking for for loops
+        self.begin_tracked_scope(ScopeType::ForLoop(for_stmt.id), for_stmt.id, for_stmt.node.span);
 
-        // Begin for loop tracking
+        // Begin for loop tracking (preserve legacy for compatibility)
         self.begin_for_loop(for_stmt.id, for_stmt.node.span);
 
         // Track initializer variables
@@ -1117,7 +1254,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
         self.end_loop();
 
-        self.end_scope();
+        self.end_tracked_scope();
         Ok(())
     }
 
@@ -1179,12 +1316,14 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         // Map expressions are essentially lambda expressions, so treat them the same way
         let anonymous_name = self.strings.intern("<map>");
 
-        self.begin_function(
+        self.begin_function_with_scope_type(
             anonymous_name,
             1, // Map expressions always take exactly one parameter
             map_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
+            map_expr.id,
+            ScopeType::Lambda(map_expr.id),
         );
 
         // Declare the parameter
@@ -1210,12 +1349,14 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         // Optional map expressions work the same as regular map expressions
         let anonymous_name = self.strings.intern("<optional_map>");
 
-        self.begin_function(
+        self.begin_function_with_scope_type(
             anonymous_name,
             1, // Optional map expressions also take exactly one parameter
             opt_map_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
+            opt_map_expr.id,
+            ScopeType::Lambda(opt_map_expr.id),
         );
 
         // Declare the parameter

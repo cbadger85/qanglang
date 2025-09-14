@@ -8,3 +8,7 @@ fn get_value() {
 fn double_value(x) {
   return x * 2;
 }
+
+fn sum(a, b) {
+  return a + b;
+}

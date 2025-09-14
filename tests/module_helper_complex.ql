@@ -39,3 +39,15 @@ fn apply_operations(value) {
   }
   return result;
 }
+
+// Additional state for testing module state persistence
+var value = 0;
+
+fn increment() {
+  value += 1;
+  return value;
+}
+
+var create_array = (length, init) -> Range(0, length)
+  |> iter_map(init)
+  |> iter_collect();

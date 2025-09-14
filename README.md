@@ -1,6 +1,6 @@
 # QangLang
 
-An embedded scripting language written in Rust 🦀
+A scripting language written in Rust 🦀
 
 ## Grammar Definition
 
@@ -236,22 +236,10 @@ An embedded scripting language written in Rust 🦀
       <td>IDENTIFIER ( "=" expression )?</td>
       <td>;</td>
     </tr>
-    <tr>
-      <td>destructurePattern</td>
-      <td>=</td>
-      <td>"(" IDENTIFIER ( "," IDENTIFIER )* ( "," ".." IDENTIFIER )? ")"</td>
-      <td>;</td>
-    </tr>
   </tbody>
 </table>
 ```
 
 ## Roadmap
-
-[ ] - array destructuring for variable declaration `var (item1, item2, ..others) = [1, 2, 3, 4, 5];`
-
-[ ] - array destructuring for function parameters `fn the_function((item1, item2, ..others), arg2) {}` and lambda parameters `((item1, item2, ..others), arg2) -> nil`
-
-[ ] - array destructuring for map operator and map optional operator `var first = maybe_array?|(first) -> first|;`
 
 [ ] - tail call optimization

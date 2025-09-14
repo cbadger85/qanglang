@@ -97,7 +97,7 @@
           "match": "\\b(print|println|assert|assert_eq|assert_throws|typeof|system_time|to_string|array_of_length|hash)\\b"
         },
         {
-          "name": "entity.name.function.call.qanglang",
+          "name": "support.function.builtin",
           "match": "\\.(call|apply|to_uppercase|to_lowercase|length|push|pop|reverse|slice|get|concat)(?=\\s|\\(|$)"
         }
       ]

@@ -9,7 +9,7 @@ A scripting language written in Rust 🦀
   <thead/>
   <tbody>
     <tr>
-      <td>program</td>
+      <td>module</td>
       <td>=</td>
       <td>declaration* EOF</td>
       <td>;</td>

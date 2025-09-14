@@ -38,7 +38,7 @@ pub fn execute_repl_line(source: &str, vm: &mut Vm) {
         source.to_string(),
         std::env::current_dir()
             .and_then(|p| p.join(Path::new("./repl")).canonicalize())
-            .expect("Expect to be ran from a dir."),
+            .expect("Expect to be ran from a dir."), // TODO this needs to be handled more graceful as it also shows up when the path is invalid.
     );
 
     let program = match CompilerPipeline::new().compile(source_map, &mut vm.alloc) {

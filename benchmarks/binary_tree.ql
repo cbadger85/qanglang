@@ -35,7 +35,6 @@ println(Tree(0, stretchDepth).check());
 
 var longLivedTree = Tree(0, maxDepth);
 
-// iterations = 2 ** maxDepth
 var iterations = 1;
 var d = 0;
 while (d < maxDepth) {
@@ -68,4 +67,4 @@ println(maxDepth);
 println("check:");
 println(longLivedTree.check());
 println("elapsed:");
-println(clock() - start);
+println(system_time() - start);

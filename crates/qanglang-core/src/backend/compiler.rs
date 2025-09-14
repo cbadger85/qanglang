@@ -1298,6 +1298,14 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Pop, for_stmt.node.span);
         }
 
+        // Clean up for loop scope variables (initializer variables like 'i' and 'j')
+        if let Some(for_info) = self.analysis.scopes.for_loops.get(&for_stmt.id) {
+            // Pop loop initializer variables (like 'var i = 0' in for loop)
+            for _ in &for_info.scope_info.initializer_variables {
+                self.emit_opcode(OpCode::Pop, for_stmt.node.span);
+            }
+        }
+
         // Patch break jumps to current position (after scope cleanup)
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, for_stmt.node.span)?;
@@ -1425,6 +1433,38 @@ impl<'a> NodeVisitor for Assembler<'a> {
             })?;
 
         loop_context.continue_jumps.push(continue_position);
+        Ok(())
+    }
+
+    fn visit_block_statement(
+        &mut self,
+        block_stmt: TypedNodeRef<BlockStmtNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let length = ctx.nodes.array.size(block_stmt.node.decls);
+
+        // Count how many variable declarations are in this block
+        let mut local_var_count = 0;
+
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(block_stmt.node.decls, i) {
+                let decl = ctx.nodes.get_decl_node(node_id);
+
+                // Count variable declarations (not function declarations)
+                if matches!(decl.node, crate::frontend::typed_node_arena::DeclNode::Variable(_)) {
+                    local_var_count += 1;
+                }
+
+                self.visit_declaration(decl, ctx)?;
+            }
+        }
+
+        // Clean up local variables declared in this block scope
+        // Each variable declaration creates one local slot that needs cleanup
+        for _ in 0..local_var_count {
+            self.emit_opcode(OpCode::Pop, block_stmt.node.span);
+        }
+
         Ok(())
     }
 

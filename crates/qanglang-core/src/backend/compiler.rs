@@ -1451,27 +1451,19 @@ impl<'a> NodeVisitor for Assembler<'a> {
         }
 
         // Clean up local variables declared in this block scope using scope analysis
-        // Get variables declared in this scope in LIFO order (reverse declaration order)
+        // Variables in scope are stored in declaration order, so reverse iterate for LIFO cleanup
         let scope_variables = self.analysis.scopes.get_scope_variables(block_stmt.id);
-        let mut var_cleanup_info: Vec<(usize, bool)> = Vec::new(); // (declaration_order, is_captured)
 
-        for var_id in scope_variables {
+        // Emit cleanup instructions in reverse order (LIFO) for local variables only
+        for &var_id in scope_variables.iter().rev() {
             if let Some(var_info) = self.analysis.scopes.variables.get(&var_id) {
                 if let crate::frontend::scope_analysis::VariableKind::Local { .. } = var_info.kind {
-                    var_cleanup_info.push((var_info.declaration_order, var_info.is_captured));
+                    if var_info.is_captured {
+                        self.emit_opcode(OpCode::CloseUpvalue, block_stmt.node.span);
+                    } else {
+                        self.emit_opcode(OpCode::Pop, block_stmt.node.span);
+                    }
                 }
-            }
-        }
-
-        // Sort by declaration order descending (LIFO cleanup)
-        var_cleanup_info.sort_by(|a, b| b.0.cmp(&a.0));
-
-        // Emit cleanup instructions
-        for (_order, is_captured) in var_cleanup_info {
-            if is_captured {
-                self.emit_opcode(OpCode::CloseUpvalue, block_stmt.node.span);
-            } else {
-                self.emit_opcode(OpCode::Pop, block_stmt.node.span);
             }
         }
 

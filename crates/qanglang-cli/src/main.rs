@@ -170,9 +170,13 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
     let path = if path.is_absolute() {
         path
     } else {
-        std::env::current_dir()
-            .and_then(|p| p.join(path).canonicalize())
-            .expect("Expect to be ran from a dir.") // TODO this needs to be handled more graceful as it also shows up when the path is invalid.
+        match std::env::current_dir().and_then(|p| p.join(path).canonicalize()) {
+            Ok(path_buf) => path_buf,
+            Err(_) => {
+                eprintln!("Unable to run program, invalid file path.");
+                std::process::exit(1)
+            }
+        }
     };
 
     let source_map = match SourceMap::from_path(path.as_path()) {

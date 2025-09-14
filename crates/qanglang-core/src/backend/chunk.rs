@@ -70,6 +70,7 @@ pub enum OpCode {
     TailCall,
     Module,
     Module16,
+    ModuleReturn,
 }
 
 impl From<u8> for OpCode {
@@ -139,6 +140,7 @@ impl From<u8> for OpCode {
             61 => OpCode::TailCall,
             62 => OpCode::Module,
             63 => OpCode::Module16,
+            64 => OpCode::ModuleReturn,
             _ => panic!("Unknown opcode: {}", byte),
         }
     }

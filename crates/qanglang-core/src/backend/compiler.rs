@@ -178,7 +178,7 @@ impl<'a> Assembler<'a> {
             .map_err(|err| QangPipelineError::new(vec![err]))?;
 
         self.emit_opcode(OpCode::Nil, SourceSpan::default());
-        self.emit_opcode(OpCode::Return, SourceSpan::default());
+        self.emit_opcode(OpCode::ModuleReturn, SourceSpan::default());
 
         Ok(self.current_function)
     }
@@ -623,6 +623,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
         }
 
+        // All explicit return statements use regular Return opcode
         self.emit_opcode(OpCode::Return, return_stmt.node.span);
         Ok(())
     }

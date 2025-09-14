@@ -1126,8 +1126,6 @@ impl Vm {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
 
-                    let previous_module_target =
-                        self.state.frames[self.state.frame_count - 1].previous_module_target;
                     let previous_function_module_context = self.state.frames
                         [self.state.frame_count - 1]
                         .previous_function_module_context;
@@ -1138,22 +1136,45 @@ impl Vm {
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    let is_module_return = previous_module_target.is_some()
-                        || (previous_module_target.is_none()
-                            && self.state.module_export_target.is_some());
+                    // Restore function module context for regular function returns
+                    self.state.function_module_context = previous_function_module_context;
 
-                    if is_module_return {
-                        let module_instance = self
-                            .state
-                            .module_export_target
-                            .expect("Module should have export target");
+                    if self.state.frame_count == 0 {
+                        return Ok(result);
+                    }
 
+                    let previous_frame = &self.state.frames[self.state.frame_count - 1];
+                    let previous_closure = self.alloc.closures.get_closure(previous_frame.closure);
+                    let previous_function = self.alloc.get_function(previous_closure.function);
+                    self.state.current_function_ptr = previous_function as *const FunctionObject;
+
+                    // Regular function return - put result on stack
+                    self.state.stack_top = value_slot + 1;
+                    self.state.stack[value_slot] = result;
+                }
+                OpCode::ModuleReturn => {
+                    let result = pop_value!(self);
+                    let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
+
+                    let previous_module_target =
+                        self.state.frames[self.state.frame_count - 1].previous_module_target;
+
+                    self.close_upvalue(value_slot);
+                    self.state.frame_count -= 1;
+
+                    #[cfg(feature = "profiler")]
+                    coz::progress!("function_returns");
+
+                    // Handle both imported modules and top-level script
+                    if let Some(module_instance) = self.state.module_export_target {
+                        // This is an imported module - put the module instance on the stack
                         self.state.stack[self.state.stack_top - 1] = Value::module(module_instance);
-
                         self.state.module_export_target = previous_module_target;
                     } else {
-                        // Restore function module context for regular function returns
-                        self.state.function_module_context = previous_function_module_context;
+                        // This is the top-level script - just return normally
+                        if self.state.frame_count == 0 {
+                            return Ok(result);
+                        }
                     }
 
                     if self.state.frame_count == 0 {
@@ -1165,10 +1186,8 @@ impl Vm {
                     let previous_function = self.alloc.get_function(previous_closure.function);
                     self.state.current_function_ptr = previous_function as *const FunctionObject;
 
-                    if !is_module_return {
-                        self.state.stack_top = value_slot + 1;
-                        self.state.stack[value_slot] = result;
-                    }
+                    // Note: For module returns, we don't update stack_top or put result on stack
+                    // because we already put the module instance on the stack above
                 }
             };
         }

@@ -103,6 +103,27 @@ impl Default for PropertyCache {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MethodCache {
+    pub object_type: CachedObjectType,
+    pub method_name: StringHandle,
+    pub table_handle: HashMapHandle,
+    pub cached_method: Value, // Cache the actual method/closure
+    pub generation: u32,
+}
+
+impl Default for MethodCache {
+    fn default() -> Self {
+        Self {
+            object_type: CachedObjectType::ObjectLiteral,
+            method_name: StringHandle::default(),
+            table_handle: HashMapHandle::default(),
+            cached_method: Value::nil(),
+            generation: 0,
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {
@@ -192,12 +213,14 @@ pub(crate) struct VmState {
     pub modules: ModuleResolver,
     module_export_target: Option<HashMapHandle>,
     function_module_context: Option<HashMapHandle>,
-    property_cache: Vec<PropertyCache>,
+    property_cache: [PropertyCache; Self::PROPERTY_CACHE_SIZE],
+    method_cache: [MethodCache; Self::METHOD_CACHE_SIZE],
     cache_generation: u32,
 }
 
 impl VmState {
     const PROPERTY_CACHE_SIZE: usize = 256;
+    const METHOD_CACHE_SIZE: usize = 256;
 
     fn new(
         globals: FxHashMap<StringHandle, Value>,
@@ -217,7 +240,8 @@ impl VmState {
             modules: ModuleResolver::default(),
             module_export_target: None,
             function_module_context: None,
-            property_cache: vec![PropertyCache::default(); Self::PROPERTY_CACHE_SIZE],
+            property_cache: [PropertyCache::default(); Self::PROPERTY_CACHE_SIZE],
+            method_cache: [MethodCache::default(); Self::METHOD_CACHE_SIZE],
             cache_generation: 0,
         }
     }
@@ -1579,10 +1603,12 @@ impl Vm {
 
     fn invoke(&mut self, method_handle: StringHandle, arg_count: usize) -> RuntimeResult<()> {
         let receiver = peek_value!(self, arg_count);
+
         match receiver.kind() {
             ValueKind::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);
 
+                // First check if it's a field (not cached since fields can change frequently)
                 if let Some(value) = self
                     .alloc
                     .get_instance_field(instance.table, Value::string(method_handle))
@@ -1604,8 +1630,50 @@ impl Vm {
                     ));
                 }
 
+                // Look for method in class (this could also be cached, but classes change less frequently)
                 self.invoke_from_class(instance.clazz, method_handle, arg_count)
             }
+
+            ValueKind::ObjectLiteral(handle) => {
+                let object_type = CachedObjectType::ObjectLiteral;
+
+                // Try cached method lookup
+                if let Some(method_value) =
+                    self.get_method_cached(object_type, handle, method_handle)
+                {
+                    self.state.stack[self.state.stack_top - arg_count - 1] = method_value;
+                    self.call_value(method_value, arg_count)
+                } else {
+                    Err(QangRuntimeError::new(
+                        format!(
+                            "Property '{}' does not exist on object.",
+                            self.alloc.strings.get_string(method_handle)
+                        ),
+                        self.state.get_previous_loc(),
+                    ))
+                }
+            }
+
+            ValueKind::Module(handle) => {
+                let object_type = CachedObjectType::Module;
+
+                // Try cached method lookup
+                if let Some(method_value) =
+                    self.get_method_cached(object_type, handle, method_handle)
+                {
+                    self.state.stack[self.state.stack_top - arg_count - 1] = method_value;
+                    self.call_value(method_value, arg_count)
+                } else {
+                    Err(QangRuntimeError::new(
+                        format!(
+                            "Property '{}' does not exist on module.",
+                            self.alloc.strings.get_string(method_handle)
+                        ),
+                        self.state.get_previous_loc(),
+                    ))
+                }
+            }
+
             ValueKind::String(_) => {
                 let intrinsic = *self
                     .state
@@ -1619,6 +1687,7 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
+
             ValueKind::Array(_) => {
                 let intrinsic = *self
                     .state
@@ -1632,6 +1701,21 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
+
+            ValueKind::Number(_) => {
+                let intrinsic = *self
+                    .state
+                    .intrinsics
+                    .get(&IntrinsicKind::Number(method_handle))
+                    .ok_or_else(|| {
+                        QangRuntimeError::new(
+                            "invalid method call.".to_string(),
+                            self.state.get_previous_loc(),
+                        )
+                    })?;
+                self.call_intrinsic_method(receiver, intrinsic, arg_count)
+            }
+
             ValueKind::Closure(_)
             | ValueKind::NativeFunction(_)
             | ValueKind::BoundIntrinsic(_)
@@ -1648,21 +1732,7 @@ impl Vm {
                     })?;
                 self.call_intrinsic_method(receiver, intrinsic, arg_count)
             }
-            ValueKind::ObjectLiteral(handle) | ValueKind::Module(handle) => {
-                let key = Value::string(method_handle);
-                if let Some(method_value) = self.alloc.tables.get(handle, &key) {
-                    self.state.stack[self.state.stack_top - arg_count - 1] = method_value;
-                    self.call_value(method_value, arg_count)
-                } else {
-                    Err(QangRuntimeError::new(
-                        format!(
-                            "Property '{}' does not exist on object.",
-                            self.alloc.strings.get_string(method_handle)
-                        ),
-                        self.state.get_previous_loc(),
-                    ))
-                }
-            }
+
             _ => Err(QangRuntimeError::new(
                 format!(
                     "Cannot invoke {}, no methods exist.",
@@ -1992,6 +2062,46 @@ impl Vm {
         value
     }
 
+    fn get_method_cached(
+        &mut self,
+        object_type: CachedObjectType,
+        table_handle: HashMapHandle,
+        method_name: StringHandle,
+    ) -> Option<Value> {
+        let cache_index =
+            (self.state.frames[self.state.frame_count - 1].ip + 1) % VmState::METHOD_CACHE_SIZE;
+
+        // Check method cache hit
+        if let Some(cached) = self.state.method_cache.get(cache_index) {
+            if cached.object_type == object_type
+                && cached.method_name == method_name
+                && cached.table_handle == table_handle
+                && cached.generation == self.state.cache_generation
+            {
+                // Fast path: return cached method
+                return Some(cached.cached_method);
+            }
+        }
+
+        // Slow path: lookup method in table
+        let key = Value::string(method_name);
+        if let Some(method_value) = self.alloc.tables.get(table_handle, &key) {
+            // Update method cache
+            if let Some(cache_entry) = self.state.method_cache.get_mut(cache_index) {
+                *cache_entry = MethodCache {
+                    object_type,
+                    method_name,
+                    table_handle,
+                    cached_method: method_value,
+                    generation: self.state.cache_generation,
+                };
+            }
+            Some(method_value)
+        } else {
+            None
+        }
+    }
+
     fn get_property_value(
         &mut self,
         object: Value,
@@ -2022,7 +2132,9 @@ impl Vm {
                 let object_type = CachedObjectType::ObjectLiteral;
 
                 // Use cached lookup (returns None if property doesn't exist, which becomes nil via unwrap_or_default)
-                let value = self.get_property_cached(object_type, handle, identifier).unwrap_or_default();
+                let value = self
+                    .get_property_cached(object_type, handle, identifier)
+                    .unwrap_or_default();
                 pop_value!(self);
                 push_value!(self, value)?;
             }
@@ -2093,6 +2205,10 @@ impl Vm {
 
             ValueKind::Array(_) => {
                 self.bind_intrinsic_method(identifier, IntrinsicKind::Array(identifier), object)?;
+            }
+
+            ValueKind::Number(_) => {
+                self.bind_intrinsic_method(identifier, IntrinsicKind::Number(identifier), object)?;
             }
 
             ValueKind::Closure(_) | ValueKind::BoundMethod(_) => {

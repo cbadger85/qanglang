@@ -23,7 +23,7 @@ fn test_assignment_to_object_field() {
 }
 
 fn test_assignment_to_array_index() {
-  var array = Array(1);
+  var array = array_of_length(1);
   array[0] = true;
 
   assert(array[0]);

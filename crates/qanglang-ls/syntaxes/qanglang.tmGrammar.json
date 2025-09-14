@@ -94,11 +94,11 @@
         },
         {
           "name": "support.function.builtin",
-          "match": "\\b(print|println|assert|assert_eq|assert_throws|typeof|system_time|to_string)\\b"
+          "match": "\\b(print|println|assert|assert_eq|assert_throws|typeof|system_time|to_string|array_of_length|hash)\\b"
         },
         {
-          "name": "support.function.intrinsic",
-          "match": "\\.(call|apply)\\b"
+          "name": "entity.name.function.call.qanglang",
+          "match": "\\.(call|apply|to_uppercase|to_lowercase|length|push|pop|reverse|slice|get|concat)(?=\\s|\\(|$)"
         }
       ]
     },

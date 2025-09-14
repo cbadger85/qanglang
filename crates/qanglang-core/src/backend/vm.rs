@@ -16,11 +16,8 @@ use crate::{
         module_resolver::ModuleResolver,
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
-            qang_array_concat, qang_array_construct, qang_array_get, qang_array_length,
-            qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice, qang_assert,
-            qang_assert_eq, qang_assert_throws, qang_hash, qang_print, qang_println,
-            qang_string_to_lowercase, qang_string_to_uppercase, qang_system_time, qang_to_string,
-            qang_typeof,
+            qang_array_construct, qang_assert, qang_assert_eq, qang_assert_throws, qang_hash,
+            qang_print, qang_println, qang_system_time, qang_to_string, qang_typeof,
         },
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -398,94 +395,10 @@ impl Vm {
             Value::string(module_type_value_handle),
         );
 
-        let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
-        let to_uppercase_handle = alloc.strings.intern("to_uppercase");
-        intrinsics.insert(
-            IntrinsicKind::String(to_uppercase_handle),
-            IntrinsicMethod::Native {
-                function: qang_string_to_uppercase,
-                arity: 0,
-            },
-        );
-        let to_lowercase_handle = alloc.strings.intern("to_lowercase");
-        intrinsics.insert(
-            IntrinsicKind::String(to_lowercase_handle),
-            IntrinsicMethod::Native {
-                function: qang_string_to_lowercase,
-                arity: 0,
-            },
-        );
-        let length_handle = alloc.strings.intern("length");
-        intrinsics.insert(
-            IntrinsicKind::Array(length_handle),
-            IntrinsicMethod::Native {
-                function: qang_array_length,
-                arity: 0,
-            },
-        );
-        let array_push_handle = alloc.strings.intern("push");
-        intrinsics.insert(
-            IntrinsicKind::Array(array_push_handle),
-            IntrinsicMethod::Native {
-                function: qang_array_push,
-                arity: 1,
-            },
-        );
-        let array_pop_handle = alloc.strings.intern("pop");
-        intrinsics.insert(
-            IntrinsicKind::Array(array_pop_handle),
-            IntrinsicMethod::Native {
-                function: qang_array_pop,
-                arity: 0,
-            },
-        );
-        let array_reverse_handle = alloc.strings.intern("reverse");
-        intrinsics.insert(
-            IntrinsicKind::Array(array_reverse_handle),
-            IntrinsicMethod::Native {
-                function: qang_array_reverse,
-                arity: 0,
-            },
-        );
-        let array_slice_handle = alloc.strings.intern("slice");
-        intrinsics.insert(
-            IntrinsicKind::Array(array_slice_handle),
-            IntrinsicMethod::Native {
-                function: qang_array_slice,
-                arity: 2,
-            },
-        );
-        let array_get_handle = alloc.strings.intern("get");
-        intrinsics.insert(
-            IntrinsicKind::Array(array_get_handle),
-            IntrinsicMethod::Native {
-                function: qang_array_get,
-                arity: 1,
-            },
-        );
-        let concat_handle = alloc.strings.intern("concat");
-        intrinsics.insert(
-            IntrinsicKind::Array(concat_handle),
-            IntrinsicMethod::Native {
-                function: qang_array_concat,
-                arity: 1,
-            },
-        );
-        let function_call_handle = alloc.strings.intern("call");
-        intrinsics.insert(
-            IntrinsicKind::Function(function_call_handle),
-            IntrinsicMethod::Call,
-        );
-        let function_apply_handle = alloc.strings.intern("apply");
-        intrinsics.insert(
-            IntrinsicKind::Function(function_apply_handle),
-            IntrinsicMethod::Apply,
-        );
-
         let vm = Self {
             is_debug: false,
             is_gc_enabled: true,
-            state: VmState::new(globals, intrinsics, keywords),
+            state: VmState::new(globals, Self::load_intrinsics(&mut alloc), keywords),
             alloc,
         };
 
@@ -498,7 +411,7 @@ impl Vm {
             .add_native_function("typeof", 1, qang_typeof)
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("hash", 1, qang_hash)
-            .add_native_function("Array", 2, qang_array_construct)
+            .add_native_function("array_of_length", 1, qang_array_construct)
             .with_stdlib()
     }
 

@@ -145,3 +145,7 @@ class Range : Iterator {
     return nil;
   }
 }
+
+var array_of = (length, init) -> Range(0, length) 
+  |> iter_map(init or identity) 
+  |> iter_collect();

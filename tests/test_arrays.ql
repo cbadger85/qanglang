@@ -142,8 +142,24 @@ fn test_array_concat_with_plus() {
 }
 
 
-fn test_array_from_constructor() {
-  var arr1 = Array(1);
+fn test_array_from_native_method() {
+  var arr1 = array_of_length(1);
   assert_eq(arr1.length(), 1);
   assert_eq(arr1[0], nil);
+}
+
+fn test_array_of() {
+  var arr1 = array_of(3);
+  assert_eq(arr1.length(), 3);
+  assert_eq(arr1[0], 0);
+  assert_eq(arr1[1], 1);
+  assert_eq(arr1[2], 2);
+}
+
+fn test_array_of_with_init() {
+  var arr1 = array_of(3, (i) -> i + 1);
+  assert_eq(arr1.length(), 3);
+  assert_eq(arr1[0], 1);
+  assert_eq(arr1[1], 2);
+  assert_eq(arr1[2], 3);
 }

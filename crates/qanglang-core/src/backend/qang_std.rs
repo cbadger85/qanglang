@@ -1,8 +1,11 @@
+use rustc_hash::{FxBuildHasher, FxHashMap};
+
 use crate::{
-    CompilerPipeline, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap, Value,
-    ValueKind, Vm,
+    CompilerPipeline, HeapAllocator, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap,
+    Value, ValueKind, Vm,
     backend::{
         compiler::STACK_MAX,
+        object::{IntrinsicKind, IntrinsicMethod},
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
             MODULE_TYPE_STRING, NIL_TYPE_STRING, NUMBER_TYPE_STRING, OBJECT_TYPE_STRING,
@@ -411,6 +414,96 @@ impl Vm {
         self.alloc.strings.intern(ARRAY_TYPE_STRING);
         self.alloc.strings.intern(MODULE_TYPE_STRING);
         self.alloc.strings.intern("MODULE");
+    }
+
+    pub(crate) fn load_intrinsics(
+        alloc: &mut HeapAllocator,
+    ) -> FxHashMap<IntrinsicKind, IntrinsicMethod> {
+        let mut intrinsics = FxHashMap::with_hasher(FxBuildHasher);
+        let to_uppercase_handle = alloc.strings.intern("to_uppercase");
+        intrinsics.insert(
+            IntrinsicKind::String(to_uppercase_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_to_uppercase,
+                arity: 0,
+            },
+        );
+        let to_lowercase_handle = alloc.strings.intern("to_lowercase");
+        intrinsics.insert(
+            IntrinsicKind::String(to_lowercase_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_to_lowercase,
+                arity: 0,
+            },
+        );
+        let length_handle = alloc.strings.intern("length");
+        intrinsics.insert(
+            IntrinsicKind::Array(length_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_length,
+                arity: 0,
+            },
+        );
+        let array_push_handle = alloc.strings.intern("push");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_push_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_push,
+                arity: 1,
+            },
+        );
+        let array_pop_handle = alloc.strings.intern("pop");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_pop_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_pop,
+                arity: 0,
+            },
+        );
+        let array_reverse_handle = alloc.strings.intern("reverse");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_reverse_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_reverse,
+                arity: 0,
+            },
+        );
+        let array_slice_handle = alloc.strings.intern("slice");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_slice_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_slice,
+                arity: 2,
+            },
+        );
+        let array_get_handle = alloc.strings.intern("get");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_get_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_get,
+                arity: 1,
+            },
+        );
+        let concat_handle = alloc.strings.intern("concat");
+        intrinsics.insert(
+            IntrinsicKind::Array(concat_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_concat,
+                arity: 1,
+            },
+        );
+        let function_call_handle = alloc.strings.intern("call");
+        intrinsics.insert(
+            IntrinsicKind::Function(function_call_handle),
+            IntrinsicMethod::Call,
+        );
+        let function_apply_handle = alloc.strings.intern("apply");
+        intrinsics.insert(
+            IntrinsicKind::Function(function_apply_handle),
+            IntrinsicMethod::Apply,
+        );
+
+        intrinsics
     }
 
     pub(crate) fn handle_function_intrinsic_call(

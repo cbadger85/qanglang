@@ -9,6 +9,10 @@ pub use backend::chunk::SourceLocation;
 pub use backend::compiler::QangProgram;
 pub use backend::compiler::{CompilerConfig, CompilerPipeline};
 pub use backend::module_resolver::{ModuleResolver, RuntimeModule};
+pub use backend::object::{
+    BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,
+    InstanceObject, IntrinsicFn, NativeFn, NativeFunctionObject, Upvalue,
+};
 pub use backend::value::{Value, ValueKind};
 pub use backend::vm::Vm;
 pub use debug::{disassemble_chunk, disassemble_program};
@@ -26,10 +30,9 @@ pub use frontend::{
     typed_node_arena::{NodeId, TypedNodeArena},
 };
 pub use memory::{
-    BoundIntrinsicHandle, BoundIntrinsicObject, BoundMethodHandle, BoundMethodObject, ClassHandle,
-    ClassObject, ClosureHandle, ClosureObject, FunctionHandle, FunctionObject, HashMapHandle,
-    HeapAllocator, InstanceHandle, InstanceObject, IntrinsicFn, NativeFn, NativeFunctionHandle,
-    NativeFunctionObject, StringHandle, StringInterner, Upvalue, UpvalueHandle, UpvalueSlot,
+    BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, ClosureHandle, FunctionHandle,
+    HashMapHandle, HeapAllocator, InstanceHandle, NativeFunctionHandle, StringHandle,
+    StringInterner, UpvalueHandle, UpvalueSlot,
 };
 
 #[cfg(test)]

@@ -1,14 +1,11 @@
 use crate::{
     ClassHandle, ClosureHandle, FunctionHandle, HashMapHandle, NativeFunctionError, Value, Vm,
     backend::chunk::Chunk,
-    memory::{
-        StringHandle,
-        closure_arena::{INLINE_UPVALUE_COUNT, OverflowHandle},
-    },
+    memory::{INLINE_UPVALUE_COUNT, OverflowHandle, StringHandle},
 };
 
 // Re-export from closure_arena
-pub use crate::memory::closure_arena::UpvalueSlot;
+pub use crate::memory::UpvalueSlot;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Upvalue {
@@ -113,17 +110,6 @@ pub enum IntrinsicKind {
     Number(StringHandle),
     Array(StringHandle),
     Function(StringHandle),
-}
-
-impl IntrinsicKind {
-    pub fn string_handle(&self) -> StringHandle {
-        match self {
-            Self::String(handle) => *handle,
-            Self::Number(handle) => *handle,
-            Self::Array(handle) => *handle,
-            Self::Function(handle) => *handle,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -1,11 +1,11 @@
 use crate::arena::{Arena, Index};
+use crate::backend::object::{
+    BoundIntrinsicObject, BoundMethodObject, ClassObject, InstanceObject, NativeFunctionObject,
+};
 use crate::memory::UpvalueOverflowArena;
 use crate::memory::array_arena::ArrayArena;
 use crate::memory::closure_arena::ClosureArena;
 use crate::memory::hashmap_arena::HashMapArena;
-use crate::memory::object::{
-    BoundIntrinsicObject, BoundMethodObject, ClassObject, InstanceObject, NativeFunctionObject,
-};
 use crate::memory::string_interner::StringInterner;
 use crate::{FunctionObject, Upvalue, Value, debug_log};
 use crate::{StringHandle, ValueKind};

@@ -7,13 +7,14 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
 use crate::{
-    BoundIntrinsicObject, BoundMethodObject, ClassHandle, HashMapHandle, HeapAllocator, NativeFn,
-    NativeFunctionError, NativeFunctionHandle, NativeFunctionObject, QangProgram, QangRuntimeError,
-    Value, ValueKind,
+    BoundIntrinsicObject, BoundMethodObject, ClassHandle, ClosureHandle, HashMapHandle,
+    HeapAllocator, NativeFn, NativeFunctionError, NativeFunctionHandle, NativeFunctionObject,
+    QangProgram, QangRuntimeError, StringHandle, Value, ValueKind,
     backend::{
         chunk::{OpCode, SourceLocation},
         compiler::{FRAME_MAX, STACK_MAX},
         module_resolver::ModuleResolver,
+        object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
             qang_array_concat, qang_array_construct, qang_array_get, qang_array_length,
             qang_array_pop, qang_array_push, qang_array_reverse, qang_array_slice, qang_assert,
@@ -28,10 +29,6 @@ use crate::{
         },
     },
     debug_log,
-    memory::{
-        ClosureHandle, ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, StringHandle,
-        UpvalueSlot,
-    },
 };
 
 #[derive(Debug, Clone)]

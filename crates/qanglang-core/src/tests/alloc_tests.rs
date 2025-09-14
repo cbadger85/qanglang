@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::Value;
-    use crate::memory::{ClosureObject, FunctionObject, HeapAllocator, UpvalueSlot};
+    use crate::backend::object::{ClosureObject, FunctionObject};
+    use crate::memory::{HeapAllocator, UpvalueSlot};
     use std::collections::VecDeque;
 
     fn create_test_function() -> FunctionObject {

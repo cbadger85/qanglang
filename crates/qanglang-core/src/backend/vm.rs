@@ -77,6 +77,32 @@ pub enum Keyword {
     Module,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct PropertyCache {
+    pub object_type: CachedObjectType,
+    pub property_name: StringHandle,
+    pub table_handle: HashMapHandle,
+    pub generation: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CachedObjectType {
+    Instance(ClassHandle),
+    ObjectLiteral,
+    Module,
+}
+
+impl Default for PropertyCache {
+    fn default() -> Self {
+        Self {
+            object_type: CachedObjectType::ObjectLiteral,
+            property_name: StringHandle::default(),
+            table_handle: HashMapHandle::default(),
+            generation: 0,
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! push_value {
     ($vm:expr, $value:expr) => {
@@ -166,9 +192,13 @@ pub(crate) struct VmState {
     pub modules: ModuleResolver,
     module_export_target: Option<HashMapHandle>,
     function_module_context: Option<HashMapHandle>,
+    property_cache: Vec<PropertyCache>,
+    cache_generation: u32,
 }
 
 impl VmState {
+    const PROPERTY_CACHE_SIZE: usize = 256;
+
     fn new(
         globals: FxHashMap<StringHandle, Value>,
         intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
@@ -187,7 +217,13 @@ impl VmState {
             modules: ModuleResolver::default(),
             module_export_target: None,
             function_module_context: None,
+            property_cache: vec![PropertyCache::default(); Self::PROPERTY_CACHE_SIZE],
+            cache_generation: 0,
         }
+    }
+
+    pub fn invalidate_caches(&mut self) {
+        self.cache_generation = self.cache_generation.wrapping_add(1);
     }
 
     fn get_current_function(&self) -> &FunctionObject {
@@ -1917,6 +1953,45 @@ impl Vm {
         }
     }
 
+    fn get_property_cached(
+        &mut self,
+        object_type: CachedObjectType,
+        table_handle: HashMapHandle,
+        property_name: StringHandle,
+    ) -> Option<Value> {
+        let cache_index =
+            (self.state.frames[self.state.frame_count - 1].ip) % VmState::PROPERTY_CACHE_SIZE;
+
+        // Check cache hit
+        if let Some(cached) = self.state.property_cache.get(cache_index) {
+            if cached.object_type == object_type
+                && cached.property_name == property_name
+                && cached.table_handle == table_handle
+                && cached.generation == self.state.cache_generation
+            {
+                // Fast path: use cached table handle
+                let key = Value::string(property_name);
+                return self.alloc.tables.get(cached.table_handle, &key);
+            }
+        }
+
+        // Slow path: full lookup + cache update
+        let key = Value::string(property_name);
+        let value = self.alloc.tables.get(table_handle, &key);
+
+        // Update cache
+        if let Some(cache_entry) = self.state.property_cache.get_mut(cache_index) {
+            *cache_entry = PropertyCache {
+                object_type,
+                property_name,
+                table_handle,
+                generation: self.state.cache_generation,
+            };
+        }
+
+        value
+    }
+
     fn get_property_value(
         &mut self,
         object: Value,
@@ -1924,7 +1999,62 @@ impl Vm {
         identifier: StringHandle,
     ) -> RuntimeResult<()> {
         match object.kind() {
+            ValueKind::Instance(instance_handle) => {
+                let instance = self.alloc.get_instance(instance_handle);
+                let clazz = instance.clazz;
+                let object_type = CachedObjectType::Instance(clazz);
+                let instance_table = instance.table;
+
+                // Try cached lookup first
+                if let Some(value) =
+                    self.get_property_cached(object_type, instance_table, identifier)
+                {
+                    pop_value!(self);
+                    push_value!(self, value)?;
+                } else {
+                    // Fall back to method binding
+                    let key = Value::string(identifier);
+                    self.bind_method(clazz, key)?;
+                }
+            }
+
+            ValueKind::ObjectLiteral(handle) => {
+                let object_type = CachedObjectType::ObjectLiteral;
+
+                // Use cached lookup (returns None if property doesn't exist, which becomes nil via unwrap_or_default)
+                let value = self.get_property_cached(object_type, handle, identifier).unwrap_or_default();
+                pop_value!(self);
+                push_value!(self, value)?;
+            }
+
+            ValueKind::Module(handle) => {
+                let object_type = CachedObjectType::Module;
+
+                // Use cached lookup
+                let value = self.get_property_cached(object_type, handle, identifier);
+
+                pop_value!(self);
+                match value {
+                    Some(val) => push_value!(self, val)?,
+                    None => {
+                        // Module property doesn't exist, return nil or error based on optional flag
+                        if optional {
+                            push_value!(self, Value::nil())?;
+                        } else {
+                            return Err(QangRuntimeError::new(
+                                format!(
+                                    "Property '{}' does not exist on module.",
+                                    self.alloc.strings.get_string(identifier)
+                                ),
+                                self.state.get_previous_loc(),
+                            ));
+                        }
+                    }
+                }
+            }
+
             ValueKind::Nil => {
+                // Handle nil-safe method calls (call/apply)
                 let call_handle = *self
                     .state
                     .keywords
@@ -1956,29 +2086,15 @@ impl Vm {
                     ));
                 }
             }
-            ValueKind::Instance(instance_handle) => {
-                let instance = self.alloc.get_instance(instance_handle);
-                let key = Value::string(identifier);
 
-                if let Some(value) = self.alloc.get_instance_field(instance.table, key) {
-                    pop_value!(self);
-                    push_value!(self, value)?;
-                } else {
-                    self.bind_method(instance.clazz, key)?;
-                }
-            }
-            ValueKind::ObjectLiteral(handle) | ValueKind::Module(handle) => {
-                let key = Value::string(identifier);
-                let value = self.alloc.tables.get(handle, &key).unwrap_or_default();
-                pop_value!(self);
-                push_value!(self, value)?;
-            }
             ValueKind::String(_) => {
                 self.bind_intrinsic_method(identifier, IntrinsicKind::String(identifier), object)?;
             }
+
             ValueKind::Array(_) => {
                 self.bind_intrinsic_method(identifier, IntrinsicKind::Array(identifier), object)?;
             }
+
             ValueKind::Closure(_) | ValueKind::BoundMethod(_) => {
                 self.bind_intrinsic_method(
                     identifier,
@@ -1986,6 +2102,7 @@ impl Vm {
                     object,
                 )?;
             }
+
             _ => {
                 if optional {
                     pop_value!(self);
@@ -2005,24 +2122,43 @@ impl Vm {
         let instance = peek_value!(self, 1);
         match instance.kind() {
             ValueKind::Instance(instance_handle) => {
-                let instance_table = self.alloc.get_instance(instance_handle).table;
+                let instance_obj = self.alloc.get_instance(instance_handle);
+                let table_handle = instance_obj.table;
                 let constant = Value::string(identifier);
                 let value = peek_value!(self, 0);
-                self.with_gc_check(|alloc| {
-                    alloc.set_instance_field(instance_table, constant, value)
-                });
-                let value = pop_value!(self); // value to assign
-                pop_value!(self); // instance
-                push_value!(self, value)?; // push assigned value to top of stack
+
+                // Update the property (this will invalidate cache naturally via generation)
+                self.with_gc_check(|alloc| alloc.set_instance_field(table_handle, constant, value));
+
+                let value = pop_value!(self);
+                pop_value!(self);
+                push_value!(self, value)?;
             }
+
             ValueKind::ObjectLiteral(obj_handle) => {
                 let constant = Value::string(identifier);
                 let value = peek_value!(self, 0);
+
+                // Update the property
                 self.with_gc_check(|alloc| alloc.tables.insert(obj_handle, constant, value));
-                let value = pop_value!(self); // value to assign
-                pop_value!(self); // obj
-                push_value!(self, value)?; // push assigned value to top of stack
+
+                let value = pop_value!(self);
+                pop_value!(self);
+                push_value!(self, value)?;
             }
+
+            ValueKind::Module(module_handle) => {
+                let constant = Value::string(identifier);
+                let value = peek_value!(self, 0);
+
+                // Update the module property
+                self.with_gc_check(|alloc| alloc.tables.insert(module_handle, constant, value));
+
+                let value = pop_value!(self);
+                pop_value!(self);
+                push_value!(self, value)?;
+            }
+
             _ => {
                 return Err(QangRuntimeError::new(
                     format!("Cannot set property on {}.", instance.to_type_string()),
@@ -2210,6 +2346,8 @@ impl Vm {
 
     pub fn collect_garbage(&mut self) {
         debug_log!(self.is_debug, "--gc begin");
+
+        self.state.invalidate_caches();
 
         // Mark overflow chunks referenced by open upvalues before GC
         for (_, upvalue_ref) in &self.state.open_upvalues {

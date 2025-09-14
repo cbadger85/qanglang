@@ -240,8 +240,24 @@ impl VmState {
         }
     }
 
-    pub fn invalidate_caches(&mut self) {
+    fn invalidate_caches(&mut self) {
         self.cache_generation = self.cache_generation.wrapping_add(1);
+    }
+
+    fn get_property_cache_index(&self) -> usize {
+        let ip = self.frames[self.frame_count - 1].ip;
+        let closure_handle = self.frames[self.frame_count - 1].closure;
+
+        let cache_key = (ip as u64) ^ closure_handle.as_raw();
+        cache_key as usize % Self::PROPERTY_CACHE_SIZE
+    }
+
+    fn get_method_cache_index(&self) -> usize {
+        let ip = self.frames[self.frame_count - 1].ip;
+        let closure_handle = self.frames[self.frame_count - 1].closure;
+
+        let cache_key = (ip as u64) ^ closure_handle.as_raw();
+        cache_key as usize % Self::METHOD_CACHE_SIZE
     }
 
     fn get_current_function(&self) -> &FunctionObject {
@@ -1939,8 +1955,7 @@ impl Vm {
         table_handle: HashMapHandle,
         property_name: StringHandle,
     ) -> Option<Value> {
-        let cache_index =
-            (self.state.frames[self.state.frame_count - 1].ip) % VmState::PROPERTY_CACHE_SIZE;
+        let cache_index = self.state.get_property_cache_index();
 
         // Check cache hit
         if let Some(cached) = self.state.property_cache.get(cache_index) {
@@ -1978,8 +1993,7 @@ impl Vm {
         table_handle: HashMapHandle,
         method_name: StringHandle,
     ) -> Option<Value> {
-        let cache_index =
-            (self.state.frames[self.state.frame_count - 1].ip + 1) % VmState::METHOD_CACHE_SIZE;
+        let cache_index = self.state.get_method_cache_index();
 
         // Check method cache hit
         if let Some(cached) = self.state.method_cache.get(cache_index) {

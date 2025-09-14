@@ -4,6 +4,8 @@ use crate::{
     arena::Index,
     memory::{ArrayHandle, ClosureHandle, FunctionHandle, StringHandle},
 };
+use rustc_hash::FxHasher;
+use std::hash::{Hash, Hasher};
 
 // keywords
 pub const NIL_TYPE_STRING: &str = "nil";
@@ -444,8 +446,6 @@ impl Value {
     }
 
     pub fn hash(&self) -> u64 {
-        use rustc_hash::FxHasher;
-        use std::hash::{Hash, Hasher};
         let mut hasher = FxHasher::default();
 
         self.0.to_bits().hash(&mut hasher);

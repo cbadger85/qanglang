@@ -38,6 +38,10 @@ impl Index {
             generation: (packed >> 28) as u16,
         }
     }
+
+    pub fn as_raw(&self) -> u64 {
+        ((self.generation as u64) << 32) | (self.index as u64)
+    }
 }
 
 impl Default for Index {

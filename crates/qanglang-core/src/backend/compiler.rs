@@ -1265,14 +1265,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
         }
 
         // Clean up for loop scope variables using unified scope tracking
-        let scope_variables: Vec<_> = self
-            .analysis
-            .scopes
-            .get_scope_variables(for_stmt.id)
-            .collect();
-
         // Emit cleanup instructions in reverse order (LIFO) for local variables only
-        for &var_id in scope_variables.iter().rev() {
+        for &var_id in self.analysis.scopes.get_scope_variables(for_stmt.id).rev() {
             if let Some(var_info) = self.analysis.scopes.variables.get(&var_id) {
                 if let crate::frontend::scope_analysis::VariableKind::Local { .. } = var_info.kind {
                     if var_info.is_captured {
@@ -1430,14 +1424,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         // Clean up local variables declared in this block scope using scope analysis
         // Variables in scope are stored in declaration order, so reverse iterate for LIFO cleanup
-        let scope_variables: Vec<_> = self
-            .analysis
-            .scopes
-            .get_scope_variables(block_stmt.id)
-            .collect();
-
         // Emit cleanup instructions in reverse order (LIFO) for local variables only
-        for &var_id in scope_variables.iter().rev() {
+        for &var_id in self.analysis.scopes.get_scope_variables(block_stmt.id).rev() {
             if let Some(var_info) = self.analysis.scopes.variables.get(&var_id) {
                 if let crate::frontend::scope_analysis::VariableKind::Local { .. } = var_info.kind {
                     if var_info.is_captured {

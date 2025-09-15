@@ -121,12 +121,12 @@ impl ScopeAnalysis {
     }
 
     // NEW: Helper methods for scope queries
-    pub fn get_scope_variables(&self, scope_id: NodeId) -> impl Iterator<Item = &NodeId> {
+    pub fn get_scope_variables(&self, scope_id: NodeId) -> impl DoubleEndedIterator<Item = &NodeId> {
         self.scopes
             .get(&scope_id)
-            .map(|scope_info| scope_info.declared_variables.iter())
-            .into_iter()
-            .flatten()
+            .map(|scope_info| scope_info.declared_variables.as_slice())
+            .unwrap_or(&[])
+            .iter()
     }
 
     pub fn get_variable_scope(&self, var_id: NodeId) -> Option<NodeId> {

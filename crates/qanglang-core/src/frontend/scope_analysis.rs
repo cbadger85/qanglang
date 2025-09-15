@@ -21,7 +21,7 @@ pub struct VariableInfo {
     pub is_captured: bool,
     pub span: SourceSpan,
     pub declaring_scope: Option<NodeId>, // NEW: Which scope declared this variable
-    pub declaration_order: usize, // NEW: Order within scope (for LIFO cleanup)
+    pub declaration_order: usize,        // NEW: Order within scope (for LIFO cleanup)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,7 +48,6 @@ pub struct ClassInheritanceInfo {
     pub super_slot: usize,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct BreakContinueInfo {
     pub target_loop: NodeId,
@@ -74,12 +73,12 @@ pub struct ScopeInfo {
 
 #[derive(Debug, Clone)]
 pub enum ScopeType {
-    Block(NodeId), // Block statements
-    ForLoop(NodeId), // For loop bodies
+    Block(NodeId),     // Block statements
+    ForLoop(NodeId),   // For loop bodies
     WhileLoop(NodeId), // While loop bodies
-    Function(NodeId), // Function bodies
-    Class(NodeId), // Class bodies
-    Lambda(NodeId), // Lambda expressions
+    Function(NodeId),  // Function bodies
+    Class(NodeId),     // Class bodies
+    Lambda(NodeId),    // Lambda expressions
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +121,7 @@ impl ScopeAnalysis {
     }
 
     // NEW: Helper methods for scope queries
+    // TODO turn this into an iterator and do not create a new vec
     pub fn get_scope_variables(&self, scope_id: NodeId) -> Vec<NodeId> {
         if let Some(scope_info) = self.scopes.get(&scope_id) {
             scope_info.declared_variables.clone()
@@ -431,7 +431,7 @@ impl<'a> ScopeAnalyzer<'a> {
                 is_captured: false,
                 span,
                 declaring_scope: None, // Will be set by declare_variable_in_current_scope
-                declaration_order: 0, // Will be set by declare_variable_in_current_scope
+                declaration_order: 0,  // Will be set by declare_variable_in_current_scope
             };
             (variable_info, Some(local_idx))
         };
@@ -571,7 +571,6 @@ impl<'a> ScopeAnalyzer<'a> {
         Ok(None)
     }
 
-
     fn current_loop(&self) -> Option<NodeId> {
         // Find the most recent loop scope in the scope stack, but stop at function boundaries
         for &scope_id in self.scope_stack.iter().rev() {
@@ -596,7 +595,15 @@ impl<'a> ScopeAnalyzer<'a> {
         errors: &mut ErrorReporter,
         function_id: NodeId,
     ) {
-        self.begin_function_with_scope_type(name, arity, span, kind, errors, function_id, ScopeType::Function(function_id));
+        self.begin_function_with_scope_type(
+            name,
+            arity,
+            span,
+            kind,
+            errors,
+            function_id,
+            ScopeType::Function(function_id),
+        );
     }
 
     fn begin_function_with_scope_type(
@@ -1056,7 +1063,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         // Use unified scope tracking
-        self.begin_tracked_scope(ScopeType::Block(block_stmt.id), block_stmt.id, block_stmt.node.span);
+        self.begin_tracked_scope(
+            ScopeType::Block(block_stmt.id),
+            block_stmt.id,
+            block_stmt.node.span,
+        );
 
         let decl_count = ctx.nodes.array.size(block_stmt.node.decls);
         for i in 0..decl_count {
@@ -1115,7 +1126,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         self.visit_expression(condition, ctx)?;
 
         // Enter loop context and visit body using unified scope tracking
-        self.begin_tracked_scope(ScopeType::WhileLoop(while_stmt.id), while_stmt.id, while_stmt.node.span);
+        self.begin_tracked_scope(
+            ScopeType::WhileLoop(while_stmt.id),
+            while_stmt.id,
+            while_stmt.node.span,
+        );
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
         self.end_tracked_scope();
@@ -1129,7 +1144,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         // Use unified scope tracking for for loops
-        self.begin_tracked_scope(ScopeType::ForLoop(for_stmt.id), for_stmt.id, for_stmt.node.span);
+        self.begin_tracked_scope(
+            ScopeType::ForLoop(for_stmt.id),
+            for_stmt.id,
+            for_stmt.node.span,
+        );
 
         // Handle initializer (variables automatically tracked by unified scope system)
         if let Some(initializer_id) = for_stmt.node.initializer {
@@ -1144,7 +1163,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         if let Some(increment_id) = for_stmt.node.increment {
             self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
         }
-
 
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
 

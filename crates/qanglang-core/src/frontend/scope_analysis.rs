@@ -121,13 +121,12 @@ impl ScopeAnalysis {
     }
 
     // NEW: Helper methods for scope queries
-    // TODO turn this into an iterator and do not create a new vec
-    pub fn get_scope_variables(&self, scope_id: NodeId) -> Vec<NodeId> {
-        if let Some(scope_info) = self.scopes.get(&scope_id) {
-            scope_info.declared_variables.clone()
-        } else {
-            Vec::new()
-        }
+    pub fn get_scope_variables(&self, scope_id: NodeId) -> impl Iterator<Item = &NodeId> {
+        self.scopes
+            .get(&scope_id)
+            .map(|scope_info| scope_info.declared_variables.iter())
+            .into_iter()
+            .flatten()
     }
 
     pub fn get_variable_scope(&self, var_id: NodeId) -> Option<NodeId> {
@@ -138,17 +137,16 @@ impl ScopeAnalysis {
         }
     }
 
-    pub fn get_nested_scopes(&self, scope_id: NodeId) -> Vec<NodeId> {
+    pub fn get_nested_scopes(&self, scope_id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
         self.scopes
             .iter()
-            .filter_map(|(id, scope_info)| {
+            .filter_map(move |(id, scope_info)| {
                 if scope_info.parent_scope == Some(scope_id) {
                     Some(*id)
                 } else {
                     None
                 }
             })
-            .collect()
     }
 }
 
@@ -526,7 +524,8 @@ impl<'a> ScopeAnalyzer<'a> {
         name: StringHandle,
         _span: SourceSpan,
     ) -> Result<Option<VariableKind>, QangCompilerError> {
-        if self.functions.len() < 2 {
+        let no_enclosing_function = self.functions.len() < 2;
+        if no_enclosing_function {
             return Ok(None); // No enclosing function to capture from
         }
 

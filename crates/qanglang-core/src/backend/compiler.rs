@@ -468,7 +468,6 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
-
     fn handle_map_expression(
         &mut self,
         callee: TypedNodeRef<crate::frontend::typed_node_arena::ExprNode>,
@@ -1198,7 +1197,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             let condition_jump = self.emit_jump(OpCode::Jump, condition.node.span());
             loop_start = self.current_chunk_mut().code.len();
 
-
             let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
             self.visit_statement(body, ctx)?;
 
@@ -1216,7 +1214,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Pop, condition.node.span());
             self.emit_loop(loop_start, body.node.span())?;
         } else {
-
             let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
             self.visit_statement(body, ctx)?;
 
@@ -1268,7 +1265,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
         }
 
         // Clean up for loop scope variables using unified scope tracking
-        let scope_variables = self.analysis.scopes.get_scope_variables(for_stmt.id);
+        let scope_variables: Vec<_> = self
+            .analysis
+            .scopes
+            .get_scope_variables(for_stmt.id)
+            .collect();
 
         // Emit cleanup instructions in reverse order (LIFO) for local variables only
         for &var_id in scope_variables.iter().rev() {
@@ -1429,7 +1430,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         // Clean up local variables declared in this block scope using scope analysis
         // Variables in scope are stored in declaration order, so reverse iterate for LIFO cleanup
-        let scope_variables = self.analysis.scopes.get_scope_variables(block_stmt.id);
+        let scope_variables: Vec<_> = self
+            .analysis
+            .scopes
+            .get_scope_variables(block_stmt.id)
+            .collect();
 
         // Emit cleanup instructions in reverse order (LIFO) for local variables only
         for &var_id in scope_variables.iter().rev() {

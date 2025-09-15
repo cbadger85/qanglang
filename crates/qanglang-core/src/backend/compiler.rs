@@ -468,33 +468,6 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
-    fn emit_nested_loop_variable_resets(
-        &mut self,
-        for_loop_id: NodeId,
-        ctx: &mut VisitorContext,
-    ) -> Result<(), QangCompilerError> {
-        // Find nested for loops within this loop's body and reset their variables
-        if let Some(child_loop_ids) = self.analysis.scopes.loop_children.get(&for_loop_id) {
-            // Look for nested loops that need their variables reset
-            for &child_loop_id in child_loop_ids {
-                if let Some(nested_for_info) = self.analysis.scopes.for_loops.get(&child_loop_id) {
-                    for var_info in &nested_for_info.scope_info.initializer_variables {
-                        if let Some(initializer_node) = var_info.initializer_node {
-                            let initializer_expr = ctx.nodes.get_expr_node(initializer_node);
-                            self.visit_expression(initializer_expr, ctx)?;
-                            self.emit_opcode_and_byte(
-                                OpCode::SetLocal,
-                                var_info.slot as u8,
-                                initializer_expr.node.span(),
-                            );
-                            self.emit_opcode(OpCode::Pop, initializer_expr.node.span());
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
 
     fn handle_map_expression(
         &mut self,
@@ -1225,8 +1198,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             let condition_jump = self.emit_jump(OpCode::Jump, condition.node.span());
             loop_start = self.current_chunk_mut().code.len();
 
-            // Reset nested loop variables if this is a nested for loop
-            self.emit_nested_loop_variable_resets(for_stmt.id, ctx)?;
 
             let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
             self.visit_statement(body, ctx)?;
@@ -1245,8 +1216,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Pop, condition.node.span());
             self.emit_loop(loop_start, body.node.span())?;
         } else {
-            // Reset nested loop variables if this is a nested for loop
-            self.emit_nested_loop_variable_resets(for_stmt.id, ctx)?;
 
             let body = ctx.nodes.get_stmt_node(for_stmt.node.body);
             self.visit_statement(body, ctx)?;
@@ -1298,11 +1267,19 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Pop, for_stmt.node.span);
         }
 
-        // Clean up for loop scope variables (initializer variables like 'i' and 'j')
-        if let Some(for_info) = self.analysis.scopes.for_loops.get(&for_stmt.id) {
-            // Pop loop initializer variables (like 'var i = 0' in for loop)
-            for _ in &for_info.scope_info.initializer_variables {
-                self.emit_opcode(OpCode::Pop, for_stmt.node.span);
+        // Clean up for loop scope variables using unified scope tracking
+        let scope_variables = self.analysis.scopes.get_scope_variables(for_stmt.id);
+
+        // Emit cleanup instructions in reverse order (LIFO) for local variables only
+        for &var_id in scope_variables.iter().rev() {
+            if let Some(var_info) = self.analysis.scopes.variables.get(&var_id) {
+                if let crate::frontend::scope_analysis::VariableKind::Local { .. } = var_info.kind {
+                    if var_info.is_captured {
+                        self.emit_opcode(OpCode::CloseUpvalue, for_stmt.node.span);
+                    } else {
+                        self.emit_opcode(OpCode::Pop, for_stmt.node.span);
+                    }
+                }
             }
         }
 

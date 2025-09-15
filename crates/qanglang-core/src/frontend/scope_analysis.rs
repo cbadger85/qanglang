@@ -48,29 +48,6 @@ pub struct ClassInheritanceInfo {
     pub super_slot: usize,
 }
 
-#[derive(Debug, Clone)]
-pub struct ForLoopInfo {
-    pub depth: usize,
-    pub span: SourceSpan,
-    pub node_id: NodeId,
-    pub scope_info: ForLoopScopeInfo,
-}
-
-#[derive(Debug, Clone)]
-pub struct ForLoopScopeInfo {
-    pub entry_scope_depth: usize,
-    pub body_scope_depth: usize,
-    pub initializer_variables: Vec<LoopVariableInfo>,
-    pub parent_loop: Option<NodeId>,
-}
-
-#[derive(Debug, Clone)]
-pub struct LoopVariableInfo {
-    pub name: StringHandle,
-    pub slot: usize,
-    pub scope_depth: usize,
-    pub initializer_node: Option<NodeId>,
-}
 
 #[derive(Debug, Clone)]
 pub struct BreakContinueInfo {
@@ -99,6 +76,7 @@ pub struct ScopeInfo {
 pub enum ScopeType {
     Block(NodeId), // Block statements
     ForLoop(NodeId), // For loop bodies
+    WhileLoop(NodeId), // While loop bodies
     Function(NodeId), // Function bodies
     Class(NodeId), // Class bodies
     Lambda(NodeId), // Lambda expressions
@@ -110,8 +88,6 @@ pub struct ScopeAnalysis {
     pub functions: FxHashMap<NodeId, FunctionInfo>,
     pub upvalue_captures: FxHashMap<NodeId, Vec<UpvalueInfo>>,
     pub class_inheritance: FxHashMap<NodeId, ClassInheritanceInfo>,
-    pub for_loops: FxHashMap<NodeId, ForLoopInfo>,
-    pub loop_children: FxHashMap<NodeId, Vec<NodeId>>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
     pub scopes: FxHashMap<NodeId, ScopeInfo>, // NEW: Unified scope tracking
 }
@@ -129,8 +105,6 @@ impl ScopeAnalysis {
             functions: FxHashMap::with_hasher(FxBuildHasher),
             upvalue_captures: FxHashMap::with_hasher(FxBuildHasher),
             class_inheritance: FxHashMap::with_hasher(FxBuildHasher),
-            for_loops: FxHashMap::with_hasher(FxBuildHasher),
-            loop_children: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
             scopes: FxHashMap::with_hasher(FxBuildHasher),
         }
@@ -141,8 +115,6 @@ impl ScopeAnalysis {
         self.functions.extend(other.functions);
         self.upvalue_captures.extend(other.upvalue_captures);
         self.class_inheritance.extend(other.class_inheritance);
-        self.for_loops.extend(other.for_loops);
-        self.loop_children.extend(other.loop_children);
         self.break_continue_statements
             .extend(other.break_continue_statements);
         self.scopes.extend(other.scopes);
@@ -310,10 +282,8 @@ pub struct ScopeAnalyzer<'a> {
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
     blank_handle: StringHandle,
-    loop_depth: usize,
-    loop_stack: Vec<NodeId>, // Stack of current loop node IDs
-    scope_stack: Vec<NodeId>, // NEW: Stack of current scope node IDs for unified tracking
-    declaration_order_counter: usize, // NEW: Global counter for declaration order
+    scope_stack: Vec<NodeId>, // Stack of current scope node IDs for unified tracking
+    declaration_order_counter: usize, // Global counter for declaration order
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -332,8 +302,6 @@ impl<'a> ScopeAnalyzer<'a> {
                 SourceSpan::default(),
             )],
             results: ScopeAnalysis::new(),
-            loop_depth: 0,
-            loop_stack: Vec::new(),
             scope_stack: Vec::new(),
             declaration_order_counter: 0,
         }
@@ -603,55 +571,20 @@ impl<'a> ScopeAnalyzer<'a> {
         Ok(None)
     }
 
-    fn begin_while_loop(&mut self, loop_node_id: NodeId) {
-        self.loop_depth += 1;
-        self.loop_stack.push(loop_node_id);
-    }
-
-    fn begin_for_loop(&mut self, loop_node_id: NodeId, span: SourceSpan) {
-        self.loop_depth += 1;
-        self.loop_stack.push(loop_node_id);
-
-        let entry_scope_depth = self.current_scope_depth();
-        let parent_loop = if self.loop_stack.len() >= 2 {
-            self.loop_stack.get(self.loop_stack.len() - 2).copied()
-        } else {
-            None
-        };
-
-        let loop_info = ForLoopInfo {
-            depth: self.loop_depth,
-            span,
-            node_id: loop_node_id,
-            scope_info: ForLoopScopeInfo {
-                entry_scope_depth,
-                body_scope_depth: entry_scope_depth + 1,
-                initializer_variables: Vec::new(),
-                parent_loop,
-            },
-        };
-
-        self.results.for_loops.insert(loop_node_id, loop_info);
-
-        // Update children mapping for parent loop
-        if let Some(parent_id) = parent_loop {
-            self.results
-                .loop_children
-                .entry(parent_id)
-                .or_default()
-                .push(loop_node_id);
-        }
-    }
-
-    fn end_loop(&mut self) {
-        if self.loop_depth > 0 {
-            self.loop_depth -= 1;
-            self.loop_stack.pop();
-        }
-    }
 
     fn current_loop(&self) -> Option<NodeId> {
-        self.loop_stack.last().copied()
+        // Find the most recent loop scope in the scope stack, but stop at function boundaries
+        for &scope_id in self.scope_stack.iter().rev() {
+            if let Some(scope_info) = self.results.scopes.get(&scope_id) {
+                match scope_info.scope_type {
+                    ScopeType::ForLoop(_) | ScopeType::WhileLoop(_) => return Some(scope_id),
+                    // Stop at function boundaries - break/continue cannot cross function boundaries
+                    ScopeType::Function(_) | ScopeType::Lambda(_) => return None,
+                    _ => continue,
+                }
+            }
+        }
+        None
     }
 
     fn begin_function(
@@ -696,9 +629,7 @@ impl<'a> ScopeAnalyzer<'a> {
         // Track function scope using unified tracking
         self.begin_tracked_scope(scope_type, function_id, span);
 
-        // Reset loop depth and stack when entering a new function - loops don't cross function boundaries
-        self.loop_depth = 0;
-        self.loop_stack.clear();
+        // Note: Loops don't cross function boundaries - scope stack automatically handles this
     }
 
     fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
@@ -1183,11 +1114,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         let condition = ctx.nodes.get_expr_node(while_stmt.node.condition);
         self.visit_expression(condition, ctx)?;
 
-        // Enter loop context and visit body
-        self.begin_while_loop(while_stmt.id);
+        // Enter loop context and visit body using unified scope tracking
+        self.begin_tracked_scope(ScopeType::WhileLoop(while_stmt.id), while_stmt.id, while_stmt.node.span);
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
-        self.end_loop();
+        self.end_tracked_scope();
 
         Ok(())
     }
@@ -1200,41 +1131,10 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         // Use unified scope tracking for for loops
         self.begin_tracked_scope(ScopeType::ForLoop(for_stmt.id), for_stmt.id, for_stmt.node.span);
 
-        // Begin for loop tracking (preserve legacy for compatibility)
-        self.begin_for_loop(for_stmt.id, for_stmt.node.span);
-
-        // Track initializer variables
+        // Handle initializer (variables automatically tracked by unified scope system)
         if let Some(initializer_id) = for_stmt.node.initializer {
             let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
-            if let crate::frontend::typed_node_arena::ForInitializerNode::VarDecl(var_decl) =
-                initializer.node
-            {
-                let identifier = ctx.nodes.get_identifier_node(var_decl.target);
-
-                // Visit the initializer first
-                self.visit_for_initializer(initializer, ctx)?;
-
-                // Record the variable info for the loop
-                if let Some(var_info) = self.results.variables.get(&identifier.id)
-                    && let VariableKind::Local {
-                        slot, scope_depth, ..
-                    } = var_info.kind
-                {
-                    let loop_var = LoopVariableInfo {
-                        name: identifier.node.name,
-                        slot,
-                        scope_depth,
-                        initializer_node: var_decl.initializer,
-                    };
-
-                    // Add to the for loop's scope info
-                    if let Some(for_info) = self.results.for_loops.get_mut(&for_stmt.id) {
-                        for_info.scope_info.initializer_variables.push(loop_var);
-                    }
-                }
-            } else {
-                self.visit_for_initializer(initializer, ctx)?;
-            }
+            self.visit_for_initializer(initializer, ctx)?;
         }
 
         if let Some(condition_id) = for_stmt.node.condition {
@@ -1245,14 +1145,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
         }
 
-        // Update body scope depth
-        let body_scope_depth = self.current_scope_depth();
-        if let Some(for_info) = self.results.for_loops.get_mut(&for_stmt.id) {
-            for_info.scope_info.body_scope_depth = body_scope_depth;
-        }
 
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
-        self.end_loop();
 
         self.end_tracked_scope();
         Ok(())
@@ -1263,13 +1157,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         break_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BreakStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if self.loop_depth == 0 {
-            ctx.errors
-                .report_error(QangCompilerError::new_analysis_error(
-                    "'break' can only be used inside loops.".to_string(),
-                    break_stmt.node.span,
-                ));
-        } else if let Some(target_loop) = self.current_loop() {
+        if let Some(target_loop) = self.current_loop() {
             // Record this break statement and which loop it targets
             let break_info = BreakContinueInfo {
                 target_loop,
@@ -1279,6 +1167,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             self.results
                 .break_continue_statements
                 .insert(break_stmt.id, break_info);
+        } else {
+            ctx.errors
+                .report_error(QangCompilerError::new_analysis_error(
+                    "'break' can only be used inside loops.".to_string(),
+                    break_stmt.node.span,
+                ));
         }
         Ok(())
     }
@@ -1288,13 +1182,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         continue_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ContinueStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if self.loop_depth == 0 {
-            ctx.errors
-                .report_error(QangCompilerError::new_analysis_error(
-                    "'continue' can only be used inside loops.".to_string(),
-                    continue_stmt.node.span,
-                ));
-        } else if let Some(target_loop) = self.current_loop() {
+        if let Some(target_loop) = self.current_loop() {
             // Record this continue statement and which loop it targets
             let continue_info = BreakContinueInfo {
                 target_loop,
@@ -1304,6 +1192,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             self.results
                 .break_continue_statements
                 .insert(continue_stmt.id, continue_info);
+        } else {
+            ctx.errors
+                .report_error(QangCompilerError::new_analysis_error(
+                    "'continue' can only be used inside loops.".to_string(),
+                    continue_stmt.node.span,
+                ));
         }
         Ok(())
     }

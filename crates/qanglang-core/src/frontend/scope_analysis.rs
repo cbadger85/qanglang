@@ -7,9 +7,9 @@ use crate::{
     nodes::SourceSpan,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum VariableKind {
-    Local { scope_depth: usize },
+    Local,
     Global,
     Upvalue { index: usize, is_local: bool },
 }
@@ -20,8 +20,6 @@ pub struct VariableInfo {
     pub kind: VariableKind,
     pub is_captured: bool,
     pub span: SourceSpan,
-    pub declaring_scope: Option<NodeId>,
-    pub declaration_order: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -108,35 +106,6 @@ impl ScopeAnalysis {
         self.scopes.extend(other.scopes);
         self
     }
-
-    pub fn get_scope_variables(
-        &self,
-        scope_id: NodeId,
-    ) -> impl DoubleEndedIterator<Item = &NodeId> {
-        self.scopes
-            .get(&scope_id)
-            .map(|scope_info| scope_info.declared_variables.as_slice())
-            .unwrap_or(&[])
-            .iter()
-    }
-
-    pub fn get_variable_scope(&self, var_id: NodeId) -> Option<NodeId> {
-        if let Some(var_info) = self.variables.get(&var_id) {
-            var_info.declaring_scope
-        } else {
-            None
-        }
-    }
-
-    pub fn get_nested_scopes(&self, scope_id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
-        self.scopes.iter().filter_map(move |(id, scope_info)| {
-            if scope_info.parent_scope == Some(scope_id) {
-                Some(*id)
-            } else {
-                None
-            }
-        })
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -209,7 +178,6 @@ pub struct ScopeAnalyzer<'a> {
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
     scope_stack: Vec<NodeId>,
-    declaration_order_counter: usize,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -226,7 +194,6 @@ impl<'a> ScopeAnalyzer<'a> {
             )],
             results: ScopeAnalysis::new(),
             scope_stack: Vec::new(),
-            declaration_order_counter: 0,
         }
     }
 
@@ -283,12 +250,6 @@ impl<'a> ScopeAnalyzer<'a> {
             if let Some(scope_info) = self.results.scopes.get_mut(&current_scope_id) {
                 scope_info.declared_variables.push(var_id);
             }
-
-            if let Some(var_info) = self.results.variables.get_mut(&var_id) {
-                var_info.declaring_scope = Some(current_scope_id);
-                var_info.declaration_order = self.declaration_order_counter;
-                self.declaration_order_counter += 1;
-            }
         }
     }
 
@@ -330,13 +291,8 @@ impl<'a> ScopeAnalyzer<'a> {
                 kind: VariableKind::Global,
                 is_captured: false,
                 span,
-                declaring_scope: None,
-                declaration_order: 0,
             }
         } else {
-            // Local scope - track for analysis only
-            let scope_depth = self.current_scope_depth();
-
             // Add to current function's local count for max_locals calculation
             if let Some(function) = self.functions.last_mut() {
                 function.add_local();
@@ -344,11 +300,9 @@ impl<'a> ScopeAnalyzer<'a> {
 
             VariableInfo {
                 name,
-                kind: VariableKind::Local { scope_depth },
+                kind: VariableKind::Local,
                 is_captured: false,
                 span,
-                declaring_scope: None,
-                declaration_order: 0,
             }
         };
 
@@ -377,24 +331,15 @@ impl<'a> ScopeAnalyzer<'a> {
         // Try to resolve as local variable by searching scopes backwards
         for scope in self.scopes.iter().rev() {
             if let Some(var_info) = scope.variables.get(&name) {
-                let variable_kind = match &var_info.kind {
-                    VariableKind::Local { scope_depth } => VariableKind::Local {
-                        scope_depth: *scope_depth,
-                    },
-                    other => other.clone(),
-                };
-
                 let variable_info = VariableInfo {
                     name,
-                    kind: variable_kind.clone(),
+                    kind: var_info.kind,
                     is_captured: var_info.is_captured,
                     span,
-                    declaring_scope: None,
-                    declaration_order: 0,
                 };
 
                 self.results.variables.insert(node_id, variable_info);
-                return Ok(variable_kind);
+                return Ok(var_info.kind);
             }
         }
 
@@ -405,8 +350,6 @@ impl<'a> ScopeAnalyzer<'a> {
                 kind: upvalue_kind.clone(),
                 is_captured: false,
                 span,
-                declaring_scope: None,
-                declaration_order: 0,
             };
             self.results.variables.insert(node_id, variable_info);
             return Ok(upvalue_kind);
@@ -419,8 +362,6 @@ impl<'a> ScopeAnalyzer<'a> {
             kind: variable_kind.clone(),
             is_captured: false,
             span,
-            declaring_scope: None,
-            declaration_order: 0,
         };
         self.results.variables.insert(node_id, variable_info);
 
@@ -808,7 +749,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
             // Create synthetic super variable for analysis
             let super_handle = self.strings.intern("super");
-            let scope_depth = self.current_scope_depth();
 
             if let Some(func) = self.functions.last_mut() {
                 func.add_local();
@@ -816,11 +756,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
             let var_info = VariableInfo {
                 name: super_handle,
-                kind: VariableKind::Local { scope_depth },
+                kind: VariableKind::Local,
                 is_captured: false,
                 span: class_decl.node.span,
-                declaring_scope: None,
-                declaration_order: 0,
             };
 
             if let Some(current_scope) = self.scopes.last_mut() {

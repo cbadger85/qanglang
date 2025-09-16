@@ -53,31 +53,10 @@ pub enum BreakContinueType {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScopeInfo {
-    pub scope_type: ScopeType,
-    pub declared_variables: Vec<NodeId>,
-    pub scope_depth: usize,
-    pub parent_scope: Option<NodeId>,
-    pub span: SourceSpan,
-}
-
-#[derive(Debug, Clone)]
-pub enum ScopeType {
-    Block(NodeId),
-    ForLoop(NodeId),
-    WhileLoop(NodeId),
-    Function(NodeId),
-    Class(NodeId),
-    Lambda(NodeId),
-}
-
-#[derive(Debug, Clone)]
 pub struct ScopeAnalysis {
     pub variables: FxHashMap<NodeId, VariableInfo>,
     pub functions: FxHashMap<NodeId, FunctionInfo>,
-    pub upvalue_captures: FxHashMap<NodeId, Vec<UpvalueInfo>>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
-    pub scopes: FxHashMap<NodeId, ScopeInfo>,
 }
 
 impl Default for ScopeAnalysis {
@@ -91,19 +70,15 @@ impl ScopeAnalysis {
         Self {
             variables: FxHashMap::with_hasher(FxBuildHasher),
             functions: FxHashMap::with_hasher(FxBuildHasher),
-            upvalue_captures: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
-            scopes: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 
     pub fn merge_with(mut self, other: Self) -> Self {
         self.variables.extend(other.variables);
         self.functions.extend(other.functions);
-        self.upvalue_captures.extend(other.upvalue_captures);
         self.break_continue_statements
             .extend(other.break_continue_statements);
-        self.scopes.extend(other.scopes);
         self
     }
 }
@@ -177,7 +152,7 @@ pub struct ScopeAnalyzer<'a> {
     scopes: Vec<Scope>,
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
-    scope_stack: Vec<NodeId>,
+    loop_stack: Vec<NodeId>, // Stack of current loop node IDs for break/continue validation
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -193,7 +168,7 @@ impl<'a> ScopeAnalyzer<'a> {
                 SourceSpan::default(),
             )],
             results: ScopeAnalysis::new(),
-            scope_stack: Vec::new(),
+            loop_stack: Vec::new(),
         }
     }
 
@@ -223,34 +198,12 @@ impl<'a> ScopeAnalyzer<'a> {
         self.scopes.pop();
     }
 
-    fn begin_tracked_scope(&mut self, scope_type: ScopeType, scope_id: NodeId, span: SourceSpan) {
-        let scope_depth = self.current_scope_depth();
-        let parent_scope = self.scope_stack.last().copied();
-
-        let scope_info = ScopeInfo {
-            scope_type,
-            declared_variables: Vec::new(),
-            scope_depth,
-            parent_scope,
-            span,
-        };
-
-        self.results.scopes.insert(scope_id, scope_info);
-        self.scope_stack.push(scope_id);
-        self.begin_scope();
+    fn begin_loop(&mut self, loop_id: NodeId) {
+        self.loop_stack.push(loop_id);
     }
 
-    fn end_tracked_scope(&mut self) {
-        self.scope_stack.pop();
-        self.end_scope();
-    }
-
-    fn declare_variable_in_current_scope(&mut self, var_id: NodeId) {
-        if let Some(&current_scope_id) = self.scope_stack.last() {
-            if let Some(scope_info) = self.results.scopes.get_mut(&current_scope_id) {
-                scope_info.declared_variables.push(var_id);
-            }
-        }
+    fn end_loop(&mut self) {
+        self.loop_stack.pop();
     }
 
     fn declare_variable(
@@ -313,11 +266,6 @@ impl<'a> ScopeAnalyzer<'a> {
 
         // Add to results
         self.results.variables.insert(identifier.id, variable_info);
-
-        // Track in current scope if it's a local variable
-        if self.current_scope_depth() > 0 {
-            self.declare_variable_in_current_scope(identifier.id);
-        }
 
         Ok(())
     }
@@ -416,16 +364,9 @@ impl<'a> ScopeAnalyzer<'a> {
     }
 
     fn current_loop(&self) -> Option<NodeId> {
-        for &scope_id in self.scope_stack.iter().rev() {
-            if let Some(scope_info) = self.results.scopes.get(&scope_id) {
-                match scope_info.scope_type {
-                    ScopeType::ForLoop(_) | ScopeType::WhileLoop(_) => return Some(scope_id),
-                    ScopeType::Function(_) | ScopeType::Lambda(_) => return None,
-                    _ => continue,
-                }
-            }
-        }
-        None
+        // Return the most recent loop, or None if no loop is active
+        // Functions automatically clear the loop stack, so we don't need to check for function boundaries
+        self.loop_stack.last().copied()
     }
 
     fn begin_function(
@@ -435,28 +376,6 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         kind: FunctionKind,
         errors: &mut ErrorReporter,
-        function_id: NodeId,
-    ) {
-        self.begin_function_with_scope_type(
-            name,
-            arity,
-            span,
-            kind,
-            errors,
-            function_id,
-            ScopeType::Function(function_id),
-        );
-    }
-
-    fn begin_function_with_scope_type(
-        &mut self,
-        name: StringHandle,
-        arity: usize,
-        span: SourceSpan,
-        kind: FunctionKind,
-        errors: &mut ErrorReporter,
-        function_id: NodeId,
-        scope_type: ScopeType,
     ) {
         if arity > 255 {
             errors.report_error(QangCompilerError::new_analysis_error(
@@ -468,11 +387,13 @@ impl<'a> ScopeAnalyzer<'a> {
         let function = FunctionContext::new(name, arity, kind, span);
         self.functions.push(function);
 
-        self.begin_tracked_scope(scope_type, function_id, span);
+        // Clear loop stack when entering a function - break/continue cannot cross function boundaries
+        self.loop_stack.clear();
+        self.begin_scope();
     }
 
     fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
-        self.end_tracked_scope();
+        self.end_scope();
 
         let function = self
             .functions
@@ -488,9 +409,6 @@ impl<'a> ScopeAnalyzer<'a> {
             kind: function.kind,
         };
         self.results.functions.insert(node_id, analysis);
-        self.results
-            .upvalue_captures
-            .insert(node_id, function.upvalues);
 
         Ok(())
     }
@@ -593,7 +511,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             func_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
-            func_expr.id,
         );
 
         for i in 0..arity {
@@ -630,14 +547,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         let anonymous_name = self.strings.intern("<lambda>");
 
-        self.begin_function_with_scope_type(
+        self.begin_function(
             anonymous_name,
             arity,
             lambda_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
-            lambda_expr.id,
-            ScopeType::Lambda(lambda_expr.id),
         );
 
         for i in 0..arity {
@@ -797,7 +712,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                                 FunctionKind::Method
                             },
                             ctx.errors,
-                            member_id,
                         );
 
                         for j in 0..arity {
@@ -838,11 +752,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         block_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BlockStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.begin_tracked_scope(
-            ScopeType::Block(block_stmt.id),
-            block_stmt.id,
-            block_stmt.node.span,
-        );
+        self.begin_scope();
 
         let decl_count = ctx.nodes.array.size(block_stmt.node.decls);
         for i in 0..decl_count {
@@ -852,7 +762,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
-        self.end_tracked_scope();
+        self.end_scope();
         Ok(())
     }
 
@@ -897,14 +807,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         let condition = ctx.nodes.get_expr_node(while_stmt.node.condition);
         self.visit_expression(condition, ctx)?;
 
-        self.begin_tracked_scope(
-            ScopeType::WhileLoop(while_stmt.id),
-            while_stmt.id,
-            while_stmt.node.span,
-        );
+        self.begin_loop(while_stmt.id);
+        self.begin_scope();
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
-        self.end_tracked_scope();
+        self.end_scope();
+        self.end_loop();
 
         Ok(())
     }
@@ -914,11 +822,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.begin_tracked_scope(
-            ScopeType::ForLoop(for_stmt.id),
-            for_stmt.id,
-            for_stmt.node.span,
-        );
+        self.begin_loop(for_stmt.id);
+        self.begin_scope();
 
         if let Some(initializer_id) = for_stmt.node.initializer {
             let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
@@ -935,7 +840,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
 
-        self.end_tracked_scope();
+        self.end_scope();
+        self.end_loop();
         Ok(())
     }
 
@@ -994,14 +900,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
     ) -> Result<(), Self::Error> {
         let anonymous_name = self.strings.intern("<map>");
 
-        self.begin_function_with_scope_type(
+        self.begin_function(
             anonymous_name,
             1,
             map_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
-            map_expr.id,
-            ScopeType::Lambda(map_expr.id),
         );
 
         let param = ctx.nodes.get_identifier_node(map_expr.node.parameter);
@@ -1024,14 +928,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
     ) -> Result<(), Self::Error> {
         let anonymous_name = self.strings.intern("<optional_map>");
 
-        self.begin_function_with_scope_type(
+        self.begin_function(
             anonymous_name,
             1,
             opt_map_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
-            opt_map_expr.id,
-            ScopeType::Lambda(opt_map_expr.id),
         );
 
         let param = ctx.nodes.get_identifier_node(opt_map_expr.node.parameter);

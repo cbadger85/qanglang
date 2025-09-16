@@ -9,7 +9,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VariableKind {
-    Local { scope_depth: usize, slot: usize },
+    Local { scope_depth: usize },
     Global,
     Upvalue { index: usize, is_local: bool },
 }
@@ -20,8 +20,8 @@ pub struct VariableInfo {
     pub kind: VariableKind,
     pub is_captured: bool,
     pub span: SourceSpan,
-    pub declaring_scope: Option<NodeId>, // NEW: Which scope declared this variable
-    pub declaration_order: usize,        // NEW: Order within scope (for LIFO cleanup)
+    pub declaring_scope: Option<NodeId>,
+    pub declaration_order: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,13 +42,6 @@ pub struct FunctionInfo {
 }
 
 #[derive(Debug, Clone)]
-pub struct ClassInheritanceInfo {
-    pub entry_scope_depth: usize,
-    pub super_scope_depth: usize,
-    pub super_slot: usize,
-}
-
-#[derive(Debug, Clone)]
 pub struct BreakContinueInfo {
     pub target_loop: NodeId,
     pub statement_type: BreakContinueType,
@@ -61,24 +54,23 @@ pub enum BreakContinueType {
     Continue,
 }
 
-// NEW: Unified scope information for all scope types
 #[derive(Debug, Clone)]
 pub struct ScopeInfo {
     pub scope_type: ScopeType,
-    pub declared_variables: Vec<NodeId>, // Variables declared directly in this scope (LIFO order)
+    pub declared_variables: Vec<NodeId>,
     pub scope_depth: usize,
-    pub parent_scope: Option<NodeId>, // For nested scope queries
+    pub parent_scope: Option<NodeId>,
     pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
 pub enum ScopeType {
-    Block(NodeId),     // Block statements
-    ForLoop(NodeId),   // For loop bodies
-    WhileLoop(NodeId), // While loop bodies
-    Function(NodeId),  // Function bodies
-    Class(NodeId),     // Class bodies
-    Lambda(NodeId),    // Lambda expressions
+    Block(NodeId),
+    ForLoop(NodeId),
+    WhileLoop(NodeId),
+    Function(NodeId),
+    Class(NodeId),
+    Lambda(NodeId),
 }
 
 #[derive(Debug, Clone)]
@@ -86,9 +78,8 @@ pub struct ScopeAnalysis {
     pub variables: FxHashMap<NodeId, VariableInfo>,
     pub functions: FxHashMap<NodeId, FunctionInfo>,
     pub upvalue_captures: FxHashMap<NodeId, Vec<UpvalueInfo>>,
-    pub class_inheritance: FxHashMap<NodeId, ClassInheritanceInfo>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
-    pub scopes: FxHashMap<NodeId, ScopeInfo>, // NEW: Unified scope tracking
+    pub scopes: FxHashMap<NodeId, ScopeInfo>,
 }
 
 impl Default for ScopeAnalysis {
@@ -103,7 +94,6 @@ impl ScopeAnalysis {
             variables: FxHashMap::with_hasher(FxBuildHasher),
             functions: FxHashMap::with_hasher(FxBuildHasher),
             upvalue_captures: FxHashMap::with_hasher(FxBuildHasher),
-            class_inheritance: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
             scopes: FxHashMap::with_hasher(FxBuildHasher),
         }
@@ -113,15 +103,16 @@ impl ScopeAnalysis {
         self.variables.extend(other.variables);
         self.functions.extend(other.functions);
         self.upvalue_captures.extend(other.upvalue_captures);
-        self.class_inheritance.extend(other.class_inheritance);
         self.break_continue_statements
             .extend(other.break_continue_statements);
         self.scopes.extend(other.scopes);
         self
     }
 
-    // NEW: Helper methods for scope queries
-    pub fn get_scope_variables(&self, scope_id: NodeId) -> impl DoubleEndedIterator<Item = &NodeId> {
+    pub fn get_scope_variables(
+        &self,
+        scope_id: NodeId,
+    ) -> impl DoubleEndedIterator<Item = &NodeId> {
         self.scopes
             .get(&scope_id)
             .map(|scope_info| scope_info.declared_variables.as_slice())
@@ -138,15 +129,13 @@ impl ScopeAnalysis {
     }
 
     pub fn get_nested_scopes(&self, scope_id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
-        self.scopes
-            .iter()
-            .filter_map(move |(id, scope_info)| {
-                if scope_info.parent_scope == Some(scope_id) {
-                    Some(*id)
-                } else {
-                    None
-                }
-            })
+        self.scopes.iter().filter_map(move |(id, scope_info)| {
+            if scope_info.parent_scope == Some(scope_id) {
+                Some(*id)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -171,94 +160,34 @@ pub enum FunctionKind {
     Initializer,
 }
 
-#[derive(Debug, Clone)]
-pub struct LocalVariable {
-    pub name: StringHandle,
-    pub slot: usize,
-    pub is_captured: bool,
-    pub scope_depth: usize,
-    pub is_initialized: bool,
-}
-
+// Simplified function context - only for static analysis, no compilation state
 #[derive(Debug, Clone)]
 struct FunctionContext {
     pub name: StringHandle,
     pub arity: usize,
     pub kind: FunctionKind,
-    pub locals: Vec<LocalVariable>,
-    pub local_count: usize,
     pub upvalues: Vec<UpvalueInfo>,
     pub span: SourceSpan,
+    pub local_count: usize, // Track for max_locals, but not for slot assignment
 }
 
 impl FunctionContext {
-    fn new(
-        handle: StringHandle,
-        arity: usize,
-        kind: FunctionKind,
-        blank_handle: StringHandle,
-        span: SourceSpan,
-    ) -> Self {
-        let mut locals = Vec::with_capacity(u8::MAX as usize);
-
-        // For methods and initializers, slot 0 is reserved for 'this'
-        let initial_name = match kind {
-            FunctionKind::Method | FunctionKind::Initializer => handle, // Use method name as placeholder
-            _ => blank_handle,
-        };
-
-        locals.push(LocalVariable {
-            name: initial_name,
-            scope_depth: 0,
-            slot: 0,
-            is_captured: false,
-            is_initialized: true, // Function names are immediately initialized
-        });
+    fn new(handle: StringHandle, arity: usize, kind: FunctionKind, span: SourceSpan) -> Self {
+        // Initialize with 1 for the placeholder local (like old compiler)
+        let local_count = 1;
 
         Self {
             name: handle,
             arity,
-            locals,
-            local_count: 1,
             upvalues: Vec::with_capacity(u8::MAX as usize),
             span,
             kind,
+            local_count,
         }
     }
 
-    fn add_local(&mut self, name: StringHandle, scope_depth: usize, is_initialized: bool) -> usize {
-        let slot = self.local_count;
-        let local_index = self.locals.len();
-
-        self.locals.push(LocalVariable {
-            name,
-            scope_depth,
-            slot,
-            is_captured: false,
-            is_initialized,
-        });
-
+    fn add_local(&mut self) {
         self.local_count += 1;
-
-        local_index
-    }
-
-    fn mark_initialized(&mut self, local_index: usize) {
-        if let Some(local) = self.locals.get_mut(local_index) {
-            local.is_initialized = true;
-        }
-    }
-
-    fn find_local(&self, name: StringHandle, current_scope_depth: usize) -> Option<usize> {
-        // Search backwards to find the most recent (innermost scope) variable with this name
-        // that is still within the current scope depth
-        self.locals.iter().enumerate().rev().find_map(|(i, local)| {
-            if local.name == name && local.scope_depth <= current_scope_depth {
-                Some(i)
-            } else {
-                None
-            }
-        })
     }
 
     fn add_upvalue(&mut self, name: StringHandle, index: usize, is_local: bool) -> usize {
@@ -279,24 +208,20 @@ pub struct ScopeAnalyzer<'a> {
     scopes: Vec<Scope>,
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
-    blank_handle: StringHandle,
-    scope_stack: Vec<NodeId>, // Stack of current scope node IDs for unified tracking
-    declaration_order_counter: usize, // Global counter for declaration order
+    scope_stack: Vec<NodeId>,
+    declaration_order_counter: usize,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
     pub fn new(strings: &'a mut StringInterner) -> Self {
         let handle = strings.intern("(script)");
-        let blank_handle = strings.intern("");
         Self {
-            blank_handle,
             strings,
             scopes: vec![Scope::new()],
             functions: vec![FunctionContext::new(
                 handle,
                 0,
                 FunctionKind::Global,
-                blank_handle,
                 SourceSpan::default(),
             )],
             results: ScopeAnalysis::new(),
@@ -331,7 +256,6 @@ impl<'a> ScopeAnalyzer<'a> {
         self.scopes.pop();
     }
 
-    // NEW: Unified scope tracking methods
     fn begin_tracked_scope(&mut self, scope_type: ScopeType, scope_id: NodeId, span: SourceSpan) {
         let scope_depth = self.current_scope_depth();
         let parent_scope = self.scope_stack.last().copied();
@@ -356,12 +280,10 @@ impl<'a> ScopeAnalyzer<'a> {
 
     fn declare_variable_in_current_scope(&mut self, var_id: NodeId) {
         if let Some(&current_scope_id) = self.scope_stack.last() {
-            // Add to scope's declared_variables list
             if let Some(scope_info) = self.results.scopes.get_mut(&current_scope_id) {
                 scope_info.declared_variables.push(var_id);
             }
 
-            // Update variable's declaring_scope and declaration_order
             if let Some(var_info) = self.results.variables.get_mut(&var_id) {
                 var_info.declaring_scope = Some(current_scope_id);
                 var_info.declaration_order = self.declaration_order_counter;
@@ -376,7 +298,7 @@ impl<'a> ScopeAnalyzer<'a> {
             crate::frontend::nodes::IdentifierNode,
         >,
     ) -> Result<(), QangCompilerError> {
-        self.declare_variable_with_init(identifier, true)?; // Default to initialized
+        self.declare_variable_with_init(identifier, true)?;
         Ok(())
     }
 
@@ -385,8 +307,8 @@ impl<'a> ScopeAnalyzer<'a> {
         identifier: crate::frontend::typed_node_arena::TypedNodeRef<
             crate::frontend::nodes::IdentifierNode,
         >,
-        is_initialized: bool,
-    ) -> Result<Option<usize>, QangCompilerError> {
+        _is_initialized: bool,
+    ) -> Result<(), QangCompilerError> {
         let name = identifier.node.name;
         let span = identifier.node.span;
 
@@ -401,37 +323,33 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let (variable_info, local_index) = if self.current_scope_depth() == 0 {
+        let variable_info = if self.current_scope_depth() == 0 {
             // Global scope
-            let variable_info = VariableInfo {
+            VariableInfo {
                 name,
                 kind: VariableKind::Global,
                 is_captured: false,
                 span,
-                declaring_scope: None, // Global variables don't have a scope
+                declaring_scope: None,
                 declaration_order: 0,
-            };
-            (variable_info, None)
+            }
         } else {
-            // Local scope - add to current function's locals
+            // Local scope - track for analysis only
             let scope_depth = self.current_scope_depth();
-            let (local_idx, slot) = if let Some(function) = self.functions.last_mut() {
-                let slot = function.local_count; // Get slot before adding
-                let local_idx = function.add_local(name, scope_depth, is_initialized);
-                (local_idx, slot)
-            } else {
-                (0, 0)
-            };
 
-            let variable_info = VariableInfo {
+            // Add to current function's local count for max_locals calculation
+            if let Some(function) = self.functions.last_mut() {
+                function.add_local();
+            }
+
+            VariableInfo {
                 name,
-                kind: VariableKind::Local { scope_depth, slot },
+                kind: VariableKind::Local { scope_depth },
                 is_captured: false,
                 span,
-                declaring_scope: None, // Will be set by declare_variable_in_current_scope
-                declaration_order: 0,  // Will be set by declare_variable_in_current_scope
-            };
-            (variable_info, Some(local_idx))
+                declaring_scope: None,
+                declaration_order: 0,
+            }
         };
 
         // Add to current scope
@@ -447,7 +365,7 @@ impl<'a> ScopeAnalyzer<'a> {
             self.declare_variable_in_current_scope(identifier.id);
         }
 
-        Ok(local_index)
+        Ok(())
     }
 
     fn resolve_variable(
@@ -456,36 +374,26 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         node_id: NodeId,
     ) -> Result<VariableKind, QangCompilerError> {
-        // First try to resolve as local variable in current function
-        if let Some(function) = self.functions.last() {
-            let current_scope_depth = self.current_scope_depth();
-            if let Some(local_index) = function.find_local(name, current_scope_depth) {
-                let local = &function.locals[local_index];
-
-                // Check if the local variable is initialized
-                if !local.is_initialized {
-                    return Err(QangCompilerError::new_analysis_error(
-                        "Cannot read local variable during its initialization.".to_string(),
-                        span,
-                    ));
-                }
-
-                let variable_kind = VariableKind::Local {
-                    scope_depth: local.scope_depth,
-                    slot: local.slot,
+        // Try to resolve as local variable by searching scopes backwards
+        for scope in self.scopes.iter().rev() {
+            if let Some(var_info) = scope.variables.get(&name) {
+                let variable_kind = match &var_info.kind {
+                    VariableKind::Local { scope_depth } => VariableKind::Local {
+                        scope_depth: *scope_depth,
+                    },
+                    other => other.clone(),
                 };
 
-                // Add to results
                 let variable_info = VariableInfo {
                     name,
                     kind: variable_kind.clone(),
-                    is_captured: local.is_captured,
+                    is_captured: var_info.is_captured,
                     span,
-                    declaring_scope: None, // Variable references don't have declaring scope info
+                    declaring_scope: None,
                     declaration_order: 0,
                 };
-                self.results.variables.insert(node_id, variable_info);
 
+                self.results.variables.insert(node_id, variable_info);
                 return Ok(variable_kind);
             }
         }
@@ -497,7 +405,7 @@ impl<'a> ScopeAnalyzer<'a> {
                 kind: upvalue_kind.clone(),
                 is_captured: false,
                 span,
-                declaring_scope: None, // Variable references don't have declaring scope info
+                declaring_scope: None,
                 declaration_order: 0,
             };
             self.results.variables.insert(node_id, variable_info);
@@ -511,7 +419,7 @@ impl<'a> ScopeAnalyzer<'a> {
             kind: variable_kind.clone(),
             is_captured: false,
             span,
-            declaring_scope: None, // Variable references don't have declaring scope info
+            declaring_scope: None,
             declaration_order: 0,
         };
         self.results.variables.insert(node_id, variable_info);
@@ -526,27 +434,24 @@ impl<'a> ScopeAnalyzer<'a> {
     ) -> Result<Option<VariableKind>, QangCompilerError> {
         let no_enclosing_function = self.functions.len() < 2;
         if no_enclosing_function {
-            return Ok(None); // No enclosing function to capture from
+            return Ok(None);
         }
 
-        // We need to look at functions in reverse order (excluding current)
-        let current_func_idx = self.functions.len() - 1;
+        for (depth, scope) in self.scopes.iter_mut().enumerate().rev().skip(1) {
+            if let Some(var_info) = scope.variables.get_mut(&name) {
+                if let VariableKind::Local { .. } = var_info.kind {
+                    // Mark as captured
+                    var_info.is_captured = true;
 
-        // Check if it's a local in the immediately enclosing function
-        if let Some(enclosing_func) = self.functions.get_mut(current_func_idx - 1) {
-            // For upvalue resolution, we want to find any variable in the enclosing function
-            // regardless of scope depth, since it will be captured
-            if let Some(local_index) = enclosing_func.find_local(name, usize::MAX) {
-                // Mark the local as captured
-                enclosing_func.locals[local_index].is_captured = true;
-
-                // Add upvalue to current function
-                if let Some(current_func) = self.functions.get_mut(current_func_idx) {
-                    let upvalue_index = current_func.add_upvalue(name, local_index, true);
-                    return Ok(Some(VariableKind::Upvalue {
-                        index: upvalue_index,
-                        is_local: true,
-                    }));
+                    // Add upvalue to current function
+                    let local_index = depth; // Use depth as index for simplicity
+                    if let Some(current_func) = self.functions.last_mut() {
+                        let upvalue_index = current_func.add_upvalue(name, local_index, true);
+                        return Ok(Some(VariableKind::Upvalue {
+                            index: upvalue_index,
+                            is_local: true,
+                        }));
+                    }
                 }
             }
         }
@@ -557,7 +462,6 @@ impl<'a> ScopeAnalyzer<'a> {
         self.functions.push(current_function);
 
         if let Some(VariableKind::Upvalue { index, .. }) = upvalue_result {
-            // Add upvalue reference to current function
             if let Some(current_func) = self.functions.last_mut() {
                 let upvalue_index = current_func.add_upvalue(name, index, false);
                 return Ok(Some(VariableKind::Upvalue {
@@ -571,12 +475,10 @@ impl<'a> ScopeAnalyzer<'a> {
     }
 
     fn current_loop(&self) -> Option<NodeId> {
-        // Find the most recent loop scope in the scope stack, but stop at function boundaries
         for &scope_id in self.scope_stack.iter().rev() {
             if let Some(scope_info) = self.results.scopes.get(&scope_id) {
                 match scope_info.scope_type {
                     ScopeType::ForLoop(_) | ScopeType::WhileLoop(_) => return Some(scope_id),
-                    // Stop at function boundaries - break/continue cannot cross function boundaries
                     ScopeType::Function(_) | ScopeType::Lambda(_) => return None,
                     _ => continue,
                 }
@@ -622,20 +524,10 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let mut function = FunctionContext::new(name, arity, kind, self.blank_handle, span);
-
-        // For methods and initializers, properly set up 'this' at slot 0
-        if matches!(kind, FunctionKind::Method | FunctionKind::Initializer) {
-            let this_handle = self.strings.intern("this");
-            function.locals[0].name = this_handle;
-        }
-
+        let function = FunctionContext::new(name, arity, kind, span);
         self.functions.push(function);
 
-        // Track function scope using unified tracking
         self.begin_tracked_scope(scope_type, function_id, span);
-
-        // Note: Loops don't cross function boundaries - scope stack automatically handles this
     }
 
     fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
@@ -723,7 +615,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 ));
         }
 
-        // Visit each object entry to analyze the value expressions
         for i in 0..size {
             if let Some(node_id) = ctx.nodes.array.get_node_id_at(object.node.entries, i) {
                 let entry = ctx.nodes.get_obj_entry_node(node_id);
@@ -773,7 +664,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
-        // Visit body
         let body = ctx.nodes.get_block_stmt_node(func_expr.node.body);
         self.visit_block_statement(body, ctx)?;
 
@@ -822,7 +712,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
-        // Visit body
         let body = ctx.nodes.get_lambda_body_node(lambda_expr.node.body);
         self.visit_lambda_body(body, ctx)?;
 
@@ -838,26 +727,13 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(var_decl.node.target);
 
-        // First declare the variable (but leave it uninitialized for locals)
-        let local_index = match self.declare_variable_with_init(identifier, false) {
-            Ok(index) => index,
-            Err(error) => {
-                ctx.errors.report_error(error);
-                None // Continue analysis but without local index
-            }
-        };
+        if let Err(error) = self.declare_variable_with_init(identifier, false) {
+            ctx.errors.report_error(error);
+        }
 
-        // Then analyze initializer (if present)
         if let Some(initializer_id) = var_decl.node.initializer {
             let initializer = ctx.nodes.get_expr_node(initializer_id);
             self.visit_expression(initializer, ctx)?;
-        }
-
-        // Finally, mark the variable as initialized (for locals only)
-        if let Some(local_idx) = local_index
-            && let Some(function) = self.functions.last_mut()
-        {
-            function.mark_initialized(local_idx);
         }
 
         Ok(())
@@ -880,11 +756,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         call: super::typed_node_arena::TypedNodeRef<super::nodes::CallExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Visit callee
         let callee = ctx.nodes.get_expr_node(call.node.callee);
         self.visit_expression(callee, ctx)?;
 
-        // Visit operation
         let operation = ctx.nodes.get_call_operation_node(call.node.operation);
         match operation.node {
             super::typed_node_arena::CallOperationNode::Call(call_node) => {
@@ -898,7 +772,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                         ));
                 }
 
-                let arg_count = ctx.nodes.array.size(call_node.args);
                 for i in 0..arg_count {
                     if let Some(arg_id) = ctx.nodes.array.get_node_id_at(call_node.args, i) {
                         let arg = ctx.nodes.get_expr_node(arg_id);
@@ -924,64 +797,35 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             ctx.errors.report_error(error);
         }
 
-        // Handle inheritance setup
         let has_superclass = class_decl.node.superclass.is_some();
         if has_superclass {
-            // Visit superclass identifier
             if let Some(superclass_id) = class_decl.node.superclass {
                 let superclass = ctx.nodes.get_identifier_node(superclass_id);
                 self.visit_identifier(superclass, ctx)?;
             }
 
-            // Begin new scope for super variable - this creates a scope that methods can capture from
             self.begin_scope();
 
-            // Create a synthetic local for super by manipulating the current function's local slot allocation
-            // This mimics how the working assembler allocates super as a local in the class compilation context
+            // Create synthetic super variable for analysis
             let super_handle = self.strings.intern("super");
             let scope_depth = self.current_scope_depth();
 
-            // Add super to current function's locals to properly reserve a slot
-            let super_slot = if let Some(func) = self.functions.last_mut() {
-                let slot_index = func.add_local(super_handle, scope_depth, true); // Super should be immediately initialized
-                func.locals[slot_index].slot
-            } else {
-                ctx.errors
-                    .report_error(QangCompilerError::new_analysis_error(
-                        "No function context for super variable".to_string(),
-                        class_decl.node.span,
-                    ));
+            if let Some(func) = self.functions.last_mut() {
+                func.add_local();
+            }
 
-                return Ok(());
-            };
-
-            // Add to scope so methods can resolve 'super' as an upvalue
             let var_info = VariableInfo {
                 name: super_handle,
-                kind: VariableKind::Local {
-                    scope_depth,
-                    slot: super_slot,
-                },
-                is_captured: false, // Will be marked as captured when methods access it
+                kind: VariableKind::Local { scope_depth },
+                is_captured: false,
                 span: class_decl.node.span,
-                declaring_scope: None, // Super is a special synthetic variable
+                declaring_scope: None,
                 declaration_order: 0,
             };
 
             if let Some(current_scope) = self.scopes.last_mut() {
                 current_scope.variables.insert(super_handle, var_info);
             }
-
-            // Record class inheritance information for the compiler backend
-            let inheritance_info = ClassInheritanceInfo {
-                entry_scope_depth: scope_depth - 1, // Scope depth before begin_scope()
-                super_scope_depth: scope_depth,     // Scope depth where super is allocated
-                super_slot,                         // Slot where super should be stored
-            };
-
-            self.results
-                .class_inheritance
-                .insert(class_decl.id, inheritance_info);
         }
 
         // Visit members
@@ -1018,7 +862,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                             member_id,
                         );
 
-                        // Visit parameters
                         for j in 0..arity {
                             if let Some(param_id) =
                                 ctx.nodes.array.get_node_id_at(method.parameters, j)
@@ -1030,15 +873,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                             }
                         }
 
-                        // Visit body
                         let body = ctx.nodes.get_block_stmt_node(method.body);
                         self.visit_block_statement(body, ctx)?;
 
                         self.end_function(member_id)?;
                     }
                     super::typed_node_arena::ClassMemberNode::Field(field) => {
-                        // Field names are not variables to be resolved, they are property names
-                        // Only visit the initializer if present
                         if let Some(init_id) = field.initializer {
                             let initializer = ctx.nodes.get_expr_node(init_id);
                             self.visit_expression(initializer, ctx)?;
@@ -1048,7 +888,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
-        // End the superclass scope if we created one
         if has_superclass {
             self.end_scope();
         }
@@ -1061,7 +900,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         block_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BlockStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Use unified scope tracking
         self.begin_tracked_scope(
             ScopeType::Block(block_stmt.id),
             block_stmt.id,
@@ -1085,7 +923,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         super_expr: super::typed_node_arena::TypedNodeRef<super::nodes::SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Check if we're in a method or initializer context
         if let Some(current_function) = &self.functions.last() {
             if !matches!(
                 current_function.kind,
@@ -1105,7 +942,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 ));
         }
 
-        // Resolve the 'super' variable access
         let super_handle = self.strings.intern("super");
         if let Err(error) = self.resolve_variable(super_handle, super_expr.node.span, super_expr.id)
         {
@@ -1120,11 +956,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         while_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::WhileStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Visit condition
         let condition = ctx.nodes.get_expr_node(while_stmt.node.condition);
         self.visit_expression(condition, ctx)?;
 
-        // Enter loop context and visit body using unified scope tracking
         self.begin_tracked_scope(
             ScopeType::WhileLoop(while_stmt.id),
             while_stmt.id,
@@ -1142,14 +976,12 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Use unified scope tracking for for loops
         self.begin_tracked_scope(
             ScopeType::ForLoop(for_stmt.id),
             for_stmt.id,
             for_stmt.node.span,
         );
 
-        // Handle initializer (variables automatically tracked by unified scope system)
         if let Some(initializer_id) = for_stmt.node.initializer {
             let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
             self.visit_for_initializer(initializer, ctx)?;
@@ -1175,7 +1007,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if let Some(target_loop) = self.current_loop() {
-            // Record this break statement and which loop it targets
             let break_info = BreakContinueInfo {
                 target_loop,
                 statement_type: BreakContinueType::Break,
@@ -1200,7 +1031,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if let Some(target_loop) = self.current_loop() {
-            // Record this continue statement and which loop it targets
             let continue_info = BreakContinueInfo {
                 target_loop,
                 statement_type: BreakContinueType::Continue,
@@ -1224,12 +1054,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::MapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Map expressions are essentially lambda expressions, so treat them the same way
         let anonymous_name = self.strings.intern("<map>");
 
         self.begin_function_with_scope_type(
             anonymous_name,
-            1, // Map expressions always take exactly one parameter
+            1,
             map_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
@@ -1237,13 +1066,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             ScopeType::Lambda(map_expr.id),
         );
 
-        // Declare the parameter
         let param = ctx.nodes.get_identifier_node(map_expr.node.parameter);
         if let Err(error) = self.declare_variable(param) {
             ctx.errors.report_error(error);
         };
 
-        // Visit the body expression
         let body = ctx.nodes.get_expr_node(map_expr.node.body);
         self.visit_expression(body, ctx)?;
 
@@ -1257,12 +1084,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         opt_map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::OptionalMapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Optional map expressions work the same as regular map expressions
         let anonymous_name = self.strings.intern("<optional_map>");
 
         self.begin_function_with_scope_type(
             anonymous_name,
-            1, // Optional map expressions also take exactly one parameter
+            1,
             opt_map_expr.node.span,
             FunctionKind::Function,
             ctx.errors,
@@ -1270,13 +1096,11 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             ScopeType::Lambda(opt_map_expr.id),
         );
 
-        // Declare the parameter
         let param = ctx.nodes.get_identifier_node(opt_map_expr.node.parameter);
         if let Err(error) = self.declare_variable(param) {
             ctx.errors.report_error(error);
         };
 
-        // Visit the body expression
         let body = ctx.nodes.get_expr_node(opt_map_expr.node.body);
         self.visit_expression(body, ctx)?;
 
@@ -1305,15 +1129,8 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 }
                 Ok(())
             }
-            CallOperationNode::Property(_property) => {
-                // Property names should not be resolved as variables - they are property identifiers
-                // used for property lookup at runtime, not variable resolution at compile time
-                Ok(())
-            }
-            CallOperationNode::OptionalProperty(_optional_property) => {
-                // Same as regular properties - don't resolve property names as variables
-                Ok(())
-            }
+            CallOperationNode::Property(_property) => Ok(()),
+            CallOperationNode::OptionalProperty(_optional_property) => Ok(()),
             CallOperationNode::Index(index) => {
                 self.visit_expression(ctx.nodes.get_expr_node(index.index), ctx)
             }

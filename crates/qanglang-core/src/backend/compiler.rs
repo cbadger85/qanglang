@@ -3,17 +3,16 @@ use std::sync::Arc;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
-    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
-    HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError, SourceLocation, SourceMap,
-    TypedNodeArena, Value,
+    AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle,
+    FunctionObject, HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError,
+    SourceLocation, SourceMap, TypedNodeArena, Value,
     backend::{
         chunk::{Chunk, OpCode},
         module_resolver::{ModuleResolver, RuntimeModule},
     },
     frontend::{
-        analyzer::{AnalysisPipeline, AnalysisResults},
         node_visitor::{NodeVisitor, VisitorContext},
-        scope_analysis::{FunctionInfo, FunctionKind, VariableKind},
+        scope_analysis::{FunctionInfo, FunctionKind, ScopeAnalysis, VariableKind},
         typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
     },
     nodes::*,
@@ -101,11 +100,15 @@ impl CompilerPipeline {
 
         let mut errors = parser.into_errors();
 
-        let result = AnalysisPipeline::new(&mut alloc.strings)
+        let analysis_results = AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())
             .analyze(&modules, &mut nodes, &mut errors)?;
 
-        let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc, &result);
+        let assembler = Assembler::new(
+            modules.get_main().source_map.clone(),
+            alloc,
+            &analysis_results.scopes,
+        );
         let mut main_function =
             assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
         let main_module_id = alloc
@@ -117,7 +120,7 @@ impl CompilerPipeline {
         for (path, module) in modules.into_iter() {
             let path_str = path.to_string_lossy();
             let path = alloc.strings.intern(&path_str);
-            let assembler = Assembler::new(module.source_map, alloc, &result);
+            let assembler = Assembler::new(module.source_map, alloc, &analysis_results.scopes);
             let mut module = assembler.assemble(module.node, &mut nodes, &mut errors)?;
             module.name = path;
             let function_handle = alloc.allocate_function(module);
@@ -138,22 +141,187 @@ struct LoopContext {
     node_id: NodeId,
 }
 
+// Dynamic compiler state similar to old compiler
+#[derive(Debug, Clone)]
+struct Local {
+    name: crate::StringHandle,
+    depth: Option<usize>,
+    is_captured: bool,
+}
+
+impl Local {
+    fn new(name: crate::StringHandle) -> Self {
+        Self {
+            name,
+            depth: None,
+            is_captured: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Upvalue {
+    index: u8,
+    is_local: bool,
+}
+
+#[derive(Debug, Clone)]
+struct CompilerState {
+    locals: Vec<Local>,
+    local_count: usize,
+    scope_depth: usize,
+    upvalues: Vec<Upvalue>,
+    enclosing: Option<Box<CompilerState>>,
+    has_superclass: bool,
+    blank_handle: crate::StringHandle,
+    this_handle: crate::StringHandle,
+}
+
+impl CompilerState {
+    fn new(blank_handle: crate::StringHandle, this_handle: crate::StringHandle) -> Self {
+        let mut locals = Vec::with_capacity(u8::MAX as usize);
+        locals.push(Local::new(blank_handle));
+        Self {
+            locals,
+            local_count: 1,
+            scope_depth: 0,
+            upvalues: Vec::with_capacity(u8::MAX as usize),
+            enclosing: None,
+            has_superclass: false,
+            blank_handle,
+            this_handle,
+        }
+    }
+
+    fn push(&mut self, has_superclass: bool, is_method: bool) -> &mut Self {
+        let mut locals = Vec::with_capacity(u8::MAX as usize);
+        if is_method {
+            let mut this_local = Local::new(self.this_handle);
+            this_local.depth = Some(0);
+            locals.push(this_local);
+        } else {
+            locals.push(Local::new(self.blank_handle));
+        }
+        let previous = std::mem::replace(
+            self,
+            Self {
+                locals,
+                local_count: 1,
+                scope_depth: 0,
+                upvalues: Vec::with_capacity(u8::MAX as usize),
+                enclosing: None,
+                has_superclass,
+                blank_handle: self.blank_handle,
+                this_handle: self.this_handle,
+            },
+        );
+
+        self.enclosing = Some(Box::new(previous));
+        self
+    }
+
+    fn pop(&mut self) -> Option<Self> {
+        if let Some(mut previous) = self.enclosing.take() {
+            std::mem::swap(&mut *previous, self);
+            Some(*previous)
+        } else {
+            None
+        }
+    }
+
+    fn resolve_local_variable(
+        &self,
+        handle: crate::StringHandle,
+        span: SourceSpan,
+    ) -> Result<Option<usize>, QangCompilerError> {
+        for i in (0..self.local_count).rev() {
+            if let Some(local) = self.locals.get(i)
+                && local.name == handle
+            {
+                if local.depth.is_none() {
+                    return Err(QangCompilerError::new_assembler_error(
+                        "Cannot read local variable during its initialization.".to_string(),
+                        span,
+                    ));
+                }
+                return Ok(Some(i));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn resolve_upvalue(
+        &mut self,
+        handle: crate::StringHandle,
+        span: SourceSpan,
+    ) -> Result<Option<usize>, QangCompilerError> {
+        if let Some(enclosing) = self.enclosing.as_mut() {
+            if let Some(local_index) = enclosing.resolve_local_variable(handle, span)? {
+                if let Some(local) = enclosing.locals.get_mut(local_index) {
+                    local.is_captured = true;
+                }
+                return self.add_upvalue(local_index, true, span).map(Some);
+            }
+
+            if let Some(upvalue_index) = enclosing.resolve_upvalue(handle, span)? {
+                return self.add_upvalue(upvalue_index, false, span).map(Some);
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn add_upvalue(
+        &mut self,
+        index: usize,
+        is_local: bool,
+        span: SourceSpan,
+    ) -> Result<usize, QangCompilerError> {
+        let upvalue_count = self.upvalues.len();
+
+        for i in 0..upvalue_count {
+            let upvalue = self.upvalues[i];
+            if upvalue.index == index as u8 && upvalue.is_local == is_local {
+                return Ok(i);
+            }
+        }
+
+        if upvalue_count == u8::MAX as usize {
+            return Err(QangCompilerError::new_assembler_error(
+                "Can only close over up to 256 variables.".to_string(),
+                span,
+            ));
+        }
+
+        self.upvalues.push(Upvalue {
+            index: index as u8,
+            is_local,
+        });
+
+        Ok(upvalue_count)
+    }
+}
+
 struct Assembler<'a> {
     source_map: Arc<SourceMap>,
     allocator: &'a mut HeapAllocator,
-    analysis: &'a AnalysisResults,
+    analysis: &'a ScopeAnalysis,
     current_function_id: Option<NodeId>,
     current_function: FunctionObject,
     loop_contexts: Vec<LoopContext>,
+    compiler_state: CompilerState,
 }
 
 impl<'a> Assembler<'a> {
     pub fn new(
         source_map: Arc<SourceMap>,
         allocator: &'a mut HeapAllocator,
-        analysis: &'a AnalysisResults,
+        analysis: &'a ScopeAnalysis,
     ) -> Self {
         let handle = allocator.strings.intern("");
+        let blank_handle = allocator.strings.intern("");
+        let this_handle = allocator.strings.intern("this");
         Self {
             source_map,
             allocator,
@@ -161,7 +329,20 @@ impl<'a> Assembler<'a> {
             current_function: FunctionObject::new(handle, 0),
             current_function_id: None,
             loop_contexts: Vec::new(),
+            compiler_state: CompilerState::new(blank_handle, this_handle),
         }
+    }
+
+    fn get_function_info(&self, node_id: NodeId) -> &FunctionInfo {
+        self.analysis
+            .functions
+            .get(&node_id)
+            .expect("Function info should exist for function node")
+    }
+
+    fn get_current_function_info(&self) -> Option<&FunctionInfo> {
+        self.current_function_id
+            .and_then(|id| self.analysis.functions.get(&id))
     }
 
     pub fn assemble(
@@ -289,6 +470,189 @@ impl<'a> Assembler<'a> {
         Ok(())
     }
 
+    fn begin_scope(&mut self) {
+        self.compiler_state.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self, span: SourceSpan) {
+        let current = &mut self.compiler_state;
+        current.scope_depth -= 1;
+
+        let mut instructions = Vec::new();
+
+        for i in (0..current.local_count).rev() {
+            if let Some(local) = current.locals.get(i) {
+                if let Some(depth) = local.depth {
+                    if depth > current.scope_depth {
+                        let instruction = if local.is_captured {
+                            OpCode::CloseUpvalue
+                        } else {
+                            OpCode::Pop
+                        };
+                        instructions.push(instruction);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        current.local_count -= instructions.len();
+
+        for instruction in instructions {
+            self.emit_opcode(instruction, span);
+        }
+    }
+
+    fn add_local(
+        &mut self,
+        handle: crate::StringHandle,
+        span: SourceSpan,
+    ) -> Result<(), QangCompilerError> {
+        let current = &mut self.compiler_state;
+        if current.local_count >= STACK_MAX {
+            Err(QangCompilerError::new_assembler_error(
+                "Too many local variables in scope.".to_string(),
+                span,
+            ))
+        } else {
+            let local = Local::new(handle);
+            if current.local_count < current.locals.len() {
+                current.locals[current.local_count] = local;
+            } else {
+                current.locals.push(local);
+            }
+            current.local_count += 1;
+            Ok(())
+        }
+    }
+
+    fn declare_variable(
+        &mut self,
+        handle: crate::StringHandle,
+        span: SourceSpan,
+    ) -> Result<(), QangCompilerError> {
+        let current = &self.compiler_state;
+        if current.scope_depth == 0 {
+            return Ok(());
+        }
+        for i in (0..current.local_count).rev() {
+            if let Some(local) = current.locals.get(i) {
+                if local
+                    .depth
+                    .map(|local_depth| local_depth < current.scope_depth)
+                    .unwrap_or(false)
+                {
+                    break;
+                }
+
+                if local.name == handle {
+                    return Err(QangCompilerError::new_assembler_error(
+                        "Already a variable with this name in this scope.".to_string(),
+                        span,
+                    ));
+                }
+            }
+        }
+
+        self.add_local(handle, span)?;
+        Ok(())
+    }
+
+    fn define_variable(
+        &mut self,
+        handle: Option<crate::StringHandle>,
+        span: SourceSpan,
+    ) -> Result<(), QangCompilerError> {
+        if self.compiler_state.scope_depth > 0 {
+            self.mark_initialized();
+            return Ok(());
+        }
+        let handle = handle.expect("Expected an object handle when defining global variables.");
+
+        self.emit_constant_opcode(
+            OpCode::DefineGlobal,
+            OpCode::DefineGlobal16,
+            Value::string(handle),
+            span,
+        )?;
+
+        Ok(())
+    }
+
+    fn mark_initialized(&mut self) {
+        let current = &mut self.compiler_state;
+        if current.scope_depth == 0 {
+            return;
+        }
+        if current.local_count > 0
+            && let Some(local) = current.locals.get_mut(current.local_count - 1)
+        {
+            local.depth = Some(current.scope_depth)
+        }
+    }
+
+    fn parse_variable(
+        &mut self,
+        identifier: crate::StringHandle,
+        span: SourceSpan,
+    ) -> Result<bool, QangCompilerError> {
+        self.declare_variable(identifier, span)?;
+
+        if self.compiler_state.scope_depth > 0 {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn handle_variable(
+        &mut self,
+        handle: crate::StringHandle,
+        span: SourceSpan,
+        is_assignment: bool,
+    ) -> Result<(), QangCompilerError> {
+        let (index, get_op, set_op) = {
+            if let Some(index) = self.resolve_local_variable(handle, span)? {
+                (index as u8, OpCode::GetLocal, OpCode::SetLocal)
+            } else if let Some(index) = self.resolve_upvalue(handle, span)? {
+                (index as u8, OpCode::GetUpvalue, OpCode::SetUpvalue)
+            } else {
+                let index = self.current_chunk_mut().add_constant(Value::string(handle));
+                if index <= u8::MAX as usize {
+                    (index as u8, OpCode::GetGlobal, OpCode::SetGlobal)
+                } else {
+                    return self.emit_global_variable_access(handle, is_assignment, span);
+                }
+            }
+        };
+
+        let op = if is_assignment { set_op } else { get_op };
+        self.emit_opcode_and_byte(op, index, span);
+
+        Ok(())
+    }
+
+    fn resolve_upvalue(
+        &mut self,
+        name: crate::StringHandle,
+        span: SourceSpan,
+    ) -> Result<Option<usize>, QangCompilerError> {
+        self.compiler_state.resolve_upvalue(name, span)
+    }
+
+    fn resolve_local_variable(
+        &self,
+        handle: crate::StringHandle,
+        span: SourceSpan,
+    ) -> Result<Option<usize>, QangCompilerError> {
+        self.compiler_state.resolve_local_variable(handle, span)
+    }
+
     fn emit_return(&mut self, span: SourceSpan) {
         let is_init = self
             .current_function_id
@@ -308,44 +672,18 @@ impl<'a> Assembler<'a> {
         span: SourceSpan,
         is_assignment: bool,
     ) -> Result<(), QangCompilerError> {
-        let var_info = self
-            .analysis
-            .scopes
-            .variables
-            .get(&node_id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    format!(
-                        "Variable not found in analysis results for node_id: {:?}",
-                        node_id
-                    ),
-                    span,
-                )
-            })?;
+        let var_info = self.analysis.variables.get(&node_id).ok_or_else(|| {
+            QangCompilerError::new_assembler_error(
+                format!(
+                    "Variable not found in analysis results for node_id: {:?}",
+                    node_id
+                ),
+                span,
+            )
+        })?;
 
-        match &var_info.kind {
-            VariableKind::Local { slot, .. } => {
-                let opcode = if is_assignment {
-                    OpCode::SetLocal
-                } else {
-                    OpCode::GetLocal
-                };
-                self.emit_opcode_and_byte(opcode, *slot as u8, span);
-            }
-            VariableKind::Global => {
-                self.emit_global_variable_access(var_info.name, is_assignment, span)?;
-            }
-            VariableKind::Upvalue { index, .. } => {
-                let opcode = if is_assignment {
-                    OpCode::SetUpvalue
-                } else {
-                    OpCode::GetUpvalue
-                };
-                self.emit_opcode_and_byte(opcode, *index as u8, span);
-            }
-        }
-
-        Ok(())
+        // Use dynamic slot resolution instead of static slot from scope analysis
+        self.handle_variable(var_info.name, span, is_assignment)
     }
 
     fn emit_global_variable_access(
@@ -377,12 +715,25 @@ impl<'a> Assembler<'a> {
         func_expr: FunctionExprNode,
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
-        // Get function info from analysis
-        let func_info = self.get_function_info(func_node_id);
+        self.compile_function_with_superclass(func_node_id, func_expr, ctx, false)
+    }
+
+    fn compile_function_with_superclass(
+        &mut self,
+        func_node_id: NodeId,
+        func_expr: FunctionExprNode,
+        ctx: &mut VisitorContext,
+        has_superclass: bool,
+    ) -> Result<(), QangCompilerError> {
+        // Get function info from analysis and determine if it's a method
+        let (func_arity, func_kind) = {
+            let func_info = self.get_function_info(func_node_id);
+            (func_info.arity, func_info.kind)
+        };
 
         // Create new function object
         let identifier = ctx.nodes.get_identifier_node(func_expr.name).node;
-        let function = FunctionObject::new(identifier.name, func_info.arity);
+        let function = FunctionObject::new(identifier.name, func_arity);
 
         // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
@@ -393,6 +744,28 @@ impl<'a> Assembler<'a> {
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(func_node_id);
 
+        // Push new compiler state for function (like old compiler)
+        let is_method = matches!(func_kind, FunctionKind::Method | FunctionKind::Initializer);
+        self.compiler_state.push(has_superclass, is_method);
+        self.begin_scope();
+
+        // Add parameters to the new compiler state
+        let param_count = ctx.nodes.array.size(func_expr.parameters);
+        for i in 0..param_count {
+            if let Some(param_id) = ctx.nodes.array.get_node_id_at(func_expr.parameters, i) {
+                let param = ctx.nodes.get_identifier_node(param_id);
+                let is_local = self.parse_variable(param.node.name, param.node.span)?;
+                self.define_variable(
+                    if is_local {
+                        None
+                    } else {
+                        Some(param.node.name)
+                    },
+                    param.node.span,
+                )?;
+            }
+        }
+
         // Compile function body
         let body_node = ctx.nodes.get_block_stmt_node(func_expr.body);
         self.visit_block_statement(body_node, ctx)?;
@@ -400,18 +773,15 @@ impl<'a> Assembler<'a> {
         // Emit return
         self.emit_return(func_expr.span);
 
-        // Get upvalue info for this function
-        let upvalue_captures = self
-            .analysis
-            .scopes
-            .upvalue_captures
-            .get(&func_node_id)
-            .cloned()
-            .unwrap_or_default();
+        // Pop compiler state and get upvalue info
+        let old_state = self
+            .compiler_state
+            .pop()
+            .expect("Function state should exist");
 
         // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
-        compiled_function.upvalue_count = upvalue_captures.len();
+        compiled_function.upvalue_count = old_state.upvalues.len();
 
         // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
@@ -428,26 +798,13 @@ impl<'a> Assembler<'a> {
         )?;
 
         // Emit upvalue information
-        for upvalue in upvalue_captures {
+        for upvalue in &old_state.upvalues {
             let is_local_byte = if upvalue.is_local { 1 } else { 0 };
             self.emit_byte(is_local_byte, func_expr.span);
-            self.emit_byte(upvalue.index as u8, func_expr.span);
+            self.emit_byte(upvalue.index, func_expr.span);
         }
 
         Ok(())
-    }
-
-    fn get_function_info(&self, node_id: NodeId) -> &FunctionInfo {
-        self.analysis
-            .scopes
-            .functions
-            .get(&node_id)
-            .expect("Function not found in analysis results")
-    }
-
-    fn get_current_function_info(&self) -> Option<&FunctionInfo> {
-        self.current_function_id
-            .map(|id| self.get_function_info(id))
     }
 
     fn emit_compound_assignment_op(
@@ -508,6 +865,19 @@ impl<'a> Assembler<'a> {
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(map_node_id);
 
+        // Push new compiler state for map expression (like lambda compilation)
+        self.compiler_state.push(false, false);
+        self.begin_scope();
+
+        // Add the map parameter to the new compiler state
+        let param_identifier = ctx.nodes.get_identifier_node(map_expr.parameter);
+        let param_handle = param_identifier.node.name;
+        let is_local = self.parse_variable(param_handle, param_identifier.node.span)?;
+        self.define_variable(
+            if is_local { None } else { Some(param_handle) },
+            param_identifier.node.span,
+        )?;
+
         // For map expressions, the body is always an expression that gets returned
         let return_node = ReturnStmtNode {
             value: Some(map_expr.body),
@@ -515,18 +885,16 @@ impl<'a> Assembler<'a> {
         };
         self.visit_return_statement(TypedNodeRef::new(map_expr.body, return_node), ctx)?;
 
-        // Get upvalue info for this map expression
-        let upvalue_captures = self
-            .analysis
-            .scopes
-            .upvalue_captures
-            .get(&map_node_id)
-            .cloned()
-            .unwrap_or_default();
+        // End the scope and pop the compiler state (like lambda compilation)
+        self.end_scope(map_expr.span);
+        let old_state = self
+            .compiler_state
+            .pop()
+            .expect("Map expression state should exist");
 
-        // Store compiled function and set upvalue count
+        // Store compiled function and set upvalue count (dynamic resolution like lambda compilation)
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
-        compiled_function.upvalue_count = upvalue_captures.len();
+        compiled_function.upvalue_count = old_state.upvalues.len();
 
         // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
@@ -542,11 +910,11 @@ impl<'a> Assembler<'a> {
             map_expr.span,
         )?;
 
-        // Emit upvalue information for the VM
-        for upvalue in &upvalue_captures {
+        // Emit upvalue information for the VM (like lambda compilation)
+        for upvalue in &old_state.upvalues {
             let is_local_byte = if upvalue.is_local { 1 } else { 0 };
             self.emit_byte(is_local_byte, map_expr.span);
-            self.emit_byte(upvalue.index as u8, map_expr.span);
+            self.emit_byte(upvalue.index, map_expr.span);
         }
 
         Ok(())
@@ -675,6 +1043,14 @@ impl<'a> NodeVisitor for Assembler<'a> {
         ) {
             return Err(QangCompilerError::new_assembler_error(
                 "Cannot use 'super' outside of a class method.".to_string(),
+                super_expr.node.span,
+            ));
+        }
+
+        // Check if the current class has a superclass
+        if !self.compiler_state.has_superclass {
+            return Err(QangCompilerError::new_assembler_error(
+                "Can't use 'super' in a class with no superclass.".to_string(),
                 super_expr.node.span,
             ));
         }
@@ -900,6 +1276,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(var_decl.node.target);
 
+        // Parse variable - handles declaration and slot allocation
+        let is_local = self.parse_variable(identifier.node.name, identifier.node.span)?;
+
         // Emit initializer
         if let Some(expr) = var_decl
             .node
@@ -911,39 +1290,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Nil, var_decl.node.span);
         }
 
-        // Use static analysis to determine how to define the variable
-        let var_info = self
-            .analysis
-            .scopes
-            .variables
-            .get(&identifier.id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Variable not found in analysis results".to_string(),
-                    identifier.node.span,
-                )
-            })?;
-
-        match &var_info.kind {
-            VariableKind::Global => {
-                self.emit_constant_opcode(
-                    OpCode::DefineGlobal,
-                    OpCode::DefineGlobal16,
-                    Value::string(identifier.node.name),
-                    var_decl.node.span,
-                )?;
-            }
-            VariableKind::Local { slot, .. } => {
-                // Emit OP_SET_LOCAL to store the value in the variable's slot
-                self.emit_opcode_and_byte(OpCode::SetLocal, *slot as u8, var_decl.node.span);
-            }
-            VariableKind::Upvalue { .. } => {
-                // This shouldn't happen for declarations
-                return Err(QangCompilerError::new_assembler_error(
-                    "Cannot declare upvalue variable".to_string(),
-                    var_decl.node.span,
-                ));
-            }
+        // Define the variable
+        if is_local {
+            self.define_variable(None, var_decl.node.span)?;
+        } else {
+            self.define_variable(Some(identifier.node.name), var_decl.node.span)?;
         }
 
         Ok(())
@@ -956,6 +1307,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(import_decl.node.name);
 
+        // Parse variable - handles declaration and slot allocation
+        let is_local = self.parse_variable(identifier.node.name, identifier.node.span)?;
+
         // Emit module declaration
         self.emit_constant_opcode(
             OpCode::Module,
@@ -964,39 +1318,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
             import_decl.node.span,
         )?;
 
-        // Use static analysis to determine how to define the variable
-        let var_info = self
-            .analysis
-            .scopes
-            .variables
-            .get(&identifier.id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Variable not found in analysis results".to_string(),
-                    identifier.node.span,
-                )
-            })?;
-
-        match &var_info.kind {
-            VariableKind::Global => {
-                self.emit_constant_opcode(
-                    OpCode::DefineGlobal,
-                    OpCode::DefineGlobal16,
-                    Value::string(identifier.node.name),
-                    import_decl.node.span,
-                )?;
-            }
-            VariableKind::Local { slot, .. } => {
-                // Emit OP_SET_LOCAL to store the value in the variable's slot
-                self.emit_opcode_and_byte(OpCode::SetLocal, *slot as u8, import_decl.node.span);
-            }
-            VariableKind::Upvalue { .. } => {
-                // This shouldn't happen for declarations
-                return Err(QangCompilerError::new_assembler_error(
-                    "Cannot declare upvalue variable".to_string(),
-                    import_decl.node.span,
-                ));
-            }
+        // Define the variable
+        if is_local {
+            self.define_variable(None, import_decl.node.span)?;
+        } else {
+            self.define_variable(Some(identifier.node.name), import_decl.node.span)?;
         }
 
         Ok(())
@@ -1162,7 +1488,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
         for_stmt: TypedNodeRef<ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Handle initializer
+        // Begin scope for for-loop variables (like in old compiler)
+        self.begin_scope();
+
+        // Handle initializer within the for-loop scope
         if let Some(initializer_id) = for_stmt.node.initializer {
             let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
             match initializer.node {
@@ -1264,24 +1593,13 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Pop, for_stmt.node.span);
         }
 
-        // Clean up for loop scope variables using unified scope tracking
-        // Emit cleanup instructions in reverse order (LIFO) for local variables only
-        for &var_id in self.analysis.scopes.get_scope_variables(for_stmt.id).rev() {
-            if let Some(var_info) = self.analysis.scopes.variables.get(&var_id) {
-                if let crate::frontend::scope_analysis::VariableKind::Local { .. } = var_info.kind {
-                    if var_info.is_captured {
-                        self.emit_opcode(OpCode::CloseUpvalue, for_stmt.node.span);
-                    } else {
-                        self.emit_opcode(OpCode::Pop, for_stmt.node.span);
-                    }
-                }
-            }
-        }
-
-        // Patch break jumps to current position (after scope cleanup)
+        // Patch break jumps to current position (before scope cleanup)
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, for_stmt.node.span)?;
         }
+
+        // End scope - this handles all the cleanup automatically
+        self.end_scope(for_stmt.node.span);
 
         Ok(())
     }
@@ -1293,43 +1611,22 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let func_expr = ctx.nodes.get_func_expr_node(func_decl.node.function);
 
-        // Declare the function variable first (for global functions)
+        // Declare the function variable using dynamic resolution like old compiler
         let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
-        let var_info = self
-            .analysis
-            .scopes
-            .variables
-            .get(&identifier.id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Function variable not found in analysis results".to_string(),
-                    identifier.node.span,
-                )
-            })?;
+        let is_local = self.parse_variable(identifier.node.name, identifier.node.span)?;
 
         // Compile the function
         self.compile_function(func_decl.node.function, func_expr.node, ctx)?;
 
-        // Define the function variable
-        match &var_info.kind {
-            VariableKind::Global => {
-                self.emit_constant_opcode(
-                    OpCode::DefineGlobal,
-                    OpCode::DefineGlobal16,
-                    Value::string(identifier.node.name),
-                    func_decl.node.span,
-                )?;
-            }
-            VariableKind::Local { .. } => {
-                // Local function, no additional instruction needed
-            }
-            VariableKind::Upvalue { .. } => {
-                return Err(QangCompilerError::new_assembler_error(
-                    "Cannot declare upvalue function".to_string(),
-                    func_decl.node.span,
-                ));
-            }
-        }
+        // Define the function variable using dynamic resolution like old compiler
+        self.define_variable(
+            if is_local {
+                None
+            } else {
+                Some(identifier.node.name)
+            },
+            func_decl.node.span,
+        )?;
 
         Ok(())
     }
@@ -1344,7 +1641,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // Use scope analysis to find the target loop for this break statement
         let break_info = self
             .analysis
-            .scopes
             .break_continue_statements
             .get(&break_stmt.id)
             .ok_or_else(|| {
@@ -1381,7 +1677,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         // Use scope analysis to find the target loop for this continue statement
         let continue_info = self
             .analysis
-            .scopes
             .break_continue_statements
             .get(&continue_stmt.id)
             .ok_or_else(|| {
@@ -1413,6 +1708,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
         block_stmt: TypedNodeRef<BlockStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
         let length = ctx.nodes.array.size(block_stmt.node.decls);
 
         for i in 0..length {
@@ -1422,20 +1719,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
         }
 
-        // Clean up local variables declared in this block scope using scope analysis
-        // Variables in scope are stored in declaration order, so reverse iterate for LIFO cleanup
-        // Emit cleanup instructions in reverse order (LIFO) for local variables only
-        for &var_id in self.analysis.scopes.get_scope_variables(block_stmt.id).rev() {
-            if let Some(var_info) = self.analysis.scopes.variables.get(&var_id) {
-                if let crate::frontend::scope_analysis::VariableKind::Local { .. } = var_info.kind {
-                    if var_info.is_captured {
-                        self.emit_opcode(OpCode::CloseUpvalue, block_stmt.node.span);
-                    } else {
-                        self.emit_opcode(OpCode::Pop, block_stmt.node.span);
-                    }
-                }
-            }
-        }
+        self.end_scope(block_stmt.node.span);
 
         Ok(())
     }
@@ -1452,17 +1736,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.visit_lambda_expression(lambda_expr, ctx)?;
 
         // Define the lambda variable using static analysis
-        let var_info = self
-            .analysis
-            .scopes
-            .variables
-            .get(&identifier.id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Lambda variable not found in analysis results".to_string(),
-                    identifier.node.span,
-                )
-            })?;
+        let var_info = self.analysis.variables.get(&identifier.id).ok_or_else(|| {
+            QangCompilerError::new_assembler_error(
+                "Lambda variable not found in analysis results".to_string(),
+                identifier.node.span,
+            )
+        })?;
 
         match &var_info.kind {
             VariableKind::Global => {
@@ -1507,6 +1786,31 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let old_function_id = self.current_function_id;
         self.current_function_id = Some(lambda_expr.id);
 
+        // Push new compiler state for lambda (like old compiler)
+        self.compiler_state.push(false, false);
+        self.begin_scope();
+
+        // Add parameters to the new compiler state
+        let param_count = ctx.nodes.array.size(lambda_expr.node.parameters);
+        for i in 0..param_count {
+            if let Some(param_id) = ctx
+                .nodes
+                .array
+                .get_node_id_at(lambda_expr.node.parameters, i)
+            {
+                let param = ctx.nodes.get_identifier_node(param_id);
+                let is_local = self.parse_variable(param.node.name, param.node.span)?;
+                self.define_variable(
+                    if is_local {
+                        None
+                    } else {
+                        Some(param.node.name)
+                    },
+                    param.node.span,
+                )?;
+            }
+        }
+
         // Compile lambda body
         let lambda_body = ctx.nodes.get_lambda_body_node(lambda_expr.node.body);
         match lambda_body.node {
@@ -1524,18 +1828,16 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
         }
 
-        // Get upvalue info for this lambda
-        let upvalue_captures = self
-            .analysis
-            .scopes
-            .upvalue_captures
-            .get(&lambda_expr.id)
-            .cloned()
-            .unwrap_or_default();
+        // End the scope and pop the compiler state (like old compiler)
+        self.end_scope(lambda_expr.node.span);
+        let old_state = self
+            .compiler_state
+            .pop()
+            .expect("Lambda state should exist");
 
-        // Store compiled function and set upvalue count
+        // Store compiled function and set upvalue count (dynamic resolution like old compiler)
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
-        compiled_function.upvalue_count = upvalue_captures.len();
+        compiled_function.upvalue_count = old_state.upvalues.len();
 
         // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
@@ -1551,11 +1853,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
             lambda_expr.node.span,
         )?;
 
-        // Emit upvalue information for the VM
-        for upvalue in &upvalue_captures {
+        // Emit upvalue information for the VM (like old compiler)
+        for upvalue in &old_state.upvalues {
             let is_local_byte = if upvalue.is_local { 1 } else { 0 };
             self.emit_byte(is_local_byte, lambda_expr.node.span);
-            self.emit_byte(upvalue.index as u8, lambda_expr.node.span);
+            self.emit_byte(upvalue.index, lambda_expr.node.span);
         }
 
         Ok(())
@@ -1882,60 +2184,15 @@ impl<'a> NodeVisitor for Assembler<'a> {
             name.node.span,
         )?;
 
-        // Define the class variable using static analysis
-        let var_info = self
-            .analysis
-            .scopes
-            .variables
-            .get(&name.id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Class variable not found in analysis results".to_string(),
-                    name.node.span,
-                )
-            })?;
+        // Define the class variable using dynamic resolution like old compiler
+        let is_local = self.parse_variable(class_handle, name.node.span)?;
+        self.define_variable(
+            if is_local { None } else { Some(class_handle) },
+            name.node.span,
+        )?;
 
-        match &var_info.kind {
-            VariableKind::Global => {
-                self.emit_constant_opcode(
-                    OpCode::DefineGlobal,
-                    OpCode::DefineGlobal16,
-                    Value::string(class_handle),
-                    name.node.span,
-                )?;
-            }
-            VariableKind::Local { .. } => {
-                // Local class, no additional instruction needed for definition
-            }
-            VariableKind::Upvalue { .. } => {
-                return Err(QangCompilerError::new_assembler_error(
-                    "Cannot declare upvalue class".to_string(),
-                    class_decl.node.span,
-                ));
-            }
-        }
-
-        // Load the class for method/field definitions
-        // The class should be loaded from the same location where it was defined
-        match &var_info.kind {
-            VariableKind::Global => {
-                self.emit_constant_opcode(
-                    OpCode::GetGlobal,
-                    OpCode::GetGlobal16,
-                    Value::string(class_handle),
-                    name.node.span,
-                )?;
-            }
-            VariableKind::Local { slot, .. } => {
-                self.emit_opcode_and_byte(OpCode::GetLocal, *slot as u8, name.node.span);
-            }
-            VariableKind::Upvalue { .. } => {
-                return Err(QangCompilerError::new_assembler_error(
-                    "Cannot access upvalue class for member definition".to_string(),
-                    name.node.span,
-                ));
-            }
-        }
+        // Load the class for method/field definitions using dynamic resolution like old compiler
+        self.handle_variable(class_handle, name.node.span, false)?;
 
         // Handle inheritance using class inheritance analysis
         if let Some(superclass) = superclass {
@@ -1947,50 +2204,23 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 ));
             }
 
-            // Get the inheritance information from static analysis
-            let inheritance_info = self
-                .analysis
-                .scopes
-                .class_inheritance
-                .get(&class_decl.id)
-                .ok_or_else(|| {
-                    QangCompilerError::new_assembler_error(
-                        "Class inheritance info not found in analysis results".to_string(),
-                        class_decl.node.span,
-                    )
-                })?;
+            // Begin a new scope for the superclass local variable (like the old compiler)
+            self.begin_scope();
 
-            // Load the subclass again (for inheritance)
-            // The class should be loaded from the same location where it was defined
-            match &var_info.kind {
-                VariableKind::Global => {
-                    self.emit_constant_opcode(
-                        OpCode::GetGlobal,
-                        OpCode::GetGlobal16,
-                        Value::string(class_handle),
-                        name.node.span,
-                    )?;
-                }
-                VariableKind::Local { slot, .. } => {
-                    self.emit_opcode_and_byte(OpCode::GetLocal, *slot as u8, name.node.span);
-                }
-                VariableKind::Upvalue { .. } => {
-                    return Err(QangCompilerError::new_assembler_error(
-                        "Cannot access upvalue class for inheritance".to_string(),
-                        name.node.span,
-                    ));
-                }
-            }
+            // Load the subclass again (for inheritance) using dynamic resolution like old compiler
+            self.handle_variable(class_handle, name.node.span, false)?;
 
-            // Load the superclass
-            self.emit_variable_access(superclass.id, superclass.node.span, false)?;
+            // Load the superclass using dynamic resolution like old compiler
+            self.handle_variable(superclass.node.name, superclass.node.span, false)?;
 
-            // Store the superclass in the "super" local variable using the slot from analysis
-            self.emit_opcode_and_byte(
-                OpCode::SetLocal,
-                inheritance_info.super_slot as u8,
-                superclass.node.span,
-            );
+            // The "super" local variable should already be handled by the scope analysis
+            // and dynamic slot resolution, but we need to add it to current scope's locals
+            let super_handle = self.allocator.strings.intern("super");
+            self.add_local(super_handle, class_decl.node.span)?;
+            self.define_variable(None, class_decl.node.span)?; // Local variable
+
+            // Store the superclass in the "super" local variable
+            self.handle_variable(super_handle, superclass.node.span, true)?;
 
             // Now emit inheritance instruction
             self.emit_opcode(OpCode::Inherit, superclass.node.span);
@@ -2006,8 +2236,14 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     ClassMemberNode::Method(function) => {
                         let method_name = ctx.nodes.get_identifier_node(function.name);
 
-                        // Compile the method function
-                        self.compile_function(node_id, function, ctx)?;
+                        // Compile the method function with superclass information
+                        let has_superclass = class_decl.node.superclass.is_some();
+                        self.compile_function_with_superclass(
+                            node_id,
+                            function,
+                            ctx,
+                            has_superclass,
+                        )?;
 
                         // Add the method to the class
                         self.emit_constant_opcode(
@@ -2042,6 +2278,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         // Pop the class from the stack
         self.emit_opcode(OpCode::Pop, class_decl.node.span);
+
+        // End the superclass scope if there was inheritance (like the old compiler)
+        if class_decl.node.superclass.is_some() {
+            self.end_scope(class_decl.node.span);
+        }
 
         Ok(())
     }

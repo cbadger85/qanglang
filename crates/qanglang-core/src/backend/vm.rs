@@ -210,6 +210,7 @@ pub(crate) struct VmState {
     property_cache: [PropertyCache; Self::PROPERTY_CACHE_SIZE],
     method_cache: [MethodCache; Self::METHOD_CACHE_SIZE],
     cache_generation: u32,
+    arg_buffer: [Value; 256],
 }
 
 impl VmState {
@@ -237,6 +238,7 @@ impl VmState {
             property_cache: [PropertyCache::default(); Self::PROPERTY_CACHE_SIZE],
             method_cache: [MethodCache::default(); Self::METHOD_CACHE_SIZE],
             cache_generation: 0,
+            arg_buffer: [Value::default(); 256],
         }
     }
 
@@ -1852,17 +1854,20 @@ impl Vm {
         result
     }
 
+    pub fn get_function_args(&self, arg_count: usize) -> &[Value] {
+        &self.state.arg_buffer[..arg_count]
+    }
+
     fn call_native_function(
         &mut self,
         handle: NativeFunctionHandle,
         arg_count: usize,
     ) -> RuntimeResult<()> {
         let function = self.alloc.get_native_function(handle);
-        let mut args = [Value::default(); 256];
 
         for i in (0..arg_count).rev() {
             if i < function.arity {
-                args[i] = pop_value!(self);
+                self.state.arg_buffer[i] = pop_value!(self);
             } else {
                 pop_value!(self); // discard values that are passed in but not needed by the function.
             }
@@ -1870,7 +1875,7 @@ impl Vm {
 
         pop_value!(self); // pop function off the stack now that it has been called.
 
-        let value = (function.function)(&args[..function.arity], self)
+        let value = (function.function)(arg_count, self)
             .map_err(|e: NativeFunctionError| {
                 let loc = self.state.get_previous_loc();
                 e.into_qang_error(loc)
@@ -1878,6 +1883,7 @@ impl Vm {
             .unwrap_or_default();
 
         push_value!(self, value)?;
+        self.state.arg_buffer.fill(Value::default());
 
         Ok(())
     }
@@ -1890,11 +1896,9 @@ impl Vm {
     ) -> RuntimeResult<()> {
         match method {
             IntrinsicMethod::Native { function, arity } => {
-                let mut args = [Value::default(); 256];
-
                 for i in (0..arg_count).rev() {
                     if i < arity {
-                        args[i] = pop_value!(self);
+                        self.state.arg_buffer[i] = pop_value!(self);
                     } else {
                         pop_value!(self); // discard values that are passed in but not needed by the function.
                     }
@@ -1902,7 +1906,7 @@ impl Vm {
 
                 pop_value!(self); // pop function off the stack now that it has been called.
 
-                let value = function(receiver, &args[..arity], self)
+                let value = function(receiver, arg_count, self)
                     .map_err(|e: NativeFunctionError| {
                         let loc = self.state.get_previous_loc();
                         e.into_qang_error(loc)
@@ -1910,6 +1914,7 @@ impl Vm {
                     .unwrap_or_default();
 
                 push_value!(self, value)?;
+                self.state.arg_buffer.fill(Value::default());
 
                 Ok(())
             }
@@ -2383,7 +2388,8 @@ impl Vm {
             + self.globals().len()
             + self.state.frame_count
             + self.state.open_upvalues.len()
-            + self.state.modules.count();
+            + self.state.modules.count()
+            + self.state.arg_buffer.len();
         let mut roots = VecDeque::with_capacity(capacity);
         roots.extend(&self.state.stack[..self.state.stack_top]);
         roots.extend(self.globals().values());
@@ -2397,6 +2403,7 @@ impl Vm {
                 roots.push_back(Value::closure(closure_handle));
             }
         }
+        roots.extend(&self.state.arg_buffer);
 
         self.state.modules.gather_roots(&mut roots);
 

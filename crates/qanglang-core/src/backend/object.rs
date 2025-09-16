@@ -92,7 +92,7 @@ impl BoundMethodObject {
     }
 }
 
-pub type NativeFn = fn(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
+pub type NativeFn = fn(arity: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
 #[derive(Debug, Clone)]
 pub struct NativeFunctionObject {
@@ -102,7 +102,7 @@ pub struct NativeFunctionObject {
 }
 
 pub type IntrinsicFn =
-    fn(receiver: Value, args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
+    fn(receiver: Value, arity: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError>;
 
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum IntrinsicKind {

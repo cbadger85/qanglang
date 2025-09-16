@@ -16,7 +16,8 @@ use crate::{
     peek_value, pop_value, push_value,
 };
 
-pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_assert(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     let assertion = args
         .first()
         .ok_or(NativeFunctionError::new("No arguments provided."))?;
@@ -39,7 +40,8 @@ pub fn qang_assert(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
     Err(NativeFunctionError(message))
 }
 
-pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_assert_eq(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     if args.len() < 2 {
         return Err("Must provide two arguments.".into());
     }
@@ -66,12 +68,14 @@ pub fn qang_assert_eq(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
 }
 
 pub fn qang_assert_throws(
-    args: &[Value],
+    arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     let assertion = args
         .first()
         .ok_or(NativeFunctionError::new("No arguments provided."))?;
+    let message_handle = args.get(1).copied();
 
     let function_handle = match assertion.as_closure() {
         Some(function_handle) => function_handle,
@@ -82,9 +86,7 @@ pub fn qang_assert_throws(
 
     match result {
         Ok(_) => {
-            let message = args
-                .get(1)
-                .copied()
+            let message = message_handle
                 .and_then(|v| {
                     if v.is_nil() {
                         None
@@ -100,21 +102,24 @@ pub fn qang_assert_throws(
     }
 }
 
-pub fn qang_print(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_print(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     let value = args.first().copied().unwrap_or(Value::nil());
     let value = value.to_display_string(&vm.alloc);
     print!("{}", value);
     Ok(None)
 }
 
-pub fn qang_println(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_println(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     let value = args.first().copied().unwrap_or(Value::nil());
     let value = value.to_display_string(&vm.alloc);
     println!("{}", value);
     Ok(None)
 }
 
-pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_typeof(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     let value = args.first().copied().unwrap_or(Value::nil());
     let value_string = value.to_type_string();
     let handle = vm.alloc.strings.intern(value_string);
@@ -123,7 +128,7 @@ pub fn qang_typeof(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeF
 }
 
 pub fn qang_system_time(
-    _args: &[Value],
+    _arg_count: usize,
     _vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -138,7 +143,8 @@ pub fn qang_system_time(
     Ok(Some(time.into()))
 }
 
-pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_to_string(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     let value = args.first().copied().unwrap_or(Value::nil());
 
     let value = value.to_display_string(&vm.alloc);
@@ -149,7 +155,7 @@ pub fn qang_to_string(args: &[Value], vm: &mut Vm) -> Result<Option<Value>, Nati
 
 pub fn qang_string_to_uppercase(
     receiver: Value,
-    _args: &[Value],
+    _arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Some(handle) = receiver.as_string() {
@@ -167,7 +173,7 @@ pub fn qang_string_to_uppercase(
 
 pub fn qang_string_to_lowercase(
     receiver: Value,
-    _args: &[Value],
+    _arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Some(handle) = receiver.as_string() {
@@ -185,7 +191,7 @@ pub fn qang_string_to_lowercase(
 
 pub fn qang_array_length(
     receiver: Value,
-    _args: &[Value],
+    _arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Some(handle) = receiver.as_array() {
@@ -201,9 +207,10 @@ pub fn qang_array_length(
 
 pub fn qang_array_push(
     receiver: Value,
-    args: &[Value],
+    arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     if let Some(handle) = receiver.as_array() {
         let element = args.first().copied().unwrap_or_default();
         vm.with_gc_check(|alloc| alloc.arrays.push(handle, element));
@@ -218,7 +225,7 @@ pub fn qang_array_push(
 
 pub fn qang_array_pop(
     receiver: Value,
-    _args: &[Value],
+    _arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Some(handle) = receiver.as_array() {
@@ -237,7 +244,7 @@ pub fn qang_array_pop(
 
 pub fn qang_array_reverse(
     receiver: Value,
-    _args: &[Value],
+    _arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Some(handle) = receiver.as_array() {
@@ -253,9 +260,10 @@ pub fn qang_array_reverse(
 
 pub fn qang_array_slice(
     receiver: Value,
-    args: &[Value],
+    arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     if let Some(handle) = receiver.as_array() {
         let begin = args.first().copied().unwrap_or(Value::nil());
         let end = args.get(1).copied().unwrap_or(Value::nil());
@@ -296,9 +304,10 @@ pub fn qang_array_slice(
 
 pub fn qang_array_get(
     receiver: Value,
-    args: &[Value],
+    arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     match (receiver.kind(), args.first().map(|a| a.kind())) {
         (ValueKind::Array(handle), Some(ValueKind::Number(index))) => {
             Ok(Some(vm.alloc.arrays.get(handle, index.trunc() as isize)))
@@ -315,9 +324,10 @@ pub fn qang_array_get(
 
 pub fn qang_array_concat(
     receiver: Value,
-    args: &[Value],
+    arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     match (receiver.kind(), args.first().copied().map(|a| a.kind())) {
         (ValueKind::Array(handle1), Some(ValueKind::Array(handle2))) => {
             Ok(Some(Value::array(vm.alloc.arrays.concat(handle1, handle2))))
@@ -333,9 +343,10 @@ pub fn qang_array_concat(
 }
 
 pub fn qang_array_construct(
-    args: &[Value],
+    arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     if let Some(length) = args.first().copied().unwrap_or(Value::nil()).as_number() {
         Ok(Some(Value::array(
             vm.alloc.arrays.create_array(length.trunc() as usize),
@@ -345,7 +356,8 @@ pub fn qang_array_construct(
     }
 }
 
-pub fn qang_hash(args: &[Value], _vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+pub fn qang_hash(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
     let value = args.first().copied();
 
     match value {

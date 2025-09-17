@@ -4,7 +4,6 @@ use crate::{SourceMap, Token, TokenType, Tokenizer};
 
 /// Tokenizes all source code in the given SourceMap and returns a vector of Tokens.
 fn tokenize_all(source_map: &SourceMap) -> Vec<Token> {
-    // TODO maybe fix this so we don't need to clone it
     let tokenizer = Tokenizer::new(Arc::new(source_map.clone()));
     tokenizer.collect()
 }

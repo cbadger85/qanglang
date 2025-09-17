@@ -368,10 +368,8 @@ pub fn qang_hash(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeF
 
 impl Vm {
     pub(crate) fn with_stdlib(mut self) -> Self {
-        if self.load_stdlib().is_err() {
-            // TODO
-            // If stdlib fails to load, continue without it
-            // In production, you might want to handle this differently
+        if let Err(err) = self.load_stdlib() {
+            panic!("Failed to load standard library: {}", err);
         }
         self
     }

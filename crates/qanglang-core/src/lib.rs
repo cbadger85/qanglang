@@ -23,7 +23,7 @@ pub use error::{
 pub use frontend::source::SourceMap;
 pub use frontend::tokenizer::{Token, TokenType, Tokenizer};
 pub use frontend::{
-    analyzer::{AnalysisPipeline, AnalysisPipelineConfig, AnalysisResults},
+    analyzer::{AnalysisPipeline, AnalysisPipelineConfig},
     node_array_arena::NodeArrayId,
     nodes,
     parse::{Parser, ParserConfig},

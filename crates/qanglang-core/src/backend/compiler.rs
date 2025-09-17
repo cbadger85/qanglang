@@ -12,7 +12,7 @@ use crate::{
     },
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
-        scope_analysis::FunctionKind,
+        semantic_validator::FunctionKind,
         typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
     },
     nodes::*,
@@ -100,7 +100,7 @@ impl CompilerPipeline {
 
         let mut errors = parser.into_errors();
 
-        let _analysis_results = AnalysisPipeline::new(&mut alloc.strings)
+        AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())
             .analyze(&modules, &mut nodes, &mut errors)?;
 

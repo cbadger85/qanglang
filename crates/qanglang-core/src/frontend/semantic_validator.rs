@@ -31,14 +31,14 @@ impl FunctionContext {
     }
 }
 
-pub struct ScopeAnalyzer<'a> {
+pub struct SemanticValidator<'a> {
     strings: &'a mut StringInterner,
     scope_depth: usize,
     functions: Vec<FunctionContext>,
     in_loop: bool,
 }
 
-impl<'a> ScopeAnalyzer<'a> {
+impl<'a> SemanticValidator<'a> {
     pub fn new(strings: &'a mut StringInterner) -> Self {
         Self {
             strings,
@@ -144,7 +144,7 @@ impl<'a> ScopeAnalyzer<'a> {
     }
 }
 
-impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
+impl<'a> NodeVisitor for SemanticValidator<'a> {
     type Error = QangCompilerError;
 
     fn visit_array_literal(

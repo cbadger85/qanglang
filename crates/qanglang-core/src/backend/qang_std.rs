@@ -367,7 +367,7 @@ pub fn qang_hash(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeF
 }
 
 impl Vm {
-    pub fn with_stdlib(mut self) -> Self {
+    pub(crate) fn with_stdlib(mut self) -> Self {
         if self.load_stdlib().is_err() {
             // TODO
             // If stdlib fails to load, continue without it

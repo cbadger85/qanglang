@@ -1,17 +1,8 @@
 use crate::{
     ErrorMessageFormat, ErrorReporter, QangPipelineError, TypedNodeArena,
-    frontend::{scope_analysis::ScopeAnalyzer, source::ModuleMap},
+    frontend::{semantic_validator::SemanticValidator, source::ModuleMap},
     memory::StringInterner,
 };
-
-#[derive(Debug, Clone)]
-pub struct AnalysisResults;
-
-impl AnalysisResults {
-    pub fn new() -> Self {
-        Self
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct AnalysisPipelineConfig {
@@ -51,14 +42,12 @@ impl<'a> AnalysisPipeline<'a> {
         modules: &ModuleMap,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
-    ) -> Result<AnalysisResults, QangPipelineError> {
-        ScopeAnalyzer::new(self.strings).analyze(modules.get_main().node, nodes, errors);
+    ) -> Result<(), QangPipelineError> {
+        SemanticValidator::new(self.strings).analyze(modules.get_main().node, nodes, errors);
 
         for (_, module) in modules.iter() {
-            ScopeAnalyzer::new(self.strings).analyze(module.node, nodes, errors);
+            SemanticValidator::new(self.strings).analyze(module.node, nodes, errors);
         }
-
-        let result = AnalysisResults::new();
 
         if self.config.strict_mode && errors.has_errors() {
             let errors = errors.take_errors();
@@ -79,6 +68,6 @@ impl<'a> AnalysisPipeline<'a> {
             return Err(QangPipelineError::new(formatted_errors));
         }
 
-        Ok(result)
+        Ok(())
     }
 }

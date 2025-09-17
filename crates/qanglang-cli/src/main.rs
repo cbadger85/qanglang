@@ -140,7 +140,7 @@ fn main() {
             heap: _,
             eformat: _,
         }) => {
-            let resolver = match qanglang_test::TestFileResolver::new() {
+            let resolver = match qanglang_test::SourceFileResolver::new() {
                 Ok(resolver) => resolver,
                 Err(err) => {
                     eprintln!("Error: Unable to determine working directory: {}", err);

@@ -2,13 +2,11 @@ use std::sync::Arc;
 
 use crate::{SourceMap, Token, TokenType, Tokenizer};
 
-/// Tokenizes all source code in the given SourceMap and returns a vector of Tokens.
 fn tokenize_all(source_map: &SourceMap) -> Vec<Token> {
     let tokenizer = Tokenizer::new(Arc::new(source_map.clone()));
     tokenizer.collect()
 }
 
-/// Asserts that the token types produced from tokenizing the source string match the expected types.
 fn assert_token_types(source: &str, expected: &[TokenType]) {
     let source_map = SourceMap::from_source(source.to_string());
     let tokens = tokenize_all(&source_map);
@@ -16,7 +14,6 @@ fn assert_token_types(source: &str, expected: &[TokenType]) {
     assert_eq!(actual, expected);
 }
 
-/// Asserts that the token produced from tokenizing the source string match the expected types.
 fn assert_single_token(source: &str, expected: Token) {
     assert_tokens(
         source,
@@ -32,15 +29,12 @@ fn assert_single_token(source: &str, expected: Token) {
     );
 }
 
-/// Asserts that the tokens produced from tokenizing the source string match the expected types.
 fn assert_tokens(source: &str, expected: &[Token]) {
     let source_map = SourceMap::from_source(source.to_string());
     let tokens = tokenize_all(&source_map);
     assert_eq!(&tokens, expected);
 }
 
-/// Asserts that a single token of the expected type is produced from tokenizing the source string,
-/// followed by an EOF token.
 fn assert_single_token_type(source: &str, expected: TokenType) {
     assert_token_types(source, &[expected, TokenType::Eof]);
 }

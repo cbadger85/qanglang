@@ -212,7 +212,6 @@ impl std::fmt::Display for QangRuntimeError {
 
 impl std::error::Error for QangRuntimeError {}
 
-/// Handles error reporting and pretty printing for the QangLang compiler.
 #[derive(Debug, Clone, Default)]
 pub struct ErrorReporter {
     errors: Vec<QangCompilerError>,
@@ -223,12 +222,10 @@ impl ErrorReporter {
         Self { errors: Vec::new() }
     }
 
-    /// Add an error to the error list
     pub fn report_error(&mut self, error: QangCompilerError) {
         self.errors.push(error);
     }
 
-    /// Check if there are any errors
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
@@ -246,7 +243,6 @@ impl ErrorReporter {
     }
 }
 
-/// Pretty print a single error with source context
 pub fn pretty_print_error(
     source_map: &SourceMap,
     kind: QangErrorKind,
@@ -282,7 +278,6 @@ pub fn pretty_print_error(
     output
 }
 
-/// Create a visual pointer to the error location
 fn create_error_pointer(
     source_map: &SourceMap,
     span: SourceSpan,
@@ -387,8 +382,6 @@ impl Vm {
     }
 }
 
-/// Cleans path artifacts from canonicalized paths that are added by the OS.
-/// Removes Windows UNC prefix (`\\?\`) and leading `./` on Unix systems.
 fn clean_canonicalized_path(path: &str) -> String {
     // Remove Windows UNC prefix
     #[cfg(target_os = "windows")]

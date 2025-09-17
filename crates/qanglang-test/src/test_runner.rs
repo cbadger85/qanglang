@@ -5,7 +5,6 @@ use rustc_hash::FxHashMap;
 
 use crate::test_file::SourceFile;
 
-/// Represents the result of running a single test function
 #[derive(Debug, Clone)]
 pub struct TestResult {
     pub name: String,
@@ -31,7 +30,6 @@ impl TestResult {
     }
 }
 
-/// Represents the result of running a test suite (single .ql file)
 #[derive(Debug, Clone)]
 pub struct TestSuiteResult {
     pub display_path: String,
@@ -76,7 +74,6 @@ impl TestSuiteResult {
     }
 }
 
-/// Runs tests from a collection of SourceFile objects and optional lambda to modify the runtime, then returns results,
 pub fn run_tests_from_files(
     source_files: Vec<SourceFile>,
     vm_builder: Option<fn(&mut Vm)>,
@@ -87,9 +84,7 @@ pub fn run_tests_from_files(
         .collect()
 }
 
-/// Runs a single test file and returns the results. Allows an optional lambda to be used to modify the runtime,
 pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -> TestSuiteResult {
-    // Read the test file
     let source_map = match SourceMap::from_path(&source_file.file_path) {
         Ok(content) => content,
         Err(err) => {
@@ -150,7 +145,6 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
     TestSuiteResult::success(source_file.display_path, description, test_results)
 }
 
-/// Extracts test description and test functions from the VM globals
 fn extract_test_info(
     globals: &FxHashMap<StringHandle, Value>,
     allocator: &HeapAllocator,
@@ -159,17 +153,14 @@ fn extract_test_info(
     let mut test_functions = Vec::new();
 
     for (handle, value) in globals.iter() {
-        // Get the identifier name for this global
         let identifier = allocator.strings.get_string(*handle);
 
         match value.kind() {
-            // Check if this is a test function (starts with "test_")
             ValueKind::Closure(func_handle) => {
                 if identifier.starts_with("test_") {
                     test_functions.push((identifier.to_string(), func_handle));
                 }
             }
-            // Check if this is the test description
             ValueKind::String(string_handle) => {
                 if identifier == "test_description" {
                     description = Some(allocator.strings.get_string(string_handle).to_string());
@@ -179,17 +170,14 @@ fn extract_test_info(
         }
     }
 
-    // Sort test functions by name for consistent output
     test_functions.sort_by(|a, b| a.0.cmp(&b.0));
 
     (description, test_functions)
 }
 
-/// Formats test results for console output
 pub fn format_results(results: &[TestSuiteResult]) -> String {
     let mut output = String::new();
 
-    // Print each test suite
     for result in results {
         if let Some(description) = &result.description {
             output.push_str(&format!("{} - {}\n", result.display_path, description));

@@ -7,7 +7,6 @@ use qanglang_core::{
 
 use crate::test_file::SourceFile;
 
-/// Represents the result of checking a single source file
 #[derive(Debug, Clone)]
 pub struct CheckResult {
     pub display_path: String,
@@ -37,7 +36,6 @@ impl CheckResult {
     }
 }
 
-/// Checks source files for compilation errors and returns results
 pub fn check_files_from_sources(
     source_files: Vec<SourceFile>,
     error_format: ErrorMessageFormat,
@@ -48,7 +46,6 @@ pub fn check_files_from_sources(
         .collect()
 }
 
-/// Checks a single source file for compilation errors
 pub fn check_single_file(
     source_file: SourceFile,
     error_message_format: ErrorMessageFormat,
@@ -92,7 +89,6 @@ pub fn check_single_file(
     }
 }
 
-/// Formats check results for console output
 pub fn format_check_results(results: &[CheckResult]) -> String {
     let mut output = String::new();
 

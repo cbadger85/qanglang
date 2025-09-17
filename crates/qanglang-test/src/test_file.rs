@@ -18,16 +18,9 @@ impl SourceFile {
     }
 }
 
-// Type alias for backward compatibility
-pub type TestFile = SourceFile;
-
-/// Resolves source files from user input while preserving display context
 pub struct SourceFileResolver {
     user_working_dir: PathBuf,
 }
-
-// Type alias for backward compatibility
-pub type TestFileResolver = SourceFileResolver;
 
 // TODO add support for ignore patterns when resolving a dir of files.
 

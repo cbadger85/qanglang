@@ -82,12 +82,10 @@ impl SourceMap {
         self.path.as_path()
     }
 
-    /// Returns the source code as a vector of characters.
     pub fn get_source(&self) -> &Vec<char> {
         &self.source
     }
 
-    /// Returns a specified line of source code as a vector of characters.
     pub fn get_line(&self, line_number: u32) -> &[char] {
         if line_number == 0 {
             return &[];
@@ -123,7 +121,6 @@ impl SourceMap {
         }
     }
 
-    /// Returns the line number (1-based) for a given position in the source
     pub fn get_line_number(&self, position: usize) -> u32 {
         if position >= self.source.len() {
             return (self.line_indices.len() + 1) as u32;
@@ -136,7 +133,6 @@ impl SourceMap {
         }
     }
 
-    /// Returns the column number (1-based) for a given position in the source
     pub fn get_column_number(&self, position: usize) -> u32 {
         if position >= self.source.len() {
             return 1;

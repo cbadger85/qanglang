@@ -132,7 +132,6 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
-    /// Creates a new tokenizer for the source map.
     pub fn new(source_map: Arc<SourceMap>) -> Self {
         Self {
             source_map,
@@ -144,7 +143,6 @@ impl Tokenizer {
         }
     }
 
-    /// Peek at the nth token ahead (0 = next token, 1 = token after that, etc.)
     pub fn peek_ahead(&mut self, n: usize) -> Option<&Token> {
         while self.lookahead_buffer.len() <= n {
             if let Some(token) = self.next_token() {
@@ -156,12 +154,10 @@ impl Tokenizer {
         self.lookahead_buffer.get(n)
     }
 
-    /// Convenience method for peek (peek_ahead(0))
     pub fn peek(&mut self) -> Option<&Token> {
         self.peek_ahead(0)
     }
 
-    /// Convenience method for peek_next (peek_ahead(1))
     #[allow(dead_code)]
     pub fn peek_next(&mut self) -> Option<&Token> {
         self.peek_ahead(1)
@@ -230,7 +226,6 @@ impl Tokenizer {
         }
     }
 
-    /// Advances the cursor.
     fn advance(&mut self) -> char {
         if self.is_at_end() {
             return '\0';
@@ -256,7 +251,6 @@ impl Tokenizer {
         }
     }
 
-    /// Peeks at the character after the next.
     fn peek_next_char(&self) -> char {
         if self.location + 1 >= self.source_map.get_source().len() {
             '\0'
@@ -265,7 +259,6 @@ impl Tokenizer {
         }
     }
 
-    /// Moves the cursor through whitespace.
     fn skip_whitespace(&mut self) {
         loop {
             match self.peek_char() {
@@ -281,12 +274,10 @@ impl Tokenizer {
         }
     }
 
-    /// returns true if the cursor is at the end of the source code.
     fn is_at_end(&self) -> bool {
         self.is_eof || self.location >= self.source_map.get_source().len()
     }
 
-    /// Peeks at the next character. If it matches, advances the cursor.
     fn match_char(&mut self, expected: char) -> bool {
         if self.is_at_end() || self.peek_char() != expected {
             false
@@ -297,7 +288,6 @@ impl Tokenizer {
         }
     }
 
-    /// Creates a Token of a given type and adds its lexeme.
     fn make_token(&mut self, token_type: TokenType, start: usize) -> Option<Token> {
         let end = self.location;
 
@@ -309,7 +299,6 @@ impl Tokenizer {
         })
     }
 
-    /// Adds an error token for tokenization errors.
     fn error_token(&self, message: &str) -> Option<Token> {
         Some(Token {
             token_type: TokenType::Error,
@@ -319,7 +308,6 @@ impl Tokenizer {
         })
     }
 
-    /// Creates a string token.
     fn string(&mut self) -> Option<Token> {
         let start = self.location - 1;
 
@@ -361,7 +349,6 @@ impl Tokenizer {
         self.make_token(TokenType::String, start)
     }
 
-    /// Advances cursor without treating characters as line breaks (for use in strings)
     fn advance_in_string(&mut self) -> char {
         if self.is_at_end() {
             return '\0';
@@ -370,13 +357,9 @@ impl Tokenizer {
         let c = self.source_map.get_source()[self.location];
         self.location += 1;
 
-        // Don't increment line/col for characters inside strings
-        // The column tracking will be handled in make_token
-
         c
     }
 
-    /// Creates a number token.
     fn number(&mut self) -> Option<Token> {
         let start = self.location - 1; // Account for first digit or dot
 
@@ -397,7 +380,6 @@ impl Tokenizer {
         self.make_token(TokenType::Number, start)
     }
 
-    /// Creates an identifier token.
     fn identifier(&mut self) -> Option<Token> {
         let start = self.location - 1;
 
@@ -413,17 +395,14 @@ impl Tokenizer {
         self.make_token(token_type, start)
     }
 
-    /// Creates a single line comment token.
     fn single_line_comment(&mut self) -> Option<Token> {
         while self.peek_char() != '\n' && !self.is_at_end() {
             self.advance();
         }
 
-        // Continue to next token after consuming comment
         self.next_token()
     }
 
-    /// Creates a multi-line comment token.
     fn multi_line_comment(&mut self) -> Option<Token> {
         while !self.is_at_end() {
             if self.peek_char() == '*' && self.peek_next_char() == '/' {

@@ -12,7 +12,7 @@ use crate::{
     },
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
-        scope_analysis::{FunctionKind},
+        scope_analysis::FunctionKind,
         typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
     },
     nodes::*,
@@ -104,10 +104,7 @@ impl CompilerPipeline {
             .with_config(self.config.into())
             .analyze(&modules, &mut nodes, &mut errors)?;
 
-        let assembler = Assembler::new(
-            modules.get_main().source_map.clone(),
-            alloc,
-        );
+        let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc);
         let mut main_function =
             assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
         let main_module_id = alloc
@@ -140,7 +137,6 @@ struct LoopContext {
     node_id: NodeId,
 }
 
-// Dynamic compiler state similar to old compiler
 #[derive(Debug, Clone)]
 struct Local {
     name: crate::StringHandle,
@@ -182,7 +178,7 @@ impl CompilerState {
         let mut locals = Vec::with_capacity(u8::MAX as usize);
         locals.push(Local::new(blank_handle));
         Self {
-            kind: FunctionKind::Global,
+            kind: FunctionKind::Script,
             locals,
             local_count: 1,
             scope_depth: 0,
@@ -316,10 +312,7 @@ struct Assembler<'a> {
 }
 
 impl<'a> Assembler<'a> {
-    pub fn new(
-        source_map: Arc<SourceMap>,
-        allocator: &'a mut HeapAllocator,
-    ) -> Self {
+    pub fn new(source_map: Arc<SourceMap>, allocator: &'a mut HeapAllocator) -> Self {
         let handle = allocator.strings.intern("");
         let blank_handle = allocator.strings.intern("");
         let this_handle = allocator.strings.intern("this");
@@ -826,7 +819,7 @@ impl<'a> Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
         let map_name_handle = self.allocator.strings.intern("<map>");
-        let func_arity = 1; // Map expressions always have exactly 1 parameter
+        let func_arity = 1;
 
         let function = FunctionObject::new(map_name_handle, func_arity);
 
@@ -924,7 +917,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
         }
 
-        // All explicit return statements use regular Return opcode
         self.emit_opcode(OpCode::Return, return_stmt.node.span);
         Ok(())
     }
@@ -2025,7 +2017,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
             let super_handle = self.allocator.strings.intern("super");
             self.add_local(super_handle, class_decl.node.span)?;
-            self.define_variable(None, class_decl.node.span)?; // Local variable
+            self.define_variable(None, class_decl.node.span)?;
 
             self.handle_variable(super_handle, superclass.node.span, true)?;
 

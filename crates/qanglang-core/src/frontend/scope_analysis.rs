@@ -5,28 +5,9 @@ use crate::{
     nodes::SourceSpan,
 };
 
-#[derive(Debug, Clone)]
-pub struct ScopeAnalysis {}
-
-impl Default for ScopeAnalysis {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ScopeAnalysis {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn merge_with(self, _other: Self) -> Self {
-        self
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionKind {
-    Global,
+    Script,
     Function,
     Method,
     Initializer,
@@ -54,8 +35,7 @@ pub struct ScopeAnalyzer<'a> {
     strings: &'a mut StringInterner,
     scope_depth: usize,
     functions: Vec<FunctionContext>,
-    results: ScopeAnalysis,
-    loop_stack: Vec<NodeId>,
+    in_loop: bool,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -63,9 +43,8 @@ impl<'a> ScopeAnalyzer<'a> {
         Self {
             strings,
             scope_depth: 0,
-            functions: vec![FunctionContext::new(FunctionKind::Global)],
-            results: ScopeAnalysis::new(),
-            loop_stack: Vec::new(),
+            functions: vec![FunctionContext::new(FunctionKind::Script)],
+            in_loop: false,
         }
     }
 
@@ -74,13 +53,11 @@ impl<'a> ScopeAnalyzer<'a> {
         program: NodeId,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
-    ) -> ScopeAnalysis {
+    ) {
         let mut ctx = VisitorContext::new(nodes, errors);
         let program_node = ctx.nodes.get_program_node(program);
 
         let _ = self.visit_module(program_node, &mut ctx);
-
-        self.results
     }
 
     fn current_scope_depth(&self) -> usize {
@@ -97,12 +74,12 @@ impl<'a> ScopeAnalyzer<'a> {
         }
     }
 
-    fn begin_loop(&mut self, loop_id: NodeId) {
-        self.loop_stack.push(loop_id);
+    fn begin_loop(&mut self) {
+        self.in_loop = true;
     }
 
     fn end_loop(&mut self) {
-        self.loop_stack.pop();
+        self.in_loop = false;
     }
 
     fn declare_variable(
@@ -131,8 +108,8 @@ impl<'a> ScopeAnalyzer<'a> {
         Ok(())
     }
 
-    fn current_loop(&self) -> Option<NodeId> {
-        self.loop_stack.last().copied()
+    fn in_current_loop(&self) -> bool {
+        self.in_loop
     }
 
     fn begin_function(
@@ -152,7 +129,7 @@ impl<'a> ScopeAnalyzer<'a> {
         let function = FunctionContext::new(kind);
         self.functions.push(function);
 
-        self.loop_stack.clear();
+        self.in_loop = false;
         self.begin_scope();
     }
 
@@ -517,7 +494,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         let condition = ctx.nodes.get_expr_node(while_stmt.node.condition);
         self.visit_expression(condition, ctx)?;
 
-        self.begin_loop(while_stmt.id);
+        self.begin_loop();
         self.begin_scope();
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
@@ -532,7 +509,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.begin_loop(for_stmt.id);
+        self.begin_loop();
         self.begin_scope();
 
         if let Some(initializer_id) = for_stmt.node.initializer {
@@ -560,7 +537,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         break_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BreakStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if self.current_loop().is_none() {
+        if !self.in_current_loop() {
             ctx.errors
                 .report_error(QangCompilerError::new_analysis_error(
                     "'break' can only be used inside loops.".to_string(),
@@ -575,7 +552,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         continue_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ContinueStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if self.current_loop().is_none() {
+        if !self.in_current_loop() {
             ctx.errors
                 .report_error(QangCompilerError::new_analysis_error(
                     "'continue' can only be used inside loops.".to_string(),

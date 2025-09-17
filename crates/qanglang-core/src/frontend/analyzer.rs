@@ -1,20 +1,15 @@
 use crate::{
     ErrorMessageFormat, ErrorReporter, QangPipelineError, TypedNodeArena,
-    frontend::{
-        scope_analysis::{ScopeAnalysis, ScopeAnalyzer},
-        source::ModuleMap,
-    },
+    frontend::{scope_analysis::ScopeAnalyzer, source::ModuleMap},
     memory::StringInterner,
 };
 
 #[derive(Debug, Clone)]
-pub struct AnalysisResults {
-    pub scopes: ScopeAnalysis,
-}
+pub struct AnalysisResults;
 
 impl AnalysisResults {
-    pub fn new(scopes: ScopeAnalysis) -> Self {
-        Self { scopes }
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -57,16 +52,13 @@ impl<'a> AnalysisPipeline<'a> {
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<AnalysisResults, QangPipelineError> {
-        let scope_analyzer = ScopeAnalyzer::new(self.strings);
-        let mut scope_analysis = scope_analyzer.analyze(modules.get_main().node, nodes, errors);
+        ScopeAnalyzer::new(self.strings).analyze(modules.get_main().node, nodes, errors);
 
         for (_, module) in modules.iter() {
-            let scope_analyzer = ScopeAnalyzer::new(self.strings);
-            scope_analysis =
-                scope_analysis.merge_with(scope_analyzer.analyze(module.node, nodes, errors));
+            ScopeAnalyzer::new(self.strings).analyze(module.node, nodes, errors);
         }
 
-        let result = AnalysisResults::new(scope_analysis);
+        let result = AnalysisResults::new();
 
         if self.config.strict_mode && errors.has_errors() {
             let errors = errors.take_errors();

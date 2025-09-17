@@ -50,7 +50,7 @@ impl TypeScope {
 }
 
 pub struct TypeInferenceEngine<'a> {
-    strings: &'a StringInterner,
+    strings: &'a mut StringInterner,
     current_scope: TypeScope,
     /// Stack of function return types for return statement checking
     function_stack: Vec<TypeId>,
@@ -63,46 +63,50 @@ pub struct TypeInferenceEngine<'a> {
 }
 
 impl<'a> TypeInferenceEngine<'a> {
-    pub fn new(strings: &'a StringInterner) -> Self {
-        Self {
+    pub fn new(strings: &'a mut StringInterner) -> Self {
+        let engine = Self {
             strings,
             current_scope: TypeScope::new(),
             function_stack: Vec::new(),
             current_function: None,
             modules: None,
             scope_depth: 0,
-        }
+        };
+
+        engine
     }
 
     pub fn with_native_types(mut self, type_arena: &mut TypeArena) -> Self {
         self.inject_native_function_types(type_arena);
-        self.inject_intrinsic_method_types(type_arena);
         self
     }
 
     fn inject_native_function_types(&mut self, type_arena: &mut TypeArena) {
+        // Create array type for use in function signatures
+        let array_type = type_arena.make_array(TypeArena::UNKNOWN);
+
+        // Pre-create optional string type to avoid multiple mutable borrows
+        let optional_string = type_arena.make_optional(TypeArena::STRING);
+
         // Global native functions
         let assert_handle = self.strings.intern("assert");
-        let assert_type = type_arena.make_function(
-            vec![TypeArena::BOOLEAN, type_arena.make_optional(TypeArena::STRING)],
-            TypeArena::UNIT
-        );
+        let assert_type =
+            type_arena.make_function(vec![TypeArena::BOOLEAN, optional_string], TypeArena::UNIT);
         self.current_scope.declare(assert_handle, assert_type);
 
         let assert_eq_handle = self.strings.intern("assert_eq");
         let assert_eq_type = type_arena.make_function(
-            vec![TypeArena::UNKNOWN, TypeArena::UNKNOWN, type_arena.make_optional(TypeArena::STRING)],
-            TypeArena::UNIT
+            vec![TypeArena::UNKNOWN, TypeArena::UNKNOWN, optional_string],
+            TypeArena::UNIT,
         );
         self.current_scope.declare(assert_eq_handle, assert_eq_type);
 
         let assert_throws_handle = self.strings.intern("assert_throws");
         let function_type = type_arena.make_function(vec![], TypeArena::UNKNOWN);
-        let assert_throws_type = type_arena.make_function(
-            vec![function_type, type_arena.make_optional(TypeArena::STRING)],
-            TypeArena::UNIT
-        );
-        self.current_scope.declare(assert_throws_handle, assert_throws_type);
+        let assert_throws_type =
+            type_arena.make_function(vec![function_type, optional_string], TypeArena::UNIT);
+        self.current_scope
+            .declare(assert_throws_handle, assert_throws_type);
 
         let print_handle = self.strings.intern("print");
         let print_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::UNIT);
@@ -118,7 +122,8 @@ impl<'a> TypeInferenceEngine<'a> {
 
         let system_time_handle = self.strings.intern("system_time");
         let system_time_type = type_arena.make_function(vec![], TypeArena::NUMBER);
-        self.current_scope.declare(system_time_handle, system_time_type);
+        self.current_scope
+            .declare(system_time_handle, system_time_type);
 
         let to_string_handle = self.strings.intern("to_string");
         let to_string_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::STRING);
@@ -129,60 +134,98 @@ impl<'a> TypeInferenceEngine<'a> {
         self.current_scope.declare(hash_handle, hash_type);
 
         let array_constructor_handle = self.strings.intern("Array");
-        let array_constructor_type = type_arena.make_function(vec![TypeArena::NUMBER], TypeArena::ARRAY);
-        self.current_scope.declare(array_constructor_handle, array_constructor_type);
+        let array_constructor_type = type_arena.make_function(vec![TypeArena::NUMBER], array_type);
+        self.current_scope
+            .declare(array_constructor_handle, array_constructor_type);
     }
 
-    fn inject_intrinsic_method_types(&mut self, type_arena: &mut TypeArena) {
-        // String intrinsics
-        let to_uppercase_handle = self.strings.intern("to_uppercase");
-        let to_uppercase_type = type_arena.make_function(vec![], TypeArena::STRING);
-        type_arena.register_intrinsic_method(TypeArena::STRING, to_uppercase_handle, to_uppercase_type);
+    /// Get the type of a string intrinsic method
+    fn get_string_intrinsic_type(
+        &self,
+        method_name: StringHandle,
+        strings: &StringInterner,
+        type_arena: &mut TypeArena,
+    ) -> TypeId {
+        let method_str = strings.get_string(method_name);
+        match method_str {
+            "to_uppercase" | "to_lowercase" => {
+                // String methods that return string
+                type_arena.make_function(vec![], TypeArena::STRING)
+            }
+            _ => TypeArena::UNKNOWN,
+        }
+    }
 
-        let to_lowercase_handle = self.strings.intern("to_lowercase");
-        let to_lowercase_type = type_arena.make_function(vec![], TypeArena::STRING);
-        type_arena.register_intrinsic_method(TypeArena::STRING, to_lowercase_handle, to_lowercase_type);
+    /// Get the type of an array intrinsic method
+    fn get_array_intrinsic_type(
+        &self,
+        method_name: StringHandle,
+        array_type: TypeId,
+        strings: &StringInterner,
+        type_arena: &mut TypeArena,
+    ) -> TypeId {
+        let method_str = strings.get_string(method_name);
+        let element_type = match type_arena.get_type(array_type) {
+            QangType::Array(elem_type) => *elem_type,
+            _ => TypeArena::UNKNOWN,
+        };
 
-        // Array intrinsics
-        let length_handle = self.strings.intern("length");
-        let length_type = type_arena.make_function(vec![], TypeArena::NUMBER);
-        type_arena.register_intrinsic_method(TypeArena::ARRAY, length_handle, length_type);
+        match method_str {
+            "length" => {
+                // () -> number
+                type_arena.make_function(vec![], TypeArena::NUMBER)
+            }
+            "push" => {
+                // (element) -> unit
+                type_arena.make_function(vec![element_type], TypeArena::UNIT)
+            }
+            "pop" => {
+                // () -> element
+                type_arena.make_function(vec![], element_type)
+            }
+            "reverse" => {
+                // () -> unit
+                type_arena.make_function(vec![], TypeArena::UNIT)
+            }
+            "slice" => {
+                // (number?, number?) -> array
+                let optional_number = type_arena.make_optional(TypeArena::NUMBER);
+                type_arena.make_function(vec![optional_number, optional_number], array_type)
+            }
+            "get" => {
+                // (number) -> element
+                type_arena.make_function(vec![TypeArena::NUMBER], element_type)
+            }
+            "concat" => {
+                // (array) -> array
+                type_arena.make_function(vec![array_type], array_type)
+            }
+            _ => TypeArena::UNKNOWN,
+        }
+    }
 
-        let push_handle = self.strings.intern("push");
-        let push_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::UNIT);
-        type_arena.register_intrinsic_method(TypeArena::ARRAY, push_handle, push_type);
+    /// Get the type of a function intrinsic method
+    fn get_function_intrinsic_type(
+        &self,
+        method_name: StringHandle,
+        return_type: TypeId,
+        strings: &StringInterner,
+        type_arena: &mut TypeArena,
+    ) -> TypeId {
+        let method_str = strings.get_string(method_name);
+        let array_type = type_arena.make_array(TypeArena::UNKNOWN);
 
-        let pop_handle = self.strings.intern("pop");
-        let pop_type = type_arena.make_function(vec![], TypeArena::UNKNOWN);
-        type_arena.register_intrinsic_method(TypeArena::ARRAY, pop_handle, pop_type);
-
-        let reverse_handle = self.strings.intern("reverse");
-        let reverse_type = type_arena.make_function(vec![], TypeArena::UNIT);
-        type_arena.register_intrinsic_method(TypeArena::ARRAY, reverse_handle, reverse_type);
-
-        let slice_handle = self.strings.intern("slice");
-        let slice_type = type_arena.make_function(
-            vec![type_arena.make_optional(TypeArena::NUMBER), type_arena.make_optional(TypeArena::NUMBER)],
-            TypeArena::ARRAY
-        );
-        type_arena.register_intrinsic_method(TypeArena::ARRAY, slice_handle, slice_type);
-
-        let get_handle = self.strings.intern("get");
-        let get_type = type_arena.make_function(vec![TypeArena::NUMBER], TypeArena::UNKNOWN);
-        type_arena.register_intrinsic_method(TypeArena::ARRAY, get_handle, get_type);
-
-        let concat_handle = self.strings.intern("concat");
-        let concat_type = type_arena.make_function(vec![TypeArena::ARRAY], TypeArena::ARRAY);
-        type_arena.register_intrinsic_method(TypeArena::ARRAY, concat_handle, concat_type);
-
-        // Function intrinsics
-        let call_handle = self.strings.intern("call");
-        let call_type = type_arena.make_function(vec![], TypeArena::UNKNOWN); // Variadic
-        type_arena.register_intrinsic_method(TypeArena::FUNCTION, call_handle, call_type);
-
-        let apply_handle = self.strings.intern("apply");
-        let apply_type = type_arena.make_function(vec![TypeArena::ARRAY], TypeArena::UNKNOWN);
-        type_arena.register_intrinsic_method(TypeArena::FUNCTION, apply_handle, apply_type);
+        match method_str {
+            "call" => {
+                // (...args) -> return_type (variadic function)
+                type_arena.make_function(vec![], return_type)
+            }
+            "apply" => {
+                // (array) -> return_type
+                type_arena.make_function(vec![array_type], return_type)
+            }
+            _ => TypeArena::UNKNOWN,
+        }
     }
 
     #[allow(dead_code)]
@@ -493,10 +536,11 @@ impl<'a> TypeInferenceEngine<'a> {
                         type1 // Keep the optional
                     } else {
                         // Report error for incompatible return types
-                        ctx.errors.report_error(QangCompilerError::new_analysis_error(
-                            "Inconsistent return types in function".to_string(),
-                            SourceSpan::default(),
-                        ));
+                        ctx.errors
+                            .report_error(QangCompilerError::new_analysis_error(
+                                "Inconsistent return types in function".to_string(),
+                                SourceSpan::default(),
+                            ));
                         TypeArena::UNKNOWN
                     }
                 } else if !type_arena.is_optional(type1) && type_arena.is_optional(type2) {
@@ -505,18 +549,20 @@ impl<'a> TypeInferenceEngine<'a> {
                         type2 // Keep the optional
                     } else {
                         // Report error for incompatible return types
-                        ctx.errors.report_error(QangCompilerError::new_analysis_error(
-                            "Inconsistent return types in function".to_string(),
-                            SourceSpan::default(),
-                        ));
+                        ctx.errors
+                            .report_error(QangCompilerError::new_analysis_error(
+                                "Inconsistent return types in function".to_string(),
+                                SourceSpan::default(),
+                            ));
                         TypeArena::UNKNOWN
                     }
                 } else {
                     // Both concrete and incompatible - report error
-                    ctx.errors.report_error(QangCompilerError::new_analysis_error(
-                        "Inconsistent return types in function".to_string(),
-                        SourceSpan::default(),
-                    ));
+                    ctx.errors
+                        .report_error(QangCompilerError::new_analysis_error(
+                            "Inconsistent return types in function".to_string(),
+                            SourceSpan::default(),
+                        ));
                     TypeArena::UNKNOWN
                 }
             }
@@ -796,6 +842,32 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                         .map(|(_, ty)| *ty)
                         .unwrap_or(TypeArena::UNKNOWN),
                     QangType::Class { .. } => TypeArena::UNKNOWN,
+                    QangType::String => {
+                        // Handle string intrinsic methods
+                        self.get_string_intrinsic_type(
+                            property_identifier.node.name,
+                            self.strings,
+                            &mut ctx.nodes.types,
+                        )
+                    }
+                    QangType::Array(_) => {
+                        // Handle array intrinsic methods
+                        self.get_array_intrinsic_type(
+                            property_identifier.node.name,
+                            callee_type,
+                            self.strings,
+                            &mut ctx.nodes.types,
+                        )
+                    }
+                    QangType::Function { return_type, .. } => {
+                        // Handle function intrinsic methods
+                        self.get_function_intrinsic_type(
+                            property_identifier.node.name,
+                            *return_type,
+                            self.strings,
+                            &mut ctx.nodes.types,
+                        )
+                    }
                     QangType::Unknown => {
                         // For unknown types, assume property access might be valid at runtime
                         TypeArena::UNKNOWN
@@ -865,22 +937,29 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         // First, create a function type with unknown parameter and return types
         let param_count = ctx.nodes.array.size(func_expr.node.parameters);
         let param_types = vec![TypeArena::UNKNOWN; param_count];
-        let func_type = ctx.nodes.types.make_function(param_types, TypeArena::UNKNOWN);
+        let func_type = ctx
+            .nodes
+            .types
+            .make_function(param_types, TypeArena::UNKNOWN);
 
         // Declare the function in the current scope
         self.current_scope.declare(name_node.node.name, func_type);
-        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(func_type));
+        ctx.nodes
+            .set_node_type(name_node.id, TypeInfo::new(func_type));
 
         // Now visit the function expression to infer its actual types
         self.visit_function_expression(func_expr, ctx)?;
 
         // Update the function declaration's type
         let inferred_func_type = ctx.nodes.get_node_type_id(func_decl.node.function);
-        ctx.nodes.set_node_type(func_decl.id, TypeInfo::new(inferred_func_type));
+        ctx.nodes
+            .set_node_type(func_decl.id, TypeInfo::new(inferred_func_type));
 
         // Update the function name's type in scope
-        self.current_scope.declare(name_node.node.name, inferred_func_type);
-        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(inferred_func_type));
+        self.current_scope
+            .declare(name_node.node.name, inferred_func_type);
+        ctx.nodes
+            .set_node_type(name_node.id, TypeInfo::new(inferred_func_type));
 
         Ok(())
     }
@@ -893,12 +972,17 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
 
         // Create a class type
-        let class_type = ctx.nodes.types.make_class(name_node.node.name, class_decl.id);
+        let class_type = ctx
+            .nodes
+            .types
+            .make_class(name_node.node.name, class_decl.id);
 
         // Declare the class in the current scope
         self.current_scope.declare(name_node.node.name, class_type);
-        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(class_type));
-        ctx.nodes.set_node_type(class_decl.id, TypeInfo::new(class_type));
+        ctx.nodes
+            .set_node_type(name_node.id, TypeInfo::new(class_type));
+        ctx.nodes
+            .set_node_type(class_decl.id, TypeInfo::new(class_type));
 
         // Visit the superclass if it exists
         if let Some(superclass_id) = class_decl.node.superclass {
@@ -947,7 +1031,8 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     TypeArena::UNKNOWN
                 };
 
-                ctx.nodes.set_node_type(identifier.id, TypeInfo::new(field_type));
+                ctx.nodes
+                    .set_node_type(identifier.id, TypeInfo::new(field_type));
                 Ok(())
             }
         }

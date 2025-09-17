@@ -74,20 +74,14 @@ impl<'a> AnalysisPipeline<'a> {
         }
 
         if self.config.enable_type_inference {
-            TypeInferenceEngine::new(self.strings).infer_types_with_modules(
-                modules.get_main().node,
-                modules,
-                nodes,
-                errors,
-            );
+            TypeInferenceEngine::new(self.strings)
+                .with_native_types(&mut nodes.types)
+                .infer_types_with_modules(modules.get_main().node, modules, nodes, errors);
 
             for (_, module) in modules.iter() {
-                TypeInferenceEngine::new(self.strings).infer_types_with_modules(
-                    module.node,
-                    modules,
-                    nodes,
-                    errors,
-                );
+                TypeInferenceEngine::new(self.strings)
+                    .with_native_types(&mut nodes.types)
+                    .infer_types_with_modules(module.node, modules, nodes, errors);
             }
 
             if errors.has_errors() {

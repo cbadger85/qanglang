@@ -1167,13 +1167,10 @@ impl Vm {
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    // Handle both imported modules and top-level script
                     if let Some(module_instance) = self.state.module_export_target {
-                        // This is an imported module - put the module instance on the stack
                         self.state.stack[self.state.stack_top - 1] = Value::module(module_instance);
                         self.state.module_export_target = previous_module_target;
                     } else {
-                        // This is the top-level script - just return normally
                         if self.state.frame_count == 0 {
                             return Ok(result);
                         }
@@ -1187,9 +1184,6 @@ impl Vm {
                     let previous_closure = self.alloc.closures.get_closure(previous_frame.closure);
                     let previous_function = self.alloc.get_function(previous_closure.function);
                     self.state.current_function_ptr = previous_function as *const FunctionObject;
-
-                    // Note: For module returns, we don't update stack_top or put result on stack
-                    // because we already put the module instance on the stack above
                 }
             };
         }
@@ -1206,7 +1200,7 @@ impl Vm {
             .modules
             .get_module_handle(module_path, self.state.get_previous_loc())?;
 
-        let module_instance = self.alloc.tables.new_hashmap();
+        let module_instance = self.with_gc_check(|alloc| alloc.tables.new_hashmap());
 
         self.state
             .modules

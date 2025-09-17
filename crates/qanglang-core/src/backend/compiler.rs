@@ -12,7 +12,7 @@ use crate::{
     },
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
-        scope_analysis::{FunctionKind, ScopeAnalysis},
+        scope_analysis::{FunctionKind},
         typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
     },
     nodes::*,
@@ -100,14 +100,13 @@ impl CompilerPipeline {
 
         let mut errors = parser.into_errors();
 
-        let analysis_results = AnalysisPipeline::new(&mut alloc.strings)
+        let _analysis_results = AnalysisPipeline::new(&mut alloc.strings)
             .with_config(self.config.into())
             .analyze(&modules, &mut nodes, &mut errors)?;
 
         let assembler = Assembler::new(
             modules.get_main().source_map.clone(),
             alloc,
-            &analysis_results.scopes,
         );
         let mut main_function =
             assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
@@ -120,7 +119,7 @@ impl CompilerPipeline {
         for (path, module) in modules.into_iter() {
             let path_str = path.to_string_lossy();
             let path = alloc.strings.intern(&path_str);
-            let assembler = Assembler::new(module.source_map, alloc, &analysis_results.scopes);
+            let assembler = Assembler::new(module.source_map, alloc);
             let mut module = assembler.assemble(module.node, &mut nodes, &mut errors)?;
             module.name = path;
             let function_handle = alloc.allocate_function(module);
@@ -310,7 +309,6 @@ impl CompilerState {
 struct Assembler<'a> {
     source_map: Arc<SourceMap>,
     allocator: &'a mut HeapAllocator,
-    analysis: &'a ScopeAnalysis,
     current_function_id: Option<NodeId>,
     current_function: FunctionObject,
     loop_contexts: Vec<LoopContext>,
@@ -321,7 +319,6 @@ impl<'a> Assembler<'a> {
     pub fn new(
         source_map: Arc<SourceMap>,
         allocator: &'a mut HeapAllocator,
-        analysis: &'a ScopeAnalysis,
     ) -> Self {
         let handle = allocator.strings.intern("");
         let blank_handle = allocator.strings.intern("");
@@ -329,7 +326,6 @@ impl<'a> Assembler<'a> {
         Self {
             source_map,
             allocator,
-            analysis,
             current_function: FunctionObject::new(handle, 0),
             current_function_id: None,
             loop_contexts: Vec::new(),
@@ -1549,32 +1545,19 @@ impl<'a> NodeVisitor for Assembler<'a> {
         break_stmt: TypedNodeRef<BreakStmtNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
+        if self.loop_contexts.is_empty() {
+            return Err(QangCompilerError::new_assembler_error(
+                "'break' can only be used inside loops.".to_string(),
+                break_stmt.node.span,
+            ));
+        }
+
         let jump = self.emit_jump(OpCode::Jump, break_stmt.node.span);
 
-        let break_info = self
-            .analysis
-            .break_continue_statements
-            .get(&break_stmt.id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Break statement not found in scope analysis results".to_string(),
-                    break_stmt.node.span,
-                )
-            })?;
+        if let Some(loop_context) = self.loop_contexts.last_mut() {
+            loop_context.break_jumps.push(jump);
+        }
 
-        let loop_context = self
-            .loop_contexts
-            .iter_mut()
-            .rev()
-            .find(|ctx| ctx.node_id == break_info.target_loop)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Break statement target loop not found in compiler context".to_string(),
-                    break_stmt.node.span,
-                )
-            })?;
-
-        loop_context.break_jumps.push(jump);
         Ok(())
     }
 
@@ -1583,32 +1566,19 @@ impl<'a> NodeVisitor for Assembler<'a> {
         continue_stmt: TypedNodeRef<ContinueStmtNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
+        if self.loop_contexts.is_empty() {
+            return Err(QangCompilerError::new_assembler_error(
+                "'continue' can only be used inside loops.".to_string(),
+                continue_stmt.node.span,
+            ));
+        }
+
         let continue_position = self.current_chunk_mut().code.len();
 
-        let continue_info = self
-            .analysis
-            .break_continue_statements
-            .get(&continue_stmt.id)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Continue statement not found in scope analysis results".to_string(),
-                    continue_stmt.node.span,
-                )
-            })?;
+        if let Some(loop_context) = self.loop_contexts.last_mut() {
+            loop_context.continue_jumps.push(continue_position);
+        }
 
-        let loop_context = self
-            .loop_contexts
-            .iter_mut()
-            .rev()
-            .find(|ctx| ctx.node_id == continue_info.target_loop)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Continue statement target loop not found in compiler context".to_string(),
-                    continue_stmt.node.span,
-                )
-            })?;
-
-        loop_context.continue_jumps.push(continue_position);
         Ok(())
     }
 

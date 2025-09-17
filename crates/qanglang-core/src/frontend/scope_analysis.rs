@@ -1,5 +1,3 @@
-use rustc_hash::{FxBuildHasher, FxHashMap};
-
 use crate::{
     ErrorReporter, NodeId, QangCompilerError, TypedNodeArena,
     frontend::node_visitor::{NodeVisitor, VisitorContext},
@@ -7,24 +5,8 @@ use crate::{
     nodes::SourceSpan,
 };
 
-
 #[derive(Debug, Clone)]
-pub struct BreakContinueInfo {
-    pub target_loop: NodeId,
-    pub statement_type: BreakContinueType,
-    pub span: SourceSpan,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BreakContinueType {
-    Break,
-    Continue,
-}
-
-#[derive(Debug, Clone)]
-pub struct ScopeAnalysis {
-    pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
-}
+pub struct ScopeAnalysis {}
 
 impl Default for ScopeAnalysis {
     fn default() -> Self {
@@ -34,14 +16,10 @@ impl Default for ScopeAnalysis {
 
 impl ScopeAnalysis {
     pub fn new() -> Self {
-        Self {
-            break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
-        }
+        Self {}
     }
 
-    pub fn merge_with(mut self, other: Self) -> Self {
-        self.break_continue_statements
-            .extend(other.break_continue_statements);
+    pub fn merge_with(self, _other: Self) -> Self {
         self
     }
 }
@@ -64,10 +42,7 @@ impl FunctionContext {
     fn new(kind: FunctionKind) -> Self {
         let local_count = 1;
 
-        Self {
-            kind,
-            local_count,
-        }
+        Self { kind, local_count }
     }
 
     fn add_local(&mut self) {
@@ -87,7 +62,7 @@ impl<'a> ScopeAnalyzer<'a> {
     pub fn new(strings: &'a mut StringInterner) -> Self {
         Self {
             strings,
-            scope_depth: 0, // Start at global scope (depth 0)
+            scope_depth: 0,
             functions: vec![FunctionContext::new(FunctionKind::Global)],
             results: ScopeAnalysis::new(),
             loop_stack: Vec::new(),
@@ -167,7 +142,7 @@ impl<'a> ScopeAnalyzer<'a> {
         kind: FunctionKind,
         errors: &mut ErrorReporter,
     ) {
-        if arity > 255 {
+        if arity > 256 {
             errors.report_error(QangCompilerError::new_analysis_error(
                 "Cannot have more than 255 parameters.".to_string(),
                 span,
@@ -419,7 +394,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
             self.begin_scope();
 
-            // Super variable will be handled directly during compilation
             if let Some(func) = self.functions.last_mut() {
                 func.add_local();
             }
@@ -532,8 +506,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 ));
         }
 
-        // Super variable will be handled specially during compilation
-
         Ok(())
     }
 
@@ -588,16 +560,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         break_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BreakStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if let Some(target_loop) = self.current_loop() {
-            let break_info = BreakContinueInfo {
-                target_loop,
-                statement_type: BreakContinueType::Break,
-                span: break_stmt.node.span,
-            };
-            self.results
-                .break_continue_statements
-                .insert(break_stmt.id, break_info);
-        } else {
+        if self.current_loop().is_none() {
             ctx.errors
                 .report_error(QangCompilerError::new_analysis_error(
                     "'break' can only be used inside loops.".to_string(),
@@ -612,16 +575,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         continue_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ContinueStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if let Some(target_loop) = self.current_loop() {
-            let continue_info = BreakContinueInfo {
-                target_loop,
-                statement_type: BreakContinueType::Continue,
-                span: continue_stmt.node.span,
-            };
-            self.results
-                .break_continue_statements
-                .insert(continue_stmt.id, continue_info);
-        } else {
+        if self.current_loop().is_none() {
             ctx.errors
                 .report_error(QangCompilerError::new_analysis_error(
                     "'continue' can only be used inside loops.".to_string(),

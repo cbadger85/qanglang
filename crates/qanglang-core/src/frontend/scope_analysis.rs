@@ -104,7 +104,6 @@ pub enum FunctionKind {
     Initializer,
 }
 
-// Simplified function context - only for static analysis, no compilation state
 #[derive(Debug, Clone)]
 struct FunctionContext {
     pub name: StringHandle,
@@ -112,12 +111,11 @@ struct FunctionContext {
     pub kind: FunctionKind,
     pub upvalues: Vec<UpvalueInfo>,
     pub span: SourceSpan,
-    pub local_count: usize, // Track for max_locals, but not for slot assignment
+    pub local_count: usize,
 }
 
 impl FunctionContext {
     fn new(handle: StringHandle, arity: usize, kind: FunctionKind, span: SourceSpan) -> Self {
-        // Initialize with 1 for the placeholder local (like old compiler)
         let local_count = 1;
 
         Self {
@@ -152,7 +150,7 @@ pub struct ScopeAnalyzer<'a> {
     scopes: Vec<Scope>,
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
-    loop_stack: Vec<NodeId>, // Stack of current loop node IDs for break/continue validation
+    loop_stack: Vec<NodeId>,
 }
 
 impl<'a> ScopeAnalyzer<'a> {
@@ -226,7 +224,6 @@ impl<'a> ScopeAnalyzer<'a> {
         let name = identifier.node.name;
         let span = identifier.node.span;
 
-        // Check for duplicate variables in current scope (only for local scopes)
         if self.current_scope_depth() > 0
             && let Some(current_scope) = self.scopes.last()
             && current_scope.variables.contains_key(&name)
@@ -238,7 +235,6 @@ impl<'a> ScopeAnalyzer<'a> {
         }
 
         let variable_info = if self.current_scope_depth() == 0 {
-            // Global scope
             VariableInfo {
                 name,
                 kind: VariableKind::Global,
@@ -246,7 +242,6 @@ impl<'a> ScopeAnalyzer<'a> {
                 span,
             }
         } else {
-            // Add to current function's local count for max_locals calculation
             if let Some(function) = self.functions.last_mut() {
                 function.add_local();
             }
@@ -259,12 +254,10 @@ impl<'a> ScopeAnalyzer<'a> {
             }
         };
 
-        // Add to current scope
         if let Some(current_scope) = self.scopes.last_mut() {
             current_scope.variables.insert(name, variable_info.clone());
         }
 
-        // Add to results
         self.results.variables.insert(identifier.id, variable_info);
 
         Ok(())
@@ -276,7 +269,6 @@ impl<'a> ScopeAnalyzer<'a> {
         span: SourceSpan,
         node_id: NodeId,
     ) -> Result<VariableKind, QangCompilerError> {
-        // Try to resolve as local variable by searching scopes backwards
         for scope in self.scopes.iter().rev() {
             if let Some(var_info) = scope.variables.get(&name) {
                 let variable_info = VariableInfo {
@@ -291,7 +283,6 @@ impl<'a> ScopeAnalyzer<'a> {
             }
         }
 
-        // Try to resolve as upvalue
         if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
             let variable_info = VariableInfo {
                 name,
@@ -303,7 +294,6 @@ impl<'a> ScopeAnalyzer<'a> {
             return Ok(upvalue_kind);
         }
 
-        // Default to global variable
         let variable_kind = VariableKind::Global;
         let variable_info = VariableInfo {
             name,
@@ -329,13 +319,10 @@ impl<'a> ScopeAnalyzer<'a> {
         for (depth, scope) in self.scopes.iter_mut().enumerate().rev().skip(1) {
             if let Some(var_info) = scope.variables.get_mut(&name) {
                 if let VariableKind::Local { .. } = var_info.kind {
-                    // Mark as captured
                     var_info.is_captured = true;
 
-                    // Add upvalue to current function
-                    let local_index = depth; // Use depth as index for simplicity
                     if let Some(current_func) = self.functions.last_mut() {
-                        let upvalue_index = current_func.add_upvalue(name, local_index, true);
+                        let upvalue_index = current_func.add_upvalue(name, depth, true);
                         return Ok(Some(VariableKind::Upvalue {
                             index: upvalue_index,
                             is_local: true,
@@ -345,7 +332,6 @@ impl<'a> ScopeAnalyzer<'a> {
             }
         }
 
-        // Recursively check outer scopes by temporarily removing current function
         let current_function = self.functions.pop().unwrap();
         let upvalue_result = self.resolve_upvalue(name, _span)?;
         self.functions.push(current_function);
@@ -364,8 +350,6 @@ impl<'a> ScopeAnalyzer<'a> {
     }
 
     fn current_loop(&self) -> Option<NodeId> {
-        // Return the most recent loop, or None if no loop is active
-        // Functions automatically clear the loop stack, so we don't need to check for function boundaries
         self.loop_stack.last().copied()
     }
 
@@ -387,7 +371,6 @@ impl<'a> ScopeAnalyzer<'a> {
         let function = FunctionContext::new(name, arity, kind, span);
         self.functions.push(function);
 
-        // Clear loop stack when entering a function - break/continue cannot cross function boundaries
         self.loop_stack.clear();
         self.begin_scope();
     }
@@ -681,7 +664,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
             }
         }
 
-        // Visit members
         let member_count = ctx.nodes.array.size(class_decl.node.members);
         for i in 0..member_count {
             if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {

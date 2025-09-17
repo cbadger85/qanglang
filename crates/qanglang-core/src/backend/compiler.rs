@@ -725,31 +725,25 @@ impl<'a> Assembler<'a> {
         ctx: &mut VisitorContext,
         has_superclass: bool,
     ) -> Result<(), QangCompilerError> {
-        // Get function info from analysis and determine if it's a method
         let (func_arity, func_kind) = {
             let func_info = self.get_function_info(func_node_id);
             (func_info.arity, func_info.kind)
         };
 
-        // Create new function object
         let identifier = ctx.nodes.get_identifier_node(func_expr.name).node;
         let function = FunctionObject::new(identifier.name, func_arity);
 
-        // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
 
-        // Store and reset loop contexts - loops don't cross function boundaries
         let old_loop_contexts = std::mem::take(&mut self.loop_contexts);
 
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(func_node_id);
 
-        // Push new compiler state for function (like old compiler)
         let is_method = matches!(func_kind, FunctionKind::Method | FunctionKind::Initializer);
         self.compiler_state.push(has_superclass, is_method);
         self.begin_scope();
 
-        // Add parameters to the new compiler state
         let param_count = ctx.nodes.array.size(func_expr.parameters);
         for i in 0..param_count {
             if let Some(param_id) = ctx.nodes.array.get_node_id_at(func_expr.parameters, i) {
@@ -766,29 +760,23 @@ impl<'a> Assembler<'a> {
             }
         }
 
-        // Compile function body
         let body_node = ctx.nodes.get_block_stmt_node(func_expr.body);
         self.visit_block_statement(body_node, ctx)?;
 
-        // Emit return
         self.emit_return(func_expr.span);
 
-        // Pop compiler state and get upvalue info
         let old_state = self
             .compiler_state
             .pop()
             .expect("Function state should exist");
 
-        // Store compiled function and set upvalue count
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = old_state.upvalues.len();
 
-        // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
 
         self.current_function_id = old_func_id;
 
-        // Allocate function and emit closure
         let function_handle = self.allocator.allocate_function(compiled_function);
         self.emit_constant_opcode(
             OpCode::Closure,
@@ -797,7 +785,6 @@ impl<'a> Assembler<'a> {
             func_expr.span,
         )?;
 
-        // Emit upvalue information
         for upvalue in &old_state.upvalues {
             let is_local_byte = if upvalue.is_local { 1 } else { 0 };
             self.emit_byte(is_local_byte, func_expr.span);
@@ -829,16 +816,13 @@ impl<'a> Assembler<'a> {
         &mut self,
         callee: TypedNodeRef<crate::frontend::typed_node_arena::ExprNode>,
         map_expr: MapExprNode,
-        map_node_id: NodeId, // Add this parameter to identify the map expression node
+        map_node_id: NodeId,
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
-        // Compile the map expression as a closure using static analysis
         self.compile_map_expression(map_node_id, map_expr, ctx)?;
 
-        // Visit the callee (the value being mapped over)
         self.visit_expression(callee, ctx)?;
 
-        // Call the lambda with one argument (the callee result)
         self.emit_opcode_and_byte(OpCode::Call, 1, map_expr.span);
         Ok(())
     }
@@ -849,27 +833,21 @@ impl<'a> Assembler<'a> {
         map_expr: MapExprNode,
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
-        // Get function info from analysis
         let map_name_handle = self.allocator.strings.intern("<map>");
         let func_info = self.get_function_info(map_node_id);
 
-        // Create new function object for the map expression
         let function = FunctionObject::new(map_name_handle, func_info.arity);
 
-        // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
 
-        // Store and reset loop contexts - loops don't cross function boundaries
         let old_loop_contexts = std::mem::take(&mut self.loop_contexts);
 
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(map_node_id);
 
-        // Push new compiler state for map expression (like lambda compilation)
         self.compiler_state.push(false, false);
         self.begin_scope();
 
-        // Add the map parameter to the new compiler state
         let param_identifier = ctx.nodes.get_identifier_node(map_expr.parameter);
         let param_handle = param_identifier.node.name;
         let is_local = self.parse_variable(param_handle, param_identifier.node.span)?;
@@ -878,30 +856,25 @@ impl<'a> Assembler<'a> {
             param_identifier.node.span,
         )?;
 
-        // For map expressions, the body is always an expression that gets returned
         let return_node = ReturnStmtNode {
             value: Some(map_expr.body),
             span: map_expr.span,
         };
         self.visit_return_statement(TypedNodeRef::new(map_expr.body, return_node), ctx)?;
 
-        // End the scope and pop the compiler state (like lambda compilation)
         self.end_scope(map_expr.span);
         let old_state = self
             .compiler_state
             .pop()
             .expect("Map expression state should exist");
 
-        // Store compiled function and set upvalue count (dynamic resolution like lambda compilation)
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = old_state.upvalues.len();
 
-        // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
 
         self.current_function_id = old_func_id;
 
-        // Allocate function and emit closure
         let function_handle = self.allocator.allocate_function(compiled_function);
         self.emit_constant_opcode(
             OpCode::Closure,
@@ -910,7 +883,6 @@ impl<'a> Assembler<'a> {
             map_expr.span,
         )?;
 
-        // Emit upvalue information for the VM (like lambda compilation)
         for upvalue in &old_state.upvalues {
             let is_local_byte = if upvalue.is_local { 1 } else { 0 };
             self.emit_byte(is_local_byte, map_expr.span);
@@ -1026,7 +998,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         super_expr: TypedNodeRef<SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Check if we're in a method or initializer context
         let current_function_kind = self
             .get_current_function_info()
             .map(|f| f.kind)
@@ -1047,7 +1018,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             ));
         }
 
-        // Check if the current class has a superclass
         if !self.compiler_state.has_superclass {
             return Err(QangCompilerError::new_assembler_error(
                 "Can't use 'super' in a class with no superclass.".to_string(),
@@ -1055,15 +1025,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
             ));
         }
 
-        // Load 'this' onto the stack first
-        // 'this' is always at local slot 0 for methods/initializers
         self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.node.span);
 
-        // Load 'super' variable using static analysis results
-        // The scope analysis should have resolved the 'super' variable access
         self.emit_variable_access(super_expr.id, super_expr.node.span, false)?;
 
-        // Get the method name and emit GetSuper instruction
         let method_identifier = ctx.nodes.get_identifier_node(super_expr.node.method);
         self.emit_constant_opcode(
             OpCode::GetSuper,
@@ -1153,17 +1118,12 @@ impl<'a> NodeVisitor for Assembler<'a> {
         match assignment.node.operator {
             AssignmentOperator::Assign => match assignment_target.node {
                 AssignmentTargetNode::Identifier(identifier) => {
-                    // Emit the value first
                     self.visit_expression(value, ctx)?;
-                    // Then store it in the variable
                     self.emit_variable_access(assignment_target.id, identifier.span, true)?;
                 }
                 AssignmentTargetNode::Property(property) => {
-                    // Emit object
                     self.visit_expression(ctx.nodes.get_expr_node(property.object), ctx)?;
-                    // Emit value
                     self.visit_expression(value, ctx)?;
-                    // Emit property assignment
                     let identifier_handle =
                         ctx.nodes.get_identifier_node(property.property).node.name;
                     self.emit_constant_opcode(
@@ -1174,21 +1134,16 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     )?;
                 }
                 AssignmentTargetNode::Index(index) => {
-                    // Emit array
                     let array = ctx.nodes.get_expr_node(index.object);
                     self.visit_expression(array, ctx)?;
-                    // Emit index
                     let index_expr = ctx.nodes.get_expr_node(index.index);
                     self.visit_expression(index_expr, ctx)?;
-                    // Emit value
                     self.visit_expression(value, ctx)?;
-                    // Emit index assignment
                     self.emit_opcode(OpCode::SetArrayIndex, index.span);
                 }
             },
             _ => match assignment_target.node {
                 AssignmentTargetNode::Identifier(identifier) => {
-                    // For compound assignment: load current value, compute, store
                     self.emit_variable_access(assignment_target.id, identifier.span, false)?;
                     self.visit_expression(value, ctx)?;
                     self.emit_compound_assignment_op(
@@ -1198,7 +1153,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.emit_variable_access(assignment_target.id, identifier.span, true)?;
                 }
                 AssignmentTargetNode::Property(property) => {
-                    // For compound property assignment
                     let property_object = ctx.nodes.get_expr_node(property.object);
                     self.visit_expression(property_object, ctx)?;
                     self.visit_expression(property_object, ctx)?;
@@ -1225,31 +1179,24 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     )?;
                 }
                 AssignmentTargetNode::Index(index_node) => {
-                    // For compound index assignment
                     let array = ctx.nodes.get_expr_node(index_node.object);
                     let index = ctx.nodes.get_expr_node(index_node.index);
 
-                    // Load array and index for getting current value
                     self.visit_expression(array, ctx)?;
                     self.visit_expression(index, ctx)?;
 
-                    // Duplicate array and index for setting later
                     self.visit_expression(array, ctx)?;
                     self.visit_expression(index, ctx)?;
 
-                    // Get current value
                     self.emit_opcode(OpCode::GetArrayIndex, index.node.span());
 
-                    // Emit the right-hand value
                     self.visit_expression(value, ctx)?;
 
-                    // Perform the compound operation
                     self.emit_compound_assignment_op(
                         assignment.node.operator,
                         assignment.node.span,
                     )?;
 
-                    // Set the result
                     self.emit_opcode(OpCode::SetArrayIndex, index_node.span);
                 }
             },
@@ -1276,10 +1223,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(var_decl.node.target);
 
-        // Parse variable - handles declaration and slot allocation
         let is_local = self.parse_variable(identifier.node.name, identifier.node.span)?;
 
-        // Emit initializer
         if let Some(expr) = var_decl
             .node
             .initializer
@@ -1290,7 +1235,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Nil, var_decl.node.span);
         }
 
-        // Define the variable
         if is_local {
             self.define_variable(None, var_decl.node.span)?;
         } else {
@@ -1307,10 +1251,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(import_decl.node.name);
 
-        // Parse variable - handles declaration and slot allocation
         let is_local = self.parse_variable(identifier.node.name, identifier.node.span)?;
 
-        // Emit module declaration
         self.emit_constant_opcode(
             OpCode::Module,
             OpCode::Module16,
@@ -1318,7 +1260,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             import_decl.node.span,
         )?;
 
-        // Define the variable
         if is_local {
             self.define_variable(None, import_decl.node.span)?;
         } else {
@@ -1475,7 +1416,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.patch_jump(exit_jump, body.node.span())?;
         self.emit_opcode(OpCode::Pop, while_stmt.node.span);
 
-        // Patch break jumps to the same location as the exit jump
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, while_stmt.node.span)?;
         }
@@ -1488,10 +1428,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
         for_stmt: TypedNodeRef<ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Begin scope for for-loop variables (like in old compiler)
         self.begin_scope();
 
-        // Handle initializer within the for-loop scope
         if let Some(initializer_id) = for_stmt.node.initializer {
             let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
             match initializer.node {
@@ -1512,7 +1450,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let mut exit_jump: Option<usize> = None;
         let increment_start: Option<usize>;
 
-        // Create loop context AFTER initializer but BEFORE body
         let loop_context = LoopContext {
             continue_jumps: Vec::new(),
             break_jumps: Vec::new(),
@@ -1520,7 +1457,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
         };
         self.loop_contexts.push(loop_context);
 
-        // Handle condition and body
         if let Some(condition_id) = for_stmt.node.condition {
             let condition = ctx.nodes.get_expr_node(condition_id);
             let condition_jump = self.emit_jump(OpCode::Jump, condition.node.span());
@@ -1559,7 +1495,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         let loop_context = self.loop_contexts.pop().expect("Loop context should exist");
 
-        // Handle continue jumps
         let continue_target = increment_start.unwrap_or(loop_start);
         for continue_jump in loop_context.continue_jumps {
             if continue_target > continue_jump {
@@ -1593,12 +1528,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
             self.emit_opcode(OpCode::Pop, for_stmt.node.span);
         }
 
-        // Patch break jumps to current position (before scope cleanup)
         for break_jump in loop_context.break_jumps {
             self.patch_jump(break_jump, for_stmt.node.span)?;
         }
 
-        // End scope - this handles all the cleanup automatically
         self.end_scope(for_stmt.node.span);
 
         Ok(())
@@ -1611,14 +1544,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let func_expr = ctx.nodes.get_func_expr_node(func_decl.node.function);
 
-        // Declare the function variable using dynamic resolution like old compiler
         let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
         let is_local = self.parse_variable(identifier.node.name, identifier.node.span)?;
 
-        // Compile the function
         self.compile_function(func_decl.node.function, func_expr.node, ctx)?;
 
-        // Define the function variable using dynamic resolution like old compiler
         self.define_variable(
             if is_local {
                 None
@@ -1638,7 +1568,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let jump = self.emit_jump(OpCode::Jump, break_stmt.node.span);
 
-        // Use scope analysis to find the target loop for this break statement
         let break_info = self
             .analysis
             .break_continue_statements
@@ -1650,7 +1579,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 )
             })?;
 
-        // Find the loop context that matches the target loop from scope analysis
         let loop_context = self
             .loop_contexts
             .iter_mut()
@@ -1674,7 +1602,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
     ) -> Result<(), Self::Error> {
         let continue_position = self.current_chunk_mut().code.len();
 
-        // Use scope analysis to find the target loop for this continue statement
         let continue_info = self
             .analysis
             .break_continue_statements
@@ -1686,7 +1613,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 )
             })?;
 
-        // Find the loop context that matches the target loop from scope analysis
         let loop_context = self
             .loop_contexts
             .iter_mut()
@@ -1732,10 +1658,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let identifier = ctx.nodes.get_identifier_node(lambda_decl.node.name);
         let lambda_expr = ctx.nodes.get_lambda_expr_node(lambda_decl.node.lambda);
 
-        // Compile the lambda expression
         self.visit_lambda_expression(lambda_expr, ctx)?;
 
-        // Define the lambda variable using static analysis
         let var_info = self.analysis.variables.get(&identifier.id).ok_or_else(|| {
             QangCompilerError::new_assembler_error(
                 "Lambda variable not found in analysis results".to_string(),
@@ -1774,23 +1698,18 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let lambda_name_handle = self.allocator.strings.intern("<anonymous>");
         let func_info = self.get_function_info(lambda_expr.id);
 
-        // Create new function object for lambda
         let function = FunctionObject::new(lambda_name_handle, func_info.arity);
 
-        // Store current function and switch to new one
         let old_function = std::mem::replace(&mut self.current_function, function);
 
-        // Store and reset loop contexts - loops don't cross function boundaries
         let old_loop_contexts = std::mem::take(&mut self.loop_contexts);
 
         let old_function_id = self.current_function_id;
         self.current_function_id = Some(lambda_expr.id);
 
-        // Push new compiler state for lambda (like old compiler)
         self.compiler_state.push(false, false);
         self.begin_scope();
 
-        // Add parameters to the new compiler state
         let param_count = ctx.nodes.array.size(lambda_expr.node.parameters);
         for i in 0..param_count {
             if let Some(param_id) = ctx
@@ -1811,7 +1730,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
         }
 
-        // Compile lambda body
         let lambda_body = ctx.nodes.get_lambda_body_node(lambda_expr.node.body);
         match lambda_body.node {
             crate::frontend::typed_node_arena::LambdaBodyNode::Block(body) => {
@@ -1819,7 +1737,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_return(lambda_expr.node.span);
             }
             crate::frontend::typed_node_arena::LambdaBodyNode::Expr(_) => {
-                // For expression lambdas, create a return statement
                 let return_node = ReturnStmtNode {
                     value: Some(lambda_body.id),
                     span: lambda_body.node.span(),
@@ -1828,23 +1745,19 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
         }
 
-        // End the scope and pop the compiler state (like old compiler)
         self.end_scope(lambda_expr.node.span);
         let old_state = self
             .compiler_state
             .pop()
             .expect("Lambda state should exist");
 
-        // Store compiled function and set upvalue count (dynamic resolution like old compiler)
         let mut compiled_function = std::mem::replace(&mut self.current_function, old_function);
         compiled_function.upvalue_count = old_state.upvalues.len();
 
-        // Restore the old loop contexts
         self.loop_contexts = old_loop_contexts;
 
         self.current_function_id = old_function_id;
 
-        // Allocate function and emit closure
         let function_handle = self.allocator.allocate_function(compiled_function);
         self.emit_constant_opcode(
             OpCode::Closure,
@@ -1853,7 +1766,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             lambda_expr.node.span,
         )?;
 
-        // Emit upvalue information for the VM (like old compiler)
         for upvalue in &old_state.upvalues {
             let is_local_byte = if upvalue.is_local { 1 } else { 0 };
             self.emit_byte(is_local_byte, lambda_expr.node.span);
@@ -1881,12 +1793,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     ));
                 }
 
-                // Handle super calls
                 if let crate::frontend::typed_node_arena::ExprNode::Primary(
                     crate::frontend::typed_node_arena::PrimaryNode::Super(super_expr),
                 ) = callee.node
                 {
-                    // Check if we're in a method context
                     let current_function_kind = self
                         .get_current_function_info()
                         .map(|f| f.kind)
@@ -1907,10 +1817,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         ));
                     }
 
-                    // Load 'this' (always at local slot 0)
                     self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.span);
 
-                    // Emit arguments
                     for i in 0..arg_length {
                         if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
                             let expr = ctx.nodes.get_expr_node(node_id);
@@ -1920,11 +1828,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         }
                     }
 
-                    // Load 'super' using static analysis results
-                    // Find the super identifier node (we need to find the node ID for the super expression)
                     self.emit_variable_access(callee.id, super_expr.span, false)?;
 
-                    // Get method name and emit SuperInvoke
                     let method = ctx.nodes.get_identifier_node(super_expr.method);
                     self.emit_constant_opcode(
                         OpCode::SuperInvoke,
@@ -1937,7 +1842,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     return Ok(());
                 }
 
-                // Handle method calls (optimization for obj.method(args))
                 if let crate::frontend::typed_node_arena::ExprNode::Call(property_call) =
                     callee.node
                     && let crate::frontend::typed_node_arena::CallOperationNode::Property(
@@ -1947,18 +1851,15 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         .get_call_operation_node(property_call.operation)
                         .node
                 {
-                    // Emit the object
                     let expr = ctx.nodes.get_expr_node(property_call.callee);
                     self.visit_expression(expr, ctx)?;
 
-                    // Get method handle
                     let method_handle = ctx
                         .nodes
                         .get_identifier_node(method_name.identifier)
                         .node
                         .name;
 
-                    // Emit arguments
                     for i in 0..arg_length {
                         if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
                             let expr = ctx.nodes.get_expr_node(node_id);
@@ -1968,7 +1869,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         }
                     }
 
-                    // Emit optimized invoke
                     self.emit_constant_opcode(
                         OpCode::Invoke,
                         OpCode::Invoke16,
@@ -1980,10 +1880,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     return Ok(());
                 }
 
-                // Regular function call
                 self.visit_expression(callee, ctx)?;
 
-                // Emit arguments
                 for i in 0..arg_length {
                     if let Some(node_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
                         let expr = ctx.nodes.get_expr_node(node_id);
@@ -2047,7 +1945,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         parameter: map_expr.parameter,
                         span: map_expr.span,
                     },
-                    call_operation.id, // Pass the node ID here
+                    call_operation.id,
                     ctx,
                 )?;
                 self.patch_jump(nil_jump, map_expr.span)?;
@@ -2069,7 +1967,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             crate::frontend::typed_node_arena::ExprNode::Call(call_expr) => {
                 match ctx.nodes.get_call_operation_node(call_expr.operation).node {
                     crate::frontend::typed_node_arena::CallOperationNode::Call(arguments) => {
-                        // Check if this is a special .call() method invocation
                         if let crate::frontend::typed_node_arena::ExprNode::Call(inner_call) =
                             ctx.nodes.get_expr_node(call_expr.callee).node
                             && let crate::frontend::typed_node_arena::CallOperationNode::Property(
@@ -2082,7 +1979,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                                 .name
                                 == call_handle
                         {
-                            // This is obj.call(args) piped - use invoke optimization
                             self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;
                             self.visit_expression(left, ctx)?;
                             let method_handle = ctx
@@ -2100,13 +1996,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
                             return Ok(());
                         }
 
-                        // Regular function call with pipe
                         self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;
 
-                        // The left side of the pipe becomes the first argument
                         self.visit_expression(left, ctx)?;
 
-                        // Add the additional arguments from the call
                         let arg_length = ctx.nodes.array.size(arguments.args);
                         for i in 0..arg_length {
                             if let Some(node_id) = ctx.nodes.array.get_node_id_at(arguments.args, i)
@@ -2129,7 +2022,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.node.span);
                     }
                     crate::frontend::typed_node_arena::CallOperationNode::Property(method_name) => {
-                        // Method call with pipe: obj.method |> value becomes value.method()
                         self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;
                         self.visit_expression(left, ctx)?;
                         let method_handle = ctx
@@ -2154,7 +2046,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 }
             }
             _ => {
-                // Simple pipe: left |> right becomes right(left)
                 self.visit_expression(right, ctx)?;
                 self.visit_expression(left, ctx)?;
                 self.emit_opcode_and_byte(OpCode::Call, 1, pipe.node.span);
@@ -2175,7 +2066,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
             .superclass
             .map(|superclass| ctx.nodes.get_identifier_node(superclass));
 
-        // Emit the class constant and create the class
         let class_handle = name.node.name;
         self.emit_constant_opcode(
             OpCode::Class,
@@ -2184,19 +2074,15 @@ impl<'a> NodeVisitor for Assembler<'a> {
             name.node.span,
         )?;
 
-        // Define the class variable using dynamic resolution like old compiler
         let is_local = self.parse_variable(class_handle, name.node.span)?;
         self.define_variable(
             if is_local { None } else { Some(class_handle) },
             name.node.span,
         )?;
 
-        // Load the class for method/field definitions using dynamic resolution like old compiler
         self.handle_variable(class_handle, name.node.span, false)?;
 
-        // Handle inheritance using class inheritance analysis
         if let Some(superclass) = superclass {
-            // Check for self-inheritance
             if class_handle == superclass.node.name {
                 return Err(QangCompilerError::new_assembler_error(
                     "A class cannot inherit from itself.".to_string(),
@@ -2204,29 +2090,21 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 ));
             }
 
-            // Begin a new scope for the superclass local variable (like the old compiler)
             self.begin_scope();
 
-            // Load the subclass again (for inheritance) using dynamic resolution like old compiler
             self.handle_variable(class_handle, name.node.span, false)?;
 
-            // Load the superclass using dynamic resolution like old compiler
             self.handle_variable(superclass.node.name, superclass.node.span, false)?;
 
-            // The "super" local variable should already be handled by the scope analysis
-            // and dynamic slot resolution, but we need to add it to current scope's locals
             let super_handle = self.allocator.strings.intern("super");
             self.add_local(super_handle, class_decl.node.span)?;
             self.define_variable(None, class_decl.node.span)?; // Local variable
 
-            // Store the superclass in the "super" local variable
             self.handle_variable(super_handle, superclass.node.span, true)?;
 
-            // Now emit inheritance instruction
             self.emit_opcode(OpCode::Inherit, superclass.node.span);
         }
 
-        // Process class members
         let length = ctx.nodes.array.size(class_decl.node.members);
         for i in 0..length {
             if let Some(node_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {
@@ -2236,7 +2114,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     ClassMemberNode::Method(function) => {
                         let method_name = ctx.nodes.get_identifier_node(function.name);
 
-                        // Compile the method function with superclass information
                         let has_superclass = class_decl.node.superclass.is_some();
                         self.compile_function_with_superclass(
                             node_id,
@@ -2245,7 +2122,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                             has_superclass,
                         )?;
 
-                        // Add the method to the class
                         self.emit_constant_opcode(
                             OpCode::Method,
                             OpCode::Method16,
@@ -2256,7 +2132,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     ClassMemberNode::Field(field) => {
                         let field_name = ctx.nodes.get_identifier_node(field.name);
 
-                        // Emit the field initializer (or nil if none)
                         if let Some(init_id) = field.initializer {
                             let initializer = ctx.nodes.get_expr_node(init_id);
                             self.visit_expression(initializer, ctx)?;
@@ -2264,7 +2139,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                             self.emit_opcode(OpCode::Nil, field.span);
                         }
 
-                        // Add the field to the class
                         self.emit_constant_opcode(
                             OpCode::InitField,
                             OpCode::InitField16,
@@ -2276,10 +2150,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
             }
         }
 
-        // Pop the class from the stack
         self.emit_opcode(OpCode::Pop, class_decl.node.span);
 
-        // End the superclass scope if there was inheritance (like the old compiler)
         if class_decl.node.superclass.is_some() {
             self.end_scope(class_decl.node.span);
         }

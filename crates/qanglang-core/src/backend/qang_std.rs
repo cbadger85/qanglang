@@ -379,7 +379,13 @@ impl Vm {
         let stdlib_source = include_str!("stdlib.ql");
         let source_map = SourceMap::from_source(stdlib_source.to_owned());
 
+        let config = crate::backend::compiler::CompilerConfig {
+            enable_type_inference: false,
+            ..Default::default()
+        };
+
         let program = CompilerPipeline::new()
+            .with_config(config)
             .compile(source_map, &mut self.alloc)
             .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
 

@@ -40,7 +40,9 @@ mod type_error_tests {
     #[test]
     fn test_undefined_variable_error() {
         let source = r#"
-        var result = undefined_var + 5;
+        fn test_function() {
+            var result = undefined_var + 5;
+        }
         "#;
 
         let errors = run_analysis_expecting_errors(source);

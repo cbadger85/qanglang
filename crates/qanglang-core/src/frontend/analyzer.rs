@@ -89,6 +89,25 @@ impl<'a> AnalysisPipeline<'a> {
                     errors,
                 );
             }
+
+            if errors.has_errors() {
+                let errors = errors.take_errors();
+
+                let formatted_errors = errors
+                    .into_iter()
+                    .map(|error| match self.config.error_message_format {
+                        ErrorMessageFormat::Minimal => error,
+                        ErrorMessageFormat::Compact => {
+                            error.into_short_formatted(&modules.get_main().source_map)
+                        }
+                        ErrorMessageFormat::Verbose => {
+                            error.into_formatted(&modules.get_main().source_map)
+                        }
+                    })
+                    .collect();
+
+                return Err(QangPipelineError::new(formatted_errors));
+            }
         }
 
         Ok(())

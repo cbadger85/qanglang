@@ -58,6 +58,8 @@ pub struct TypeInferenceEngine<'a> {
     current_function: Option<NodeId>,
     /// Available modules for this analysis
     modules: Option<&'a ModuleMap>,
+    /// Current scope depth (0 = global scope)
+    scope_depth: usize,
 }
 
 impl<'a> TypeInferenceEngine<'a> {
@@ -68,7 +70,119 @@ impl<'a> TypeInferenceEngine<'a> {
             function_stack: Vec::new(),
             current_function: None,
             modules: None,
+            scope_depth: 0,
         }
+    }
+
+    pub fn with_native_types(mut self, type_arena: &mut TypeArena) -> Self {
+        self.inject_native_function_types(type_arena);
+        self.inject_intrinsic_method_types(type_arena);
+        self
+    }
+
+    fn inject_native_function_types(&mut self, type_arena: &mut TypeArena) {
+        // Global native functions
+        let assert_handle = self.strings.intern("assert");
+        let assert_type = type_arena.make_function(
+            vec![TypeArena::BOOLEAN, type_arena.make_optional(TypeArena::STRING)],
+            TypeArena::UNIT
+        );
+        self.current_scope.declare(assert_handle, assert_type);
+
+        let assert_eq_handle = self.strings.intern("assert_eq");
+        let assert_eq_type = type_arena.make_function(
+            vec![TypeArena::UNKNOWN, TypeArena::UNKNOWN, type_arena.make_optional(TypeArena::STRING)],
+            TypeArena::UNIT
+        );
+        self.current_scope.declare(assert_eq_handle, assert_eq_type);
+
+        let assert_throws_handle = self.strings.intern("assert_throws");
+        let function_type = type_arena.make_function(vec![], TypeArena::UNKNOWN);
+        let assert_throws_type = type_arena.make_function(
+            vec![function_type, type_arena.make_optional(TypeArena::STRING)],
+            TypeArena::UNIT
+        );
+        self.current_scope.declare(assert_throws_handle, assert_throws_type);
+
+        let print_handle = self.strings.intern("print");
+        let print_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::UNIT);
+        self.current_scope.declare(print_handle, print_type);
+
+        let println_handle = self.strings.intern("println");
+        let println_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::UNIT);
+        self.current_scope.declare(println_handle, println_type);
+
+        let typeof_handle = self.strings.intern("typeof");
+        let typeof_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::STRING);
+        self.current_scope.declare(typeof_handle, typeof_type);
+
+        let system_time_handle = self.strings.intern("system_time");
+        let system_time_type = type_arena.make_function(vec![], TypeArena::NUMBER);
+        self.current_scope.declare(system_time_handle, system_time_type);
+
+        let to_string_handle = self.strings.intern("to_string");
+        let to_string_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::STRING);
+        self.current_scope.declare(to_string_handle, to_string_type);
+
+        let hash_handle = self.strings.intern("hash");
+        let hash_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::NUMBER);
+        self.current_scope.declare(hash_handle, hash_type);
+
+        let array_constructor_handle = self.strings.intern("Array");
+        let array_constructor_type = type_arena.make_function(vec![TypeArena::NUMBER], TypeArena::ARRAY);
+        self.current_scope.declare(array_constructor_handle, array_constructor_type);
+    }
+
+    fn inject_intrinsic_method_types(&mut self, type_arena: &mut TypeArena) {
+        // String intrinsics
+        let to_uppercase_handle = self.strings.intern("to_uppercase");
+        let to_uppercase_type = type_arena.make_function(vec![], TypeArena::STRING);
+        type_arena.register_intrinsic_method(TypeArena::STRING, to_uppercase_handle, to_uppercase_type);
+
+        let to_lowercase_handle = self.strings.intern("to_lowercase");
+        let to_lowercase_type = type_arena.make_function(vec![], TypeArena::STRING);
+        type_arena.register_intrinsic_method(TypeArena::STRING, to_lowercase_handle, to_lowercase_type);
+
+        // Array intrinsics
+        let length_handle = self.strings.intern("length");
+        let length_type = type_arena.make_function(vec![], TypeArena::NUMBER);
+        type_arena.register_intrinsic_method(TypeArena::ARRAY, length_handle, length_type);
+
+        let push_handle = self.strings.intern("push");
+        let push_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::UNIT);
+        type_arena.register_intrinsic_method(TypeArena::ARRAY, push_handle, push_type);
+
+        let pop_handle = self.strings.intern("pop");
+        let pop_type = type_arena.make_function(vec![], TypeArena::UNKNOWN);
+        type_arena.register_intrinsic_method(TypeArena::ARRAY, pop_handle, pop_type);
+
+        let reverse_handle = self.strings.intern("reverse");
+        let reverse_type = type_arena.make_function(vec![], TypeArena::UNIT);
+        type_arena.register_intrinsic_method(TypeArena::ARRAY, reverse_handle, reverse_type);
+
+        let slice_handle = self.strings.intern("slice");
+        let slice_type = type_arena.make_function(
+            vec![type_arena.make_optional(TypeArena::NUMBER), type_arena.make_optional(TypeArena::NUMBER)],
+            TypeArena::ARRAY
+        );
+        type_arena.register_intrinsic_method(TypeArena::ARRAY, slice_handle, slice_type);
+
+        let get_handle = self.strings.intern("get");
+        let get_type = type_arena.make_function(vec![TypeArena::NUMBER], TypeArena::UNKNOWN);
+        type_arena.register_intrinsic_method(TypeArena::ARRAY, get_handle, get_type);
+
+        let concat_handle = self.strings.intern("concat");
+        let concat_type = type_arena.make_function(vec![TypeArena::ARRAY], TypeArena::ARRAY);
+        type_arena.register_intrinsic_method(TypeArena::ARRAY, concat_handle, concat_type);
+
+        // Function intrinsics
+        let call_handle = self.strings.intern("call");
+        let call_type = type_arena.make_function(vec![], TypeArena::UNKNOWN); // Variadic
+        type_arena.register_intrinsic_method(TypeArena::FUNCTION, call_handle, call_type);
+
+        let apply_handle = self.strings.intern("apply");
+        let apply_type = type_arena.make_function(vec![TypeArena::ARRAY], TypeArena::UNKNOWN);
+        type_arena.register_intrinsic_method(TypeArena::FUNCTION, apply_handle, apply_type);
     }
 
     #[allow(dead_code)]
@@ -101,11 +215,15 @@ impl<'a> TypeInferenceEngine<'a> {
     fn begin_scope(&mut self) {
         let parent = std::mem::replace(&mut self.current_scope, TypeScope::new());
         self.current_scope = TypeScope::with_parent(parent);
+        self.scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
         if let Some(parent) = self.current_scope.parent.take() {
             self.current_scope = *parent;
+        }
+        if self.scope_depth > 0 {
+            self.scope_depth -= 1;
         }
     }
 
@@ -367,24 +485,38 @@ impl<'a> TypeInferenceEngine<'a> {
                 type1
             }
             (false, false) => {
-                // Two different concrete types - this is an error, but we'll try to make them compatible
+                // Two different concrete types - this is an error
                 if type_arena.is_optional(type1) && !type_arena.is_optional(type2) {
                     // Optional<T1> + T2 - check if T2 is compatible with T1's inner type
                     let inner1 = type_arena.unwrap_optional(type1);
                     if self.are_types_compatible(inner1, type2, type_arena) {
                         type1 // Keep the optional
                     } else {
-                        TypeArena::UNKNOWN // Incompatible types
+                        // Report error for incompatible return types
+                        ctx.errors.report_error(QangCompilerError::new_analysis_error(
+                            "Inconsistent return types in function".to_string(),
+                            SourceSpan::default(),
+                        ));
+                        TypeArena::UNKNOWN
                     }
                 } else if !type_arena.is_optional(type1) && type_arena.is_optional(type2) {
                     let inner2 = type_arena.unwrap_optional(type2);
                     if self.are_types_compatible(type1, inner2, type_arena) {
                         type2 // Keep the optional
                     } else {
+                        // Report error for incompatible return types
+                        ctx.errors.report_error(QangCompilerError::new_analysis_error(
+                            "Inconsistent return types in function".to_string(),
+                            SourceSpan::default(),
+                        ));
                         TypeArena::UNKNOWN
                     }
                 } else {
-                    // Both concrete and incompatible
+                    // Both concrete and incompatible - report error
+                    ctx.errors.report_error(QangCompilerError::new_analysis_error(
+                        "Inconsistent return types in function".to_string(),
+                        SourceSpan::default(),
+                    ));
                     TypeArena::UNKNOWN
                 }
             }
@@ -465,14 +597,18 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             ctx.nodes
                 .set_node_type(identifier.id, TypeInfo::new(var_type));
         } else {
-            ctx.errors
-                .report_error(QangCompilerError::new_analysis_error(
-                    format!(
-                        "Undefined variable '{}'",
-                        self.strings.get_string(identifier.node.name)
-                    ),
-                    identifier.node.span,
-                ));
+            // For dynamic languages, only report undefined variable errors for local scope
+            // Global variables can be dynamically created at runtime
+            if self.scope_depth > 0 {
+                ctx.errors
+                    .report_error(QangCompilerError::new_analysis_error(
+                        format!(
+                            "Undefined variable '{}'",
+                            self.strings.get_string(identifier.node.name)
+                        ),
+                        identifier.node.span,
+                    ));
+            }
             ctx.nodes
                 .set_node_type(identifier.id, TypeInfo::new(TypeArena::UNKNOWN));
         }
@@ -615,6 +751,10 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     }
                 }
             }
+            QangType::Unknown => {
+                // For unknown types, assume it might be a function at runtime
+                TypeArena::UNKNOWN
+            }
             _ => {
                 ctx.errors
                     .report_error(QangCompilerError::new_analysis_error(
@@ -656,6 +796,10 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                         .map(|(_, ty)| *ty)
                         .unwrap_or(TypeArena::UNKNOWN),
                     QangType::Class { .. } => TypeArena::UNKNOWN,
+                    QangType::Unknown => {
+                        // For unknown types, assume property access might be valid at runtime
+                        TypeArena::UNKNOWN
+                    }
                     _ => {
                         ctx.errors
                             .report_error(QangCompilerError::new_analysis_error(
@@ -670,6 +814,11 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 match ctx.nodes.types.get_type(callee_type) {
                     QangType::Function { return_type, .. } => *return_type,
                     QangType::Class { .. } => callee_type,
+                    QangType::Unknown => {
+                        // For unknown types, assume it might be a runtime global function
+                        // and allow the call without error
+                        TypeArena::UNKNOWN
+                    }
                     _ => {
                         ctx.errors
                             .report_error(QangCompilerError::new_analysis_error(
@@ -703,6 +852,105 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         ctx.nodes.set_node_type(call.id, TypeInfo::new(result_type));
 
         Ok(())
+    }
+
+    fn visit_function_declaration(
+        &mut self,
+        func_decl: TypedNodeRef<FunctionDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let func_expr = ctx.nodes.get_func_expr_node(func_decl.node.function);
+        let name_node = ctx.nodes.get_identifier_node(func_expr.node.name);
+
+        // First, create a function type with unknown parameter and return types
+        let param_count = ctx.nodes.array.size(func_expr.node.parameters);
+        let param_types = vec![TypeArena::UNKNOWN; param_count];
+        let func_type = ctx.nodes.types.make_function(param_types, TypeArena::UNKNOWN);
+
+        // Declare the function in the current scope
+        self.current_scope.declare(name_node.node.name, func_type);
+        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(func_type));
+
+        // Now visit the function expression to infer its actual types
+        self.visit_function_expression(func_expr, ctx)?;
+
+        // Update the function declaration's type
+        let inferred_func_type = ctx.nodes.get_node_type_id(func_decl.node.function);
+        ctx.nodes.set_node_type(func_decl.id, TypeInfo::new(inferred_func_type));
+
+        // Update the function name's type in scope
+        self.current_scope.declare(name_node.node.name, inferred_func_type);
+        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(inferred_func_type));
+
+        Ok(())
+    }
+
+    fn visit_class_declaration(
+        &mut self,
+        class_decl: TypedNodeRef<ClassDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
+
+        // Create a class type
+        let class_type = ctx.nodes.types.make_class(name_node.node.name, class_decl.id);
+
+        // Declare the class in the current scope
+        self.current_scope.declare(name_node.node.name, class_type);
+        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(class_type));
+        ctx.nodes.set_node_type(class_decl.id, TypeInfo::new(class_type));
+
+        // Visit the superclass if it exists
+        if let Some(superclass_id) = class_decl.node.superclass {
+            let superclass = ctx.nodes.get_identifier_node(superclass_id);
+            self.visit_identifier(superclass, ctx)?;
+        }
+
+        // Visit all class members (methods and field declarations)
+        let member_count = ctx.nodes.array.size(class_decl.node.members);
+        for i in 0..member_count {
+            if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {
+                let member = ctx.nodes.get_class_member_node(member_id);
+                self.visit_class_member(member, ctx)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn visit_class_member(
+        &mut self,
+        member: TypedNodeRef<super::typed_node_arena::ClassMemberNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        match member.node {
+            super::typed_node_arena::ClassMemberNode::Method(method) => {
+                // For class methods, we need to handle 'this' context
+                self.begin_scope();
+
+                // TODO: Add 'this' to the scope with the class type
+                // For now, we'll just visit the method like a regular function
+                let func_expr = TypedNodeRef::new(member.id, method);
+                self.visit_function_expression(func_expr, ctx)?;
+
+                self.end_scope();
+                Ok(())
+            }
+            super::typed_node_arena::ClassMemberNode::Field(field) => {
+                let identifier = ctx.nodes.get_identifier_node(field.name);
+
+                let field_type = if let Some(initializer_id) = field.initializer {
+                    let initializer = ctx.nodes.get_expr_node(initializer_id);
+                    self.visit_expression(initializer, ctx)?;
+                    ctx.nodes.get_node_type_id(initializer_id)
+                } else {
+                    TypeArena::UNKNOWN
+                };
+
+                ctx.nodes.set_node_type(identifier.id, TypeInfo::new(field_type));
+                Ok(())
+            }
+        }
     }
 
     fn visit_function_expression(

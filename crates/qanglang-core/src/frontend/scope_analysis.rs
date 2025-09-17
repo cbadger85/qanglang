@@ -8,12 +8,6 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VariableInfo {
-    pub name: StringHandle,
-    pub span: SourceSpan,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct UpvalueInfo {
     pub name: StringHandle,
     pub index: usize,
@@ -45,7 +39,6 @@ pub enum BreakContinueType {
 
 #[derive(Debug, Clone)]
 pub struct ScopeAnalysis {
-    pub variables: FxHashMap<NodeId, VariableInfo>,
     pub functions: FxHashMap<NodeId, FunctionInfo>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
 }
@@ -59,14 +52,12 @@ impl Default for ScopeAnalysis {
 impl ScopeAnalysis {
     pub fn new() -> Self {
         Self {
-            variables: FxHashMap::with_hasher(FxBuildHasher),
             functions: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 
     pub fn merge_with(mut self, other: Self) -> Self {
-        self.variables.extend(other.variables);
         self.functions.extend(other.functions);
         self.break_continue_statements
             .extend(other.break_continue_statements);
@@ -76,13 +67,13 @@ impl ScopeAnalysis {
 
 #[derive(Debug, Clone)]
 struct Scope {
-    variables: FxHashMap<StringHandle, VariableInfo>,
+    // Local scope tracking (variables are now resolved directly from nodes)
 }
 
 impl Scope {
     fn new() -> Self {
         Self {
-            variables: FxHashMap::with_hasher(FxBuildHasher),
+            // No variables tracking needed anymore
         }
     }
 }
@@ -195,24 +186,11 @@ impl<'a> ScopeAnalyzer<'a> {
 
     fn declare_variable_with_init(
         &mut self,
-        identifier: crate::frontend::typed_node_arena::TypedNodeRef<
+        _identifier: crate::frontend::typed_node_arena::TypedNodeRef<
             crate::frontend::nodes::IdentifierNode,
         >,
         _is_initialized: bool,
     ) -> Result<(), QangCompilerError> {
-        let name = identifier.node.name;
-        let span = identifier.node.span;
-
-        if self.current_scope_depth() > 0
-            && let Some(current_scope) = self.scopes.last()
-            && current_scope.variables.contains_key(&name)
-        {
-            return Err(QangCompilerError::new_analysis_error(
-                "Already a variable with this name in this scope.".to_string(),
-                span,
-            ));
-        }
-
         // Track locals for max_locals calculation in functions
         if self.current_scope_depth() > 0 {
             if let Some(function) = self.functions.last_mut() {
@@ -220,26 +198,7 @@ impl<'a> ScopeAnalyzer<'a> {
             }
         }
 
-        let variable_info = VariableInfo { name, span };
-
-        if let Some(current_scope) = self.scopes.last_mut() {
-            current_scope.variables.insert(name, variable_info.clone());
-        }
-
-        self.results.variables.insert(identifier.id, variable_info);
-
-        Ok(())
-    }
-
-    fn resolve_variable(
-        &mut self,
-        name: StringHandle,
-        span: SourceSpan,
-        node_id: NodeId,
-    ) -> Result<(), QangCompilerError> {
-        // Simply store the variable info for name lookup during compilation
-        let variable_info = VariableInfo { name, span };
-        self.results.variables.insert(node_id, variable_info);
+        // Variable names are now resolved directly from nodes during compilation
         Ok(())
     }
 
@@ -297,19 +256,6 @@ impl<'a> ScopeAnalyzer<'a> {
 
 impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
     type Error = QangCompilerError;
-
-    fn visit_identifier(
-        &mut self,
-        identifier: super::typed_node_arena::TypedNodeRef<super::nodes::IdentifierNode>,
-        ctx: &mut VisitorContext,
-    ) -> Result<(), Self::Error> {
-        if let Err(error) =
-            self.resolve_variable(identifier.node.name, identifier.node.span, identifier.id)
-        {
-            ctx.errors.report_error(error);
-        }
-        Ok(())
-    }
 
     fn visit_array_literal(
         &mut self,
@@ -539,20 +485,9 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
             self.begin_scope();
 
-            // Create synthetic super variable for analysis
-            let super_handle = self.strings.intern("super");
-
+            // Super variable will be handled directly during compilation
             if let Some(func) = self.functions.last_mut() {
                 func.add_local();
-            }
-
-            let var_info = VariableInfo {
-                name: super_handle,
-                span: class_decl.node.span,
-            };
-
-            if let Some(current_scope) = self.scopes.last_mut() {
-                current_scope.variables.insert(super_handle, var_info);
             }
         }
 
@@ -664,11 +599,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 ));
         }
 
-        let super_handle = self.strings.intern("super");
-        if let Err(error) = self.resolve_variable(super_handle, super_expr.node.span, super_expr.id)
-        {
-            ctx.errors.report_error(error);
-        }
+        // Super variable will be handled specially during compilation
 
         Ok(())
     }

@@ -671,19 +671,28 @@ impl<'a> Assembler<'a> {
         node_id: NodeId,
         span: SourceSpan,
         is_assignment: bool,
+        ctx: &VisitorContext,
     ) -> Result<(), QangCompilerError> {
-        let var_info = self.analysis.variables.get(&node_id).ok_or_else(|| {
-            QangCompilerError::new_assembler_error(
-                format!(
-                    "Variable not found in analysis results for node_id: {:?}",
-                    node_id
-                ),
-                span,
-            )
-        })?;
+        // Try to get variable name directly from the node
+        let variable_name = match ctx.nodes.get_node(node_id) {
+            AstNode::Identifier(identifier) => identifier.name,
+            AstNode::SuperExpr(_) => {
+                // For synthetic super variable, we know the name
+                self.allocator.strings.intern("super")
+            }
+            _ => {
+                return Err(QangCompilerError::new_assembler_error(
+                    format!(
+                        "Unexpected node type for variable access: {:?}",
+                        ctx.nodes.get_node(node_id)
+                    ),
+                    span,
+                ));
+            }
+        };
 
-        // Use dynamic slot resolution instead of static slot from scope analysis
-        self.handle_variable(var_info.name, span, is_assignment)
+        // Use dynamic slot resolution
+        self.handle_variable(variable_name, span, is_assignment)
     }
 
     fn emit_global_variable_access(
@@ -1027,7 +1036,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.node.span);
 
-        self.emit_variable_access(super_expr.id, super_expr.node.span, false)?;
+        self.emit_variable_access(super_expr.id, super_expr.node.span, false, ctx)?;
 
         let method_identifier = ctx.nodes.get_identifier_node(super_expr.node.method);
         self.emit_constant_opcode(
@@ -1119,7 +1128,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             AssignmentOperator::Assign => match assignment_target.node {
                 AssignmentTargetNode::Identifier(identifier) => {
                     self.visit_expression(value, ctx)?;
-                    self.emit_variable_access(assignment_target.id, identifier.span, true)?;
+                    self.emit_variable_access(assignment_target.id, identifier.span, true, ctx)?;
                 }
                 AssignmentTargetNode::Property(property) => {
                     self.visit_expression(ctx.nodes.get_expr_node(property.object), ctx)?;
@@ -1144,13 +1153,13 @@ impl<'a> NodeVisitor for Assembler<'a> {
             },
             _ => match assignment_target.node {
                 AssignmentTargetNode::Identifier(identifier) => {
-                    self.emit_variable_access(assignment_target.id, identifier.span, false)?;
+                    self.emit_variable_access(assignment_target.id, identifier.span, false, ctx)?;
                     self.visit_expression(value, ctx)?;
                     self.emit_compound_assignment_op(
                         assignment.node.operator,
                         assignment.node.span,
                     )?;
-                    self.emit_variable_access(assignment_target.id, identifier.span, true)?;
+                    self.emit_variable_access(assignment_target.id, identifier.span, true, ctx)?;
                 }
                 AssignmentTargetNode::Property(property) => {
                     let property_object = ctx.nodes.get_expr_node(property.object);
@@ -1272,9 +1281,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
     fn visit_identifier(
         &mut self,
         identifier: TypedNodeRef<IdentifierNode>,
-        _ctx: &mut VisitorContext,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.emit_variable_access(identifier.id, identifier.node.span, false)
+        self.emit_variable_access(identifier.id, identifier.node.span, false, ctx)
     }
 
     fn visit_if_statement(
@@ -1812,7 +1821,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         }
                     }
 
-                    self.emit_variable_access(callee.id, super_expr.span, false)?;
+                    self.emit_variable_access(callee.id, super_expr.span, false, ctx)?;
 
                     let method = ctx.nodes.get_identifier_node(super_expr.method);
                     self.emit_constant_opcode(

@@ -1,0 +1,318 @@
+#[cfg(test)]
+mod type_error_tests {
+    use std::{path::PathBuf, sync::Arc};
+
+    use crate::{
+        AnalysisPipeline, AnalysisPipelineConfig, Parser, ParserConfig, QangCompilerError,
+        SourceMap, StringInterner, TypedNodeArena,
+    };
+
+    fn run_analysis_expecting_errors(source: &str) -> Vec<QangCompilerError> {
+        let source_map = SourceMap::new(source.to_string(), PathBuf::from("test.ql"));
+        let source_map = Arc::new(source_map);
+
+        let mut strings = StringInterner::new();
+        let mut nodes = TypedNodeArena::new();
+        let mut parser =
+            Parser::new(source_map.clone(), &mut nodes, &mut strings).with_config(ParserConfig {
+                skip_modules: false,
+            });
+
+        let modules = parser.parse();
+        let mut errors = parser.into_errors();
+
+        let config = AnalysisPipelineConfig {
+            enable_type_inference: true,
+            strict_mode: true,
+            ..Default::default()
+        };
+
+        if let Err(error) = AnalysisPipeline::new(&mut strings)
+            .with_config(config)
+            .analyze(&modules, &mut nodes, &mut errors)
+        {
+            error.all().to_vec()
+        } else {
+            errors.take_errors()
+        }
+    }
+
+    #[test]
+    fn test_undefined_variable_error() {
+        let source = r#"
+        var result = undefined_var + 5;
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(!errors.is_empty(), "Should report undefined variable error");
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("Undefined variable"),
+            "Error should mention undefined variable, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_assignment_type_mismatch() {
+        let source = r#"
+        var number_var = 42;
+        number_var = "hello";  // Should fail: can't assign string to number
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            !errors.is_empty(),
+            "Should report type mismatch in assignment"
+        );
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("Type mismatch"),
+            "Error should mention type mismatch, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_property_access_on_non_object() {
+        let source = r#"
+        var number = 42;
+        var result = number.invalid_property;  // Should fail: numbers don't have properties
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(!errors.is_empty(), "Should report invalid property access");
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("Cannot access property"),
+            "Error should mention invalid property access, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_call_non_function() {
+        let source = r#"
+        var not_a_function = 42;
+        var result = not_a_function();  // Should fail: can't call a number
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(!errors.is_empty(), "Should report calling non-function");
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("Cannot call"),
+            "Error should mention calling non-function, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_pipe_to_non_function() {
+        let source = r#"
+        var value = 42;
+        var not_function = "hello";
+        var result = value |> not_function;  // Should fail: can't pipe to string
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(!errors.is_empty(), "Should report piping to non-function");
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("must be a function"),
+            "Error should mention pipe target must be function, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_pipe_no_parameters() {
+        let source = r#"
+        var value = 42;
+        var no_params = () -> "hello";
+        var result = value |> no_params;  // Should fail: function has no parameters
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            !errors.is_empty(),
+            "Should report piping to parameterless function"
+        );
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("no parameters"),
+            "Error should mention no parameters, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_inconsistent_return_types() {
+        let source = r#"
+        fn mixed_returns(flag) {
+            if (flag) {
+                return 42;      // number
+            } else {
+                return "text";  // string - should conflict with number
+            }
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            !errors.is_empty(),
+            "Should report inconsistent return types"
+        );
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("return type") || error_msg.contains("Inconsistent"),
+            "Error should mention return type issue, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_return_value_when_expecting_unit() {
+        let source = r#"
+        fn unit_function() {
+            // No return type specified, should be unit
+            return;  // Empty return - OK
+        }
+        
+        fn another_call() {
+            return unit_function();  // This should be unit
+            return 42;               // This conflicts - unit vs number
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(!errors.is_empty(), "Should report return type conflict");
+    }
+
+    #[test]
+    fn test_module_missing_export() {
+        let source = r#"
+        mod fake_module = import("/nonexistent/module");
+        var result = fake_module.nonexistent_export;  // Should fail: export doesn't exist
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+
+        // This might not fail depending on how module resolution works
+        // But if it does, it should mention missing export
+        assert!(!errors.is_empty());
+    }
+
+    #[test]
+    fn test_break_continue_outside_loop() {
+        let source = r#"
+        fn invalid_break() {
+            break;     // Should fail: not in a loop
+        }
+        
+        fn invalid_continue() {
+            continue;  // Should fail: not in a loop
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            !errors.is_empty(),
+            "Should report break/continue outside loop"
+        );
+
+        let has_break_error = errors.iter().any(|e| e.message.contains("break"));
+        let has_continue_error = errors.iter().any(|e| e.message.contains("continue"));
+
+        assert!(
+            has_break_error || has_continue_error,
+            "Should report break or continue outside loop"
+        );
+    }
+
+    #[test]
+    fn test_super_outside_class() {
+        let source = r#"
+        fn not_in_class() {
+            super.method();  // Should fail: super only valid in class methods
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(!errors.is_empty(), "Should report super outside class");
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("super"),
+            "Error should mention super usage, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_array_too_many_elements() {
+        // Create an array with more than 256 elements
+        let mut elements = String::new();
+        for i in 0..300 {
+            if i > 0 {
+                elements.push_str(", ");
+            }
+            elements.push_str(&i.to_string());
+        }
+
+        let source = format!(
+            r#"
+        var huge_array = [{}];
+        "#,
+            elements
+        );
+
+        let errors = run_analysis_expecting_errors(&source);
+        assert!(!errors.is_empty(), "Should report array too large");
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("256"),
+            "Error should mention 256 element limit, got: {}",
+            error_msg
+        );
+    }
+
+    #[test]
+    fn test_function_too_many_parameters() {
+        // Create a function with more than 256 parameters
+        let mut params = String::new();
+        for i in 0..300 {
+            if i > 0 {
+                params.push_str(", ");
+            }
+            params.push_str(&format!("param{}", i));
+        }
+
+        let source = format!(
+            r#"
+        fn too_many_params({}) {{
+            return 42;
+        }}
+        "#,
+            params
+        );
+
+        let errors = run_analysis_expecting_errors(&source);
+        assert!(!errors.is_empty(), "Should report too many parameters");
+
+        let error_msg = &errors[0].message;
+        assert!(
+            error_msg.contains("255") || error_msg.contains("256"),
+            "Error should mention parameter limit, got: {}",
+            error_msg
+        );
+    }
+}

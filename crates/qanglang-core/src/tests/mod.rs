@@ -9,6 +9,7 @@ pub mod parser_errors;
 pub mod regression_tests;
 pub mod source_analysis_test;
 // pub mod tail_call_tests;
+pub mod test_type_inference;
 pub mod tokenizing;
 pub mod vm_closure_tests;
 pub mod vm_tests;

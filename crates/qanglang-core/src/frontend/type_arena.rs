@@ -189,6 +189,7 @@ impl TypeTable {
         self.node_types.get(&node)
     }
 
+    #[allow(dead_code)]
     pub fn get_type_or_unknown(&self, node: NodeId) -> TypeInfo {
         self.node_types
             .get(&node)

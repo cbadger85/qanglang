@@ -58,10 +58,6 @@ pub struct TypeInferenceEngine<'a> {
     current_function: Option<NodeId>,
     /// Available modules for this analysis
     modules: Option<&'a ModuleMap>,
-    /// All return types encountered in current function
-    return_types_seen: Vec<TypeId>,
-    /// Whether we've seen a nil return
-    has_nil_return: bool,
 }
 
 impl<'a> TypeInferenceEngine<'a> {
@@ -72,11 +68,10 @@ impl<'a> TypeInferenceEngine<'a> {
             function_stack: Vec::new(),
             current_function: None,
             modules: None,
-            return_types_seen: Vec::new(),
-            has_nil_return: false,
         }
     }
 
+    #[allow(dead_code)]
     pub fn infer_types(
         mut self,
         program: NodeId,
@@ -146,6 +141,7 @@ impl<'a> TypeInferenceEngine<'a> {
         }
     }
 
+    #[allow(dead_code)]
     /// Detect if a call expression is a tail call
     fn is_tail_call(&self, call_expr: NodeId, ctx: &VisitorContext) -> bool {
         if self.current_function.is_none() {
@@ -309,85 +305,23 @@ impl<'a> TypeInferenceEngine<'a> {
         }
     }
 
-    fn track_return_type(&mut self, return_type: TypeId) {
-        // In a full implementation, you'd track all return types
-        // and unify them to get the function's actual return type
-        // For now, we just update the current function's expected return type
-        if let Some(current_return) = self.function_stack.last_mut() {
-            if *current_return == TypeArena::UNKNOWN {
-                *current_return = return_type;
+    /// Track return type with nil handling
+    fn track_return_type_with_nil(&mut self, return_type: TypeId, ctx: &mut VisitorContext) {
+        // Get current function's return type
+        if let Some(&mut current_type) = self.function_stack.last_mut() {
+            if current_type == TypeArena::UNKNOWN {
+                // First return - just set it
+                *self.function_stack.last_mut().unwrap() = return_type;
+            } else {
+                // Subsequent return - unify with previous
+                let unified = self.unify_return_types(current_type, return_type, ctx);
+                *self.function_stack.last_mut().unwrap() = unified;
             }
-            // Could add logic here to unify multiple return types
         }
     }
 
     /// Unify two return types, handling nil specially
-    fn unify_return_types(&self, type1: TypeId, type2: TypeId, type_arena: &TypeArena) -> TypeId {
-        if type1 == type2 {
-            return type1;
-        }
-
-        // If either is unknown, use the other
-        if type1 == TypeArena::UNKNOWN {
-            return type2;
-        }
-        if type2 == TypeArena::UNKNOWN {
-            return type1;
-        }
-
-        // Handle nil returns specially
-        let type1_is_nil_optional = matches!(type_arena.get_type(type1), QangType::Optional(inner) if *inner == TypeArena::UNKNOWN);
-        let type2_is_nil_optional = matches!(type_arena.get_type(type2), QangType::Optional(inner) if *inner == TypeArena::UNKNOWN);
-
-        match (type1_is_nil_optional, type2_is_nil_optional) {
-            // nil + concrete type = Optional<concrete type>
-            (true, false) => {
-                // type1 is nil, type2 is concrete - result is Optional<type2>
-                if type_arena.is_optional(type2) {
-                    type2 // Already optional
-                } else {
-                    // Make type2 optional - but we need mutable access to type_arena
-                    // This is a design issue - we'd need to restructure to handle this properly
-                    TypeArena::UNKNOWN // Placeholder - see below for better approach
-                }
-            }
-            (false, true) => {
-                // type2 is nil, type1 is concrete - result is Optional<type1>
-                if type_arena.is_optional(type1) {
-                    type1
-                } else {
-                    TypeArena::UNKNOWN // Placeholder
-                }
-            }
-            (true, true) => {
-                // Both are nil - result is nil (Optional<Unknown>)
-                type1
-            }
-            (false, false) => {
-                // Neither is nil - they should be compatible or it's an error
-                // For now, return unknown to indicate error
-                TypeArena::UNKNOWN
-            }
-        }
-    }
-
-    /// Track return type with nil handling
-    fn track_return_type_with_nil(&mut self, return_type: TypeId, ctx: &mut VisitorContext) {
-        // Get current function's return type
-        if let Some(current_return) = self.function_stack.last_mut() {
-            if *current_return == TypeArena::UNKNOWN {
-                // First return - just set it
-                *current_return = return_type;
-            } else {
-                // Subsequent return - unify with previous
-                let unified = self.unify_return_types_with_arena(*current_return, return_type, ctx);
-                *current_return = unified;
-            }
-        }
-    }
-
-    /// Unify return types with mutable arena access
-    fn unify_return_types_with_arena(
+    fn unify_return_types(
         &mut self,
         type1: TypeId,
         type2: TypeId,
@@ -474,27 +408,13 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             TypeArena::UNIT
         };
 
-        // Track this return type for function inference
-        self.track_return_type(return_type);
-
-        // Check compatibility with previously inferred return type
-        if let Some(expected_return_type) = self.current_function_return_type() {
-            if expected_return_type != TypeArena::UNKNOWN
-                && !self.are_types_compatible(expected_return_type, return_type, &ctx.nodes.types)
-            {
-                ctx.errors
-                    .report_error(QangCompilerError::new_analysis_error(
-                        "Inconsistent return types in function".to_string(),
-                        return_stmt.node.span,
-                    ));
-            }
-        }
+        // Track this return type with nil handling
+        self.track_return_type_with_nil(return_type, ctx);
 
         ctx.nodes
             .set_node_type(return_stmt.id, TypeInfo::new(TypeArena::UNIT));
         Ok(())
     }
-
     fn visit_number_literal(
         &mut self,
         number: TypedNodeRef<NumberLiteralNode>,

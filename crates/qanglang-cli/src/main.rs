@@ -204,6 +204,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
     let program = match CompilerPipeline::new()
         .with_config(CompilerConfig {
             error_message_format,
+            ..Default::default()
         })
         .compile(source_map, &mut allocator)
     {

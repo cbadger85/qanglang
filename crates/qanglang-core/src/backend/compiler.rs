@@ -47,12 +47,14 @@ impl QangProgram {
 #[derive(Clone, Copy, Debug)]
 pub struct CompilerConfig {
     pub error_message_format: ErrorMessageFormat,
+    pub enable_type_inference: bool,
 }
 
 impl Default for CompilerConfig {
     fn default() -> Self {
         Self {
             error_message_format: ErrorMessageFormat::Compact,
+            enable_type_inference: true,
         }
     }
 }
@@ -61,6 +63,7 @@ impl From<CompilerConfig> for AnalysisPipelineConfig {
     fn from(value: CompilerConfig) -> Self {
         Self {
             error_message_format: value.error_message_format,
+            enable_type_inference: value.enable_type_inference,
             ..Default::default()
         }
     }

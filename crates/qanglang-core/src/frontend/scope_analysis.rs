@@ -65,19 +65,6 @@ impl ScopeAnalysis {
     }
 }
 
-#[derive(Debug, Clone)]
-struct Scope {
-    // Local scope tracking (variables are now resolved directly from nodes)
-}
-
-impl Scope {
-    fn new() -> Self {
-        Self {
-            // No variables tracking needed anymore
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionKind {
     Global,
@@ -117,7 +104,7 @@ impl FunctionContext {
 
 pub struct ScopeAnalyzer<'a> {
     strings: &'a mut StringInterner,
-    scopes: Vec<Scope>,
+    scope_depth: usize,
     functions: Vec<FunctionContext>,
     results: ScopeAnalysis,
     loop_stack: Vec<NodeId>,
@@ -128,7 +115,7 @@ impl<'a> ScopeAnalyzer<'a> {
         let handle = strings.intern("(script)");
         Self {
             strings,
-            scopes: vec![Scope::new()],
+            scope_depth: 0, // Start at global scope (depth 0)
             functions: vec![FunctionContext::new(
                 handle,
                 0,
@@ -155,15 +142,17 @@ impl<'a> ScopeAnalyzer<'a> {
     }
 
     fn current_scope_depth(&self) -> usize {
-        self.scopes.len() - 1
+        self.scope_depth
     }
 
     fn begin_scope(&mut self) {
-        self.scopes.push(Scope::new());
+        self.scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
-        self.scopes.pop();
+        if self.scope_depth > 0 {
+            self.scope_depth -= 1;
+        }
     }
 
     fn begin_loop(&mut self, loop_id: NodeId) {
@@ -191,14 +180,12 @@ impl<'a> ScopeAnalyzer<'a> {
         >,
         _is_initialized: bool,
     ) -> Result<(), QangCompilerError> {
-        // Track locals for max_locals calculation in functions
         if self.current_scope_depth() > 0 {
             if let Some(function) = self.functions.last_mut() {
                 function.add_local();
             }
         }
 
-        // Variable names are now resolved directly from nodes during compilation
         Ok(())
     }
 

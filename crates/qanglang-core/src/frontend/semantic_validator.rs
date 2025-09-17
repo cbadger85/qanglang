@@ -55,7 +55,7 @@ impl<'a> SemanticValidator<'a> {
         errors: &mut ErrorReporter,
     ) {
         let mut ctx = VisitorContext::new(nodes, errors);
-        let program_node = ctx.nodes.get_program_node(program);
+        let program_node = ctx.nodes.get_module_node(program);
 
         let _ = self.visit_module(program_node, &mut ctx);
     }

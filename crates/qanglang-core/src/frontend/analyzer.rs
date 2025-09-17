@@ -1,6 +1,9 @@
 use crate::{
     ErrorMessageFormat, ErrorReporter, QangPipelineError, TypedNodeArena,
-    frontend::{semantic_validator::SemanticValidator, source::ModuleMap},
+    frontend::{
+        semantic_validator::SemanticValidator, source::ModuleMap,
+        type_inference::TypeInferenceEngine,
+    },
     memory::StringInterner,
 };
 
@@ -8,6 +11,7 @@ use crate::{
 pub struct AnalysisPipelineConfig {
     pub error_message_format: ErrorMessageFormat,
     pub strict_mode: bool,
+    pub enable_type_inference: bool,
 }
 
 impl Default for AnalysisPipelineConfig {
@@ -15,6 +19,7 @@ impl Default for AnalysisPipelineConfig {
         Self {
             error_message_format: ErrorMessageFormat::Minimal,
             strict_mode: true,
+            enable_type_inference: true,
         }
     }
 }
@@ -66,6 +71,24 @@ impl<'a> AnalysisPipeline<'a> {
                 .collect();
 
             return Err(QangPipelineError::new(formatted_errors));
+        }
+
+        if self.config.enable_type_inference {
+            TypeInferenceEngine::new(self.strings).infer_types_with_modules(
+                modules.get_main().node,
+                modules,
+                nodes,
+                errors,
+            );
+
+            for (_, module) in modules.iter() {
+                TypeInferenceEngine::new(self.strings).infer_types_with_modules(
+                    module.node,
+                    modules,
+                    nodes,
+                    errors,
+                );
+            }
         }
 
         Ok(())

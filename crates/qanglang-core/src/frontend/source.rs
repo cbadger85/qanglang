@@ -5,7 +5,7 @@ use std::{
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use crate::NodeId;
+use crate::{NodeId, StringHandle};
 
 #[derive(Debug, Clone, Default)]
 pub struct SourceMap {
@@ -159,6 +159,7 @@ pub struct ModuleSource {
 
 pub struct ModuleMap {
     modules: FxHashMap<PathBuf, ModuleSource>,
+    pub nodes: FxHashMap<StringHandle, NodeId>,
     main: ModuleSource,
 }
 
@@ -170,6 +171,7 @@ impl ModuleMap {
                 source_map,
             },
             modules: FxHashMap::with_hasher(FxBuildHasher),
+            nodes: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 

@@ -1,8 +1,24 @@
 use crate::{
     arena::{Arena, Index},
-    frontend::{node_array_arena::NodeArrayArena, nodes::*},
+    frontend::{
+        node_array_arena::NodeArrayArena,
+        nodes::*,
+        type_arena::{TypeArena, TypeInfo, TypeTable},
+        types::TypeId,
+    },
 };
 use std::convert::TryFrom;
+
+#[macro_export]
+macro_rules! get_typed_node {
+    ($arena:expr, $node_id:expr, $ast_variant:path) => {{
+        let node = $arena.get_node($node_id);
+        match *node {
+            $ast_variant(inner) => TypedNodeRef::new($node_id, inner),
+            _ => panic!("Expected {}", stringify!($ast_variant)),
+        }
+    }};
+}
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct NodeId(Index);
@@ -400,6 +416,8 @@ impl<T: Clone + Copy> TypedNodeRef<T> {
 pub struct TypedNodeArena {
     nodes: Arena<AstNode>,
     pub array: NodeArrayArena,
+    pub types: TypeArena,
+    node_types: TypeTable,
 }
 
 impl TypedNodeArena {
@@ -407,6 +425,8 @@ impl TypedNodeArena {
         Self {
             nodes: Arena::new(),
             array: NodeArrayArena::new(),
+            types: TypeArena::new(),
+            node_types: TypeTable::new(),
         }
     }
 
@@ -460,7 +480,7 @@ impl TypedNodeArena {
         }
     }
 
-    pub fn get_program_node(&self, node_id: NodeId) -> TypedNodeRef<Module> {
+    pub fn get_module_node(&self, node_id: NodeId) -> TypedNodeRef<Module> {
         let node = self.nodes[node_id.get()];
 
         match node {
@@ -526,5 +546,16 @@ impl TypedNodeArena {
     pub fn get_class_member_node(&self, node_id: NodeId) -> TypedNodeRef<ClassMemberNode> {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())
+    }
+
+    pub fn set_node_type(&mut self, node: NodeId, type_info: TypeInfo) {
+        self.node_types.set_type(node, type_info);
+    }
+
+    pub fn get_node_type_id(&self, node: NodeId) -> TypeId {
+        self.node_types
+            .get_type(node)
+            .map(|n| n.inferred_type)
+            .unwrap_or_default()
     }
 }

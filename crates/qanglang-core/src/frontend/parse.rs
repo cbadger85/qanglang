@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    ErrorReporter, QangCompilerError, SourceMap,
+    ErrorReporter, QangCompilerError, SourceMap, StringHandle,
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
@@ -31,7 +31,7 @@ pub struct Parser<'a> {
     errors: ErrorReporter,
     strings: &'a mut StringInterner,
     nodes: &'a mut TypedNodeArena,
-    module_queue: VecDeque<PathBuf>,
+    module_queue: VecDeque<(PathBuf, StringHandle)>,
     config: ParserConfig,
 }
 
@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
         self.errors
     }
 
-    fn into_parts(self) -> (ErrorReporter, VecDeque<PathBuf>) {
+    fn into_parts(self) -> (ErrorReporter, VecDeque<(PathBuf, StringHandle)>) {
         (self.errors, self.module_queue)
     }
 
@@ -342,7 +342,7 @@ impl<'a> Parser<'a> {
             return modules;
         }
 
-        while let Some(module_path) = self.module_queue.pop_front() {
+        while let Some((module_path, module_name)) = self.module_queue.pop_front() {
             if modules.has(&module_path) {
                 continue;
             }
@@ -364,6 +364,7 @@ impl<'a> Parser<'a> {
             let mut module_parser = Parser::new(source_map.clone(), self.nodes, self.strings);
 
             let module_id = module_parser.parse_file();
+            modules.nodes.insert(module_name, module_id);
 
             let (errors, queue) = module_parser.into_parts();
             self.errors.merge(errors);
@@ -488,7 +489,7 @@ impl<'a> Parser<'a> {
 
         let combined_path_str = combined_path.to_string_lossy();
         let path = self.strings.intern(&combined_path_str);
-        self.module_queue.push_back(combined_path);
+        self.module_queue.push_back((combined_path, path));
 
         self.consume(TokenType::RightParen, "Expected closing parentheses.")?;
         self.consume(TokenType::Semicolon, "Expected semicolon.")?;

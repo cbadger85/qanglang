@@ -1,26 +1,15 @@
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
-    ErrorReporter, NodeId, QangCompilerError, StringHandle, TypedNodeArena,
+    ErrorReporter, NodeId, QangCompilerError, TypedNodeArena,
     frontend::node_visitor::{NodeVisitor, VisitorContext},
     memory::StringInterner,
     nodes::SourceSpan,
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct UpvalueInfo {
-    pub name: StringHandle,
-    pub index: usize,
-    pub is_local: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionInfo {
-    pub name: StringHandle,
     pub arity: usize,
-    pub upvalues: Vec<UpvalueInfo>,
-    pub max_locals: usize,
-    pub span: SourceSpan,
     pub kind: FunctionKind,
 }
 
@@ -75,23 +64,17 @@ pub enum FunctionKind {
 
 #[derive(Debug, Clone)]
 struct FunctionContext {
-    pub name: StringHandle,
     pub arity: usize,
     pub kind: FunctionKind,
-    pub upvalues: Vec<UpvalueInfo>,
-    pub span: SourceSpan,
     pub local_count: usize,
 }
 
 impl FunctionContext {
-    fn new(handle: StringHandle, arity: usize, kind: FunctionKind, span: SourceSpan) -> Self {
+    fn new(arity: usize, kind: FunctionKind) -> Self {
         let local_count = 1;
 
         Self {
-            name: handle,
             arity,
-            upvalues: Vec::with_capacity(u8::MAX as usize),
-            span,
             kind,
             local_count,
         }
@@ -112,16 +95,10 @@ pub struct ScopeAnalyzer<'a> {
 
 impl<'a> ScopeAnalyzer<'a> {
     pub fn new(strings: &'a mut StringInterner) -> Self {
-        let handle = strings.intern("(script)");
         Self {
             strings,
             scope_depth: 0, // Start at global scope (depth 0)
-            functions: vec![FunctionContext::new(
-                handle,
-                0,
-                FunctionKind::Global,
-                SourceSpan::default(),
-            )],
+            functions: vec![FunctionContext::new(0, FunctionKind::Global)],
             results: ScopeAnalysis::new(),
             loop_stack: Vec::new(),
         }
@@ -180,10 +157,10 @@ impl<'a> ScopeAnalyzer<'a> {
         >,
         _is_initialized: bool,
     ) -> Result<(), QangCompilerError> {
-        if self.current_scope_depth() > 0 {
-            if let Some(function) = self.functions.last_mut() {
-                function.add_local();
-            }
+        if self.current_scope_depth() > 0
+            && let Some(function) = self.functions.last_mut()
+        {
+            function.add_local();
         }
 
         Ok(())
@@ -195,7 +172,6 @@ impl<'a> ScopeAnalyzer<'a> {
 
     fn begin_function(
         &mut self,
-        name: StringHandle,
         arity: usize,
         span: SourceSpan,
         kind: FunctionKind,
@@ -208,7 +184,7 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let function = FunctionContext::new(name, arity, kind, span);
+        let function = FunctionContext::new(arity, kind);
         self.functions.push(function);
 
         self.loop_stack.clear();
@@ -224,20 +200,12 @@ impl<'a> ScopeAnalyzer<'a> {
             .expect("Expect function stack not to be empty.");
 
         let analysis = FunctionInfo {
-            name: function.name,
             arity: function.arity,
-            upvalues: function.upvalues.clone(),
-            max_locals: function.local_count,
-            span: function.span,
             kind: function.kind,
         };
         self.results.functions.insert(node_id, analysis);
 
         Ok(())
-    }
-
-    fn get_identifier_name(&self, nodes: &TypedNodeArena, node_id: NodeId) -> StringHandle {
-        nodes.get_identifier_node(node_id).node.name
     }
 }
 
@@ -316,7 +284,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         }
 
         self.begin_function(
-            self.get_identifier_name(ctx.nodes, func_expr.node.name),
             arity,
             func_expr.node.span,
             FunctionKind::Function,
@@ -355,10 +322,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                 ));
         }
 
-        let anonymous_name = self.strings.intern("<lambda>");
-
         self.begin_function(
-            anonymous_name,
             arity,
             lambda_expr.node.span,
             FunctionKind::Function,
@@ -499,7 +463,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
                         }
 
                         self.begin_function(
-                            method_name.node.name,
                             arity,
                             method.span,
                             if is_initializer {
@@ -690,15 +653,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::MapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        let anonymous_name = self.strings.intern("<map>");
-
-        self.begin_function(
-            anonymous_name,
-            1,
-            map_expr.node.span,
-            FunctionKind::Function,
-            ctx.errors,
-        );
+        self.begin_function(1, map_expr.node.span, FunctionKind::Function, ctx.errors);
 
         let param = ctx.nodes.get_identifier_node(map_expr.node.parameter);
         if let Err(error) = self.declare_variable(param) {
@@ -718,10 +673,7 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
         opt_map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::OptionalMapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        let anonymous_name = self.strings.intern("<optional_map>");
-
         self.begin_function(
-            anonymous_name,
             1,
             opt_map_expr.node.span,
             FunctionKind::Function,

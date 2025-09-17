@@ -1982,16 +1982,15 @@ impl Vm {
         let cache_index = self.state.get_property_cache_index();
 
         // Check cache hit
-        if let Some(cached) = self.state.property_cache.get(cache_index) {
-            if cached.object_type == object_type
-                && cached.property_name == property_name
-                && cached.table_handle == table_handle
-                && cached.generation == self.state.cache_generation
-            {
-                // Fast path: use cached table handle
-                let key = Value::string(property_name);
-                return self.alloc.tables.get(cached.table_handle, &key);
-            }
+        if let Some(cached) = self.state.property_cache.get(cache_index)
+            && cached.object_type == object_type
+            && cached.property_name == property_name
+            && cached.table_handle == table_handle
+            && cached.generation == self.state.cache_generation
+        {
+            // Fast path: use cached table handle
+            let key = Value::string(property_name);
+            return self.alloc.tables.get(cached.table_handle, &key);
         }
 
         // Slow path: full lookup + cache update
@@ -2020,15 +2019,14 @@ impl Vm {
         let cache_index = self.state.get_method_cache_index();
 
         // Check method cache hit
-        if let Some(cached) = self.state.method_cache.get(cache_index) {
-            if cached.object_type == object_type
-                && cached.method_name == method_name
-                && cached.table_handle == table_handle
-                && cached.generation == self.state.cache_generation
-            {
-                // Fast path: return cached method
-                return Some(cached.cached_method);
-            }
+        if let Some(cached) = self.state.method_cache.get(cache_index)
+            && cached.object_type == object_type
+            && cached.method_name == method_name
+            && cached.table_handle == table_handle
+            && cached.generation == self.state.cache_generation
+        {
+            // Fast path: return cached method
+            return Some(cached.cached_method);
         }
 
         // Slow path: lookup method in table

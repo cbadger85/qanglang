@@ -7,11 +7,6 @@ use crate::{
     nodes::SourceSpan,
 };
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct FunctionInfo {
-    pub arity: usize,
-    pub kind: FunctionKind,
-}
 
 #[derive(Debug, Clone)]
 pub struct BreakContinueInfo {
@@ -28,7 +23,6 @@ pub enum BreakContinueType {
 
 #[derive(Debug, Clone)]
 pub struct ScopeAnalysis {
-    pub functions: FxHashMap<NodeId, FunctionInfo>,
     pub break_continue_statements: FxHashMap<NodeId, BreakContinueInfo>,
 }
 
@@ -41,13 +35,11 @@ impl Default for ScopeAnalysis {
 impl ScopeAnalysis {
     pub fn new() -> Self {
         Self {
-            functions: FxHashMap::with_hasher(FxBuildHasher),
             break_continue_statements: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 
     pub fn merge_with(mut self, other: Self) -> Self {
-        self.functions.extend(other.functions);
         self.break_continue_statements
             .extend(other.break_continue_statements);
         self
@@ -64,17 +56,15 @@ pub enum FunctionKind {
 
 #[derive(Debug, Clone)]
 struct FunctionContext {
-    pub arity: usize,
     pub kind: FunctionKind,
     pub local_count: usize,
 }
 
 impl FunctionContext {
-    fn new(arity: usize, kind: FunctionKind) -> Self {
+    fn new(kind: FunctionKind) -> Self {
         let local_count = 1;
 
         Self {
-            arity,
             kind,
             local_count,
         }
@@ -98,7 +88,7 @@ impl<'a> ScopeAnalyzer<'a> {
         Self {
             strings,
             scope_depth: 0, // Start at global scope (depth 0)
-            functions: vec![FunctionContext::new(0, FunctionKind::Global)],
+            functions: vec![FunctionContext::new(FunctionKind::Global)],
             results: ScopeAnalysis::new(),
             loop_stack: Vec::new(),
         }
@@ -184,26 +174,19 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let function = FunctionContext::new(arity, kind);
+        let function = FunctionContext::new(kind);
         self.functions.push(function);
 
         self.loop_stack.clear();
         self.begin_scope();
     }
 
-    fn end_function(&mut self, node_id: NodeId) -> Result<(), QangCompilerError> {
+    fn end_function(&mut self, _node_id: NodeId) -> Result<(), QangCompilerError> {
         self.end_scope();
 
-        let function = self
-            .functions
+        self.functions
             .pop()
             .expect("Expect function stack not to be empty.");
-
-        let analysis = FunctionInfo {
-            arity: function.arity,
-            kind: function.kind,
-        };
-        self.results.functions.insert(node_id, analysis);
 
         Ok(())
     }

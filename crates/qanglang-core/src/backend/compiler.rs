@@ -12,7 +12,7 @@ use crate::{
     },
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
-        scope_analysis::{FunctionInfo, FunctionKind, ScopeAnalysis},
+        scope_analysis::{FunctionKind, ScopeAnalysis},
         typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
     },
     nodes::*,
@@ -167,6 +167,7 @@ struct Upvalue {
 
 #[derive(Debug, Clone)]
 struct CompilerState {
+    kind: FunctionKind,
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
@@ -182,6 +183,7 @@ impl CompilerState {
         let mut locals = Vec::with_capacity(u8::MAX as usize);
         locals.push(Local::new(blank_handle));
         Self {
+            kind: FunctionKind::Global,
             locals,
             local_count: 1,
             scope_depth: 0,
@@ -193,8 +195,9 @@ impl CompilerState {
         }
     }
 
-    fn push(&mut self, has_superclass: bool, is_method: bool) -> &mut Self {
+    fn push(&mut self, has_superclass: bool, kind: FunctionKind) -> &mut Self {
         let mut locals = Vec::with_capacity(u8::MAX as usize);
+        let is_method = matches!(kind, FunctionKind::Method | FunctionKind::Initializer);
         if is_method {
             let mut this_local = Local::new(self.this_handle);
             this_local.depth = Some(0);
@@ -205,6 +208,7 @@ impl CompilerState {
         let previous = std::mem::replace(
             self,
             Self {
+                kind,
                 locals,
                 local_count: 1,
                 scope_depth: 0,
@@ -331,18 +335,6 @@ impl<'a> Assembler<'a> {
             loop_contexts: Vec::new(),
             compiler_state: CompilerState::new(blank_handle, this_handle),
         }
-    }
-
-    fn get_function_info(&self, node_id: NodeId) -> &FunctionInfo {
-        self.analysis
-            .functions
-            .get(&node_id)
-            .expect("Function info should exist for function node")
-    }
-
-    fn get_current_function_info(&self) -> Option<&FunctionInfo> {
-        self.current_function_id
-            .and_then(|id| self.analysis.functions.get(&id))
     }
 
     pub fn assemble(
@@ -654,10 +646,7 @@ impl<'a> Assembler<'a> {
     }
 
     fn emit_return(&mut self, span: SourceSpan) {
-        let is_init = self
-            .current_function_id
-            .map(|id| matches!(self.get_function_info(id).kind, FunctionKind::Initializer))
-            .unwrap_or(false);
+        let is_init = matches!(self.compiler_state.kind, FunctionKind::Initializer);
         if is_init {
             self.emit_opcode_and_byte(OpCode::GetLocal, 0, span);
         } else {
@@ -673,13 +662,9 @@ impl<'a> Assembler<'a> {
         is_assignment: bool,
         ctx: &VisitorContext,
     ) -> Result<(), QangCompilerError> {
-        // Try to get variable name directly from the node
         let variable_name = match ctx.nodes.get_node(node_id) {
             AstNode::Identifier(identifier) => identifier.name,
-            AstNode::SuperExpr(_) => {
-                // For synthetic super variable, we know the name
-                self.allocator.strings.intern("super")
-            }
+            AstNode::SuperExpr(_) => self.allocator.strings.intern("super"),
             _ => {
                 return Err(QangCompilerError::new_assembler_error(
                     format!(
@@ -691,7 +676,6 @@ impl<'a> Assembler<'a> {
             }
         };
 
-        // Use dynamic slot resolution
         self.handle_variable(variable_name, span, is_assignment)
     }
 
@@ -724,7 +708,13 @@ impl<'a> Assembler<'a> {
         func_expr: FunctionExprNode,
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
-        self.compile_function_with_superclass(func_node_id, func_expr, ctx, false)
+        self.compile_function_with_superclass(
+            func_node_id,
+            func_expr,
+            ctx,
+            false,
+            FunctionKind::Function,
+        )
     }
 
     fn compile_function_with_superclass(
@@ -733,11 +723,9 @@ impl<'a> Assembler<'a> {
         func_expr: FunctionExprNode,
         ctx: &mut VisitorContext,
         has_superclass: bool,
+        func_kind: FunctionKind,
     ) -> Result<(), QangCompilerError> {
-        let (func_arity, func_kind) = {
-            let func_info = self.get_function_info(func_node_id);
-            (func_info.arity, func_info.kind)
-        };
+        let func_arity = ctx.nodes.array.size(func_expr.parameters);
 
         let identifier = ctx.nodes.get_identifier_node(func_expr.name).node;
         let function = FunctionObject::new(identifier.name, func_arity);
@@ -749,8 +737,7 @@ impl<'a> Assembler<'a> {
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(func_node_id);
 
-        let is_method = matches!(func_kind, FunctionKind::Method | FunctionKind::Initializer);
-        self.compiler_state.push(has_superclass, is_method);
+        self.compiler_state.push(has_superclass, func_kind);
         self.begin_scope();
 
         let param_count = ctx.nodes.array.size(func_expr.parameters);
@@ -843,9 +830,9 @@ impl<'a> Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), QangCompilerError> {
         let map_name_handle = self.allocator.strings.intern("<map>");
-        let func_info = self.get_function_info(map_node_id);
+        let func_arity = 1; // Map expressions always have exactly 1 parameter
 
-        let function = FunctionObject::new(map_name_handle, func_info.arity);
+        let function = FunctionObject::new(map_name_handle, func_arity);
 
         let old_function = std::mem::replace(&mut self.current_function, function);
 
@@ -854,7 +841,7 @@ impl<'a> Assembler<'a> {
         let old_func_id = self.current_function_id;
         self.current_function_id = Some(map_node_id);
 
-        self.compiler_state.push(false, false);
+        self.compiler_state.push(false, FunctionKind::Function);
         self.begin_scope();
 
         let param_identifier = ctx.nodes.get_identifier_node(map_expr.parameter);
@@ -932,10 +919,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             let expr_node = ctx.nodes.get_expr_node(expr);
             self.visit_expression(expr_node, ctx)?;
         } else {
-            let is_init = self
-                .get_current_function_info()
-                .map(|f| matches!(f.kind, FunctionKind::Initializer))
-                .unwrap_or(false);
+            let is_init = matches!(self.compiler_state.kind, FunctionKind::Initializer);
 
             if is_init {
                 self.emit_opcode_and_byte(OpCode::GetLocal, 0, return_stmt.node.span);
@@ -989,8 +973,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if matches!(
-            self.get_current_function_info().map(|f| f.kind),
-            Some(FunctionKind::Method | FunctionKind::Initializer)
+            self.compiler_state.kind,
+            FunctionKind::Method | FunctionKind::Initializer
         ) {
             self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.node.span);
             Ok(())
@@ -1007,18 +991,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
         super_expr: TypedNodeRef<SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        let current_function_kind = self
-            .get_current_function_info()
-            .map(|f| f.kind)
-            .ok_or_else(|| {
-                QangCompilerError::new_assembler_error(
-                    "Cannot use 'super' outside of a class method.".to_string(),
-                    super_expr.node.span,
-                )
-            })?;
-
         if !matches!(
-            current_function_kind,
+            self.compiler_state.kind,
             FunctionKind::Method | FunctionKind::Initializer
         ) {
             return Err(QangCompilerError::new_assembler_error(
@@ -1689,9 +1663,9 @@ impl<'a> NodeVisitor for Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let lambda_name_handle = self.allocator.strings.intern("<anonymous>");
-        let func_info = self.get_function_info(lambda_expr.id);
+        let func_arity = ctx.nodes.array.size(lambda_expr.node.parameters);
 
-        let function = FunctionObject::new(lambda_name_handle, func_info.arity);
+        let function = FunctionObject::new(lambda_name_handle, func_arity);
 
         let old_function = std::mem::replace(&mut self.current_function, function);
 
@@ -1700,7 +1674,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let old_function_id = self.current_function_id;
         self.current_function_id = Some(lambda_expr.id);
 
-        self.compiler_state.push(false, false);
+        self.compiler_state.push(false, FunctionKind::Function);
         self.begin_scope();
 
         let param_count = ctx.nodes.array.size(lambda_expr.node.parameters);
@@ -1790,18 +1764,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     crate::frontend::typed_node_arena::PrimaryNode::Super(super_expr),
                 ) = callee.node
                 {
-                    let current_function_kind = self
-                        .get_current_function_info()
-                        .map(|f| f.kind)
-                        .ok_or_else(|| {
-                            QangCompilerError::new_assembler_error(
-                                "Cannot use 'super' outside of a class method.".to_string(),
-                                super_expr.span,
-                            )
-                        })?;
-
                     if !matches!(
-                        current_function_kind,
+                        self.compiler_state.kind,
                         FunctionKind::Method | FunctionKind::Initializer
                     ) {
                         return Err(QangCompilerError::new_assembler_error(
@@ -2106,6 +2070,13 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 match member.node {
                     ClassMemberNode::Method(function) => {
                         let method_name = ctx.nodes.get_identifier_node(function.name);
+                        let init_name = self.allocator.strings.intern("init");
+                        let is_initializer = method_name.node.name == init_name;
+                        let func_kind = if is_initializer {
+                            FunctionKind::Initializer
+                        } else {
+                            FunctionKind::Method
+                        };
 
                         let has_superclass = class_decl.node.superclass.is_some();
                         self.compile_function_with_superclass(
@@ -2113,6 +2084,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                             function,
                             ctx,
                             has_superclass,
+                            func_kind,
                         )?;
 
                         self.emit_constant_opcode(

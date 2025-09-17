@@ -7,18 +7,9 @@ use crate::{
     nodes::SourceSpan,
 };
 
-#[derive(Debug, Clone, PartialEq, Copy)]
-pub enum VariableKind {
-    Local,
-    Global,
-    Upvalue { index: usize, is_local: bool },
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariableInfo {
     pub name: StringHandle,
-    pub kind: VariableKind,
-    pub is_captured: bool,
     pub span: SourceSpan,
 }
 
@@ -131,18 +122,6 @@ impl FunctionContext {
     fn add_local(&mut self) {
         self.local_count += 1;
     }
-
-    fn add_upvalue(&mut self, name: StringHandle, index: usize, is_local: bool) -> usize {
-        let upvalue_index = self.upvalues.len();
-
-        self.upvalues.push(UpvalueInfo {
-            name,
-            index,
-            is_local,
-        });
-
-        upvalue_index
-    }
 }
 
 pub struct ScopeAnalyzer<'a> {
@@ -234,25 +213,14 @@ impl<'a> ScopeAnalyzer<'a> {
             ));
         }
 
-        let variable_info = if self.current_scope_depth() == 0 {
-            VariableInfo {
-                name,
-                kind: VariableKind::Global,
-                is_captured: false,
-                span,
-            }
-        } else {
+        // Track locals for max_locals calculation in functions
+        if self.current_scope_depth() > 0 {
             if let Some(function) = self.functions.last_mut() {
                 function.add_local();
             }
+        }
 
-            VariableInfo {
-                name,
-                kind: VariableKind::Local,
-                is_captured: false,
-                span,
-            }
-        };
+        let variable_info = VariableInfo { name, span };
 
         if let Some(current_scope) = self.scopes.last_mut() {
             current_scope.variables.insert(name, variable_info.clone());
@@ -268,85 +236,11 @@ impl<'a> ScopeAnalyzer<'a> {
         name: StringHandle,
         span: SourceSpan,
         node_id: NodeId,
-    ) -> Result<VariableKind, QangCompilerError> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(var_info) = scope.variables.get(&name) {
-                let variable_info = VariableInfo {
-                    name,
-                    kind: var_info.kind,
-                    is_captured: var_info.is_captured,
-                    span,
-                };
-
-                self.results.variables.insert(node_id, variable_info);
-                return Ok(var_info.kind);
-            }
-        }
-
-        if let Some(upvalue_kind) = self.resolve_upvalue(name, span)? {
-            let variable_info = VariableInfo {
-                name,
-                kind: upvalue_kind.clone(),
-                is_captured: false,
-                span,
-            };
-            self.results.variables.insert(node_id, variable_info);
-            return Ok(upvalue_kind);
-        }
-
-        let variable_kind = VariableKind::Global;
-        let variable_info = VariableInfo {
-            name,
-            kind: variable_kind.clone(),
-            is_captured: false,
-            span,
-        };
+    ) -> Result<(), QangCompilerError> {
+        // Simply store the variable info for name lookup during compilation
+        let variable_info = VariableInfo { name, span };
         self.results.variables.insert(node_id, variable_info);
-
-        Ok(variable_kind)
-    }
-
-    fn resolve_upvalue(
-        &mut self,
-        name: StringHandle,
-        _span: SourceSpan,
-    ) -> Result<Option<VariableKind>, QangCompilerError> {
-        let no_enclosing_function = self.functions.len() < 2;
-        if no_enclosing_function {
-            return Ok(None);
-        }
-
-        for (depth, scope) in self.scopes.iter_mut().enumerate().rev().skip(1) {
-            if let Some(var_info) = scope.variables.get_mut(&name) {
-                if let VariableKind::Local { .. } = var_info.kind {
-                    var_info.is_captured = true;
-
-                    if let Some(current_func) = self.functions.last_mut() {
-                        let upvalue_index = current_func.add_upvalue(name, depth, true);
-                        return Ok(Some(VariableKind::Upvalue {
-                            index: upvalue_index,
-                            is_local: true,
-                        }));
-                    }
-                }
-            }
-        }
-
-        let current_function = self.functions.pop().unwrap();
-        let upvalue_result = self.resolve_upvalue(name, _span)?;
-        self.functions.push(current_function);
-
-        if let Some(VariableKind::Upvalue { index, .. }) = upvalue_result {
-            if let Some(current_func) = self.functions.last_mut() {
-                let upvalue_index = current_func.add_upvalue(name, index, false);
-                return Ok(Some(VariableKind::Upvalue {
-                    index: upvalue_index,
-                    is_local: false,
-                }));
-            }
-        }
-
-        Ok(None)
+        Ok(())
     }
 
     fn current_loop(&self) -> Option<NodeId> {
@@ -654,8 +548,6 @@ impl<'a> NodeVisitor for ScopeAnalyzer<'a> {
 
             let var_info = VariableInfo {
                 name: super_handle,
-                kind: VariableKind::Local,
-                is_captured: false,
                 span: class_decl.node.span,
             };
 

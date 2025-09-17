@@ -12,7 +12,7 @@ use crate::{
     },
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
-        scope_analysis::{FunctionInfo, FunctionKind, ScopeAnalysis, VariableKind},
+        scope_analysis::{FunctionInfo, FunctionKind, ScopeAnalysis},
         typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
     },
     nodes::*,
@@ -1658,34 +1658,18 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let identifier = ctx.nodes.get_identifier_node(lambda_decl.node.name);
         let lambda_expr = ctx.nodes.get_lambda_expr_node(lambda_decl.node.lambda);
 
+        let is_local = self.parse_variable(identifier.node.name, identifier.node.span)?;
+
         self.visit_lambda_expression(lambda_expr, ctx)?;
 
-        let var_info = self.analysis.variables.get(&identifier.id).ok_or_else(|| {
-            QangCompilerError::new_assembler_error(
-                "Lambda variable not found in analysis results".to_string(),
-                identifier.node.span,
-            )
-        })?;
-
-        match &var_info.kind {
-            VariableKind::Global => {
-                self.emit_constant_opcode(
-                    OpCode::DefineGlobal,
-                    OpCode::DefineGlobal16,
-                    Value::string(identifier.node.name),
-                    lambda_decl.node.span,
-                )?;
-            }
-            VariableKind::Local { .. } => {
-                // Local lambda, no additional instruction needed
-            }
-            VariableKind::Upvalue { .. } => {
-                return Err(QangCompilerError::new_assembler_error(
-                    "Cannot declare upvalue lambda".to_string(),
-                    lambda_decl.node.span,
-                ));
-            }
-        }
+        self.define_variable(
+            if is_local {
+                None
+            } else {
+                Some(identifier.node.name)
+            },
+            lambda_decl.node.span,
+        )?;
 
         Ok(())
     }

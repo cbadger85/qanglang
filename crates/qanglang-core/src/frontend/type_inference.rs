@@ -514,6 +514,47 @@ impl<'a> TypeInferenceEngine<'a> {
         }
     }
 
+    /// Look up a field or method in a class definition
+    fn lookup_class_member(
+        &self,
+        class_node: NodeId,
+        member_name: StringHandle,
+        ctx: &VisitorContext,
+    ) -> TypeId {
+        let class_decl = ctx.nodes.get_decl_node(class_node);
+
+        // Ensure this is actually a class declaration
+        if let DeclNode::Class(class_info) = class_decl.node {
+            let member_count = ctx.nodes.array.size(class_info.members);
+
+            for i in 0..member_count {
+                if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_info.members, i) {
+                    let member = ctx.nodes.get_class_member_node(member_id);
+
+                    match member.node {
+                        super::typed_node_arena::ClassMemberNode::Field(field) => {
+                            let field_identifier = ctx.nodes.get_identifier_node(field.name);
+                            if field_identifier.node.name == member_name {
+                                // Return the field's type if it has been inferred
+                                return ctx.nodes.get_node_type_id(field_identifier.id);
+                            }
+                        }
+                        super::typed_node_arena::ClassMemberNode::Method(method) => {
+                            let method_identifier = ctx.nodes.get_identifier_node(method.name);
+                            if method_identifier.node.name == member_name {
+                                // Return the method's function type
+                                return ctx.nodes.get_node_type_id(member_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Member not found - this will result in an error
+        TypeArena::UNKNOWN
+    }
+
     /// Unify two return types, handling nil specially
     fn unify_return_types(
         &mut self,
@@ -1006,7 +1047,8 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             super::typed_node_arena::CallOperationNode::Property(property) => {
                 let property_identifier = ctx.nodes.get_identifier_node(property.identifier);
 
-                match ctx.nodes.types.get_type(callee_type) {
+                // Set the property identifier type based on the result, don't visit it as a variable
+                let property_type = match ctx.nodes.types.get_type(callee_type) {
                     QangType::Module { .. } => ctx
                         .nodes
                         .types
@@ -1017,7 +1059,14 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                         .find(|(name, _)| *name == property_identifier.node.name)
                         .map(|(_, ty)| *ty)
                         .unwrap_or(TypeArena::UNKNOWN),
-                    QangType::Class { .. } => TypeArena::UNKNOWN,
+                    QangType::Class { class_node, .. } => {
+                        // Look up the field/method in the class definition
+                        self.lookup_class_member(
+                            *class_node,
+                            property_identifier.node.name,
+                            ctx,
+                        )
+                    }
                     QangType::String => {
                         // Handle string intrinsic methods
                         self.get_string_intrinsic_type(
@@ -1056,7 +1105,11 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                             ));
                         TypeArena::UNKNOWN
                     }
-                }
+                };
+
+                // Set the property identifier type and return the property type
+                ctx.nodes.set_node_type(property_identifier.id, TypeInfo::new(property_type));
+                property_type
             }
             super::typed_node_arena::CallOperationNode::Call(_) => {
                 // Check if this is calling an intrinsic method (e.g., arr.length())
@@ -1287,6 +1340,10 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 let func_expr = TypedNodeRef::new(member.id, method);
                 self.visit_function_expression(func_expr, ctx)?;
 
+                // Set the member node type to the function type
+                let method_type = ctx.nodes.get_node_type_id(member.id);
+                ctx.nodes.set_node_type(member.id, TypeInfo::new(method_type));
+
                 self.end_scope();
                 Ok(())
             }
@@ -1298,11 +1355,15 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     self.visit_expression(initializer, ctx)?;
                     ctx.nodes.get_node_type_id(initializer_id)
                 } else {
-                    TypeArena::UNKNOWN
+                    // Fields without initializers default to optional unknown (nil)
+                    ctx.nodes.types.make_optional(TypeArena::UNKNOWN)
                 };
 
+                // Set both the identifier and member types
                 ctx.nodes
                     .set_node_type(identifier.id, TypeInfo::new(field_type));
+                ctx.nodes
+                    .set_node_type(member.id, TypeInfo::new(field_type));
                 Ok(())
             }
         }
@@ -1428,6 +1489,73 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         }
     }
 
+    fn visit_object_literal(
+        &mut self,
+        object: TypedNodeRef<ObjectLiteralExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let mut fields = Vec::new();
+        let length = ctx.nodes.array.size(object.node.entries);
+
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(object.node.entries, i) {
+                let entry = ctx.nodes.get_obj_entry_node(node_id);
+
+                // Extract field information from the entry
+                // ObjectEntryNode has key and value fields
+                let key_identifier = ctx.nodes.get_identifier_node(entry.node.key);
+                let field_name = key_identifier.node.name;
+
+                // Visit the value expression to infer its type
+                let value_expr = ctx.nodes.get_expr_node(entry.node.value);
+                self.visit_expression(value_expr, ctx)?;
+                let field_type = ctx.nodes.get_node_type_id(entry.node.value);
+
+                fields.push((field_name, field_type));
+            }
+        }
+
+        let object_type = ctx.nodes.types.make_object(fields);
+        ctx.nodes.set_node_type(object.id, TypeInfo::new(object_type));
+
+        Ok(())
+    }
+
+    fn visit_object_entry(
+        &mut self,
+        entry: TypedNodeRef<ObjectEntryNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // For object literal entries, the key is a field name, not a variable reference
+        // So we don't need to visit it as an identifier (which would cause variable lookup)
+        // Just visit the value expression
+        let value_expr = ctx.nodes.get_expr_node(entry.node.value);
+        self.visit_expression(value_expr, ctx)?;
+
+        Ok(())
+    }
+
+    fn visit_property_assignment(
+        &mut self,
+        property: TypedNodeRef<PropertyAssignmentNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Visit the object being assigned to
+        let object = ctx.nodes.get_expr_node(property.node.object);
+        self.visit_expression(object, ctx)?;
+        let _object_type = ctx.nodes.get_node_type_id(property.node.object);
+
+        // For property assignment, we need to handle the property identifier
+        let property_identifier = ctx.nodes.get_identifier_node(property.node.property);
+
+        // Set the type of the property based on the assignment target type
+        // For now, we'll set it to unknown and let assignment expression handle the real type
+        ctx.nodes.set_node_type(property_identifier.id, TypeInfo::new(TypeArena::UNKNOWN));
+        ctx.nodes.set_node_type(property.id, TypeInfo::new(TypeArena::UNKNOWN));
+
+        Ok(())
+    }
+
     fn visit_block_statement(
         &mut self,
         block_stmt: TypedNodeRef<BlockStmtNode>,
@@ -1449,6 +1577,48 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             .set_node_type(block_stmt.id, TypeInfo::new(TypeArena::UNIT));
 
         Ok(())
+    }
+
+    fn visit_call_operation(
+        &mut self,
+        operation: TypedNodeRef<super::typed_node_arena::CallOperationNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        match operation.node {
+            super::typed_node_arena::CallOperationNode::Call(call) => {
+                // Visit function call arguments
+                let length = ctx.nodes.array.size(call.args);
+                for i in 0..length {
+                    if let Some(node_id) = ctx.nodes.array.get_node_id_at(call.args, i) {
+                        let arg = ctx.nodes.get_expr_node(node_id);
+                        self.visit_expression(arg, ctx)?;
+                    }
+                }
+                Ok(())
+            }
+            super::typed_node_arena::CallOperationNode::Property(_) => {
+                // For property access, don't visit the property identifier as a variable
+                // The property type is already set in the call expression handler
+                Ok(())
+            }
+            super::typed_node_arena::CallOperationNode::OptionalProperty(_) => {
+                // Similar to property access, don't visit as variable
+                Ok(())
+            }
+            super::typed_node_arena::CallOperationNode::Index(index) => {
+                // Visit the index expression
+                let index_expr = ctx.nodes.get_expr_node(index.index);
+                self.visit_expression(index_expr, ctx)
+            }
+            super::typed_node_arena::CallOperationNode::Map(_) => {
+                // Map operations are handled specially in visit_call_expression
+                Ok(())
+            }
+            super::typed_node_arena::CallOperationNode::OptionalMap(_) => {
+                // Optional map operations are handled specially in visit_call_expression
+                Ok(())
+            }
+        }
     }
 }
 

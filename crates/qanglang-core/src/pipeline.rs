@@ -11,9 +11,10 @@ use crate::{
     backend::compiler::Assembler,
     frontend::{
         module_map::{ModuleMap, ModuleSource, ModuleStatus},
+        node_visitor::{NodeVisitor, VisitorContext},
         source::LegacyModuleMap,
     },
-    nodes::{DeclNode, SourceSpan},
+    nodes::SourceSpan,
 };
 
 pub struct GlobalCompilerPipeline {
@@ -119,7 +120,10 @@ impl GlobalCompilerPipeline {
         allocator: &mut HeapAllocator,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {
-        let import_paths = self.extract_import_paths(module_node, module_path, allocator);
+        // Extract import paths first, requiring a separate scope to avoid borrowing conflicts
+        let import_paths = {
+            Self::extract_import_paths(module_node, module_path, &mut self.nodes, allocator)
+        };
 
         for import_path in import_paths {
             // Mark this file as imported (it's not a main module)
@@ -231,34 +235,57 @@ impl GlobalCompilerPipeline {
         Ok(QangProgram::new(main_handle, module_map.into()))
     }
 
-    /// Extract import paths from a parsed module
-    fn extract_import_paths(&self, module_node: NodeId, module_path: &Path, allocator: &mut HeapAllocator) -> Vec<PathBuf> {
-        let mut import_paths = Vec::new();
-        let module = self.nodes.get_program_node(module_node);
-        let length = self.nodes.array.size(module.node.decls);
+    /// Extract import paths from a parsed module using NodeVisitor for complete traversal
+    fn extract_import_paths(
+        module_node: NodeId,
+        module_path: &Path,
+        nodes: &mut TypedNodeArena,
+        allocator: &mut HeapAllocator,
+    ) -> Vec<PathBuf> {
+        struct ModuleImportExtractor<'a> {
+            import_paths: Vec<PathBuf>,
+            module_path: &'a Path,
+            allocator: &'a mut HeapAllocator,
+        }
 
-        for i in 0..length {
-            if let Some(node_id) = self.nodes.array.get_node_id_at(module.node.decls, i) {
-                let decl_node = self.nodes.get_decl_node(node_id);
-                if let DeclNode::Module(import_decl) = decl_node.node {
-                    // Get the import path string
-                    let import_path_str = allocator.strings.get_string(import_decl.path);
+        impl<'a> NodeVisitor for ModuleImportExtractor<'a> {
+            type Error = ();
 
-                    // Resolve relative to the current module's directory
-                    let resolved_path = if let Some(parent_dir) = module_path.parent() {
-                        parent_dir.join(import_path_str)
-                    } else {
-                        PathBuf::from(import_path_str)
-                    };
+            fn visit_import_module_declaration(
+                &mut self,
+                import_decl: crate::frontend::typed_node_arena::TypedNodeRef<crate::nodes::ImportModuleDeclNode>,
+                _ctx: &mut VisitorContext,
+            ) -> Result<(), Self::Error> {
+                // Found an import declaration - extract the path
+                let import_path_str = self.allocator.strings.get_string(import_decl.node.path);
 
-                    // Try to canonicalize the path, but use the resolved path if it fails
-                    let final_path = resolved_path.canonicalize().unwrap_or(resolved_path);
-                    import_paths.push(final_path);
-                }
+                // Resolve relative to the current module's directory
+                let resolved_path = if let Some(parent_dir) = self.module_path.parent() {
+                    parent_dir.join(import_path_str)
+                } else {
+                    PathBuf::from(import_path_str)
+                };
+
+                // Try to canonicalize the path, but use the resolved path if it fails
+                let final_path = resolved_path.canonicalize().unwrap_or(resolved_path);
+                self.import_paths.push(final_path);
+                Ok(())
             }
         }
 
-        import_paths
+        let mut extractor = ModuleImportExtractor {
+            import_paths: Vec::new(),
+            module_path,
+            allocator,
+        };
+
+        let mut errors = ErrorReporter::new();
+        let mut ctx = VisitorContext::new(nodes, &mut errors);
+
+        let module_ref = ctx.nodes.get_program_node(module_node);
+        let _ = extractor.visit_module(module_ref, &mut ctx);
+
+        extractor.import_paths
     }
 
     /// Get all parsed modules

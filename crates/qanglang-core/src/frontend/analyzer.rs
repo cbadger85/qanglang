@@ -61,7 +61,8 @@ impl<'a> AnalysisPipeline<'a> {
             let errors = errors.take_errors();
 
             // Use the first main module's source map for formatting
-            let main_source_map = modules.get_main_modules()
+            let main_source_map = modules
+                .get_main_modules()
                 .first()
                 .and_then(|path| modules.get(path))
                 .map(|module| &module.source_map);

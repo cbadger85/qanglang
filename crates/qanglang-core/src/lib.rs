@@ -22,7 +22,7 @@ pub use error::{
     QangRuntimeError, Trace,
 };
 pub use frontend::module_map::ModuleMap;
-pub use frontend::source::{LegacyModuleMap, SourceMap};
+pub use frontend::source::SourceMap;
 pub use frontend::tokenizer::{Token, TokenType, Tokenizer};
 pub use frontend::{
     analyzer::{AnalysisPipeline, AnalysisPipelineConfig},

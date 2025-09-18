@@ -6,13 +6,11 @@ use std::{
 
 use crate::{
     AnalysisPipeline, AnalysisPipelineConfig, CompilerConfig, ErrorReporter, HeapAllocator, NodeId,
-    Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap,
-    TypedNodeArena,
+    Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap, TypedNodeArena,
     backend::compiler::Assembler,
     frontend::{
-        module_map::{ModuleMap, ModuleSource, ModuleStatus},
+        module_map::ModuleMap,
         node_visitor::{NodeVisitor, VisitorContext},
-        source::LegacyModuleMap,
     },
     nodes::SourceSpan,
 };
@@ -41,8 +39,7 @@ impl GlobalCompilerPipeline {
         self
     }
 
-    /// Parse files and automatically determine which are main modules
-    pub fn parse_files_auto_main(
+    pub fn parse_files(
         &mut self,
         file_paths: Vec<PathBuf>,
         allocator: &mut HeapAllocator,
@@ -55,7 +52,9 @@ impl GlobalCompilerPipeline {
         // Second pass: determine main modules (files that aren't imported)
         for file_path in file_paths {
             // Try to canonicalize the path, but fall back to the original if it fails
-            let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
+            let canonical_path = file_path
+                .canonicalize()
+                .unwrap_or_else(|_| file_path.clone());
 
             // If this file wasn't imported by any other file, it's a main module
             if !self.imported_files.contains(&canonical_path) {
@@ -66,20 +65,23 @@ impl GlobalCompilerPipeline {
         Ok(())
     }
 
-    fn parse_file_recursive(&mut self, file_path: &PathBuf, allocator: &mut HeapAllocator) -> Result<NodeId, QangPipelineError> {
+    fn parse_file_recursive(
+        &mut self,
+        file_path: &PathBuf,
+        allocator: &mut HeapAllocator,
+    ) -> Result<NodeId, QangPipelineError> {
         // Try to canonicalize the path, but fall back to the original if it fails
         // (this supports in-memory test scenarios where files don't exist on disk)
-        let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
+        let canonical_path = file_path
+            .canonicalize()
+            .unwrap_or_else(|_| file_path.clone());
 
-        // Track that we've seen this file
         self.processed_files.insert(canonical_path.clone());
 
-        // Return existing if already parsed
         if self.modules.has(&canonical_path) {
             return Ok(self.modules.get(&canonical_path).unwrap().node);
         }
 
-        // Parse this file
         let source_map = match SourceMap::from_path(&canonical_path) {
             Ok(source_map) => Arc::new(source_map),
             Err(_) => {
@@ -99,11 +101,9 @@ impl GlobalCompilerPipeline {
 
         let mut errors = parser.into_errors();
 
-        // Insert the module first to prevent infinite recursion
         self.modules
             .insert(&canonical_path, node_id, source_map.clone());
 
-        // Now parse dependencies and mark them as imported
         self.parse_module_dependencies(&canonical_path, node_id, allocator, &mut errors)?;
 
         if errors.has_errors() {
@@ -120,19 +120,14 @@ impl GlobalCompilerPipeline {
         allocator: &mut HeapAllocator,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {
-        // Extract import paths first, requiring a separate scope to avoid borrowing conflicts
-        let import_paths = {
-            Self::extract_import_paths(module_node, module_path, &mut self.nodes, allocator)
-        };
+        let import_paths =
+            { Self::extract_import_paths(module_node, module_path, &mut self.nodes, allocator) };
 
         for import_path in import_paths {
-            // Mark this file as imported (it's not a main module)
             self.imported_files.insert(import_path.clone());
 
-            // Add to dependency graph
             self.modules.add_dependency(module_path, &import_path);
 
-            // Recursively parse the dependency
             match self.parse_file_recursive(&import_path, allocator) {
                 Ok(_) => {}
                 Err(dep_error) => {
@@ -146,34 +141,27 @@ impl GlobalCompilerPipeline {
         Ok(())
     }
 
-    /// Get all main modules (files that aren't imported by others)
     pub fn get_main_modules(&self) -> &[PathBuf] {
         &self.modules.main_modules
     }
 
-    /// Check if a specific file is a main module
-    pub fn is_main_module(&self, path: &Path) -> bool {
-        let canonical = path.canonicalize().ok();
-        canonical
-            .as_ref()
-            .map(|p| !self.imported_files.contains(p))
-            .unwrap_or(false)
-    }
+    pub fn process_files(
+        &mut self,
+        file_paths: Vec<PathBuf>,
+        allocator: &mut HeapAllocator,
+    ) -> Result<(), QangPipelineError> {
+        self.parse_files(file_paths, allocator)?;
 
-    /// Full pipeline: Parse -> Analyze -> Ready for compilation
-    pub fn process_files(&mut self, file_paths: Vec<PathBuf>, allocator: &mut HeapAllocator) -> Result<(), QangPipelineError> {
-        // Step 1: Parse all files and determine main modules
-        self.parse_files_auto_main(file_paths, allocator)?;
-
-        // Step 2: Run semantic analysis on all parsed modules
         self.analyze_all_modules(allocator)?;
 
-        // Now everything is ready for compilation
         Ok(())
     }
 
     /// Run analysis using the contained AnalysisPipeline
-    fn analyze_all_modules(&mut self, allocator: &mut HeapAllocator) -> Result<(), QangPipelineError> {
+    fn analyze_all_modules(
+        &mut self,
+        allocator: &mut HeapAllocator,
+    ) -> Result<(), QangPipelineError> {
         let analysis_config = AnalysisPipelineConfig {
             error_message_format: self.config.error_message_format,
             strict_mode: true,
@@ -187,15 +175,14 @@ impl GlobalCompilerPipeline {
         Ok(())
     }
 
-
     /// Compile a specific module to executable form
     pub fn compile_module(
         &mut self,
         module_path: &Path,
         alloc: &mut HeapAllocator,
     ) -> Result<QangProgram, QangPipelineError> {
-        use rustc_hash::{FxBuildHasher, FxHashMap};
         use crate::backend::module_resolver::RuntimeModule;
+        use rustc_hash::{FxBuildHasher, FxHashMap};
 
         let module_source = self.modules.get(module_path).ok_or_else(|| {
             QangPipelineError::new(vec![QangCompilerError::new_analysis_error(
@@ -221,7 +208,8 @@ impl GlobalCompilerPipeline {
             let path_str = path.to_string_lossy();
             let path_handle = alloc.strings.intern(&path_str);
             let assembler = Assembler::new(module.source_map.clone(), alloc);
-            let mut compiled_module = assembler.assemble(module.node, &mut self.nodes, &mut errors)?;
+            let mut compiled_module =
+                assembler.assemble(module.node, &mut self.nodes, &mut errors)?;
             compiled_module.name = path_handle;
             let function_handle = alloc.allocate_function(compiled_module);
             module_map.insert(path_handle, RuntimeModule::new(function_handle));
@@ -253,7 +241,9 @@ impl GlobalCompilerPipeline {
 
             fn visit_import_module_declaration(
                 &mut self,
-                import_decl: crate::frontend::typed_node_arena::TypedNodeRef<crate::nodes::ImportModuleDeclNode>,
+                import_decl: crate::frontend::typed_node_arena::TypedNodeRef<
+                    crate::nodes::ImportModuleDeclNode,
+                >,
                 _ctx: &mut VisitorContext,
             ) -> Result<(), Self::Error> {
                 // Found an import declaration - extract the path
@@ -289,46 +279,47 @@ impl GlobalCompilerPipeline {
     }
 
     /// Get all parsed modules
-    pub fn get_all_modules(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
-        self.modules.iter()
-    }
+    // pub fn get_all_modules(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
+    //     self.modules.iter()
+    // }
 
     /// Get the total number of modules
-    pub fn module_count(&self) -> usize {
-        self.modules.iter().count()
-    }
+    // pub fn module_count(&self) -> usize {
+    //     self.modules.iter().count()
+    // }
 
     /// Get modules with errors
-    pub fn get_modules_with_errors(&self) -> Vec<&Path> {
-        self.modules.modules_with_status(ModuleStatus::Error(Vec::new()))
-    }
+    // pub fn get_modules_with_errors(&self) -> Vec<&Path> {
+    //     self.modules
+    //         .modules_with_status(ModuleStatus::Error(Vec::new()))
+    // }
 
     /// Get the dependency graph
-    pub fn get_dependencies(&self, path: &Path) -> Option<&Vec<PathBuf>> {
-        self.modules.get_dependencies(path)
-    }
+    // pub fn get_dependencies(&self, path: &Path) -> Option<&Vec<PathBuf>> {
+    //     self.modules.get_dependencies(path)
+    // }
 
     /// Get reverse dependencies (what depends on this module)
-    pub fn get_dependents(&self, path: &Path) -> Option<&Vec<PathBuf>> {
-        self.modules.get_dependents(path)
-    }
+    // pub fn get_dependents(&self, path: &Path) -> Option<&Vec<PathBuf>> {
+    //     self.modules.get_dependents(path)
+    // }
 
     /// Check for circular dependencies
-    pub fn detect_circular_dependencies(&self) -> Vec<Vec<PathBuf>> {
-        self.modules.detect_cycles()
-    }
+    // pub fn detect_circular_dependencies(&self) -> Vec<Vec<PathBuf>> {
+    // self.modules.detect_cycles()
+    // }
 
     /// Get a module by path
-    pub fn get_module(&self, path: &Path) -> Option<&ModuleSource> {
-        self.modules.get(path)
-    }
+    // pub fn get_module(&self, path: &Path) -> Option<&ModuleSource> {
+    //     self.modules.get(path)
+    // }
 
     /// Check if all modules have been successfully analyzed
-    pub fn all_modules_analyzed(&self) -> bool {
-        self.modules.iter().all(|(_, module)| {
-            matches!(module.status, ModuleStatus::Analyzed)
-        })
-    }
+    // pub fn all_modules_analyzed(&self) -> bool {
+    //     self.modules
+    //         .iter()
+    //         .all(|(_, module)| matches!(module.status, ModuleStatus::Analyzed))
+    // }
 
     /// Compile source code directly from a string (for in-memory compilation)
     /// This is the primary method for tests and REPL usage
@@ -342,7 +333,11 @@ impl GlobalCompilerPipeline {
         let source_map = Arc::new(SourceMap::from_source(source));
 
         // Parse the source using the internal parser approach
-        let mut parser = Parser::new(source_map.clone(), &mut pipeline.nodes, &mut allocator.strings);
+        let mut parser = Parser::new(
+            source_map.clone(),
+            &mut pipeline.nodes,
+            &mut allocator.strings,
+        );
         let modules = parser.parse();
         let mut errors = parser.into_errors();
 
@@ -351,9 +346,8 @@ impl GlobalCompilerPipeline {
             return Err(QangPipelineError::new(errors.take_errors()));
         }
 
-        // Convert LegacyModuleMap to new ModuleMap (temporary until Parser is updated)
-        let new_modules = Self::convert_legacy_to_new_module_map(modules);
-        pipeline.modules = new_modules;
+        // Parser now returns ModuleMap directly
+        pipeline.modules = modules;
 
         // Run semantic analysis
         pipeline.analyze_all_modules(allocator)?;
@@ -362,33 +356,17 @@ impl GlobalCompilerPipeline {
         let main_module_path = {
             let main_modules = pipeline.get_main_modules();
             if main_modules.is_empty() {
-                return Err(QangPipelineError::new(vec![QangCompilerError::new_analysis_error(
-                    "No main module found during compilation".to_string(),
-                    SourceSpan::default(),
-                )]));
+                return Err(QangPipelineError::new(vec![
+                    QangCompilerError::new_analysis_error(
+                        "No main module found during compilation".to_string(),
+                        SourceSpan::default(),
+                    ),
+                ]));
             }
             main_modules[0].clone()
         };
 
         // Compile the main module
         pipeline.compile_module(&main_module_path, allocator)
-    }
-
-    /// Helper to convert LegacyModuleMap to new ModuleMap (temporary)
-    fn convert_legacy_to_new_module_map(legacy: LegacyModuleMap) -> ModuleMap {
-        let mut new_map = ModuleMap::new();
-
-        // Add main module first
-        let main_module = legacy.get_main();
-        let main_path = main_module.source_map.get_path();
-        new_map.insert(main_path, main_module.node, main_module.source_map.clone());
-        new_map.add_main_module(main_path.to_path_buf());
-
-        // Add other modules
-        for (path, module) in legacy.iter() {
-            new_map.insert(path, module.node, module.source_map.clone());
-        }
-
-        new_map
     }
 }

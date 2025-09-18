@@ -21,7 +21,7 @@ pub fn parse_source(
     let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
     let modules = parser.parse();
     let errors = parser.into_errors();
-    (modules.get_main().node, errors)
+    (modules.get_main().unwrap().node, errors)
 }
 
 pub fn assert_no_parse_errors(errors: &crate::ErrorReporter) {

@@ -9,7 +9,7 @@ use crate::{
     frontend::{
         node_array_arena::NodeArrayId,
         nodes::*,
-        source::LegacyModuleMap,
+        module_map::ModuleMap,
         tokenizer::{Token, TokenType, Tokenizer},
         typed_node_arena::{NodeId, TypedNodeArena},
     },
@@ -334,9 +334,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> LegacyModuleMap {
+    pub fn parse(&mut self) -> ModuleMap {
         let main_id = self.parse_file();
-        let mut modules = LegacyModuleMap::new(main_id, self.source_map.clone());
+        let mut modules = ModuleMap::new();
+
+        // Insert the main module
+        let main_path = self.source_map.get_path().to_path_buf();
+        modules.insert(&main_path, main_id, self.source_map.clone());
+        modules.add_main_module(main_path);
 
         if self.config.skip_modules {
             return modules;

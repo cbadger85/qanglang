@@ -148,6 +148,31 @@ impl<'a> TypeInferenceEngine<'a> {
             type_arena.make_function(vec![TypeArena::NUMBER, nullable_item_creator], array_type);
         self.current_scope
             .declare(array_of_length_handle, array_of_length_type);
+
+        // Runtime type constants for 'is' operator
+        let array_const_handle = self.strings.intern("ARRAY");
+        self.current_scope.declare(array_const_handle, TypeArena::UNKNOWN);
+
+        let object_const_handle = self.strings.intern("OBJECT");
+        self.current_scope.declare(object_const_handle, TypeArena::UNKNOWN);
+
+        let string_const_handle = self.strings.intern("STRING");
+        self.current_scope.declare(string_const_handle, TypeArena::UNKNOWN);
+
+        let number_const_handle = self.strings.intern("NUMBER");
+        self.current_scope.declare(number_const_handle, TypeArena::UNKNOWN);
+
+        let boolean_const_handle = self.strings.intern("BOOLEAN");
+        self.current_scope.declare(boolean_const_handle, TypeArena::UNKNOWN);
+
+        let nil_const_handle = self.strings.intern("NIL");
+        self.current_scope.declare(nil_const_handle, TypeArena::UNKNOWN);
+
+        let function_const_handle = self.strings.intern("FUNCTION");
+        self.current_scope.declare(function_const_handle, TypeArena::UNKNOWN);
+
+        let class_const_handle = self.strings.intern("CLASS");
+        self.current_scope.declare(class_const_handle, TypeArena::UNKNOWN);
     }
 
     /// Get the type of a string intrinsic method

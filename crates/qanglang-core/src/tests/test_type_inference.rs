@@ -317,4 +317,201 @@ mod type_error_tests {
             error_msg
         );
     }
+
+    #[test]
+    fn test_nil_to_concrete_type_assignment() {
+        let source = r#"
+        fn test_nil_assignment() {
+            var test_value = nil;
+            test_value = 42;  // Should work: nil -> number becomes optional number
+            assert_eq(test_value, 42, "Expected test_value to be 42");
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        // This should not produce any errors with our fixed type inference
+        assert!(
+            errors.is_empty(),
+            "Should not report errors for nil to concrete assignment, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_nil_to_string_assignment() {
+        let source = r#"
+        fn test_nil_to_string() {
+            var test_value = nil;
+            test_value = "hello";  // Should work: nil -> string becomes optional string
+            assert_eq(test_value, "hello", "Expected test_value to be hello");
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            errors.is_empty(),
+            "Should not report errors for nil to string assignment, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_concrete_to_nil_assignment() {
+        let source = r#"
+        fn test_concrete_to_nil() {
+            var test_value = 42;
+            test_value = nil;  // Should work: number -> nil becomes optional number
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            errors.is_empty(),
+            "Should not report errors for concrete to nil assignment, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_mixed_type_assignments() {
+        let source = r#"
+        fn test_mixed_types() {
+            var test_value = 42;      // starts as number
+            test_value = "hello";     // should fail - can't assign string to number
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        // This should produce errors - concrete types can't be changed to different concrete types
+        assert!(
+            !errors.is_empty(),
+            "Should report error for mixed type assignment (concrete to different concrete), got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_complex_nil_mixed_assignments() {
+        let source = r#"
+        fn test_complex_mixed() {
+            var test_value = nil;     // Optional<Unknown>
+            test_value = 42;          // Optional<Number>
+            test_value = "hello";     // Should fail - can't assign string to Optional<Number>
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            !errors.is_empty(),
+            "Should report error for assigning different concrete type to already-typed optional variable, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_nil_variable_stays_flexible() {
+        let source = r#"
+        fn test_flexible_nil() {
+            var test_value = nil;     // Optional<Unknown>
+            test_value = nil;         // Still Optional<Unknown>
+            test_value = 42;          // Optional<Number>
+            test_value = nil;         // Still Optional<Number>
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            errors.is_empty(),
+            "Should not report errors for nil variable that becomes concrete then nil again, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_optional_type_compatibility() {
+        let source = r#"
+        fn test_optional_compat() {
+            var maybe_number = nil;   // Optional<Unknown>
+            maybe_number = 42;        // Optional<Number>
+            maybe_number = 24;        // Still Optional<Number> (same concrete type)
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            errors.is_empty(),
+            "Should not report errors for optional type compatibility, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_variable_shadowing_with_different_types() {
+        let source = r#"
+        fn test_shadowing() {
+            var test_value = nil;
+            test_value = 42;
+            {
+                var test_value = "scoped string";  // Different variable, should be fine
+                assert_eq(test_value, "scoped string", "Expected scoped variable to be string");
+            }
+            assert_eq(test_value, 42, "Expected outer variable to be number");
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            errors.is_empty(),
+            "Should not report errors for variable shadowing with different types, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_function_return_type_with_nil() {
+        let source = r#"
+        fn maybe_return_number(flag) {
+            if (flag) {
+                return 42;
+            } else {
+                return nil;  // Should make return type Optional<Number>
+            }
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        assert!(
+            errors.is_empty(),
+            "Should not report errors for function returning number or nil, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_array_with_mixed_nil_types() {
+        let source = r#"
+        fn test_mixed_array() {
+            var arr = [nil, 42, nil, 24];  // Should become Array<Optional<Number>>
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        // This might not work perfectly yet, but it shouldn't crash
+        // We'll accept this test result for now
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_object_property_with_nil_assignment() {
+        let source = r#"
+        fn test_object_property() {
+            var obj = { value: nil };
+            obj.value = 42;  // Property should be able to change from nil to number
+        }
+        "#;
+
+        let errors = run_analysis_expecting_errors(source);
+        // Property assignment might not be fully implemented yet, but shouldn't crash
+        assert!(errors.is_empty());
+    }
 }

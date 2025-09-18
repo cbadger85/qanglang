@@ -400,7 +400,7 @@ impl<'a> TypeInferenceEngine<'a> {
             return true;
         }
 
-        // Special cases for null safety
+        // Special cases for null safety and type inference
         match (type_arena.get_type(target), type_arena.get_type(source)) {
             // Can assign non-optional to optional
             (QangType::Optional(inner), _) if *inner == source => true,
@@ -408,7 +408,65 @@ impl<'a> TypeInferenceEngine<'a> {
             (QangType::Unknown, _) | (_, QangType::Unknown) => true,
             // Unit types are compatible
             (QangType::Unit, QangType::Unit) => true,
+            // Can assign nil to optional types
+            (QangType::Optional(_), QangType::Optional(inner)) if *inner == TypeArena::UNKNOWN => true,
+            // Can assign concrete type to optional of that type
+            (QangType::Optional(inner), _) if *inner == source => true,
+            // Can assign anything to optional unknown (updated variable from nil)
+            (QangType::Optional(inner), _) if *inner == TypeArena::UNKNOWN => true,
             _ => false,
+        }
+    }
+
+    /// Update variable type based on assignment, handling nil-to-concrete and mixed types
+    fn update_variable_type(&self, current_type: TypeId, new_value_type: TypeId, type_arena: &mut TypeArena) -> TypeId {
+        // Check if current type is nil (Optional<Unknown>)
+        let current_is_nil = matches!(
+            type_arena.get_type(current_type),
+            QangType::Optional(inner) if *inner == TypeArena::UNKNOWN
+        );
+
+        // Check if new value is nil
+        let new_is_nil = matches!(
+            type_arena.get_type(new_value_type),
+            QangType::Optional(inner) if *inner == TypeArena::UNKNOWN
+        );
+
+        match (current_is_nil, new_is_nil) {
+            (true, false) => {
+                // nil -> concrete type: make the concrete type optional
+                if type_arena.is_optional(new_value_type) {
+                    new_value_type // Already optional
+                } else {
+                    type_arena.make_optional(new_value_type)
+                }
+            },
+            (false, true) => {
+                // concrete -> nil: keep current type but make it optional if not already
+                if type_arena.is_optional(current_type) {
+                    current_type
+                } else {
+                    type_arena.make_optional(current_type)
+                }
+            },
+            (true, true) => {
+                // nil -> nil: stay as nil
+                current_type
+            },
+            (false, false) => {
+                // concrete -> concrete: check if types are compatible
+                if current_type == new_value_type {
+                    current_type // Same type
+                } else if current_type == TypeArena::UNKNOWN {
+                    new_value_type // Unknown can become any concrete type
+                } else if new_value_type == TypeArena::UNKNOWN {
+                    current_type // Keep current if new is unknown
+                } else {
+                    // Different concrete types - this is a type error (don't update type)
+                    // Return the current type and let the compatibility check catch it
+                    current_type
+                }
+            }
         }
     }
 
@@ -985,7 +1043,17 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         let value_type = ctx.nodes.get_node_type_id(assignment.node.value);
         let target_type = ctx.nodes.get_node_type_id(assignment.node.target);
 
-        if !self.are_types_compatible(target_type, value_type, &ctx.nodes.types) {
+        // Handle variable type updates for assignments
+        let updated_type = self.update_variable_type(target_type, value_type, &mut ctx.nodes.types);
+
+        // Update the variable's type in scope if this is an identifier assignment
+        if let super::typed_node_arena::AssignmentTargetNode::Identifier(identifier) = target.node {
+            self.current_scope.declare(identifier.name, updated_type);
+            ctx.nodes.set_node_type(target.id, TypeInfo::new(updated_type));
+        }
+
+        // Check for type compatibility after potential updates
+        if !self.are_types_compatible(updated_type, value_type, &ctx.nodes.types) {
             ctx.errors
                 .report_error(QangCompilerError::new_analysis_error(
                     "Type mismatch in assignment".to_string(),

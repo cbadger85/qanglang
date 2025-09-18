@@ -12,6 +12,7 @@ pub struct AnalysisPipelineConfig {
     pub error_message_format: ErrorMessageFormat,
     pub strict_mode: bool,
     pub enable_type_inference: bool,
+    pub skip_modules: bool,
 }
 
 impl Default for AnalysisPipelineConfig {
@@ -20,6 +21,7 @@ impl Default for AnalysisPipelineConfig {
             error_message_format: ErrorMessageFormat::Minimal,
             strict_mode: true,
             enable_type_inference: true,
+            skip_modules: false,
         }
     }
 }
@@ -74,14 +76,11 @@ impl<'a> AnalysisPipeline<'a> {
         }
 
         if self.config.enable_type_inference {
-            TypeInferenceEngine::new(self.strings)
-                .with_native_types(&mut nodes.types)
-                .infer_types_with_modules(modules.get_main().node, modules, nodes, errors);
-
-            for (_, module) in modules.iter() {
-                TypeInferenceEngine::new(self.strings)
-                    .with_native_types(&mut nodes.types)
-                    .infer_types_with_modules(module.node, modules, nodes, errors);
+            let engine = TypeInferenceEngine::new(self.strings).with_native_types(&mut nodes.types);
+            if self.config.skip_modules {
+                engine.infer_types(modules.get_main().node, nodes, errors);
+            } else {
+                engine.infer_types_with_modules(modules.get_main().node, modules, nodes, errors);
             }
 
             if errors.has_errors() {

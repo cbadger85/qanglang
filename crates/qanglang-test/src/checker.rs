@@ -71,6 +71,7 @@ pub fn check_single_file(
     let mut errors = parser.into_errors();
     let analyzer = AnalysisPipeline::new(&mut strings).with_config(AnalysisPipelineConfig {
         error_message_format,
+        skip_modules: true,
         ..Default::default()
     });
 

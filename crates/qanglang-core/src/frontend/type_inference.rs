@@ -515,7 +515,9 @@ impl<'a> TypeInferenceEngine<'a> {
                 .make_module(module_path, exports, module_node);
         }
 
-        panic!("Expected modules but found none.")
+        // No modules available (likely because parsing was done with skip_modules=true)
+        // Return a default module type for the import
+        ctx.nodes.types.make_module(module_path, vec![], crate::NodeId::default())
     }
 
     /// Extract exports from a parsed module

@@ -1,6 +1,6 @@
 use crate::{
     ErrorMessageFormat, ErrorReporter, QangPipelineError, TypedNodeArena,
-    frontend::{semantic_validator::SemanticValidator, source::LegacyModuleMap},
+    frontend::{module_map::ModuleMap, semantic_validator::SemanticValidator},
     memory::StringInterner,
 };
 
@@ -39,28 +39,50 @@ impl<'a> AnalysisPipeline<'a> {
 
     pub fn analyze(
         self,
-        modules: &LegacyModuleMap,
+        modules: &ModuleMap,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {
-        SemanticValidator::new(self.strings).analyze(modules.get_main().node, nodes, errors);
+        // Analyze all main modules
+        for main_path in modules.get_main_modules() {
+            if let Some(main_module) = modules.get(main_path) {
+                SemanticValidator::new(self.strings).analyze(main_module.node, nodes, errors);
+            }
+        }
 
-        for (_, module) in modules.iter() {
-            SemanticValidator::new(self.strings).analyze(module.node, nodes, errors);
+        // Analyze all other modules
+        for (path, module) in modules.iter() {
+            if !modules.is_main_module(path) {
+                SemanticValidator::new(self.strings).analyze(module.node, nodes, errors);
+            }
         }
 
         if self.config.strict_mode && errors.has_errors() {
             let errors = errors.take_errors();
+
+            // Use the first main module's source map for formatting
+            let main_source_map = modules.get_main_modules()
+                .first()
+                .and_then(|path| modules.get(path))
+                .map(|module| &module.source_map);
 
             let formatted_errors = errors
                 .into_iter()
                 .map(|error| match self.config.error_message_format {
                     ErrorMessageFormat::Minimal => error,
                     ErrorMessageFormat::Compact => {
-                        error.into_short_formatted(&modules.get_main().source_map)
+                        if let Some(source_map) = main_source_map {
+                            error.into_short_formatted(source_map)
+                        } else {
+                            error
+                        }
                     }
                     ErrorMessageFormat::Verbose => {
-                        error.into_formatted(&modules.get_main().source_map)
+                        if let Some(source_map) = main_source_map {
+                            error.into_formatted(source_map)
+                        } else {
+                            error
+                        }
                     }
                 })
                 .collect();

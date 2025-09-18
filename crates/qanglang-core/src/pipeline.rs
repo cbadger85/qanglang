@@ -9,7 +9,10 @@ use crate::{
     Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap,
     TypedNodeArena,
     backend::compiler::Assembler,
-    frontend::{module_map::{ModuleMap, ModuleSource, ModuleStatus}, source::LegacyModuleMap},
+    frontend::{
+        module_map::{ModuleMap, ModuleSource, ModuleStatus},
+        source::LegacyModuleMap,
+    },
     nodes::{DeclNode, SourceSpan},
 };
 
@@ -30,6 +33,11 @@ impl GlobalCompilerPipeline {
             processed_files: HashSet::new(),
             config: CompilerConfig::default(),
         }
+    }
+
+    pub fn with_config(mut self, config: CompilerConfig) -> Self {
+        self.config = config;
+        self
     }
 
     /// Parse files and automatically determine which are main modules
@@ -167,21 +175,14 @@ impl GlobalCompilerPipeline {
             strict_mode: true,
         };
 
-        // For now, analyze each main module and its dependencies using the legacy approach
-        for main_path in self.modules.main_modules.clone() {
-            if let Some(legacy_modules) = self.create_analysis_module_map(&main_path) {
-                let analyzer = AnalysisPipeline::new(&mut allocator.strings).with_config(analysis_config);
-                let mut errors = ErrorReporter::new();
-                analyzer.analyze(&legacy_modules, &mut self.nodes, &mut errors)?;
-            }
-        }
+        // Use the new ModuleMap directly
+        let analyzer = AnalysisPipeline::new(&mut allocator.strings).with_config(analysis_config);
+        let mut errors = ErrorReporter::new();
+        analyzer.analyze(&self.modules, &mut self.nodes, &mut errors)?;
 
         Ok(())
     }
 
-    fn create_analysis_module_map(&self, main_path: &Path) -> Option<LegacyModuleMap> {
-        self.modules.to_legacy_module_map(main_path)
-    }
 
     /// Compile a specific module to executable form
     pub fn compile_module(
@@ -300,5 +301,67 @@ impl GlobalCompilerPipeline {
         self.modules.iter().all(|(_, module)| {
             matches!(module.status, ModuleStatus::Analyzed)
         })
+    }
+
+    /// Compile source code directly from a string (for in-memory compilation)
+    /// This is the primary method for tests and REPL usage
+    pub fn compile_source(
+        source: String,
+        allocator: &mut HeapAllocator,
+    ) -> Result<QangProgram, QangPipelineError> {
+        let mut pipeline = Self::new();
+
+        // Create an in-memory source map
+        let source_map = Arc::new(SourceMap::from_source(source));
+
+        // Parse the source using the internal parser approach
+        let mut parser = Parser::new(source_map.clone(), &mut pipeline.nodes, &mut allocator.strings);
+        let modules = parser.parse();
+        let mut errors = parser.into_errors();
+
+        // Check for parse errors
+        if errors.has_errors() {
+            return Err(QangPipelineError::new(errors.take_errors()));
+        }
+
+        // Convert LegacyModuleMap to new ModuleMap (temporary until Parser is updated)
+        let new_modules = Self::convert_legacy_to_new_module_map(modules);
+        pipeline.modules = new_modules;
+
+        // Run semantic analysis
+        pipeline.analyze_all_modules(allocator)?;
+
+        // Get the main module path before borrowing pipeline mutably
+        let main_module_path = {
+            let main_modules = pipeline.get_main_modules();
+            if main_modules.is_empty() {
+                return Err(QangPipelineError::new(vec![QangCompilerError::new_analysis_error(
+                    "No main module found during compilation".to_string(),
+                    SourceSpan::default(),
+                )]));
+            }
+            main_modules[0].clone()
+        };
+
+        // Compile the main module
+        pipeline.compile_module(&main_module_path, allocator)
+    }
+
+    /// Helper to convert LegacyModuleMap to new ModuleMap (temporary)
+    fn convert_legacy_to_new_module_map(legacy: LegacyModuleMap) -> ModuleMap {
+        let mut new_map = ModuleMap::new();
+
+        // Add main module first
+        let main_module = legacy.get_main();
+        let main_path = main_module.source_map.get_path();
+        new_map.insert(main_path, main_module.node, main_module.source_map.clone());
+        new_map.add_main_module(main_path.to_path_buf());
+
+        // Add other modules
+        for (path, module) in legacy.iter() {
+            new_map.insert(path, module.node, module.source_map.clone());
+        }
+
+        new_map
     }
 }

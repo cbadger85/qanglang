@@ -1,8 +1,5 @@
-use qanglang_core::{CompilerPipeline, HeapAllocator, SourceMap, Vm};
-use std::{
-    io::{self, Write},
-    path::Path,
-};
+use qanglang_core::{GlobalCompilerPipeline, HeapAllocator, Vm};
+use std::io::{self, Write};
 
 pub fn run_repl(debug: bool) {
     println!("QangLang REPL - Type 'exit' to quit");
@@ -34,14 +31,7 @@ pub fn run_repl(debug: bool) {
 }
 
 pub fn execute_repl_line(source: &str, vm: &mut Vm) {
-    let source_map = SourceMap::new(
-        source.to_string(),
-        std::env::current_dir()
-            .map(|p| p.join(Path::new("repl")))
-            .expect("Expect to be ran from a dir."),
-    );
-
-    let program = match CompilerPipeline::new().compile(source_map, &mut vm.alloc) {
+    let program = match GlobalCompilerPipeline::compile_source(source.to_string(), &mut vm.alloc) {
         Ok(program) => program,
         Err(errors) => {
             for error in errors.all() {

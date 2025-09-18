@@ -1,4 +1,4 @@
-use crate::{CompilerPipeline, HeapAllocator, SourceMap};
+use crate::{GlobalCompilerPipeline, HeapAllocator};
 
 #[test]
 fn test_initializing_local_variable_with_same_name() {
@@ -8,10 +8,9 @@ fn test_initializing_local_variable_with_same_name() {
             var a = "b";
         }
   "#;
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);
@@ -31,10 +30,9 @@ fn test_initializing_local_variable_with_itself() {
             }
         }
   "#;
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(_) => panic!("Expected failure but found none."),
         Err(errors) => {
             assert_eq!(errors.all().len(), 1);

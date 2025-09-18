@@ -1,4 +1,4 @@
-use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm};
+use crate::{GlobalCompilerPipeline, HeapAllocator, Vm};
 
 #[test]
 fn test_compound_assignment_operators() {
@@ -34,10 +34,9 @@ fn test_compound_assignment_operators() {
         assert_eq(str, "Hello World");
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
@@ -83,10 +82,9 @@ fn test_compound_assignment_with_properties() {
         assert_eq(obj.value, 20);
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)
@@ -126,10 +124,9 @@ fn test_compound_assignment_with_arrays() {
         assert_eq(arr[2], 2);
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             match Vm::new(allocator)
                 .set_gc_status(false)

@@ -8,7 +8,7 @@ pub mod pipeline;
 
 pub use backend::chunk::SourceLocation;
 pub use backend::compiler::QangProgram;
-pub use backend::compiler::{CompilerConfig, CompilerPipeline};
+pub use backend::compiler::CompilerConfig;
 pub use backend::module_resolver::{ModuleResolver, RuntimeModule};
 pub use backend::object::{
     BoundIntrinsicObject, BoundMethodObject, ClassObject, ClosureObject, FunctionObject,
@@ -21,7 +21,8 @@ pub use error::{
     ErrorMessageFormat, ErrorReporter, NativeFunctionError, QangCompilerError, QangPipelineError,
     QangRuntimeError, Trace,
 };
-pub use frontend::source::SourceMap;
+pub use frontend::module_map::ModuleMap;
+pub use frontend::source::{LegacyModuleMap, SourceMap};
 pub use frontend::tokenizer::{Token, TokenType, Tokenizer};
 pub use frontend::{
     analyzer::{AnalysisPipeline, AnalysisPipelineConfig},

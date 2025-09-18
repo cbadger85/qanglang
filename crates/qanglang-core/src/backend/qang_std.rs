@@ -1,7 +1,7 @@
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{
-    CompilerPipeline, HeapAllocator, NativeFunctionError, QangProgram, QangRuntimeError, SourceMap,
+    GlobalCompilerPipeline, HeapAllocator, NativeFunctionError, QangProgram, QangRuntimeError,
     Value, ValueKind, Vm,
     backend::{
         compiler::STACK_MAX,
@@ -377,10 +377,7 @@ impl Vm {
     fn load_stdlib(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.load_constants();
         let stdlib_source = include_str!("stdlib.ql");
-        let source_map = SourceMap::from_source(stdlib_source.to_owned());
-
-        let program = CompilerPipeline::new()
-            .compile(source_map, &mut self.alloc)
+        let program = GlobalCompilerPipeline::compile_source(stdlib_source.to_owned(), &mut self.alloc)
             .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
 
         // Execute stdlib to populate globals

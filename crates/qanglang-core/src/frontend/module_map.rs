@@ -6,7 +6,7 @@ use std::{
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use crate::{NodeId, SourceMap, frontend::source::LegacyModuleMap};
+use crate::{NodeId, SourceMap};
 
 // In source.rs
 pub struct ModuleMap {
@@ -159,20 +159,6 @@ impl ModuleMap {
         })
     }
 
-    /// Convert to the old ModuleMap format for AnalysisPipeline compatibility
-    pub fn to_legacy_module_map(&self, main_path: &Path) -> Option<LegacyModuleMap> {
-        let main_module = self.get(main_path)?;
-        let mut legacy = LegacyModuleMap::new(main_module.node, main_module.source_map.clone());
-
-        // Add all other modules
-        for (path, module) in &self.modules {
-            if path != main_path {
-                legacy.insert(path, module.node, module.source_map.clone());
-            }
-        }
-
-        Some(legacy)
-    }
 
     /// Detect circular dependencies
     pub fn detect_cycles(&self) -> Vec<Vec<PathBuf>> {

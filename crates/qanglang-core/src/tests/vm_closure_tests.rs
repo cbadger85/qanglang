@@ -1,4 +1,4 @@
-use crate::{CompilerPipeline, HeapAllocator, SourceMap, Vm, disassemble_program};
+use crate::{GlobalCompilerPipeline, HeapAllocator, Vm, disassemble_program};
 
 #[test]
 fn test_three_level_closure_capture_bug() {
@@ -36,10 +36,9 @@ fn test_three_level_closure_capture_bug() {
         assert_eq(result, 9);
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -84,10 +83,9 @@ fn test_simple_two_level_closure() {
         assert_eq(result, 5);
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -119,10 +117,9 @@ fn test_nested_iefes() {
     assert_eq(4||x -> (3||y -> (2||z -> x + y + z|)|)|, 9); // Should be 9 now
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -155,10 +152,9 @@ fn test_map_optional_expression() {
         assert_eq(number?|n -> n + 1|, 1); // does no not work.
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -220,10 +216,9 @@ fn test_closures() {
         assert_eq(perform_count(), 1);
 "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -266,10 +261,9 @@ fn test_multiple_overflow_chunks() {
         wrapper_function_that_is_required_for_failure();
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -308,10 +302,9 @@ fn test_upvalue_chain_linking() {
         assert_eq(closure(), 210, "Expected closure with 20 upvalues to return sum of 1-20 = 210.");
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             // disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -352,10 +345,9 @@ fn test_minimal_upvalue_overflow() {
         assert_eq(c5(), 47);
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -410,10 +402,9 @@ fn test_isolated_upvalue_overflow_scenario() {
         test_multiple_overflow_chunks();
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)
@@ -455,10 +446,9 @@ fn test_nested_closures() {
         test_three_level_nested_closures();
     "#;
 
-    let source_map = SourceMap::from_source(source.to_string());
     let mut allocator: HeapAllocator = HeapAllocator::new();
 
-    match CompilerPipeline::new().compile(source_map, &mut allocator) {
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
         Ok(program) => {
             disassemble_program(&allocator);
             match Vm::new(allocator)

@@ -1,8 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
-    AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle,
-    FunctionObject, HeapAllocator, NodeId, Parser, QangCompilerError, QangPipelineError,
+    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle,
+    FunctionObject, HeapAllocator, NodeId, QangCompilerError, QangPipelineError,
     SourceLocation, SourceMap, TypedNodeArena, Value,
     backend::{
         chunk::{Chunk, OpCode},
@@ -64,112 +64,6 @@ impl From<CompilerConfig> for AnalysisPipelineConfig {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct CompilerPipeline {
-    config: CompilerConfig,
-}
-
-impl Default for CompilerPipeline {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CompilerPipeline {
-    pub fn new() -> Self {
-        Self {
-            config: CompilerConfig::default(),
-        }
-    }
-
-    pub fn with_config(mut self, config: CompilerConfig) -> Self {
-        self.config = config;
-        self
-    }
-
-    pub fn compile(
-        &self,
-        source_map: SourceMap,
-        alloc: &mut HeapAllocator,
-    ) -> Result<QangProgram, QangPipelineError> {
-        let file_path = source_map.get_path().to_path_buf();
-
-        // Check if this is an in-memory source (empty path from SourceMap::from_source)
-        // OR if this looks like a test file (avoid GlobalCompilerPipeline for tests due to string interner conflicts)
-        if file_path.as_os_str().is_empty() || self.is_test_file(&file_path) {
-            // Use the old compilation path for in-memory sources and test files
-            self.compile_in_memory(source_map, alloc)
-        } else {
-            // Use GlobalCompilerPipeline for real file-based compilation
-            use crate::GlobalCompilerPipeline;
-
-            let mut pipeline = GlobalCompilerPipeline::new();
-            pipeline.parse_files_auto_main(vec![file_path.clone()], alloc)?;
-
-            let main_modules = pipeline.get_main_modules();
-            if main_modules.is_empty() {
-                return Err(QangPipelineError::new(vec![QangCompilerError::new_analysis_error(
-                    "No main module found during compilation".to_string(),
-                    SourceSpan::default(),
-                )]));
-            }
-
-            let main_path = main_modules[0].clone();
-            pipeline.compile_module(&main_path, alloc)
-        }
-    }
-
-    /// Check if this looks like a test file that should use in-memory compilation
-    fn is_test_file(&self, path: &PathBuf) -> bool {
-        let path_str = path.to_string_lossy().to_lowercase();
-        path_str.contains("test") ||
-        path.extension().map_or(false, |ext| ext == "ql")
-    }
-
-    /// Original compilation method for in-memory sources (used by tests)
-    fn compile_in_memory(
-        &self,
-        source_map: SourceMap,
-        alloc: &mut HeapAllocator,
-    ) -> Result<QangProgram, QangPipelineError> {
-        use rustc_hash::{FxBuildHasher, FxHashMap};
-        use crate::backend::module_resolver::RuntimeModule;
-
-        let mut nodes = TypedNodeArena::new();
-        let mut parser = Parser::new(Arc::new(source_map), &mut nodes, &mut alloc.strings);
-        let modules = parser.parse();
-
-        let mut errors = parser.into_errors();
-
-        AnalysisPipeline::new(&mut alloc.strings)
-            .with_config(self.config.into())
-            .analyze(&modules, &mut nodes, &mut errors)?;
-
-        let assembler = Assembler::new(modules.get_main().source_map.clone(), alloc);
-        let mut main_function =
-            assembler.assemble(modules.get_main().node, &mut nodes, &mut errors)?;
-        let main_module_id = alloc
-            .strings
-            .intern(&modules.get_main().source_map.get_path().to_string_lossy());
-        main_function.name = main_module_id;
-
-        let mut module_map = FxHashMap::with_hasher(FxBuildHasher);
-        for (path, module) in modules.into_iter() {
-            let path_str = path.to_string_lossy();
-            let path = alloc.strings.intern(&path_str);
-            let assembler = Assembler::new(module.source_map, alloc);
-            let mut module = assembler.assemble(module.node, &mut nodes, &mut errors)?;
-            module.name = path;
-            let function_handle = alloc.allocate_function(module);
-            module_map.insert(path, RuntimeModule::new(function_handle));
-        }
-
-        Ok(QangProgram::new(
-            alloc.allocate_function(main_function),
-            module_map.into(),
-        ))
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 struct LoopContext {

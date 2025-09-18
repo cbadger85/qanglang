@@ -1,5 +1,5 @@
 use qanglang_core::{
-    ClosureHandle, CompilerPipeline, HeapAllocator, SourceMap, StringHandle, Value, ValueKind, Vm,
+    ClosureHandle, GlobalCompilerPipeline, HeapAllocator, StringHandle, Value, ValueKind, Vm,
 };
 use rustc_hash::FxHashMap;
 
@@ -85,22 +85,33 @@ pub fn run_tests_from_files(
 }
 
 pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -> TestSuiteResult {
-    let source_map = match SourceMap::from_path(&source_file.file_path) {
-        Ok(content) => content,
-        Err(err) => {
-            eprintln!(
-                "Error reading file '{}': {}",
-                source_file.file_path.display(),
-                err
-            );
-            std::process::exit(1);
-        }
-    };
     let mut allocator = HeapAllocator::new();
 
     // Compile the test file
-    let program = match CompilerPipeline::new().compile(source_map, &mut allocator) {
-        Ok(program) => program,
+    let mut pipeline = GlobalCompilerPipeline::new();
+    let program = match pipeline.process_files(vec![source_file.file_path.clone()], &mut allocator) {
+        Ok(_) => {
+            let main_modules = pipeline.get_main_modules();
+            if main_modules.is_empty() {
+                let error_messages = vec!["No main module found".to_string()];
+                let error = format!("Compilation failed: {}", error_messages.join("; "));
+                return TestSuiteResult::failure(source_file.display_path, error);
+            }
+            let main_module_path = main_modules[0].clone();
+            match pipeline.compile_module(&main_module_path, &mut allocator) {
+                Ok(program) => program,
+                Err(errors) => {
+                    let error_messages: Vec<String> = errors
+                        .into_errors()
+                        .into_iter()
+                        .map(|e| e.message)
+                        .collect();
+
+                    let error = format!("Compilation failed: {}", error_messages.join("; "));
+                    return TestSuiteResult::failure(source_file.display_path, error);
+                }
+            }
+        }
         Err(errors) => {
             let error_messages: Vec<String> = errors
                 .into_errors()

@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod module_map;
 pub mod node_array_arena;
 pub mod node_visitor;
 pub mod nodes;

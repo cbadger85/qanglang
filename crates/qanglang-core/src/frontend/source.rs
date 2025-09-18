@@ -152,20 +152,20 @@ impl SourceMap {
     }
 }
 
-pub struct ModuleSource {
+pub struct LegacyModuleSource {
     pub node: NodeId,
     pub source_map: Arc<SourceMap>,
 }
 
-pub struct ModuleMap {
-    modules: FxHashMap<PathBuf, ModuleSource>,
-    main: ModuleSource,
+pub struct LegacyModuleMap {
+    modules: FxHashMap<PathBuf, LegacyModuleSource>,
+    main: LegacyModuleSource,
 }
 
-impl ModuleMap {
+impl LegacyModuleMap {
     pub fn new(main_id: NodeId, source_map: Arc<SourceMap>) -> Self {
         Self {
-            main: ModuleSource {
+            main: LegacyModuleSource {
                 node: main_id,
                 source_map,
             },
@@ -173,29 +173,29 @@ impl ModuleMap {
         }
     }
 
-    pub fn get_main(&self) -> &ModuleSource {
+    pub fn get_main(&self) -> &LegacyModuleSource {
         &self.main
     }
 
-    pub fn get(&self, path: &Path) -> &ModuleSource {
+    pub fn get(&self, path: &Path) -> &LegacyModuleSource {
         &self.modules[path]
     }
 
     pub fn insert(&mut self, path: &Path, node: NodeId, source_map: Arc<SourceMap>) {
         let _ = self
             .modules
-            .insert(path.to_path_buf(), ModuleSource { node, source_map });
+            .insert(path.to_path_buf(), LegacyModuleSource { node, source_map });
     }
 
     pub fn has(&self, path: &Path) -> bool {
         self.modules.contains_key(path)
     }
 
-    pub fn into_iter(self) -> impl Iterator<Item = (PathBuf, ModuleSource)> {
+    pub fn into_iter(self) -> impl Iterator<Item = (PathBuf, LegacyModuleSource)> {
         self.modules.into_iter()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Path, &LegacyModuleSource)> {
         self.modules.iter().map(|(k, v)| (k.as_path(), v))
     }
 }

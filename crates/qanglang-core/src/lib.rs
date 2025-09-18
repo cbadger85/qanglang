@@ -4,6 +4,7 @@ mod debug;
 mod error;
 mod frontend;
 pub mod memory;
+pub mod pipeline;
 
 pub use backend::chunk::SourceLocation;
 pub use backend::compiler::QangProgram;
@@ -34,6 +35,7 @@ pub use memory::{
     HashMapHandle, HeapAllocator, InstanceHandle, NativeFunctionHandle, StringHandle,
     StringInterner, UpvalueHandle, UpvalueSlot,
 };
+pub use pipeline::GlobalCompilerPipeline;
 
 #[cfg(test)]
 pub mod tests;

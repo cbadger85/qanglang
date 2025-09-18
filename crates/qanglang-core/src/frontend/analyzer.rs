@@ -1,6 +1,6 @@
 use crate::{
     ErrorMessageFormat, ErrorReporter, QangPipelineError, TypedNodeArena,
-    frontend::{semantic_validator::SemanticValidator, source::ModuleMap},
+    frontend::{semantic_validator::SemanticValidator, source::LegacyModuleMap},
     memory::StringInterner,
 };
 
@@ -39,7 +39,7 @@ impl<'a> AnalysisPipeline<'a> {
 
     pub fn analyze(
         self,
-        modules: &ModuleMap,
+        modules: &LegacyModuleMap,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {

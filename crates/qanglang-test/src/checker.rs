@@ -1,8 +1,5 @@
-use std::sync::Arc;
-
 use qanglang_core::{
-    AnalysisPipeline, AnalysisPipelineConfig, ErrorMessageFormat, Parser, ParserConfig, SourceMap,
-    StringInterner, TypedNodeArena,
+    GlobalCompilerPipeline, ErrorMessageFormat,
 };
 
 use crate::test_file::SourceFile;
@@ -40,50 +37,60 @@ pub fn check_files_from_sources(
     source_files: Vec<SourceFile>,
     error_format: ErrorMessageFormat,
 ) -> Vec<CheckResult> {
-    source_files
-        .into_iter()
-        .map(|source_file| check_single_file(source_file, error_format))
-        .collect()
+    // Use GlobalCompilerPipeline to check multiple files efficiently
+    // by parsing them all together (better module resolution)
+    let file_paths: Vec<_> = source_files.iter().map(|sf| sf.file_path.clone()).collect();
+
+    let mut pipeline = GlobalCompilerPipeline::new();
+
+    // Parse all files at once for better dependency resolution
+    match pipeline.process_files(file_paths.clone()) {
+        Ok(_) => {
+            // All files passed - create success results
+            source_files
+                .into_iter()
+                .map(|source_file| CheckResult::success(source_file.display_path))
+                .collect()
+        }
+        Err(_) => {
+            // Some files failed - check each individually to get specific errors
+            source_files
+                .into_iter()
+                .map(|source_file| check_single_file(source_file, error_format))
+                .collect()
+        }
+    }
 }
 
 pub fn check_single_file(
     source_file: SourceFile,
-    error_message_format: ErrorMessageFormat,
+    _error_message_format: ErrorMessageFormat,
 ) -> CheckResult {
-    let source_map = match SourceMap::from_path(&source_file.file_path) {
-        Ok(content) => content,
-        Err(err) => {
-            eprintln!(
-                "Error reading file '{}': {}",
-                source_file.file_path.display(),
-                err
-            );
-            std::process::exit(1);
-        }
-    };
-    let source_map = Arc::new(source_map);
-    let mut nodes = TypedNodeArena::new();
-    let mut strings = StringInterner::new();
-    let mut parser = Parser::new(source_map, &mut nodes, &mut strings)
-        .with_config(ParserConfig { skip_modules: true });
-    let modules = parser.parse();
+    // Use the new GlobalCompilerPipeline for better module handling
+    let mut pipeline = GlobalCompilerPipeline::new();
 
-    let mut errors = parser.into_errors();
-    let analyzer = AnalysisPipeline::new(&mut strings).with_config(AnalysisPipelineConfig {
-        error_message_format,
-        ..Default::default()
-    });
-
-    // Try to compile the file
-    match analyzer.analyze(&modules, &mut nodes, &mut errors) {
-        Ok(_) => CheckResult::success(source_file.display_path),
-        Err(compilation_errors) => {
-            let error_messages: Vec<String> = compilation_errors
+    // Parse files and automatically determine main modules
+    match pipeline.parse_files_auto_main(vec![source_file.file_path.clone()]) {
+        Ok(_) => {}
+        Err(parse_error) => {
+            let error_messages: Vec<String> = parse_error
                 .into_errors()
                 .into_iter()
                 .map(|e| e.message)
                 .collect();
+            return CheckResult::failure(source_file.display_path, error_messages);
+        }
+    }
 
+    // Run semantic analysis on all parsed modules
+    match pipeline.process_files(vec![source_file.file_path]) {
+        Ok(_) => CheckResult::success(source_file.display_path),
+        Err(analysis_error) => {
+            let error_messages: Vec<String> = analysis_error
+                .into_errors()
+                .into_iter()
+                .map(|e| e.message)
+                .collect();
             CheckResult::failure(source_file.display_path, error_messages)
         }
     }

@@ -11,7 +11,7 @@ use crate::{
         nodes::*,
         source::ModuleMap,
         tokenizer::{Token, TokenType, Tokenizer},
-        typed_node_arena::{ExprNode, NodeId, PrimaryNode, TypedNodeArena},
+        typed_node_arena::{NodeId, TypedNodeArena},
     },
     memory::StringInterner,
 };

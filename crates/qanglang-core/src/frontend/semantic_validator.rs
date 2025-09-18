@@ -326,7 +326,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
         let operation = ctx.nodes.get_call_operation_node(call.node.operation);
         match operation.node {
-            super::typed_node_arena::CallOperationNode::Call(call_node) => {
+            super::nodes::CallOperationNode::Call(call_node) => {
                 let arg_count = ctx.nodes.array.size(call_node.args);
 
                 if arg_count > u8::MAX as usize {
@@ -381,7 +381,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
             if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {
                 let member = ctx.nodes.get_class_member_node(member_id);
                 match member.node {
-                    super::typed_node_arena::ClassMemberNode::Method(method) => {
+                    super::nodes::ClassMemberNode::Method(method) => {
                         let method_name = ctx.nodes.get_identifier_node(method.name);
                         let init_name = self.strings.intern("init");
                         let is_initializer = method_name.node.name == init_name;
@@ -423,7 +423,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
                         self.end_function(member_id)?;
                     }
-                    super::typed_node_arena::ClassMemberNode::Field(field) => {
+                    super::nodes::ClassMemberNode::Field(field) => {
                         if let Some(init_id) = field.initializer {
                             let initializer = ctx.nodes.get_expr_node(init_id);
                             self.visit_expression(initializer, ctx)?;
@@ -609,12 +609,10 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_call_operation(
         &mut self,
-        operation: super::typed_node_arena::TypedNodeRef<
-            super::typed_node_arena::CallOperationNode,
-        >,
+        operation: super::typed_node_arena::TypedNodeRef<super::nodes::CallOperationNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        use super::typed_node_arena::CallOperationNode;
+        use super::nodes::CallOperationNode;
 
         match operation.node {
             CallOperationNode::Call(call) => {

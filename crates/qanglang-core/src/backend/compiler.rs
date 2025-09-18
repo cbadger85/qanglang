@@ -13,7 +13,7 @@ use crate::{
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
         semantic_validator::FunctionKind,
-        typed_node_arena::{AssignmentTargetNode, ClassMemberNode, TypedNodeRef},
+        typed_node_arena::TypedNodeRef,
     },
     nodes::*,
 };
@@ -799,7 +799,7 @@ impl<'a> Assembler<'a> {
 
     fn handle_map_expression(
         &mut self,
-        callee: TypedNodeRef<crate::frontend::typed_node_arena::ExprNode>,
+        callee: TypedNodeRef<ExprNode>,
         map_expr: MapExprNode,
         map_node_id: NodeId,
         ctx: &mut VisitorContext,
@@ -1404,13 +1404,13 @@ impl<'a> NodeVisitor for Assembler<'a> {
         if let Some(initializer_id) = for_stmt.node.initializer {
             let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
             match initializer.node {
-                crate::frontend::typed_node_arena::ForInitializerNode::VarDecl(var_decl) => {
+                ForInitializerNode::VarDecl(var_decl) => {
                     self.visit_variable_declaration(
                         TypedNodeRef::new(initializer.id, var_decl),
                         ctx,
                     )?;
                 }
-                crate::frontend::typed_node_arena::ForInitializerNode::Expr(expr) => {
+                ForInitializerNode::Expr(expr) => {
                     self.visit_expression(TypedNodeRef::new(initializer.id, expr), ctx)?;
                     self.emit_opcode(OpCode::Pop, expr.span());
                 }
@@ -1661,11 +1661,11 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         let lambda_body = ctx.nodes.get_lambda_body_node(lambda_expr.node.body);
         match lambda_body.node {
-            crate::frontend::typed_node_arena::LambdaBodyNode::Block(body) => {
+            LambdaBodyNode::Block(body) => {
                 self.visit_block_statement(TypedNodeRef::new(lambda_body.id, body), ctx)?;
                 self.emit_return(lambda_expr.node.span);
             }
-            crate::frontend::typed_node_arena::LambdaBodyNode::Expr(_) => {
+            LambdaBodyNode::Expr(_) => {
                 let return_node = ReturnStmtNode {
                     value: Some(lambda_body.id),
                     span: lambda_body.node.span(),
@@ -1713,7 +1713,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let call_operation = ctx.nodes.get_call_operation_node(call.node.operation);
 
         match call_operation.node {
-            crate::frontend::typed_node_arena::CallOperationNode::Call(args) => {
+            CallOperationNode::Call(args) => {
                 let arg_length = ctx.nodes.array.size(args.args);
                 if arg_length > u8::MAX as usize {
                     return Err(QangCompilerError::new_assembler_error(
@@ -1722,10 +1722,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     ));
                 }
 
-                if let crate::frontend::typed_node_arena::ExprNode::Primary(
-                    crate::frontend::typed_node_arena::PrimaryNode::Super(super_expr),
-                ) = callee.node
-                {
+                if let ExprNode::Primary(PrimaryNode::Super(super_expr)) = callee.node {
                     if !matches!(
                         self.compiler_state.kind,
                         FunctionKind::Method | FunctionKind::Initializer
@@ -1761,11 +1758,8 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     return Ok(());
                 }
 
-                if let crate::frontend::typed_node_arena::ExprNode::Call(property_call) =
-                    callee.node
-                    && let crate::frontend::typed_node_arena::CallOperationNode::Property(
-                        method_name,
-                    ) = ctx
+                if let ExprNode::Call(property_call) = callee.node
+                    && let CallOperationNode::Property(method_name) = ctx
                         .nodes
                         .get_call_operation_node(property_call.operation)
                         .node
@@ -1813,7 +1807,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 self.emit_opcode_and_byte(OpCode::Call, arg_length as u8, call.node.span);
                 Ok(())
             }
-            crate::frontend::typed_node_arena::CallOperationNode::Property(identifier) => {
+            CallOperationNode::Property(identifier) => {
                 self.visit_expression(callee, ctx)?;
                 let identifier_handle = ctx
                     .nodes
@@ -1828,14 +1822,14 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 )?;
                 Ok(())
             }
-            crate::frontend::typed_node_arena::CallOperationNode::Index(expr) => {
+            CallOperationNode::Index(expr) => {
                 self.visit_expression(callee, ctx)?;
                 let expr = ctx.nodes.get_expr_node(expr.index);
                 self.visit_expression(expr, ctx)?;
                 self.emit_opcode(OpCode::GetArrayIndex, call.node.span);
                 Ok(())
             }
-            crate::frontend::typed_node_arena::CallOperationNode::OptionalProperty(identifier) => {
+            CallOperationNode::OptionalProperty(identifier) => {
                 self.visit_expression(callee, ctx)?;
                 let identifier_handle = ctx
                     .nodes
@@ -1850,10 +1844,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 )?;
                 Ok(())
             }
-            crate::frontend::typed_node_arena::CallOperationNode::Map(map_expr) => {
+            CallOperationNode::Map(map_expr) => {
                 self.handle_map_expression(callee, map_expr, call_operation.id, ctx)
             }
-            crate::frontend::typed_node_arena::CallOperationNode::OptionalMap(map_expr) => {
+            CallOperationNode::OptionalMap(map_expr) => {
                 self.visit_expression(callee, ctx)?;
                 let nil_jump = self.emit_jump(OpCode::JumpIfNil, map_expr.span);
                 self.emit_opcode(OpCode::Pop, map_expr.span);
@@ -1883,14 +1877,13 @@ impl<'a> NodeVisitor for Assembler<'a> {
         let call_handle = self.allocator.strings.intern("call");
 
         match right.node {
-            crate::frontend::typed_node_arena::ExprNode::Call(call_expr) => {
+            ExprNode::Call(call_expr) => {
                 match ctx.nodes.get_call_operation_node(call_expr.operation).node {
-                    crate::frontend::typed_node_arena::CallOperationNode::Call(arguments) => {
-                        if let crate::frontend::typed_node_arena::ExprNode::Call(inner_call) =
+                    CallOperationNode::Call(arguments) => {
+                        if let ExprNode::Call(inner_call) =
                             ctx.nodes.get_expr_node(call_expr.callee).node
-                            && let crate::frontend::typed_node_arena::CallOperationNode::Property(
-                                method_name,
-                            ) = ctx.nodes.get_call_operation_node(inner_call.operation).node
+                            && let CallOperationNode::Property(method_name) =
+                                ctx.nodes.get_call_operation_node(inner_call.operation).node
                             && ctx
                                 .nodes
                                 .get_identifier_node(method_name.identifier)
@@ -1940,7 +1933,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
                         self.emit_opcode_and_byte(OpCode::Call, total_args as u8, pipe.node.span);
                     }
-                    crate::frontend::typed_node_arena::CallOperationNode::Property(method_name) => {
+                    CallOperationNode::Property(method_name) => {
                         self.visit_expression(ctx.nodes.get_expr_node(call_expr.callee), ctx)?;
                         self.visit_expression(left, ctx)?;
                         let method_handle = ctx

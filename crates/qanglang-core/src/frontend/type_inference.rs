@@ -133,10 +133,21 @@ impl<'a> TypeInferenceEngine<'a> {
         let hash_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::NUMBER);
         self.current_scope.declare(hash_handle, hash_type);
 
-        let array_constructor_handle = self.strings.intern("Array");
-        let array_constructor_type = type_arena.make_function(vec![TypeArena::NUMBER], array_type);
+        let array_of_length_handle = self.strings.intern("array_of_length");
+        let array_of_length_type = type_arena.make_function(vec![TypeArena::NUMBER], array_type);
         self.current_scope
-            .declare(array_constructor_handle, array_constructor_type);
+            .declare(array_of_length_handle, array_of_length_type);
+
+        let array_of_length_handle = self.strings.intern("array_of");
+        let item_creator = type_arena.create_type(QangType::Function {
+            params: vec![TypeArena::NUMBER],
+            return_type: TypeArena::UNKNOWN,
+        });
+        let nullable_item_creator = type_arena.make_optional(item_creator);
+        let array_of_length_type =
+            type_arena.make_function(vec![TypeArena::NUMBER, nullable_item_creator], array_type);
+        self.current_scope
+            .declare(array_of_length_handle, array_of_length_type);
     }
 
     /// Get the type of a string intrinsic method
@@ -225,6 +236,28 @@ impl<'a> TypeInferenceEngine<'a> {
                 type_arena.make_function(vec![array_type], return_type)
             }
             _ => TypeArena::UNKNOWN,
+        }
+    }
+
+    /// Handle a regular (non-intrinsic) function call
+    fn handle_regular_call(
+        &self,
+        callee_type: TypeId,
+        call: TypedNodeRef<CallExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<TypeId, QangCompilerError> {
+        match ctx.nodes.types.get_type(callee_type) {
+            QangType::Function { return_type, .. } => Ok(*return_type),
+            QangType::Class { .. } => Ok(callee_type),
+            QangType::Unknown => Ok(TypeArena::UNKNOWN),
+            _ => {
+                ctx.errors
+                    .report_error(QangCompilerError::new_analysis_error(
+                        "Cannot call non-function value".to_string(),
+                        call.node.span,
+                    ));
+                Ok(TypeArena::UNKNOWN)
+            }
         }
     }
 
@@ -634,6 +667,52 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         Ok(())
     }
 
+    fn visit_array_literal(
+        &mut self,
+        array: TypedNodeRef<ArrayLiteralExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let length = ctx.nodes.array.size(array.node.elements);
+        let mut element_types = Vec::new();
+
+        // Visit all elements and collect their types
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(array.node.elements, i) {
+                let element = ctx.nodes.get_expr_node(node_id);
+                self.visit_expression(element, ctx)?;
+                let element_type = ctx.nodes.get_node_type_id(node_id);
+                element_types.push(element_type);
+            }
+        }
+
+        // Determine the common element type
+        let element_type = if element_types.is_empty() {
+            // Empty array - use unknown element type
+            TypeArena::UNKNOWN
+        } else if element_types.len() == 1 {
+            // Single element - use its type
+            element_types[0]
+        } else {
+            // Multiple elements - try to find a common type
+            let first_type = element_types[0];
+            let all_same = element_types.iter().all(|&t| t == first_type);
+
+            if all_same {
+                first_type
+            } else {
+                // Mixed types - use unknown for now
+                // In a more sophisticated system, you might want to find a common supertype
+                TypeArena::UNKNOWN
+            }
+        };
+
+        // Create array type
+        let array_type = ctx.nodes.types.make_array(element_type);
+        ctx.nodes.set_node_type(array.id, TypeInfo::new(array_type));
+
+        Ok(())
+    }
+
     fn visit_identifier(
         &mut self,
         identifier: TypedNodeRef<IdentifierNode>,
@@ -821,11 +900,108 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         call: TypedNodeRef<CallExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
+        let operation = ctx.nodes.get_call_operation_node(call.node.operation);
+
+        // Check if this is an intrinsic method call first
+        if let super::typed_node_arena::CallOperationNode::Call(_) = operation.node {
+            if let super::typed_node_arena::ExprNode::Call(inner_call) =
+                ctx.nodes.get_expr_node(call.node.callee).node
+            {
+                if let super::typed_node_arena::CallOperationNode::Property(property) =
+                    ctx.nodes.get_call_operation_node(inner_call.operation).node
+                {
+                    // This is a method call - handle intrinsics specially
+                    let inner_callee = ctx.nodes.get_expr_node(inner_call.callee);
+                    self.visit_expression(inner_callee, ctx)?;
+                    let inner_callee_type = ctx.nodes.get_node_type_id(inner_call.callee);
+
+                    let property_identifier = ctx.nodes.get_identifier_node(property.identifier);
+
+                    // Handle intrinsic method calls without visiting the property identifier
+                    let result_type = match ctx.nodes.types.get_type(inner_callee_type) {
+                        QangType::String => {
+                            let method_type = self.get_string_intrinsic_type(
+                                property_identifier.node.name,
+                                self.strings,
+                                &mut ctx.nodes.types,
+                            );
+                            // Set the property identifier type to the method type
+                            ctx.nodes
+                                .set_node_type(property_identifier.id, TypeInfo::new(method_type));
+                            // Set the inner call type to the method type
+                            ctx.nodes
+                                .set_node_type(inner_call.callee, TypeInfo::new(method_type));
+                            // Return the method's return type
+                            if let QangType::Function { return_type, .. } =
+                                ctx.nodes.types.get_type(method_type)
+                            {
+                                *return_type
+                            } else {
+                                TypeArena::UNKNOWN
+                            }
+                        }
+                        QangType::Array(_) => {
+                            let method_type = self.get_array_intrinsic_type(
+                                property_identifier.node.name,
+                                inner_callee_type,
+                                self.strings,
+                                &mut ctx.nodes.types,
+                            );
+                            ctx.nodes
+                                .set_node_type(property_identifier.id, TypeInfo::new(method_type));
+                            ctx.nodes
+                                .set_node_type(inner_call.callee, TypeInfo::new(method_type));
+                            if let QangType::Function { return_type, .. } =
+                                ctx.nodes.types.get_type(method_type)
+                            {
+                                *return_type
+                            } else {
+                                TypeArena::UNKNOWN
+                            }
+                        }
+                        QangType::Function {
+                            return_type: func_return_type,
+                            ..
+                        } => {
+                            let method_type = self.get_function_intrinsic_type(
+                                property_identifier.node.name,
+                                *func_return_type,
+                                self.strings,
+                                &mut ctx.nodes.types,
+                            );
+                            ctx.nodes
+                                .set_node_type(property_identifier.id, TypeInfo::new(method_type));
+                            ctx.nodes
+                                .set_node_type(inner_call.callee, TypeInfo::new(method_type));
+                            if let QangType::Function { return_type, .. } =
+                                ctx.nodes.types.get_type(method_type)
+                            {
+                                *return_type
+                            } else {
+                                TypeArena::UNKNOWN
+                            }
+                        }
+                        _ => {
+                            // Not an intrinsic - fall back to regular processing
+                            self.visit_expression(ctx.nodes.get_expr_node(call.node.callee), ctx)?;
+                            let callee_type = ctx.nodes.get_node_type_id(call.node.callee);
+                            self.handle_regular_call(callee_type, call, ctx)?
+                        }
+                    };
+
+                    // Visit the call operation arguments
+                    self.visit_call_operation(operation, ctx)?;
+                    ctx.nodes.set_node_type(call.id, TypeInfo::new(result_type));
+                    return Ok(());
+                }
+            }
+        }
+
+        // Regular call processing
         let callee = ctx.nodes.get_expr_node(call.node.callee);
         self.visit_expression(callee, ctx)?;
         let callee_type = ctx.nodes.get_node_type_id(call.node.callee);
 
-        let operation = ctx.nodes.get_call_operation_node(call.node.operation);
         let result_type = match operation.node {
             super::typed_node_arena::CallOperationNode::Property(property) => {
                 let property_identifier = ctx.nodes.get_identifier_node(property.identifier);
@@ -883,21 +1059,115 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 }
             }
             super::typed_node_arena::CallOperationNode::Call(_) => {
-                match ctx.nodes.types.get_type(callee_type) {
-                    QangType::Function { return_type, .. } => *return_type,
-                    QangType::Class { .. } => callee_type,
-                    QangType::Unknown => {
-                        // For unknown types, assume it might be a runtime global function
-                        // and allow the call without error
-                        TypeArena::UNKNOWN
+                // Check if this is calling an intrinsic method (e.g., arr.length())
+                if let super::typed_node_arena::ExprNode::Call(inner_call) =
+                    ctx.nodes.get_expr_node(call.node.callee).node
+                {
+                    if let super::typed_node_arena::CallOperationNode::Property(property) =
+                        ctx.nodes.get_call_operation_node(inner_call.operation).node
+                    {
+                        let inner_callee_type = ctx.nodes.get_node_type_id(inner_call.callee);
+                        let property_identifier =
+                            ctx.nodes.get_identifier_node(property.identifier);
+
+                        // Handle intrinsic method calls
+                        match ctx.nodes.types.get_type(inner_callee_type) {
+                            QangType::String => {
+                                let method_type = self.get_string_intrinsic_type(
+                                    property_identifier.node.name,
+                                    self.strings,
+                                    &mut ctx.nodes.types,
+                                );
+                                // For method calls, return the return type of the method
+                                if let QangType::Function { return_type, .. } =
+                                    ctx.nodes.types.get_type(method_type)
+                                {
+                                    *return_type
+                                } else {
+                                    TypeArena::UNKNOWN
+                                }
+                            }
+                            QangType::Array(_) => {
+                                let method_type = self.get_array_intrinsic_type(
+                                    property_identifier.node.name,
+                                    inner_callee_type,
+                                    self.strings,
+                                    &mut ctx.nodes.types,
+                                );
+                                if let QangType::Function { return_type, .. } =
+                                    ctx.nodes.types.get_type(method_type)
+                                {
+                                    *return_type
+                                } else {
+                                    TypeArena::UNKNOWN
+                                }
+                            }
+                            QangType::Function {
+                                return_type: func_return_type,
+                                ..
+                            } => {
+                                let method_type = self.get_function_intrinsic_type(
+                                    property_identifier.node.name,
+                                    *func_return_type,
+                                    self.strings,
+                                    &mut ctx.nodes.types,
+                                );
+                                if let QangType::Function { return_type, .. } =
+                                    ctx.nodes.types.get_type(method_type)
+                                {
+                                    *return_type
+                                } else {
+                                    TypeArena::UNKNOWN
+                                }
+                            }
+                            _ => {
+                                // Fall back to regular function call handling
+                                match ctx.nodes.types.get_type(callee_type) {
+                                    QangType::Function { return_type, .. } => *return_type,
+                                    QangType::Class { .. } => callee_type,
+                                    QangType::Unknown => TypeArena::UNKNOWN,
+                                    _ => {
+                                        ctx.errors.report_error(
+                                            QangCompilerError::new_analysis_error(
+                                                "Cannot call non-function value".to_string(),
+                                                call.node.span,
+                                            ),
+                                        );
+                                        TypeArena::UNKNOWN
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Regular function call
+                        match ctx.nodes.types.get_type(callee_type) {
+                            QangType::Function { return_type, .. } => *return_type,
+                            QangType::Class { .. } => callee_type,
+                            QangType::Unknown => TypeArena::UNKNOWN,
+                            _ => {
+                                ctx.errors
+                                    .report_error(QangCompilerError::new_analysis_error(
+                                        "Cannot call non-function value".to_string(),
+                                        call.node.span,
+                                    ));
+                                TypeArena::UNKNOWN
+                            }
+                        }
                     }
-                    _ => {
-                        ctx.errors
-                            .report_error(QangCompilerError::new_analysis_error(
-                                "Cannot call non-function value".to_string(),
-                                call.node.span,
-                            ));
-                        TypeArena::UNKNOWN
+                } else {
+                    // Regular function call
+                    match ctx.nodes.types.get_type(callee_type) {
+                        QangType::Function { return_type, .. } => *return_type,
+                        QangType::Class { .. } => callee_type,
+                        QangType::Unknown => TypeArena::UNKNOWN,
+                        _ => {
+                            ctx.errors
+                                .report_error(QangCompilerError::new_analysis_error(
+                                    "Cannot call non-function value".to_string(),
+                                    call.node.span,
+                                ));
+                            TypeArena::UNKNOWN
+                        }
                     }
                 }
             }

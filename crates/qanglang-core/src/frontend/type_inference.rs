@@ -1129,13 +1129,23 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     TypeArena::UNKNOWN
                 } else {
                     let first_param_type = params[0];
+
+                    // Report type mismatches when we have concrete, incompatible types
+                    // We allow Unknown types to be compatible to handle incomplete type inference
                     if !self.are_types_compatible(first_param_type, left_type, &ctx.nodes.types)
                         && left_type != TypeArena::UNKNOWN
                         && first_param_type != TypeArena::UNKNOWN
                     {
-                        // TODO this isn't doing anything
-                        // Only report type mismatches when both types are known and incompatible
-                        // This allows for runtime resolution of special cases like .apply
+                        let left_type_name = format!("{:?}", ctx.nodes.types.get_type(left_type));
+                        let param_type_name = format!("{:?}", ctx.nodes.types.get_type(first_param_type));
+                        ctx.errors
+                            .report_error(QangCompilerError::new_analysis_error(
+                                format!(
+                                    "Type mismatch in pipe operation: cannot pipe {} to function expecting {}",
+                                    left_type_name, param_type_name
+                                ),
+                                pipe.node.span,
+                            ));
                     }
 
                     if params.len() > 1 {

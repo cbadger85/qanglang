@@ -128,7 +128,9 @@ fn main() {
                 }
             };
 
-            let results = qanglang_test::check_files_from_sources(source_files, error_format);
+            // Skip modules when checking multiple files (directory), but enable modules for single files
+            let skip_modules = source_files.len() > 1;
+            let results = qanglang_test::check_files_from_sources(source_files, error_format, skip_modules);
             let output = qanglang_test::format_check_results(&results);
             print!("{}", output);
         }

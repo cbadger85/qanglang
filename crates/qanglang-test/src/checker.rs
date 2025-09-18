@@ -39,16 +39,18 @@ impl CheckResult {
 pub fn check_files_from_sources(
     source_files: Vec<SourceFile>,
     error_format: ErrorMessageFormat,
+    skip_modules: bool,
 ) -> Vec<CheckResult> {
     source_files
         .into_iter()
-        .map(|source_file| check_single_file(source_file, error_format))
+        .map(|source_file| check_single_file(source_file, error_format, skip_modules))
         .collect()
 }
 
 pub fn check_single_file(
     source_file: SourceFile,
     error_message_format: ErrorMessageFormat,
+    skip_modules: bool,
 ) -> CheckResult {
     let source_map = match SourceMap::from_path(&source_file.file_path) {
         Ok(content) => content,
@@ -65,13 +67,13 @@ pub fn check_single_file(
     let mut nodes = TypedNodeArena::new();
     let mut strings = StringInterner::new();
     let mut parser = Parser::new(source_map, &mut nodes, &mut strings)
-        .with_config(ParserConfig { skip_modules: true });
+        .with_config(ParserConfig { skip_modules });
     let modules = parser.parse();
 
     let mut errors = parser.into_errors();
     let analyzer = AnalysisPipeline::new(&mut strings).with_config(AnalysisPipelineConfig {
         error_message_format,
-        skip_modules: true,
+        skip_modules,
         ..Default::default()
     });
 

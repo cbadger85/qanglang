@@ -122,6 +122,8 @@ fn test_optional_map_expressions() {
   assert_eq(42?|n -> n + 1|, 43);
   assert_eq("hello"?|s -> s + "!"|, "hello!");
   assert(true?|b -> !b| == false);
+
+  var some_function = () -> nil;
   
   // With nil values (should all return nil)
   assert_eq(nil?|n -> n + 1|, nil);
@@ -233,5 +235,5 @@ fn test_map_expression_with_value() {
 }
 
 fn test_optional_map_expression_with_value() {
-  assert_eq(nil?|v -> n.value * 9000|, nil);
+  assert_eq(nil?|v -> v.value * 9000|, nil);
 }

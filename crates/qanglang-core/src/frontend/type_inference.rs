@@ -647,6 +647,59 @@ impl<'a> TypeInferenceEngine<'a> {
 impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
     type Error = QangCompilerError;
 
+    fn visit_module(
+        &mut self,
+        program: TypedNodeRef<Module>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let length = ctx.nodes.array.size(program.node.decls);
+
+        // First pass: declare all global functions to handle forward references
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(program.node.decls, i) {
+                let decl_node = ctx.nodes.get_decl_node(node_id);
+                match decl_node.node {
+                    DeclNode::Function(func_decl) => {
+                        // Only declare the function name and type, don't visit the body yet
+                        let func_expr = ctx.nodes.get_func_expr_node(func_decl.function);
+                        let name_node = ctx.nodes.get_identifier_node(func_expr.node.name);
+
+                        // Create a function type with unknown parameter and return types
+                        let param_count = ctx.nodes.array.size(func_expr.node.parameters);
+                        let param_types = vec![TypeArena::UNKNOWN; param_count];
+                        let func_type = ctx
+                            .nodes
+                            .types
+                            .make_function(param_types, TypeArena::UNKNOWN);
+
+                        // Declare the function in the current scope
+                        self.current_scope.declare(name_node.node.name, func_type);
+                        ctx.nodes
+                            .set_node_type(name_node.id, TypeInfo::new(func_type));
+                    }
+                    DeclNode::Class(class_decl) => {
+                        // Declare classes in first pass too for forward references
+                        let name_node = ctx.nodes.get_identifier_node(class_decl.name);
+                        let class_type = ctx.nodes.types.make_class(name_node.node.name, decl_node.id);
+                        self.current_scope.declare(name_node.node.name, class_type);
+                        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(class_type));
+                    }
+                    _ => {} // Other declarations will be handled in second pass
+                }
+            }
+        }
+
+        // Second pass: visit all declarations normally (including function bodies)
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(program.node.decls, i) {
+                let decl_node = ctx.nodes.get_decl_node(node_id);
+                self.visit_declaration(decl_node, ctx)?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn visit_return_statement(
         &mut self,
         return_stmt: TypedNodeRef<ReturnStmtNode>,
@@ -1269,18 +1322,23 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         let func_expr = ctx.nodes.get_func_expr_node(func_decl.node.function);
         let name_node = ctx.nodes.get_identifier_node(func_expr.node.name);
 
-        // First, create a function type with unknown parameter and return types
-        let param_count = ctx.nodes.array.size(func_expr.node.parameters);
-        let param_types = vec![TypeArena::UNKNOWN; param_count];
-        let func_type = ctx
-            .nodes
-            .types
-            .make_function(param_types, TypeArena::UNKNOWN);
+        // Check if this function was already declared in the first pass (global scope)
+        let already_declared = self.scope_depth == 0 && self.current_scope.lookup(name_node.node.name).is_some();
 
-        // Declare the function in the current scope
-        self.current_scope.declare(name_node.node.name, func_type);
-        ctx.nodes
-            .set_node_type(name_node.id, TypeInfo::new(func_type));
+        if !already_declared {
+            // First, create a function type with unknown parameter and return types
+            let param_count = ctx.nodes.array.size(func_expr.node.parameters);
+            let param_types = vec![TypeArena::UNKNOWN; param_count];
+            let func_type = ctx
+                .nodes
+                .types
+                .make_function(param_types, TypeArena::UNKNOWN);
+
+            // Declare the function in the current scope
+            self.current_scope.declare(name_node.node.name, func_type);
+            ctx.nodes
+                .set_node_type(name_node.id, TypeInfo::new(func_type));
+        }
 
         // Now visit the function expression to infer its actual types
         self.visit_function_expression(func_expr, ctx)?;
@@ -1306,18 +1364,23 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
     ) -> Result<(), Self::Error> {
         let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
 
-        // Create a class type
-        let class_type = ctx
-            .nodes
-            .types
-            .make_class(name_node.node.name, class_decl.id);
+        // Check if this class was already declared in the first pass (global scope)
+        let already_declared = self.scope_depth == 0 && self.current_scope.lookup(name_node.node.name).is_some();
 
-        // Declare the class in the current scope
-        self.current_scope.declare(name_node.node.name, class_type);
-        ctx.nodes
-            .set_node_type(name_node.id, TypeInfo::new(class_type));
-        ctx.nodes
-            .set_node_type(class_decl.id, TypeInfo::new(class_type));
+        if !already_declared {
+            // Create a class type
+            let class_type = ctx
+                .nodes
+                .types
+                .make_class(name_node.node.name, class_decl.id);
+
+            // Declare the class in the current scope
+            self.current_scope.declare(name_node.node.name, class_type);
+            ctx.nodes
+                .set_node_type(name_node.id, TypeInfo::new(class_type));
+            ctx.nodes
+                .set_node_type(class_decl.id, TypeInfo::new(class_type));
+        }
 
         // Visit the superclass if it exists
         if let Some(superclass_id) = class_decl.node.superclass {

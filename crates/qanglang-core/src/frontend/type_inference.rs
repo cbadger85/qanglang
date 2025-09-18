@@ -407,6 +407,11 @@ impl<'a> TypeInferenceEngine<'a> {
             }
             (QangType::Optional(inner), _) if *inner == source => true,
             (QangType::Optional(inner), _) if *inner == TypeArena::UNKNOWN => true,
+            // Array compatibility:
+            // 1. Array(Unknown) can accept Array(T) for any T (for polymorphic intrinsics like apply)
+            (QangType::Array(target_elem), QangType::Array(_)) if *target_elem == TypeArena::UNKNOWN => true,
+            // 2. Array(T) and Array(T) with same element types should be compatible
+            (QangType::Array(target_elem), QangType::Array(source_elem)) if target_elem == source_elem => true,
             _ => false,
         }
     }
@@ -1132,7 +1137,10 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
 
                     // Report type mismatches when we have concrete, incompatible types
                     // We allow Unknown types to be compatible to handle incomplete type inference
-                    if !self.are_types_compatible(first_param_type, left_type, &ctx.nodes.types)
+                    let types_compatible = self.are_types_compatible(first_param_type, left_type, &ctx.nodes.types);
+
+
+                    if !types_compatible
                         && left_type != TypeArena::UNKNOWN
                         && first_param_type != TypeArena::UNKNOWN
                     {

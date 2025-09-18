@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     AnalysisPipeline, AnalysisPipelineConfig, CompilerConfig, ErrorReporter, HeapAllocator, NodeId,
-    Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap, StringInterner,
+    Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap,
     TypedNodeArena,
     backend::compiler::Assembler,
     frontend::{module_map::{ModuleMap, ModuleSource, ModuleStatus}, source::LegacyModuleMap},
@@ -16,7 +16,6 @@ use crate::{
 pub struct GlobalCompilerPipeline {
     pub modules: ModuleMap,
     pub nodes: TypedNodeArena,
-    pub strings: StringInterner,
     imported_files: HashSet<PathBuf>,
     processed_files: HashSet<PathBuf>,
     config: CompilerConfig,
@@ -27,26 +26,21 @@ impl GlobalCompilerPipeline {
         Self {
             modules: ModuleMap::new(),
             nodes: TypedNodeArena::new(),
-            strings: StringInterner::new(),
             imported_files: HashSet::new(),
             processed_files: HashSet::new(),
             config: CompilerConfig::default(),
         }
     }
 
-    pub fn with_string_interner(mut self, strings: StringInterner) -> Self {
-        self.strings = strings;
-        self
-    }
-
     /// Parse files and automatically determine which are main modules
     pub fn parse_files_auto_main(
         &mut self,
         file_paths: Vec<PathBuf>,
+        allocator: &mut HeapAllocator,
     ) -> Result<(), QangPipelineError> {
         // First pass: parse all files and track imports
         for file_path in &file_paths {
-            self.parse_file_recursive(file_path)?;
+            self.parse_file_recursive(file_path, allocator)?;
         }
 
         // Second pass: determine main modules (files that aren't imported)
@@ -63,7 +57,7 @@ impl GlobalCompilerPipeline {
         Ok(())
     }
 
-    fn parse_file_recursive(&mut self, file_path: &PathBuf) -> Result<NodeId, QangPipelineError> {
+    fn parse_file_recursive(&mut self, file_path: &PathBuf, allocator: &mut HeapAllocator) -> Result<NodeId, QangPipelineError> {
         // Try to canonicalize the path, but fall back to the original if it fails
         // (this supports in-memory test scenarios where files don't exist on disk)
         let canonical_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
@@ -91,7 +85,7 @@ impl GlobalCompilerPipeline {
                 ]));
             }
         };
-        let mut parser = Parser::new(source_map.clone(), &mut self.nodes, &mut self.strings);
+        let mut parser = Parser::new(source_map.clone(), &mut self.nodes, &mut allocator.strings);
         let node_id = parser.parse_file();
 
         let mut errors = parser.into_errors();
@@ -101,7 +95,7 @@ impl GlobalCompilerPipeline {
             .insert(&canonical_path, node_id, source_map.clone());
 
         // Now parse dependencies and mark them as imported
-        self.parse_module_dependencies(&canonical_path, node_id, &mut errors)?;
+        self.parse_module_dependencies(&canonical_path, node_id, allocator, &mut errors)?;
 
         if errors.has_errors() {
             return Err(QangPipelineError::new(errors.take_errors()));
@@ -114,9 +108,10 @@ impl GlobalCompilerPipeline {
         &mut self,
         module_path: &Path,
         module_node: NodeId,
+        allocator: &mut HeapAllocator,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {
-        let import_paths = self.extract_import_paths(module_node, module_path);
+        let import_paths = self.extract_import_paths(module_node, module_path, allocator);
 
         for import_path in import_paths {
             // Mark this file as imported (it's not a main module)
@@ -126,7 +121,7 @@ impl GlobalCompilerPipeline {
             self.modules.add_dependency(module_path, &import_path);
 
             // Recursively parse the dependency
-            match self.parse_file_recursive(&import_path) {
+            match self.parse_file_recursive(&import_path, allocator) {
                 Ok(_) => {}
                 Err(dep_error) => {
                     for error in dep_error.into_errors() {
@@ -154,19 +149,19 @@ impl GlobalCompilerPipeline {
     }
 
     /// Full pipeline: Parse -> Analyze -> Ready for compilation
-    pub fn process_files(&mut self, file_paths: Vec<PathBuf>) -> Result<(), QangPipelineError> {
+    pub fn process_files(&mut self, file_paths: Vec<PathBuf>, allocator: &mut HeapAllocator) -> Result<(), QangPipelineError> {
         // Step 1: Parse all files and determine main modules
-        self.parse_files_auto_main(file_paths)?;
+        self.parse_files_auto_main(file_paths, allocator)?;
 
         // Step 2: Run semantic analysis on all parsed modules
-        self.analyze_all_modules()?;
+        self.analyze_all_modules(allocator)?;
 
         // Now everything is ready for compilation
         Ok(())
     }
 
     /// Run analysis using the contained AnalysisPipeline
-    fn analyze_all_modules(&mut self) -> Result<(), QangPipelineError> {
+    fn analyze_all_modules(&mut self, allocator: &mut HeapAllocator) -> Result<(), QangPipelineError> {
         let analysis_config = AnalysisPipelineConfig {
             error_message_format: self.config.error_message_format,
             strict_mode: true,
@@ -175,7 +170,7 @@ impl GlobalCompilerPipeline {
         // For now, analyze each main module and its dependencies using the legacy approach
         for main_path in self.modules.main_modules.clone() {
             if let Some(legacy_modules) = self.create_analysis_module_map(&main_path) {
-                let analyzer = AnalysisPipeline::new(&mut self.strings).with_config(analysis_config);
+                let analyzer = AnalysisPipeline::new(&mut allocator.strings).with_config(analysis_config);
                 let mut errors = ErrorReporter::new();
                 analyzer.analyze(&legacy_modules, &mut self.nodes, &mut errors)?;
             }
@@ -236,7 +231,7 @@ impl GlobalCompilerPipeline {
     }
 
     /// Extract import paths from a parsed module
-    fn extract_import_paths(&self, module_node: NodeId, module_path: &Path) -> Vec<PathBuf> {
+    fn extract_import_paths(&self, module_node: NodeId, module_path: &Path, allocator: &mut HeapAllocator) -> Vec<PathBuf> {
         let mut import_paths = Vec::new();
         let module = self.nodes.get_program_node(module_node);
         let length = self.nodes.array.size(module.node.decls);
@@ -246,7 +241,7 @@ impl GlobalCompilerPipeline {
                 let decl_node = self.nodes.get_decl_node(node_id);
                 if let DeclNode::Module(import_decl) = decl_node.node {
                     // Get the import path string
-                    let import_path_str = self.strings.get_string(import_decl.path);
+                    let import_path_str = allocator.strings.get_string(import_decl.path);
 
                     // Resolve relative to the current module's directory
                     let resolved_path = if let Some(parent_dir) = module_path.parent() {

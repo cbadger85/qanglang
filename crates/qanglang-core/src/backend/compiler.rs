@@ -104,7 +104,7 @@ impl CompilerPipeline {
             use crate::GlobalCompilerPipeline;
 
             let mut pipeline = GlobalCompilerPipeline::new();
-            pipeline.parse_files_auto_main(vec![file_path.clone()])?;
+            pipeline.parse_files_auto_main(vec![file_path.clone()], alloc)?;
 
             let main_modules = pipeline.get_main_modules();
             if main_modules.is_empty() {

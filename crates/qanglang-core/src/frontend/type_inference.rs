@@ -64,6 +64,10 @@ pub struct TypeInferenceEngine<'a> {
     current_class: Option<NodeId>,
     /// Superclass of current class (for super type resolution)
     current_superclass: Option<NodeId>,
+    /// Current method name being analyzed (for init validation)
+    current_method_name: Option<crate::StringHandle>,
+    /// Whether super.init has been called in the current init method
+    super_init_called: bool,
 }
 
 impl<'a> TypeInferenceEngine<'a> {
@@ -77,6 +81,8 @@ impl<'a> TypeInferenceEngine<'a> {
             scope_depth: 0,
             current_class: None,
             current_superclass: None,
+            current_method_name: None,
+            super_init_called: false,
         };
 
         engine
@@ -710,6 +716,35 @@ impl<'a> TypeInferenceEngine<'a> {
         TypeArena::UNKNOWN
     }
 
+    /// Check if a class has an init method
+    fn class_has_init_method(
+        &self,
+        class_node: NodeId,
+        init_handle: crate::StringHandle,
+        ctx: &VisitorContext,
+    ) -> bool {
+        let class_decl = ctx.nodes.get_decl_node(class_node);
+
+        if let DeclNode::Class(class_info) = class_decl.node {
+            let member_count = ctx.nodes.array.size(class_info.members);
+
+            for i in 0..member_count {
+                if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_info.members, i) {
+                    let member = ctx.nodes.get_class_member_node(member_id);
+
+                    if let super::typed_node_arena::ClassMemberNode::Method(method) = member.node {
+                        let method_identifier = ctx.nodes.get_identifier_node(method.name);
+                        if method_identifier.node.name == init_handle {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
     /// Unify two return types, handling nil specially
     fn unify_return_types(
         &mut self,
@@ -933,6 +968,13 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         } else {
             TypeArena::UNKNOWN
         };
+
+        // Check if this is a super.init call in an init method
+        let init_handle = self.strings.intern("init");
+        if method_identifier.node.name == init_handle
+            && self.current_method_name == Some(init_handle) {
+            self.super_init_called = true;
+        }
 
         // Set the type for the method identifier and the super expression
         ctx.nodes.set_node_type(method_identifier.id, TypeInfo::new(member_type));
@@ -1610,6 +1652,13 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 // For class methods, we need to handle 'this' and 'super' context
                 self.begin_scope();
 
+                // Track current method name and reset super.init call tracking
+                let method_identifier = ctx.nodes.get_identifier_node(method.name);
+                let old_method_name = self.current_method_name;
+                let old_super_init_called = self.super_init_called;
+                self.current_method_name = Some(method_identifier.node.name);
+                self.super_init_called = false;
+
                 // Add 'super' to the scope if this class has a superclass
                 if let Some(superclass_id) = self.current_superclass {
                     let super_handle = self.strings.intern("super");
@@ -1626,6 +1675,30 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 // For now, we'll just visit the method like a regular function
                 let func_expr = TypedNodeRef::new(member.id, method);
                 self.visit_function_expression(func_expr, ctx)?;
+
+                // Check if this is an init method that should call super.init
+                let init_handle = self.strings.intern("init");
+                if method_identifier.node.name == init_handle
+                    && let Some(superclass_id) = self.current_superclass {
+
+                    // Get the superclass identifier and look up its class node
+                    let superclass_identifier = ctx.nodes.get_identifier_node(superclass_id);
+                    if let Some(superclass_type) = self.current_scope.lookup(superclass_identifier.node.name) {
+                        if let QangType::Class { class_node, .. } = ctx.nodes.types.get_type(superclass_type) {
+                            // Check if parent has init method
+                            if self.class_has_init_method(*class_node, init_handle, ctx) && !self.super_init_called {
+                                ctx.errors.report_error(QangCompilerError::new_analysis_error(
+                                    "Constructor must call 'super.init()' when parent class has an init method".to_string(),
+                                    method_identifier.node.span,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                // Restore previous method context
+                self.current_method_name = old_method_name;
+                self.super_init_called = old_super_init_called;
 
                 // Set the member node type to the function type
                 let method_type = ctx.nodes.get_node_type_id(member.id);

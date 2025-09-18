@@ -1590,8 +1590,13 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     self.current_scope.declare(super_handle, superclass_type);
                 }
 
-                // TODO: Add 'this' to the scope with the class type
-                // For now, we'll just visit the method like a regular function
+                // Add 'this' to the scope with the current class type
+                if let Some(current_class_id) = self.current_class {
+                    let this_handle = self.strings.intern("this");
+                    // Get the class type from the current class declaration
+                    let class_type = ctx.nodes.get_node_type_id(current_class_id);
+                    self.current_scope.declare(this_handle, class_type);
+                }
                 let func_expr = TypedNodeRef::new(member.id, method);
                 self.visit_function_expression(func_expr, ctx)?;
 

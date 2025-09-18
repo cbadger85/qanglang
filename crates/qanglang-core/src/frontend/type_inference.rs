@@ -173,6 +173,58 @@ impl<'a> TypeInferenceEngine<'a> {
 
         let class_const_handle = self.strings.intern("CLASS");
         self.current_scope.declare(class_const_handle, TypeArena::UNKNOWN);
+
+        // Stdlib functions from stdlib.ql
+        let transform_handle = self.strings.intern("transform");
+        let transform_type = type_arena.make_function(vec![TypeArena::UNKNOWN, TypeArena::UNKNOWN], TypeArena::UNKNOWN);
+        self.current_scope.declare(transform_handle, transform_type);
+
+        let identity_handle = self.strings.intern("identity");
+        let identity_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::UNKNOWN);
+        self.current_scope.declare(identity_handle, identity_type);
+
+        // Iterator classes - these are handled by class declarations in stdlib.ql
+        // But we can declare their constructor types here
+        let iterator_handle = self.strings.intern("Iterator");
+        let iterator_type = type_arena.make_class(iterator_handle, crate::NodeId::default());
+        self.current_scope.declare(iterator_handle, iterator_type);
+
+        let array_iterator_handle = self.strings.intern("ArrayIterator");
+        let array_iterator_type = type_arena.make_class(array_iterator_handle, crate::NodeId::default());
+        self.current_scope.declare(array_iterator_handle, array_iterator_type);
+
+        let map_iterator_handle = self.strings.intern("MapIterator");
+        let map_iterator_type = type_arena.make_class(map_iterator_handle, crate::NodeId::default());
+        self.current_scope.declare(map_iterator_handle, map_iterator_type);
+
+        let filter_iterator_handle = self.strings.intern("FilterIterator");
+        let filter_iterator_type = type_arena.make_class(filter_iterator_handle, crate::NodeId::default());
+        self.current_scope.declare(filter_iterator_handle, filter_iterator_type);
+
+        let range_handle = self.strings.intern("Range");
+        let range_type = type_arena.make_class(range_handle, crate::NodeId::default());
+        self.current_scope.declare(range_handle, range_type);
+
+        // Iterator utility functions
+        let iter_array_handle = self.strings.intern("iter_array");
+        let iter_array_type = type_arena.make_function(vec![array_type], iterator_type);
+        self.current_scope.declare(iter_array_handle, iter_array_type);
+
+        let iter_map_handle = self.strings.intern("iter_map");
+        let iter_map_type = type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], iterator_type);
+        self.current_scope.declare(iter_map_handle, iter_map_type);
+
+        let iter_filter_handle = self.strings.intern("iter_filter");
+        let iter_filter_type = type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], iterator_type);
+        self.current_scope.declare(iter_filter_handle, iter_filter_type);
+
+        let iter_for_each_handle = self.strings.intern("iter_for_each");
+        let iter_for_each_type = type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], TypeArena::UNIT);
+        self.current_scope.declare(iter_for_each_handle, iter_for_each_type);
+
+        let iter_collect_handle = self.strings.intern("iter_collect");
+        let iter_collect_type = type_arena.make_function(vec![iterator_type], array_type);
+        self.current_scope.declare(iter_collect_handle, iter_collect_type);
     }
 
     /// Get the type of a string intrinsic method

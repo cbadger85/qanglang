@@ -60,6 +60,10 @@ pub struct TypeInferenceEngine<'a> {
     modules: Option<&'a ModuleMap>,
     /// Current scope depth (0 = global scope)
     scope_depth: usize,
+    /// Current class being analyzed (for super resolution)
+    current_class: Option<NodeId>,
+    /// Superclass of current class (for super type resolution)
+    current_superclass: Option<NodeId>,
 }
 
 impl<'a> TypeInferenceEngine<'a> {
@@ -71,6 +75,8 @@ impl<'a> TypeInferenceEngine<'a> {
             current_function: None,
             modules: None,
             scope_depth: 0,
+            current_class: None,
+            current_superclass: None,
         };
 
         engine
@@ -649,7 +655,7 @@ impl<'a> TypeInferenceEngine<'a> {
         }
     }
 
-    /// Look up a field or method in a class definition
+    /// Look up a field or method in a class definition (including inherited members)
     fn lookup_class_member(
         &self,
         class_node: NodeId,
@@ -662,6 +668,7 @@ impl<'a> TypeInferenceEngine<'a> {
         if let DeclNode::Class(class_info) = class_decl.node {
             let member_count = ctx.nodes.array.size(class_info.members);
 
+            // First, look in the current class
             for i in 0..member_count {
                 if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_info.members, i) {
                     let member = ctx.nodes.get_class_member_node(member_id);
@@ -681,6 +688,19 @@ impl<'a> TypeInferenceEngine<'a> {
                                 return ctx.nodes.get_node_type_id(member_id);
                             }
                         }
+                    }
+                }
+            }
+
+            // If not found in current class and there's a superclass, look there
+            if let Some(superclass_id) = class_info.superclass {
+                // The superclass_id is an identifier, we need to find the actual class declaration
+                let superclass_identifier = ctx.nodes.get_identifier_node(superclass_id);
+
+                // Look up the superclass type to get the class node
+                if let Some(superclass_type) = self.current_scope.lookup(superclass_identifier.node.name) {
+                    if let QangType::Class { class_node, .. } = ctx.nodes.types.get_type(superclass_type) {
+                        return self.lookup_class_member(*class_node, member_name, ctx);
                     }
                 }
             }
@@ -893,6 +913,31 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         let nil_type = ctx.nodes.types.make_optional(TypeArena::UNKNOWN);
         ctx.nodes
             .set_node_type(nil.id, TypeInfo::new_nullable(nil_type));
+        Ok(())
+    }
+
+    fn visit_super_expression(
+        &mut self,
+        super_expr: TypedNodeRef<SuperExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Get the superclass type from the current scope
+        let super_handle = self.strings.intern("super");
+        let super_type = self.current_scope.lookup(super_handle)
+            .unwrap_or(TypeArena::UNKNOWN);
+
+        // Look up the method/field in the superclass
+        let method_identifier = ctx.nodes.get_identifier_node(super_expr.node.method);
+        let member_type = if let QangType::Class { class_node, .. } = ctx.nodes.types.get_type(super_type) {
+            self.lookup_class_member(*class_node, method_identifier.node.name, ctx)
+        } else {
+            TypeArena::UNKNOWN
+        };
+
+        // Set the type for the method identifier and the super expression
+        ctx.nodes.set_node_type(method_identifier.id, TypeInfo::new(member_type));
+        ctx.nodes.set_node_type(super_expr.id, TypeInfo::new(member_type));
+
         Ok(())
     }
 
@@ -1533,6 +1578,12 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             self.visit_identifier(superclass, ctx)?;
         }
 
+        // Set current class context for methods
+        let old_class = self.current_class;
+        let old_superclass = self.current_superclass;
+        self.current_class = Some(class_decl.id);
+        self.current_superclass = class_decl.node.superclass;
+
         // Visit all class members (methods and field declarations)
         let member_count = ctx.nodes.array.size(class_decl.node.members);
         for i in 0..member_count {
@@ -1541,6 +1592,10 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 self.visit_class_member(member, ctx)?;
             }
         }
+
+        // Restore previous class context
+        self.current_class = old_class;
+        self.current_superclass = old_superclass;
 
         Ok(())
     }
@@ -1552,8 +1607,20 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
     ) -> Result<(), Self::Error> {
         match member.node {
             super::typed_node_arena::ClassMemberNode::Method(method) => {
-                // For class methods, we need to handle 'this' context
+                // For class methods, we need to handle 'this' and 'super' context
                 self.begin_scope();
+
+                // Add 'super' to the scope if this class has a superclass
+                if let Some(superclass_id) = self.current_superclass {
+                    let super_handle = self.strings.intern("super");
+                    let superclass_identifier = ctx.nodes.get_identifier_node(superclass_id);
+
+                    // Look up the superclass type in the current scope
+                    let superclass_type = self.current_scope.lookup(superclass_identifier.node.name)
+                        .unwrap_or(TypeArena::UNKNOWN);
+
+                    self.current_scope.declare(super_handle, superclass_type);
+                }
 
                 // TODO: Add 'this' to the scope with the class type
                 // For now, we'll just visit the method like a regular function

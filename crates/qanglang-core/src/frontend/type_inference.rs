@@ -1,5 +1,3 @@
-// crates/qanglang-core/src/frontend/type_inference.rs
-
 use crate::{
     ErrorReporter, NodeId, QangCompilerError, StringHandle, TypedNodeArena,
     frontend::{
@@ -94,13 +92,10 @@ impl<'a> TypeInferenceEngine<'a> {
     }
 
     fn inject_native_function_types(&mut self, type_arena: &mut TypeArena) {
-        // Create array type for use in function signatures
         let array_type = type_arena.make_array(TypeArena::UNKNOWN);
 
-        // Pre-create optional string type to avoid multiple mutable borrows
         let optional_string = type_arena.make_optional(TypeArena::STRING);
 
-        // Global native functions
         let assert_handle = self.strings.intern("assert");
         let assert_type =
             type_arena.make_function(vec![TypeArena::BOOLEAN, optional_string], TypeArena::UNIT);
@@ -161,82 +156,101 @@ impl<'a> TypeInferenceEngine<'a> {
         self.current_scope
             .declare(array_of_length_handle, array_of_length_type);
 
-        // Runtime type constants for 'is' operator
         let array_const_handle = self.strings.intern("ARRAY");
-        self.current_scope.declare(array_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(array_const_handle, TypeArena::UNKNOWN);
 
         let object_const_handle = self.strings.intern("OBJECT");
-        self.current_scope.declare(object_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(object_const_handle, TypeArena::UNKNOWN);
 
         let string_const_handle = self.strings.intern("STRING");
-        self.current_scope.declare(string_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(string_const_handle, TypeArena::UNKNOWN);
 
         let number_const_handle = self.strings.intern("NUMBER");
-        self.current_scope.declare(number_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(number_const_handle, TypeArena::UNKNOWN);
 
         let boolean_const_handle = self.strings.intern("BOOLEAN");
-        self.current_scope.declare(boolean_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(boolean_const_handle, TypeArena::UNKNOWN);
 
         let nil_const_handle = self.strings.intern("NIL");
-        self.current_scope.declare(nil_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(nil_const_handle, TypeArena::UNKNOWN);
 
         let function_const_handle = self.strings.intern("FUNCTION");
-        self.current_scope.declare(function_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(function_const_handle, TypeArena::UNKNOWN);
 
         let class_const_handle = self.strings.intern("CLASS");
-        self.current_scope.declare(class_const_handle, TypeArena::UNKNOWN);
+        self.current_scope
+            .declare(class_const_handle, TypeArena::UNKNOWN);
 
-        // Stdlib functions from stdlib.ql
         let transform_handle = self.strings.intern("transform");
-        let transform_type = type_arena.make_function(vec![TypeArena::UNKNOWN, TypeArena::UNKNOWN], TypeArena::UNKNOWN);
+        let transform_type = type_arena.make_function(
+            vec![TypeArena::UNKNOWN, TypeArena::UNKNOWN],
+            TypeArena::UNKNOWN,
+        );
         self.current_scope.declare(transform_handle, transform_type);
 
         let identity_handle = self.strings.intern("identity");
         let identity_type = type_arena.make_function(vec![TypeArena::UNKNOWN], TypeArena::UNKNOWN);
         self.current_scope.declare(identity_handle, identity_type);
 
-        // Iterator classes - these are handled by class declarations in stdlib.ql
-        // But we can declare their constructor types here
         let iterator_handle = self.strings.intern("Iterator");
         let iterator_type = type_arena.make_class(iterator_handle, crate::NodeId::default());
         self.current_scope.declare(iterator_handle, iterator_type);
 
         let array_iterator_handle = self.strings.intern("ArrayIterator");
-        let array_iterator_type = type_arena.make_class(array_iterator_handle, crate::NodeId::default());
-        self.current_scope.declare(array_iterator_handle, array_iterator_type);
+        let array_iterator_type =
+            type_arena.make_class(array_iterator_handle, crate::NodeId::default());
+        self.current_scope
+            .declare(array_iterator_handle, array_iterator_type);
 
         let map_iterator_handle = self.strings.intern("MapIterator");
-        let map_iterator_type = type_arena.make_class(map_iterator_handle, crate::NodeId::default());
-        self.current_scope.declare(map_iterator_handle, map_iterator_type);
+        let map_iterator_type =
+            type_arena.make_class(map_iterator_handle, crate::NodeId::default());
+        self.current_scope
+            .declare(map_iterator_handle, map_iterator_type);
 
         let filter_iterator_handle = self.strings.intern("FilterIterator");
-        let filter_iterator_type = type_arena.make_class(filter_iterator_handle, crate::NodeId::default());
-        self.current_scope.declare(filter_iterator_handle, filter_iterator_type);
+        let filter_iterator_type =
+            type_arena.make_class(filter_iterator_handle, crate::NodeId::default());
+        self.current_scope
+            .declare(filter_iterator_handle, filter_iterator_type);
 
         let range_handle = self.strings.intern("Range");
         let range_type = type_arena.make_class(range_handle, crate::NodeId::default());
         self.current_scope.declare(range_handle, range_type);
 
-        // Iterator utility functions
         let iter_array_handle = self.strings.intern("iter_array");
         let iter_array_type = type_arena.make_function(vec![array_type], iterator_type);
-        self.current_scope.declare(iter_array_handle, iter_array_type);
+        self.current_scope
+            .declare(iter_array_handle, iter_array_type);
 
         let iter_map_handle = self.strings.intern("iter_map");
-        let iter_map_type = type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], iterator_type);
+        let iter_map_type =
+            type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], iterator_type);
         self.current_scope.declare(iter_map_handle, iter_map_type);
 
         let iter_filter_handle = self.strings.intern("iter_filter");
-        let iter_filter_type = type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], iterator_type);
-        self.current_scope.declare(iter_filter_handle, iter_filter_type);
+        let iter_filter_type =
+            type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], iterator_type);
+        self.current_scope
+            .declare(iter_filter_handle, iter_filter_type);
 
         let iter_for_each_handle = self.strings.intern("iter_for_each");
-        let iter_for_each_type = type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], TypeArena::UNIT);
-        self.current_scope.declare(iter_for_each_handle, iter_for_each_type);
+        let iter_for_each_type =
+            type_arena.make_function(vec![iterator_type, TypeArena::UNKNOWN], TypeArena::UNIT);
+        self.current_scope
+            .declare(iter_for_each_handle, iter_for_each_type);
 
         let iter_collect_handle = self.strings.intern("iter_collect");
         let iter_collect_type = type_arena.make_function(vec![iterator_type], array_type);
-        self.current_scope.declare(iter_collect_handle, iter_collect_type);
+        self.current_scope
+            .declare(iter_collect_handle, iter_collect_type);
     }
 
     /// Get the type of a string intrinsic method
@@ -248,10 +262,7 @@ impl<'a> TypeInferenceEngine<'a> {
     ) -> TypeId {
         let method_str = strings.get_string(method_name);
         match method_str {
-            "to_uppercase" | "to_lowercase" => {
-                // String methods that return string
-                type_arena.make_function(vec![], TypeArena::STRING)
-            }
+            "to_uppercase" | "to_lowercase" => type_arena.make_function(vec![], TypeArena::STRING),
             _ => TypeArena::UNKNOWN,
         }
     }
@@ -271,35 +282,16 @@ impl<'a> TypeInferenceEngine<'a> {
         };
 
         match method_str {
-            "length" => {
-                // () -> number
-                type_arena.make_function(vec![], TypeArena::NUMBER)
-            }
-            "push" => {
-                // (element) -> unit
-                type_arena.make_function(vec![element_type], TypeArena::UNIT)
-            }
-            "pop" => {
-                // () -> element
-                type_arena.make_function(vec![], element_type)
-            }
-            "reverse" => {
-                // () -> unit
-                type_arena.make_function(vec![], TypeArena::UNIT)
-            }
+            "length" => type_arena.make_function(vec![], TypeArena::NUMBER),
+            "push" => type_arena.make_function(vec![element_type], TypeArena::UNIT),
+            "pop" => type_arena.make_function(vec![], element_type),
+            "reverse" => type_arena.make_function(vec![], TypeArena::UNIT),
             "slice" => {
-                // (number?, number?) -> array
                 let optional_number = type_arena.make_optional(TypeArena::NUMBER);
                 type_arena.make_function(vec![optional_number, optional_number], array_type)
             }
-            "get" => {
-                // (number) -> element
-                type_arena.make_function(vec![TypeArena::NUMBER], element_type)
-            }
-            "concat" => {
-                // (array) -> array
-                type_arena.make_function(vec![array_type], array_type)
-            }
+            "get" => type_arena.make_function(vec![TypeArena::NUMBER], element_type),
+            "concat" => type_arena.make_function(vec![array_type], array_type),
             _ => TypeArena::UNKNOWN,
         }
     }
@@ -316,14 +308,8 @@ impl<'a> TypeInferenceEngine<'a> {
         let array_type = type_arena.make_array(TypeArena::UNKNOWN);
 
         match method_str {
-            "call" => {
-                // (...args) -> return_type (variadic function)
-                type_arena.make_function(vec![], return_type)
-            }
-            "apply" => {
-                // (array) -> return_type
-                type_arena.make_function(vec![array_type], return_type)
-            }
+            "call" => type_arena.make_function(vec![], return_type),
+            "apply" => type_arena.make_function(vec![array_type], return_type),
             _ => TypeArena::UNKNOWN,
         }
     }
@@ -412,33 +398,31 @@ impl<'a> TypeInferenceEngine<'a> {
             return true;
         }
 
-        // Special cases for null safety and type inference
         match (type_arena.get_type(target), type_arena.get_type(source)) {
-            // Can assign non-optional to optional
             (QangType::Optional(inner), _) if *inner == source => true,
-            // Can assign anything to unknown (during inference)
             (QangType::Unknown, _) | (_, QangType::Unknown) => true,
-            // Unit types are compatible
             (QangType::Unit, QangType::Unit) => true,
-            // Can assign nil to optional types
-            (QangType::Optional(_), QangType::Optional(inner)) if *inner == TypeArena::UNKNOWN => true,
-            // Can assign concrete type to optional of that type
+            (QangType::Optional(_), QangType::Optional(inner)) if *inner == TypeArena::UNKNOWN => {
+                true
+            }
             (QangType::Optional(inner), _) if *inner == source => true,
-            // Can assign anything to optional unknown (updated variable from nil)
             (QangType::Optional(inner), _) if *inner == TypeArena::UNKNOWN => true,
             _ => false,
         }
     }
 
     /// Update variable type based on assignment, handling nil-to-concrete and mixed types
-    fn update_variable_type(&self, current_type: TypeId, new_value_type: TypeId, type_arena: &mut TypeArena) -> TypeId {
-        // Check if current type is nil (Optional<Unknown>)
+    fn update_variable_type(
+        &self,
+        current_type: TypeId,
+        new_value_type: TypeId,
+        type_arena: &mut TypeArena,
+    ) -> TypeId {
         let current_is_nil = matches!(
             type_arena.get_type(current_type),
             QangType::Optional(inner) if *inner == TypeArena::UNKNOWN
         );
 
-        // Check if new value is nil
         let new_is_nil = matches!(
             type_arena.get_type(new_value_type),
             QangType::Optional(inner) if *inner == TypeArena::UNKNOWN
@@ -446,27 +430,21 @@ impl<'a> TypeInferenceEngine<'a> {
 
         match (current_is_nil, new_is_nil) {
             (true, false) => {
-                // nil -> concrete type: make the concrete type optional
                 if type_arena.is_optional(new_value_type) {
-                    new_value_type // Already optional
+                    new_value_type
                 } else {
                     type_arena.make_optional(new_value_type)
                 }
-            },
+            }
             (false, true) => {
-                // concrete -> nil: keep current type but make it optional if not already
                 if type_arena.is_optional(current_type) {
                     current_type
                 } else {
                     type_arena.make_optional(current_type)
                 }
-            },
-            (true, true) => {
-                // nil -> nil: stay as nil
-                current_type
-            },
+            }
+            (true, true) => current_type,
             (false, false) => {
-                // concrete -> concrete: check if types are compatible
                 if current_type == new_value_type {
                     current_type // Same type
                 } else if current_type == TypeArena::UNKNOWN {
@@ -474,8 +452,6 @@ impl<'a> TypeInferenceEngine<'a> {
                 } else if new_value_type == TypeArena::UNKNOWN {
                     current_type // Keep current if new is unknown
                 } else {
-                    // Different concrete types - this is a type error (don't update type)
-                    // Return the current type and let the compatibility check catch it
                     current_type
                 }
             }
@@ -515,9 +491,9 @@ impl<'a> TypeInferenceEngine<'a> {
                 .make_module(module_path, exports, module_node);
         }
 
-        // No modules available (likely because parsing was done with skip_modules=true)
-        // Return a default module type for the import
-        ctx.nodes.types.make_module(module_path, vec![], crate::NodeId::default())
+        ctx.nodes
+            .types
+            .make_module(module_path, vec![], crate::NodeId::default())
     }
 
     /// Extract exports from a parsed module
@@ -650,13 +626,10 @@ impl<'a> TypeInferenceEngine<'a> {
 
     /// Track return type with nil handling
     fn track_return_type_with_nil(&mut self, return_type: TypeId, ctx: &mut VisitorContext) {
-        // Get current function's return type
         if let Some(&mut current_type) = self.function_stack.last_mut() {
             if current_type == TypeArena::UNKNOWN {
-                // First return - just set it
                 *self.function_stack.last_mut().unwrap() = return_type;
             } else {
-                // Subsequent return - unify with previous
                 let unified = self.unify_return_types(current_type, return_type, ctx);
                 *self.function_stack.last_mut().unwrap() = unified;
             }
@@ -672,11 +645,9 @@ impl<'a> TypeInferenceEngine<'a> {
     ) -> TypeId {
         let class_decl = ctx.nodes.get_decl_node(class_node);
 
-        // Ensure this is actually a class declaration
         if let DeclNode::Class(class_info) = class_decl.node {
             let member_count = ctx.nodes.array.size(class_info.members);
 
-            // First, look in the current class
             for i in 0..member_count {
                 if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_info.members, i) {
                     let member = ctx.nodes.get_class_member_node(member_id);
@@ -685,14 +656,12 @@ impl<'a> TypeInferenceEngine<'a> {
                         super::typed_node_arena::ClassMemberNode::Field(field) => {
                             let field_identifier = ctx.nodes.get_identifier_node(field.name);
                             if field_identifier.node.name == member_name {
-                                // Return the field's type if it has been inferred
                                 return ctx.nodes.get_node_type_id(field_identifier.id);
                             }
                         }
                         super::typed_node_arena::ClassMemberNode::Method(method) => {
                             let method_identifier = ctx.nodes.get_identifier_node(method.name);
                             if method_identifier.node.name == member_name {
-                                // Return the method's function type
                                 return ctx.nodes.get_node_type_id(member_id);
                             }
                         }
@@ -700,21 +669,21 @@ impl<'a> TypeInferenceEngine<'a> {
                 }
             }
 
-            // If not found in current class and there's a superclass, look there
             if let Some(superclass_id) = class_info.superclass {
-                // The superclass_id is an identifier, we need to find the actual class declaration
                 let superclass_identifier = ctx.nodes.get_identifier_node(superclass_id);
 
-                // Look up the superclass type to get the class node
-                if let Some(superclass_type) = self.current_scope.lookup(superclass_identifier.node.name) {
-                    if let QangType::Class { class_node, .. } = ctx.nodes.types.get_type(superclass_type) {
+                if let Some(superclass_type) =
+                    self.current_scope.lookup(superclass_identifier.node.name)
+                {
+                    if let QangType::Class { class_node, .. } =
+                        ctx.nodes.types.get_type(superclass_type)
+                    {
                         return self.lookup_class_member(*class_node, member_name, ctx);
                     }
                 }
             }
         }
 
-        // Member not found - this will result in an error
         TypeArena::UNKNOWN
     }
 
@@ -767,41 +736,31 @@ impl<'a> TypeInferenceEngine<'a> {
 
         let type_arena = &ctx.nodes.types;
 
-        // Check if either type represents nil (Optional<Unknown>)
         let type1_is_nil = matches!(type_arena.get_type(type1), QangType::Optional(inner) if *inner == TypeArena::UNKNOWN);
         let type2_is_nil = matches!(type_arena.get_type(type2), QangType::Optional(inner) if *inner == TypeArena::UNKNOWN);
 
         match (type1_is_nil, type2_is_nil) {
             (true, false) => {
-                // nil + concrete type = Optional<concrete_type>
                 if type_arena.is_optional(type2) {
-                    type2 // Already optional
+                    type2
                 } else {
-                    // Make concrete type optional
                     ctx.nodes.types.make_optional(type2)
                 }
             }
             (false, true) => {
-                // concrete type + nil = Optional<concrete_type>
                 if type_arena.is_optional(type1) {
-                    type1 // Already optional
+                    type1
                 } else {
                     ctx.nodes.types.make_optional(type1)
                 }
             }
-            (true, true) => {
-                // nil + nil = nil
-                type1
-            }
+            (true, true) => type1,
             (false, false) => {
-                // Two different concrete types - this is an error
                 if type_arena.is_optional(type1) && !type_arena.is_optional(type2) {
-                    // Optional<T1> + T2 - check if T2 is compatible with T1's inner type
                     let inner1 = type_arena.unwrap_optional(type1);
                     if self.are_types_compatible(inner1, type2, type_arena) {
-                        type1 // Keep the optional
+                        type1
                     } else {
-                        // Report error for incompatible return types
                         ctx.errors
                             .report_error(QangCompilerError::new_analysis_error(
                                 "Inconsistent return types in function".to_string(),
@@ -814,7 +773,6 @@ impl<'a> TypeInferenceEngine<'a> {
                     if self.are_types_compatible(type1, inner2, type_arena) {
                         type2 // Keep the optional
                     } else {
-                        // Report error for incompatible return types
                         ctx.errors
                             .report_error(QangCompilerError::new_analysis_error(
                                 "Inconsistent return types in function".to_string(),
@@ -823,7 +781,6 @@ impl<'a> TypeInferenceEngine<'a> {
                         TypeArena::UNKNOWN
                     }
                 } else {
-                    // Both concrete and incompatible - report error
                     ctx.errors
                         .report_error(QangCompilerError::new_analysis_error(
                             "Inconsistent return types in function".to_string(),
@@ -852,11 +809,9 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 let decl_node = ctx.nodes.get_decl_node(node_id);
                 match decl_node.node {
                     DeclNode::Function(func_decl) => {
-                        // Only declare the function name and type, don't visit the body yet
                         let func_expr = ctx.nodes.get_func_expr_node(func_decl.function);
                         let name_node = ctx.nodes.get_identifier_node(func_expr.node.name);
 
-                        // Create a function type with unknown parameter and return types
                         let param_count = ctx.nodes.array.size(func_expr.node.parameters);
                         let param_types = vec![TypeArena::UNKNOWN; param_count];
                         let func_type = ctx
@@ -864,19 +819,21 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                             .types
                             .make_function(param_types, TypeArena::UNKNOWN);
 
-                        // Declare the function in the current scope
                         self.current_scope.declare(name_node.node.name, func_type);
                         ctx.nodes
                             .set_node_type(name_node.id, TypeInfo::new(func_type));
                     }
                     DeclNode::Class(class_decl) => {
-                        // Declare classes in first pass too for forward references
                         let name_node = ctx.nodes.get_identifier_node(class_decl.name);
-                        let class_type = ctx.nodes.types.make_class(name_node.node.name, decl_node.id);
+                        let class_type = ctx
+                            .nodes
+                            .types
+                            .make_class(name_node.node.name, decl_node.id);
                         self.current_scope.declare(name_node.node.name, class_type);
-                        ctx.nodes.set_node_type(name_node.id, TypeInfo::new(class_type));
+                        ctx.nodes
+                            .set_node_type(name_node.id, TypeInfo::new(class_type));
                     }
-                    _ => {} // Other declarations will be handled in second pass
+                    _ => {}
                 }
             }
         }
@@ -905,7 +862,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             TypeArena::UNIT
         };
 
-        // Track this return type with nil handling
         self.track_return_type_with_nil(return_type, ctx);
 
         ctx.nodes
@@ -958,29 +914,31 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         super_expr: TypedNodeRef<SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Get the superclass type from the current scope
         let super_handle = self.strings.intern("super");
-        let super_type = self.current_scope.lookup(super_handle)
+        let super_type = self
+            .current_scope
+            .lookup(super_handle)
             .unwrap_or(TypeArena::UNKNOWN);
 
-        // Look up the method/field in the superclass
         let method_identifier = ctx.nodes.get_identifier_node(super_expr.node.method);
-        let member_type = if let QangType::Class { class_node, .. } = ctx.nodes.types.get_type(super_type) {
-            self.lookup_class_member(*class_node, method_identifier.node.name, ctx)
-        } else {
-            TypeArena::UNKNOWN
-        };
+        let member_type =
+            if let QangType::Class { class_node, .. } = ctx.nodes.types.get_type(super_type) {
+                self.lookup_class_member(*class_node, method_identifier.node.name, ctx)
+            } else {
+                TypeArena::UNKNOWN
+            };
 
-        // Check if this is a super.init call in an init method
         let init_handle = self.strings.intern("init");
         if method_identifier.node.name == init_handle
-            && self.current_method_name == Some(init_handle) {
+            && self.current_method_name == Some(init_handle)
+        {
             self.super_init_called = true;
         }
 
-        // Set the type for the method identifier and the super expression
-        ctx.nodes.set_node_type(method_identifier.id, TypeInfo::new(member_type));
-        ctx.nodes.set_node_type(super_expr.id, TypeInfo::new(member_type));
+        ctx.nodes
+            .set_node_type(method_identifier.id, TypeInfo::new(member_type));
+        ctx.nodes
+            .set_node_type(super_expr.id, TypeInfo::new(member_type));
 
         Ok(())
     }
@@ -993,7 +951,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         let length = ctx.nodes.array.size(array.node.elements);
         let mut element_types = Vec::new();
 
-        // Visit all elements and collect their types
         for i in 0..length {
             if let Some(node_id) = ctx.nodes.array.get_node_id_at(array.node.elements, i) {
                 let element = ctx.nodes.get_expr_node(node_id);
@@ -1003,28 +960,21 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             }
         }
 
-        // Determine the common element type
         let element_type = if element_types.is_empty() {
-            // Empty array - use unknown element type
             TypeArena::UNKNOWN
         } else if element_types.len() == 1 {
-            // Single element - use its type
             element_types[0]
         } else {
-            // Multiple elements - try to find a common type
             let first_type = element_types[0];
             let all_same = element_types.iter().all(|&t| t == first_type);
 
             if all_same {
                 first_type
             } else {
-                // Mixed types - use unknown for now
-                // In a more sophisticated system, you might want to find a common supertype
                 TypeArena::UNKNOWN
             }
         };
 
-        // Create array type
         let array_type = ctx.nodes.types.make_array(element_type);
         ctx.nodes.set_node_type(array.id, TypeInfo::new(array_type));
 
@@ -1040,8 +990,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             ctx.nodes
                 .set_node_type(identifier.id, TypeInfo::new(var_type));
         } else {
-            // For dynamic languages, only report undefined variable errors for local scope
-            // Global variables can be dynamically created at runtime
             if self.scope_depth > 0 {
                 ctx.errors
                     .report_error(QangCompilerError::new_analysis_error(
@@ -1132,16 +1080,14 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         let value_type = ctx.nodes.get_node_type_id(assignment.node.value);
         let target_type = ctx.nodes.get_node_type_id(assignment.node.target);
 
-        // Handle variable type updates for assignments
         let updated_type = self.update_variable_type(target_type, value_type, &mut ctx.nodes.types);
 
-        // Update the variable's type in scope if this is an identifier assignment
         if let super::typed_node_arena::AssignmentTargetNode::Identifier(identifier) = target.node {
             self.current_scope.declare(identifier.name, updated_type);
-            ctx.nodes.set_node_type(target.id, TypeInfo::new(updated_type));
+            ctx.nodes
+                .set_node_type(target.id, TypeInfo::new(updated_type));
         }
 
-        // Check for type compatibility after potential updates
         if !self.are_types_compatible(updated_type, value_type, &ctx.nodes.types) {
             ctx.errors
                 .report_error(QangCompilerError::new_analysis_error(
@@ -1161,7 +1107,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         pipe: TypedNodeRef<PipeExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Pipe operator: left |> right (partial application)
         let left = ctx.nodes.get_expr_node(pipe.node.left);
         self.visit_expression(left, ctx)?;
         let left_type = ctx.nodes.get_node_type_id(pipe.node.left);
@@ -1184,12 +1129,11 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     TypeArena::UNKNOWN
                 } else {
                     let first_param_type = params[0];
-                    // Be more permissive with type checking for now to handle cases like .apply
-                    // which are handled specially at runtime
                     if !self.are_types_compatible(first_param_type, left_type, &ctx.nodes.types)
                         && left_type != TypeArena::UNKNOWN
                         && first_param_type != TypeArena::UNKNOWN
                     {
+                        // TODO this isn't doing anything
                         // Only report type mismatches when both types are known and incompatible
                         // This allows for runtime resolution of special cases like .apply
                     }
@@ -1242,7 +1186,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
     ) -> Result<(), Self::Error> {
         let operation = ctx.nodes.get_call_operation_node(call.node.operation);
 
-        // Check if this is an intrinsic method call first
         if let super::typed_node_arena::CallOperationNode::Call(_) = operation.node {
             if let super::typed_node_arena::ExprNode::Call(inner_call) =
                 ctx.nodes.get_expr_node(call.node.callee).node
@@ -1250,14 +1193,12 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 if let super::typed_node_arena::CallOperationNode::Property(property) =
                     ctx.nodes.get_call_operation_node(inner_call.operation).node
                 {
-                    // This is a method call - handle intrinsics specially
                     let inner_callee = ctx.nodes.get_expr_node(inner_call.callee);
                     self.visit_expression(inner_callee, ctx)?;
                     let inner_callee_type = ctx.nodes.get_node_type_id(inner_call.callee);
 
                     let property_identifier = ctx.nodes.get_identifier_node(property.identifier);
 
-                    // Handle intrinsic method calls without visiting the property identifier
                     let result_type = match ctx.nodes.types.get_type(inner_callee_type) {
                         QangType::String => {
                             let method_type = self.get_string_intrinsic_type(
@@ -1265,13 +1206,10 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                                 self.strings,
                                 &mut ctx.nodes.types,
                             );
-                            // Set the property identifier type to the method type
                             ctx.nodes
                                 .set_node_type(property_identifier.id, TypeInfo::new(method_type));
-                            // Set the inner call type to the method type
                             ctx.nodes
                                 .set_node_type(inner_call.callee, TypeInfo::new(method_type));
-                            // Return the method's return type
                             if let QangType::Function { return_type, .. } =
                                 ctx.nodes.types.get_type(method_type)
                             {
@@ -1322,14 +1260,12 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                             }
                         }
                         _ => {
-                            // Not an intrinsic - fall back to regular processing
                             self.visit_expression(ctx.nodes.get_expr_node(call.node.callee), ctx)?;
                             let callee_type = ctx.nodes.get_node_type_id(call.node.callee);
                             self.handle_regular_call(callee_type, call, ctx)?
                         }
                     };
 
-                    // Visit the call operation arguments
                     self.visit_call_operation(operation, ctx)?;
                     ctx.nodes.set_node_type(call.id, TypeInfo::new(result_type));
                     return Ok(());
@@ -1337,7 +1273,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             }
         }
 
-        // Regular call processing
         let callee = ctx.nodes.get_expr_node(call.node.callee);
         self.visit_expression(callee, ctx)?;
         let callee_type = ctx.nodes.get_node_type_id(call.node.callee);
@@ -1346,7 +1281,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             super::typed_node_arena::CallOperationNode::Property(property) => {
                 let property_identifier = ctx.nodes.get_identifier_node(property.identifier);
 
-                // Set the property identifier type based on the result, don't visit it as a variable
                 let property_type = match ctx.nodes.types.get_type(callee_type) {
                     QangType::Module { .. } => ctx
                         .nodes
@@ -1359,43 +1293,26 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                         .map(|(_, ty)| *ty)
                         .unwrap_or(TypeArena::UNKNOWN),
                     QangType::Class { class_node, .. } => {
-                        // Look up the field/method in the class definition
-                        self.lookup_class_member(
-                            *class_node,
-                            property_identifier.node.name,
-                            ctx,
-                        )
+                        self.lookup_class_member(*class_node, property_identifier.node.name, ctx)
                     }
-                    QangType::String => {
-                        // Handle string intrinsic methods
-                        self.get_string_intrinsic_type(
-                            property_identifier.node.name,
-                            self.strings,
-                            &mut ctx.nodes.types,
-                        )
-                    }
-                    QangType::Array(_) => {
-                        // Handle array intrinsic methods
-                        self.get_array_intrinsic_type(
-                            property_identifier.node.name,
-                            callee_type,
-                            self.strings,
-                            &mut ctx.nodes.types,
-                        )
-                    }
-                    QangType::Function { return_type, .. } => {
-                        // Handle function intrinsic methods
-                        self.get_function_intrinsic_type(
-                            property_identifier.node.name,
-                            *return_type,
-                            self.strings,
-                            &mut ctx.nodes.types,
-                        )
-                    }
-                    QangType::Unknown => {
-                        // For unknown types, assume property access might be valid at runtime
-                        TypeArena::UNKNOWN
-                    }
+                    QangType::String => self.get_string_intrinsic_type(
+                        property_identifier.node.name,
+                        self.strings,
+                        &mut ctx.nodes.types,
+                    ),
+                    QangType::Array(_) => self.get_array_intrinsic_type(
+                        property_identifier.node.name,
+                        callee_type,
+                        self.strings,
+                        &mut ctx.nodes.types,
+                    ),
+                    QangType::Function { return_type, .. } => self.get_function_intrinsic_type(
+                        property_identifier.node.name,
+                        *return_type,
+                        self.strings,
+                        &mut ctx.nodes.types,
+                    ),
+                    QangType::Unknown => TypeArena::UNKNOWN,
                     _ => {
                         ctx.errors
                             .report_error(QangCompilerError::new_analysis_error(
@@ -1406,12 +1323,11 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     }
                 };
 
-                // Set the property identifier type and return the property type
-                ctx.nodes.set_node_type(property_identifier.id, TypeInfo::new(property_type));
+                ctx.nodes
+                    .set_node_type(property_identifier.id, TypeInfo::new(property_type));
                 property_type
             }
             super::typed_node_arena::CallOperationNode::Call(_) => {
-                // Check if this is calling an intrinsic method (e.g., arr.length())
                 if let super::typed_node_arena::ExprNode::Call(inner_call) =
                     ctx.nodes.get_expr_node(call.node.callee).node
                 {
@@ -1422,7 +1338,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                         let property_identifier =
                             ctx.nodes.get_identifier_node(property.identifier);
 
-                        // Handle intrinsic method calls
                         match ctx.nodes.types.get_type(inner_callee_type) {
                             QangType::String => {
                                 let method_type = self.get_string_intrinsic_type(
@@ -1430,7 +1345,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                                     self.strings,
                                     &mut ctx.nodes.types,
                                 );
-                                // For method calls, return the return type of the method
                                 if let QangType::Function { return_type, .. } =
                                     ctx.nodes.types.get_type(method_type)
                                 {
@@ -1472,26 +1386,21 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                                     TypeArena::UNKNOWN
                                 }
                             }
-                            _ => {
-                                // Fall back to regular function call handling
-                                match ctx.nodes.types.get_type(callee_type) {
-                                    QangType::Function { return_type, .. } => *return_type,
-                                    QangType::Class { .. } => callee_type,
-                                    QangType::Unknown => TypeArena::UNKNOWN,
-                                    _ => {
-                                        ctx.errors.report_error(
-                                            QangCompilerError::new_analysis_error(
-                                                "Cannot call non-function value".to_string(),
-                                                call.node.span,
-                                            ),
-                                        );
-                                        TypeArena::UNKNOWN
-                                    }
+                            _ => match ctx.nodes.types.get_type(callee_type) {
+                                QangType::Function { return_type, .. } => *return_type,
+                                QangType::Class { .. } => callee_type,
+                                QangType::Unknown => TypeArena::UNKNOWN,
+                                _ => {
+                                    ctx.errors
+                                        .report_error(QangCompilerError::new_analysis_error(
+                                            "Cannot call non-function value".to_string(),
+                                            call.node.span,
+                                        ));
+                                    TypeArena::UNKNOWN
                                 }
-                            }
+                            },
                         }
                     } else {
-                        // Regular function call
                         match ctx.nodes.types.get_type(callee_type) {
                             QangType::Function { return_type, .. } => *return_type,
                             QangType::Class { .. } => callee_type,
@@ -1507,7 +1416,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                         }
                     }
                 } else {
-                    // Regular function call
                     match ctx.nodes.types.get_type(callee_type) {
                         QangType::Function { return_type, .. } => *return_type,
                         QangType::Class { .. } => callee_type,
@@ -1556,11 +1464,10 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         let func_expr = ctx.nodes.get_func_expr_node(func_decl.node.function);
         let name_node = ctx.nodes.get_identifier_node(func_expr.node.name);
 
-        // Check if this function was already declared in the first pass (global scope)
-        let already_declared = self.scope_depth == 0 && self.current_scope.lookup(name_node.node.name).is_some();
+        let already_declared =
+            self.scope_depth == 0 && self.current_scope.lookup(name_node.node.name).is_some();
 
         if !already_declared {
-            // First, create a function type with unknown parameter and return types
             let param_count = ctx.nodes.array.size(func_expr.node.parameters);
             let param_types = vec![TypeArena::UNKNOWN; param_count];
             let func_type = ctx
@@ -1568,21 +1475,17 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 .types
                 .make_function(param_types, TypeArena::UNKNOWN);
 
-            // Declare the function in the current scope
             self.current_scope.declare(name_node.node.name, func_type);
             ctx.nodes
                 .set_node_type(name_node.id, TypeInfo::new(func_type));
         }
 
-        // Now visit the function expression to infer its actual types
         self.visit_function_expression(func_expr, ctx)?;
 
-        // Update the function declaration's type
         let inferred_func_type = ctx.nodes.get_node_type_id(func_decl.node.function);
         ctx.nodes
             .set_node_type(func_decl.id, TypeInfo::new(inferred_func_type));
 
-        // Update the function name's type in scope
         self.current_scope
             .declare(name_node.node.name, inferred_func_type);
         ctx.nodes
@@ -1598,17 +1501,15 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
     ) -> Result<(), Self::Error> {
         let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
 
-        // Check if this class was already declared in the first pass (global scope)
-        let already_declared = self.scope_depth == 0 && self.current_scope.lookup(name_node.node.name).is_some();
+        let already_declared =
+            self.scope_depth == 0 && self.current_scope.lookup(name_node.node.name).is_some();
 
         if !already_declared {
-            // Create a class type
             let class_type = ctx
                 .nodes
                 .types
                 .make_class(name_node.node.name, class_decl.id);
 
-            // Declare the class in the current scope
             self.current_scope.declare(name_node.node.name, class_type);
             ctx.nodes
                 .set_node_type(name_node.id, TypeInfo::new(class_type));
@@ -1616,19 +1517,16 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 .set_node_type(class_decl.id, TypeInfo::new(class_type));
         }
 
-        // Visit the superclass if it exists
         if let Some(superclass_id) = class_decl.node.superclass {
             let superclass = ctx.nodes.get_identifier_node(superclass_id);
             self.visit_identifier(superclass, ctx)?;
         }
 
-        // Set current class context for methods
         let old_class = self.current_class;
         let old_superclass = self.current_superclass;
         self.current_class = Some(class_decl.id);
         self.current_superclass = class_decl.node.superclass;
 
-        // Visit all class members (methods and field declarations)
         let member_count = ctx.nodes.array.size(class_decl.node.members);
         for i in 0..member_count {
             if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {
@@ -1637,7 +1535,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             }
         }
 
-        // Restore previous class context
         self.current_class = old_class;
         self.current_superclass = old_superclass;
 
@@ -1667,7 +1564,9 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                     let superclass_identifier = ctx.nodes.get_identifier_node(superclass_id);
 
                     // Look up the superclass type in the current scope
-                    let superclass_type = self.current_scope.lookup(superclass_identifier.node.name)
+                    let superclass_type = self
+                        .current_scope
+                        .lookup(superclass_identifier.node.name)
                         .unwrap_or(TypeArena::UNKNOWN);
 
                     self.current_scope.declare(super_handle, superclass_type);
@@ -1681,14 +1580,20 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 // Check if this is an init method that should call super.init
                 let init_handle = self.strings.intern("init");
                 if method_identifier.node.name == init_handle
-                    && let Some(superclass_id) = self.current_superclass {
-
+                    && let Some(superclass_id) = self.current_superclass
+                {
                     // Get the superclass identifier and look up its class node
                     let superclass_identifier = ctx.nodes.get_identifier_node(superclass_id);
-                    if let Some(superclass_type) = self.current_scope.lookup(superclass_identifier.node.name) {
-                        if let QangType::Class { class_node, .. } = ctx.nodes.types.get_type(superclass_type) {
+                    if let Some(superclass_type) =
+                        self.current_scope.lookup(superclass_identifier.node.name)
+                    {
+                        if let QangType::Class { class_node, .. } =
+                            ctx.nodes.types.get_type(superclass_type)
+                        {
                             // Check if parent has init method
-                            if self.class_has_init_method(*class_node, init_handle, ctx) && !self.super_init_called {
+                            if self.class_has_init_method(*class_node, init_handle, ctx)
+                                && !self.super_init_called
+                            {
                                 ctx.errors.report_error(QangCompilerError::new_analysis_error(
                                     "Constructor must call 'super.init()' when parent class has an init method".to_string(),
                                     method_identifier.node.span,
@@ -1704,7 +1609,8 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
 
                 // Set the member node type to the function type
                 let method_type = ctx.nodes.get_node_type_id(member.id);
-                ctx.nodes.set_node_type(member.id, TypeInfo::new(method_type));
+                ctx.nodes
+                    .set_node_type(member.id, TypeInfo::new(method_type));
 
                 self.end_scope();
                 Ok(())
@@ -1753,15 +1659,12 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             }
         }
 
-        // Start with unknown return type - will be inferred from return statements
         let return_type = TypeArena::UNKNOWN;
         self.begin_function(return_type, func_expr.id);
 
         let body = ctx.nodes.get_block_stmt_node(func_expr.node.body);
         self.visit_block_statement(body, ctx)?;
 
-        // After visiting body, get the inferred return type
-        // For now, we'll use UNKNOWN, but this could be enhanced to track actual returns
         let inferred_return_type = self
             .current_function_return_type()
             .unwrap_or(TypeArena::UNIT);
@@ -1809,7 +1712,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
 
         let return_type = match body.node {
             super::typed_node_arena::LambdaBodyNode::Block(_) => {
-                // For block bodies, track return statements
                 self.begin_function(TypeArena::UNKNOWN, lambda_expr.id);
                 self.visit_lambda_body(body, ctx)?;
                 let inferred_return = self
@@ -1819,7 +1721,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 inferred_return
             }
             super::typed_node_arena::LambdaBodyNode::Expr(_) => {
-                // Expression body - return type is the expression type
                 self.visit_lambda_body(body, ctx)?;
                 ctx.nodes.get_node_type_id(lambda_expr.node.body)
             }
@@ -1863,12 +1764,9 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
             if let Some(node_id) = ctx.nodes.array.get_node_id_at(object.node.entries, i) {
                 let entry = ctx.nodes.get_obj_entry_node(node_id);
 
-                // Extract field information from the entry
-                // ObjectEntryNode has key and value fields
                 let key_identifier = ctx.nodes.get_identifier_node(entry.node.key);
                 let field_name = key_identifier.node.name;
 
-                // Visit the value expression to infer its type
                 let value_expr = ctx.nodes.get_expr_node(entry.node.value);
                 self.visit_expression(value_expr, ctx)?;
                 let field_type = ctx.nodes.get_node_type_id(entry.node.value);
@@ -1878,7 +1776,8 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         }
 
         let object_type = ctx.nodes.types.make_object(fields);
-        ctx.nodes.set_node_type(object.id, TypeInfo::new(object_type));
+        ctx.nodes
+            .set_node_type(object.id, TypeInfo::new(object_type));
 
         Ok(())
     }
@@ -1888,9 +1787,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         entry: TypedNodeRef<ObjectEntryNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // For object literal entries, the key is a field name, not a variable reference
-        // So we don't need to visit it as an identifier (which would cause variable lookup)
-        // Just visit the value expression
         let value_expr = ctx.nodes.get_expr_node(entry.node.value);
         self.visit_expression(value_expr, ctx)?;
 
@@ -1902,18 +1798,16 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
         property: TypedNodeRef<PropertyAssignmentNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Visit the object being assigned to
         let object = ctx.nodes.get_expr_node(property.node.object);
         self.visit_expression(object, ctx)?;
         let _object_type = ctx.nodes.get_node_type_id(property.node.object);
 
-        // For property assignment, we need to handle the property identifier
         let property_identifier = ctx.nodes.get_identifier_node(property.node.property);
 
-        // Set the type of the property based on the assignment target type
-        // For now, we'll set it to unknown and let assignment expression handle the real type
-        ctx.nodes.set_node_type(property_identifier.id, TypeInfo::new(TypeArena::UNKNOWN));
-        ctx.nodes.set_node_type(property.id, TypeInfo::new(TypeArena::UNKNOWN));
+        ctx.nodes
+            .set_node_type(property_identifier.id, TypeInfo::new(TypeArena::UNKNOWN));
+        ctx.nodes
+            .set_node_type(property.id, TypeInfo::new(TypeArena::UNKNOWN));
 
         Ok(())
     }
@@ -1948,7 +1842,6 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
     ) -> Result<(), Self::Error> {
         match operation.node {
             super::typed_node_arena::CallOperationNode::Call(call) => {
-                // Visit function call arguments
                 let length = ctx.nodes.array.size(call.args);
                 for i in 0..length {
                     if let Some(node_id) = ctx.nodes.array.get_node_id_at(call.args, i) {
@@ -1958,28 +1851,14 @@ impl<'a> NodeVisitor for TypeInferenceEngine<'a> {
                 }
                 Ok(())
             }
-            super::typed_node_arena::CallOperationNode::Property(_) => {
-                // For property access, don't visit the property identifier as a variable
-                // The property type is already set in the call expression handler
-                Ok(())
-            }
-            super::typed_node_arena::CallOperationNode::OptionalProperty(_) => {
-                // Similar to property access, don't visit as variable
-                Ok(())
-            }
             super::typed_node_arena::CallOperationNode::Index(index) => {
-                // Visit the index expression
                 let index_expr = ctx.nodes.get_expr_node(index.index);
                 self.visit_expression(index_expr, ctx)
             }
-            super::typed_node_arena::CallOperationNode::Map(_) => {
-                // Map operations are handled specially in visit_call_expression
-                Ok(())
-            }
-            super::typed_node_arena::CallOperationNode::OptionalMap(_) => {
-                // Optional map operations are handled specially in visit_call_expression
-                Ok(())
-            }
+            super::typed_node_arena::CallOperationNode::Property(_)
+            | super::typed_node_arena::CallOperationNode::OptionalProperty(_)
+            | super::typed_node_arena::CallOperationNode::Map(_)
+            | super::typed_node_arena::CallOperationNode::OptionalMap(_) => Ok(()),
         }
     }
 }

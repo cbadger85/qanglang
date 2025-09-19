@@ -100,7 +100,7 @@ pub struct MethodCache {
     pub object_type: CachedObjectType,
     pub method_name: StringHandle,
     pub table_handle: HashMapHandle,
-    pub cached_method: Value, // Cache the actual method/closure
+    pub cached_method: Value,
     pub generation: u32,
 }
 
@@ -754,14 +754,12 @@ impl Vm {
                     if let Some(module_target) =
                         self.state.frames[self.state.frame_count - 1].module_export_target
                     {
-                        // Redirect to module exports
                         self.alloc.tables.insert(
                             module_target,
                             Value::string(identifier_handle),
                             value,
                         );
                     } else {
-                        // Normal global definition
                         self.state.globals.insert(identifier_handle, value);
                     }
                 }
@@ -773,14 +771,12 @@ impl Vm {
                     if let Some(module_target) =
                         self.state.frames[self.state.frame_count - 1].module_export_target
                     {
-                        // Redirect to module exports
                         self.alloc.tables.insert(
                             module_target,
                             Value::string(identifier_handle),
                             value,
                         );
                     } else {
-                        // Normal global definition
                         self.state.globals.insert(identifier_handle, value);
                     }
                 }
@@ -1133,7 +1129,6 @@ impl Vm {
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    // Restore function module context from previous call frame's closure
                     if self.state.frame_count > 0 {
                         let prev_closure = self
                             .alloc
@@ -1153,7 +1148,6 @@ impl Vm {
                     let previous_function = self.alloc.get_function(previous_closure.function);
                     self.state.current_function_ptr = previous_function as *const FunctionObject;
 
-                    // Regular function return - put result on stack
                     self.state.stack_top = value_slot + 1;
                     self.state.stack[value_slot] = result;
                 }
@@ -1244,7 +1238,6 @@ impl Vm {
             ))
         });
 
-        // Push closure to stack immediately to ensure GC can see it as reachable
         push_value!(self, Value::closure(closure_handle))?;
 
         for i in 0..self
@@ -1303,7 +1296,6 @@ impl Vm {
     }
 
     fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
-        // Prevent binding init method to instances
         if let Some(method_handle) = method_name.as_string() {
             let init_handle = *self
                 .state
@@ -1348,7 +1340,6 @@ impl Vm {
             )
         })?;
 
-        // Use nil-safe variants for call and apply when receiver is nil
         let final_intrinsic = if receiver.is_nil() {
             match intrinsic {
                 IntrinsicMethod::Call => IntrinsicMethod::NilSafeCall,
@@ -1396,10 +1387,8 @@ impl Vm {
             if *stack_slot >= last_slot {
                 let value = self.state.stack[*stack_slot];
 
-                // Allocate upvalue without GC check to avoid collecting active closures
                 let value_handle = self.alloc.allocate_upvalue(value);
 
-                // Update all closures that reference this upvalue (inline + overflow)
                 for (closure_handle, upvalue_index) in
                     upvalue_ref.iter_all_entries(&self.alloc.upvalue_overflow)
                 {
@@ -1410,7 +1399,6 @@ impl Vm {
                     );
                 }
 
-                // Remove the upvalue entry
                 self.state.open_upvalues.remove(i);
             }
         }
@@ -1422,7 +1410,6 @@ impl Vm {
         closure_handle: ClosureHandle,
         upvalue_index: UpvalueIndex,
     ) {
-        // Check if there's already an open upvalue for this stack slot
         for (open_slot, upvalue_ref) in self.state.open_upvalues.iter_mut() {
             if *open_slot == stack_slot {
                 // Try to add to inline array first, or use overflow
@@ -1444,7 +1431,6 @@ impl Vm {
             }
         }
 
-        // Create a new open upvalue
         let mut upvalue_ref = OpenUpvalueTracker::new();
         if !upvalue_ref.add_closure(
             closure_handle,
@@ -1548,7 +1534,6 @@ impl Vm {
             ValueKind::Instance(instance_handle) => {
                 let instance = self.alloc.get_instance(instance_handle);
 
-                // First check if it's a field (not cached since fields can change frequently)
                 if let Some(value) = self
                     .alloc
                     .get_instance_field(instance.table, Value::string(method_handle))
@@ -1557,7 +1542,6 @@ impl Vm {
                     return self.call_value(value, arg_count);
                 }
 
-                // Prevent calling init method directly on instances
                 let init_handle = *self
                     .state
                     .keywords
@@ -1570,14 +1554,13 @@ impl Vm {
                     ));
                 }
 
-                // Look for method in class (this could also be cached, but classes change less frequently)
+                // TODO add instance methods to method cache.
                 self.invoke_from_class(instance.clazz, method_handle, arg_count)
             }
 
             ValueKind::ObjectLiteral(handle) => {
                 let object_type = CachedObjectType::ObjectLiteral;
 
-                // Try cached method lookup
                 if let Some(method_value) =
                     self.get_method_cached(object_type, handle, method_handle)
                 {
@@ -1597,7 +1580,6 @@ impl Vm {
             ValueKind::Module(handle) => {
                 let object_type = CachedObjectType::Module;
 
-                // Try cached method lookup
                 if let Some(method_value) =
                     self.get_method_cached(object_type, handle, method_handle)
                 {
@@ -1728,7 +1710,6 @@ impl Vm {
         call_frame.module_export_target = None;
         self.state.current_function_ptr = function as *const FunctionObject;
 
-        // Set function module context if the closure has one
         if let Some(module_context) = closure.module_context {
             self.state.function_module_context = Some(module_context);
         }
@@ -1742,10 +1723,7 @@ impl Vm {
     fn tail_call_value(&mut self, callee: Value, arg_count: usize) -> RuntimeResult<()> {
         match callee.kind() {
             ValueKind::Closure(closure_handle) => self.tail_call(closure_handle, arg_count),
-            ValueKind::NativeFunction(handle) => {
-                // Native functions can't be tail-optimized, fall back to regular call
-                self.call_native_function(handle, arg_count)
-            }
+            ValueKind::NativeFunction(handle) => self.call_native_function(handle, arg_count),
             ValueKind::Class(_handle) => {
                 panic!("Cannot tail call optimize class instancing.")
             }
@@ -1755,7 +1733,6 @@ impl Vm {
                 self.tail_call(bound_method.closure, arg_count)
             }
             ValueKind::BoundIntrinsic(handle) => {
-                // Intrinsic methods can't be tail-optimized, fall back to regular call
                 let bound_intrinsic = self.alloc.get_bound_intrinsic(handle);
                 self.call_intrinsic_method(
                     bound_intrinsic.receiver,
@@ -1971,23 +1948,19 @@ impl Vm {
     ) -> Option<Value> {
         let cache_index = self.state.get_property_cache_index();
 
-        // Check cache hit
         if let Some(cached) = self.state.property_cache.get(cache_index)
             && cached.object_type == object_type
             && cached.property_name == property_name
             && cached.table_handle == table_handle
             && cached.generation == self.state.cache_generation
         {
-            // Fast path: use cached table handle
             let key = Value::string(property_name);
             return self.alloc.tables.get(cached.table_handle, &key);
         }
 
-        // Slow path: full lookup + cache update
         let key = Value::string(property_name);
         let value = self.alloc.tables.get(table_handle, &key);
 
-        // Update cache
         if let Some(cache_entry) = self.state.property_cache.get_mut(cache_index) {
             *cache_entry = PropertyCache {
                 object_type,
@@ -2008,21 +1981,17 @@ impl Vm {
     ) -> Option<Value> {
         let cache_index = self.state.get_method_cache_index();
 
-        // Check method cache hit
         if let Some(cached) = self.state.method_cache.get(cache_index)
             && cached.object_type == object_type
             && cached.method_name == method_name
             && cached.table_handle == table_handle
             && cached.generation == self.state.cache_generation
         {
-            // Fast path: return cached method
             return Some(cached.cached_method);
         }
 
-        // Slow path: lookup method in table
         let key = Value::string(method_name);
         if let Some(method_value) = self.alloc.tables.get(table_handle, &key) {
-            // Update method cache
             if let Some(cache_entry) = self.state.method_cache.get_mut(cache_index) {
                 *cache_entry = MethodCache {
                     object_type,
@@ -2051,14 +2020,12 @@ impl Vm {
                 let object_type = CachedObjectType::Instance(clazz);
                 let instance_table = instance.table;
 
-                // Try cached lookup first
                 if let Some(value) =
                     self.get_property_cached(object_type, instance_table, identifier)
                 {
                     pop_value!(self);
                     push_value!(self, value)?;
                 } else {
-                    // Fall back to method binding
                     let key = Value::string(identifier);
                     self.bind_method(clazz, key)?;
                 }
@@ -2067,7 +2034,6 @@ impl Vm {
             ValueKind::ObjectLiteral(handle) => {
                 let object_type = CachedObjectType::ObjectLiteral;
 
-                // Use cached lookup (returns None if property doesn't exist, which becomes nil via unwrap_or_default)
                 let value = self
                     .get_property_cached(object_type, handle, identifier)
                     .unwrap_or_default();
@@ -2078,14 +2044,12 @@ impl Vm {
             ValueKind::Module(handle) => {
                 let object_type = CachedObjectType::Module;
 
-                // Use cached lookup
                 let value = self.get_property_cached(object_type, handle, identifier);
 
                 pop_value!(self);
                 match value {
                     Some(val) => push_value!(self, val)?,
                     None => {
-                        // Module property doesn't exist, return nil or error based on optional flag
                         if optional {
                             push_value!(self, Value::nil())?;
                         } else {
@@ -2102,7 +2066,6 @@ impl Vm {
             }
 
             ValueKind::Nil => {
-                // Handle nil-safe method calls (call/apply)
                 let call_handle = *self
                     .state
                     .keywords
@@ -2179,7 +2142,6 @@ impl Vm {
                 let constant = Value::string(identifier);
                 let value = peek_value!(self, 0);
 
-                // Update the property (this will invalidate cache naturally via generation)
                 self.with_gc_check(|alloc| alloc.set_instance_field(table_handle, constant, value));
 
                 let value = pop_value!(self);
@@ -2191,7 +2153,6 @@ impl Vm {
                 let constant = Value::string(identifier);
                 let value = peek_value!(self, 0);
 
-                // Update the property
                 self.with_gc_check(|alloc| alloc.tables.insert(obj_handle, constant, value));
 
                 let value = pop_value!(self);
@@ -2203,7 +2164,6 @@ impl Vm {
                 let constant = Value::string(identifier);
                 let value = peek_value!(self, 0);
 
-                // Update the module property
                 self.with_gc_check(|alloc| alloc.tables.insert(module_handle, constant, value));
 
                 let value = pop_value!(self);
@@ -2224,14 +2184,12 @@ impl Vm {
     fn get_global(&self, identifier_handle: StringHandle) -> RuntimeResult<Value> {
         let key = Value::string(identifier_handle);
 
-        // Try to get from function module context first
         if let Some(function_context) = self.state.function_module_context
             && let Some(value) = self.try_get_from_table(function_context, &key)
         {
             return Ok(value);
         }
 
-        // Try to get from module export target
         if self.state.frame_count > 0
             && let Some(module_target) =
                 self.state.frames[self.state.frame_count - 1].module_export_target
@@ -2240,12 +2198,9 @@ impl Vm {
             return Ok(value);
         }
 
-        // Try to get from globals, with different behavior based on context
         if self.has_module_context() {
-            // In module context, fall back to globals or return Nil
             Ok(self.get_from_globals_or_nil(identifier_handle))
         } else {
-            // In normal context, error if not found in globals
             self.try_get_from_globals_strict(identifier_handle)
         }
     }
@@ -2289,14 +2244,12 @@ impl Vm {
         let value = peek_value!(self, 0);
         let key = Value::string(identifier_handle);
 
-        // Try to set in function module context first
         if let Some(function_context) = self.state.function_module_context
             && self.try_set_in_table(function_context, &key, value)
         {
             return Ok(());
         }
 
-        // Try to set in module export target
         if self.state.frame_count > 0
             && let Some(module_target) =
                 self.state.frames[self.state.frame_count - 1].module_export_target
@@ -2305,12 +2258,10 @@ impl Vm {
             return Ok(());
         }
 
-        // Try to set in globals
         if self.try_set_in_globals(identifier_handle, value) {
             return Ok(());
         }
 
-        // Variable not found anywhere
         self.undefined_variable_error(identifier_handle)
     }
 
@@ -2414,7 +2365,6 @@ impl Vm {
 
         self.state.invalidate_caches();
 
-        // Mark overflow chunks referenced by open upvalues before GC
         for (_, upvalue_ref) in &self.state.open_upvalues {
             upvalue_ref.mark_overflow_chunks(&mut self.alloc.upvalue_overflow);
         }

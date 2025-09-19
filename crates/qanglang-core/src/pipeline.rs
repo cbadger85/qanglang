@@ -83,12 +83,10 @@ impl GlobalCompilerPipeline {
 
         // Second pass: determine main modules (files that aren't imported)
         for file_path in file_paths {
-            // Try to canonicalize the path, but fall back to the original if it fails
             let canonical_path = file_path
                 .canonicalize()
                 .unwrap_or_else(|_| file_path.clone());
 
-            // If this file wasn't imported by any other file, it's a main module
             if !self.imported_files.contains(&canonical_path) {
                 self.modules.main_modules.push(canonical_path);
             }
@@ -102,8 +100,6 @@ impl GlobalCompilerPipeline {
         file_path: &Path,
         allocator: &mut HeapAllocator,
     ) -> Result<NodeId, QangPipelineError> {
-        // Try to canonicalize the path, but fall back to the original if it fails
-        // (this supports in-memory test scenarios where files don't exist on disk)
         let canonical_path = file_path
             .canonicalize()
             .unwrap_or_else(|_| file_path.to_path_buf());
@@ -202,14 +198,12 @@ impl GlobalCompilerPipeline {
         Ok(())
     }
 
-    /// Run analysis using the contained AnalysisPipeline
     fn analyze_all_modules(
         &mut self,
         allocator: &mut HeapAllocator,
     ) -> Result<(), QangPipelineError> {
         let analysis_config = AnalysisPipelineConfig { strict_mode: true };
 
-        // Use the new ModuleMap directly
         let analyzer = AnalysisPipeline::new(&mut allocator.strings).with_config(analysis_config);
         let mut errors = ErrorReporter::new();
         analyzer.analyze(&self.modules, &mut self.nodes, &mut errors)?;
@@ -217,7 +211,6 @@ impl GlobalCompilerPipeline {
         Ok(())
     }
 
-    /// Compile a specific module to executable form
     pub fn compile_module(
         &mut self,
         module_path: &Path,
@@ -234,7 +227,6 @@ impl GlobalCompilerPipeline {
             )])
         })?;
 
-        // Assemble the main module
         let assembler = Assembler::new(module_source.source_map.clone(), alloc);
         let mut errors = ErrorReporter::new();
         let mut main_function =
@@ -245,7 +237,6 @@ impl GlobalCompilerPipeline {
             .intern(&module_source.source_map.get_path().to_string_lossy());
         main_function.name = main_module_id;
 
-        // Build ModuleResolver with all compiled modules
         let mut module_map = FxHashMap::with_hasher(FxBuildHasher);
         for (path, module) in self.modules.iter() {
             let path_str = path.to_string_lossy();
@@ -266,7 +257,6 @@ impl GlobalCompilerPipeline {
         Ok(QangProgram::new(main_handle, module_map.into()))
     }
 
-    /// Extract import paths from a parsed module using NodeVisitor for complete traversal
     fn extract_import_paths(
         module_node: NodeId,
         module_path: &Path,
@@ -289,17 +279,14 @@ impl GlobalCompilerPipeline {
                 >,
                 _ctx: &mut VisitorContext,
             ) -> Result<(), Self::Error> {
-                // Found an import declaration - extract the path
                 let import_path_str = self.allocator.strings.get_string(import_decl.node.path);
 
-                // Resolve relative to the current module's directory
                 let resolved_path = if let Some(parent_dir) = self.module_path.parent() {
                     parent_dir.join(import_path_str)
                 } else {
                     PathBuf::from(import_path_str)
                 };
 
-                // Try to canonicalize the path, but use the resolved path if it fails
                 let final_path = resolved_path.canonicalize().unwrap_or(resolved_path);
                 self.import_paths.push(final_path);
                 Ok(())
@@ -321,18 +308,14 @@ impl GlobalCompilerPipeline {
         extractor.import_paths
     }
 
-    /// Compile source code directly from a string (for in-memory compilation)
-    /// This is the primary method for tests and REPL usage
     pub fn compile_source(
         source: String,
         allocator: &mut HeapAllocator,
     ) -> Result<QangProgram, QangPipelineError> {
         let mut pipeline = Self::new();
 
-        // Create an in-memory source map
         let source_map = Arc::new(SourceMap::from_source(source));
 
-        // Parse the source using the internal parser approach
         let mut parser = Parser::new(
             source_map.clone(),
             &mut pipeline.nodes,
@@ -341,18 +324,14 @@ impl GlobalCompilerPipeline {
         let modules = parser.parse();
         let mut errors = parser.into_errors();
 
-        // Check for parse errors
         if errors.has_errors() {
             return Err(QangPipelineError::new(errors.take_errors()));
         }
 
-        // Parser now returns ModuleMap directly
         pipeline.modules = modules;
 
-        // Run semantic analysis
         pipeline.analyze_all_modules(allocator)?;
 
-        // Get the main module path before borrowing pipeline mutably
         let main_module_path = {
             let main_modules = pipeline.get_main_modules();
             if main_modules.is_empty() {
@@ -367,7 +346,6 @@ impl GlobalCompilerPipeline {
             main_modules[0].clone()
         };
 
-        // Compile the main module
         pipeline.compile_module(&main_module_path, allocator)
     }
 }

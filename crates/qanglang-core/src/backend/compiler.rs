@@ -72,20 +72,20 @@ struct Upvalue {
 }
 
 #[derive(Debug, Clone)]
-struct CompilerState {
+struct State {
     kind: FunctionKind,
     locals: Vec<Local>,
     local_count: usize,
     scope_depth: usize,
     upvalues: Vec<Upvalue>,
-    enclosing: Option<Box<CompilerState>>,
+    enclosing: Option<Box<State>>,
     has_superclass: bool,
     blank_handle: crate::StringHandle,
     this_handle: crate::StringHandle,
     source_map: Arc<SourceMap>,
 }
 
-impl CompilerState {
+impl State {
     fn new(
         blank_handle: crate::StringHandle,
         this_handle: crate::StringHandle,
@@ -228,7 +228,7 @@ pub struct Assembler<'a> {
     current_function_id: Option<NodeId>,
     current_function: FunctionObject,
     loop_contexts: Vec<LoopContext>,
-    compiler_state: CompilerState,
+    compiler_state: State,
 }
 
 impl<'a> Assembler<'a> {
@@ -242,7 +242,7 @@ impl<'a> Assembler<'a> {
             current_function: FunctionObject::new(handle, 0),
             current_function_id: None,
             loop_contexts: Vec::new(),
-            compiler_state: CompilerState::new(blank_handle, this_handle, source_map),
+            compiler_state: State::new(blank_handle, this_handle, source_map),
         }
     }
 

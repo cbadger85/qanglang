@@ -1170,10 +1170,8 @@ impl Vm {
 
                     if let Some(module_instance) = module_instance {
                         self.state.stack[self.state.stack_top - 1] = Value::module(module_instance);
-                    } else {
-                        if self.state.frame_count == 0 {
-                            return Ok(result);
-                        }
+                    } else if self.state.frame_count == 0 {
+                        return Ok(result);
                     }
 
                     if self.state.frame_count == 0 {
@@ -2234,14 +2232,13 @@ impl Vm {
         }
 
         // Try to get from module export target
-        if self.state.frame_count > 0 {
-            if let Some(module_target) =
+        if self.state.frame_count > 0
+            && let Some(module_target) =
                 self.state.frames[self.state.frame_count - 1].module_export_target
                 && let Some(value) = self.try_get_from_table(module_target, &key)
             {
                 return Ok(value);
             }
-        }
 
         // Try to get from globals, with different behavior based on context
         if self.has_module_context() {
@@ -2300,14 +2297,13 @@ impl Vm {
         }
 
         // Try to set in module export target
-        if self.state.frame_count > 0 {
-            if let Some(module_target) =
+        if self.state.frame_count > 0
+            && let Some(module_target) =
                 self.state.frames[self.state.frame_count - 1].module_export_target
                 && self.try_set_in_table(module_target, &key, value)
             {
                 return Ok(());
             }
-        }
 
         // Try to set in globals
         if self.try_set_in_globals(identifier_handle, value) {

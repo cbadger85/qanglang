@@ -59,21 +59,20 @@ impl ModuleMap {
         // Add to dependency graph
         self.dependency_graph
             .entry(from_path.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(to_path.clone());
 
         // Add to reverse dependencies
         self.reverse_dependencies
             .entry(to_path.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(from_path.clone());
 
         // Update the module's dependency list
-        if let Some(module) = self.modules.get_mut(&from_path) {
-            if !module.dependencies.contains(&to_path) {
+        if let Some(module) = self.modules.get_mut(&from_path)
+            && !module.dependencies.contains(&to_path) {
                 module.dependencies.push(to_path);
             }
-        }
     }
 
     /// Get all main modules

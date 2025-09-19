@@ -40,6 +40,43 @@ impl GlobalCompilerPipeline {
         self
     }
 
+    pub fn parse_from_root(
+        &mut self,
+        file_path: PathBuf,
+        allocator: &mut HeapAllocator,
+    ) -> Result<(), QangPipelineError> {
+        let canonical_path = file_path
+            .canonicalize()
+            .unwrap_or_else(|_| file_path.to_path_buf());
+
+        self.processed_files.insert(canonical_path.clone());
+
+        let source_map = match SourceMap::from_path(&canonical_path) {
+            Ok(source_map) => Arc::new(source_map),
+            Err(_) => {
+                return Err(QangPipelineError::new(vec![
+                    QangCompilerError::new_analysis_error(
+                        format!(
+                            "Unable to load module from path '{}'",
+                            canonical_path.display()
+                        ),
+                        SourceSpan::default(),
+                    ),
+                ]));
+            }
+        };
+        let mut parser = Parser::new(source_map.clone(), &mut self.nodes, &mut allocator.strings);
+
+        self.modules = parser.parse();
+        let mut errors = parser.into_errors();
+
+        if errors.has_errors() {
+            return Err(QangPipelineError::new(errors.take_errors()));
+        }
+
+        Ok(())
+    }
+
     pub fn parse_files(
         &mut self,
         file_paths: Vec<PathBuf>,
@@ -152,6 +189,18 @@ impl GlobalCompilerPipeline {
         allocator: &mut HeapAllocator,
     ) -> Result<(), QangPipelineError> {
         self.parse_files(file_paths, allocator)?;
+
+        self.analyze_all_modules(allocator)?;
+
+        Ok(())
+    }
+
+    pub fn process_root(
+        &mut self,
+        file_path: PathBuf,
+        allocator: &mut HeapAllocator,
+    ) -> Result<(), QangPipelineError> {
+        self.parse_from_root(file_path, allocator)?;
 
         self.analyze_all_modules(allocator)?;
 

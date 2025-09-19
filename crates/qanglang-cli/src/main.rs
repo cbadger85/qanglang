@@ -199,8 +199,9 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
     });
 
     let program = match pipeline
-        .process_files(vec![path], &mut allocator)
+        .process_root(path.clone(), &mut allocator)
         .and_then(|_| {
+            let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
             let main_modules = pipeline.get_main_modules();
             if main_modules.is_empty() {
                 return Err(qanglang_core::QangPipelineError::new(vec![
@@ -210,8 +211,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
                     ),
                 ]));
             }
-            let main_module_path = main_modules[0].clone();
-            pipeline.compile_module(&main_module_path, &mut allocator)
+            pipeline.compile_module(&canonical_path, &mut allocator)
         }) {
         Ok(program) => {
             if heap_dump {

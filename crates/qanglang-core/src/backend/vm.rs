@@ -1412,15 +1412,11 @@ impl Vm {
     ) {
         for (open_slot, upvalue_ref) in self.state.open_upvalues.iter_mut() {
             if *open_slot == stack_slot {
-                // Try to add to inline array first, or use overflow
-                if !upvalue_ref.add_closure(
+                upvalue_ref.add_closure(
                     closure_handle,
                     upvalue_index,
                     &mut self.alloc.upvalue_overflow,
-                ) {
-                    // This should never happen with reasonable limits, but handle gracefully
-                    panic!("Failed to add closure to upvalue tracker - overflow capacity exceeded");
-                }
+                );
 
                 self.alloc.closures.set_upvalue(
                     closure_handle,
@@ -1432,14 +1428,11 @@ impl Vm {
         }
 
         let mut upvalue_ref = OpenUpvalueTracker::new();
-        if !upvalue_ref.add_closure(
+        upvalue_ref.add_closure(
             closure_handle,
             upvalue_index,
             &mut self.alloc.upvalue_overflow,
-        ) {
-            // This should never happen with reasonable limits, but handle gracefully
-            panic!("Failed to add closure to new upvalue tracker - overflow capacity exceeded");
-        }
+        );
 
         self.alloc.closures.set_upvalue(
             closure_handle,

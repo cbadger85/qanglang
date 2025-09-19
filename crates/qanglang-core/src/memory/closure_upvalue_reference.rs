@@ -31,11 +31,11 @@ impl OpenUpvalueTracker {
         closure_handle: ClosureHandle,
         upvalue_index: usize,
         overflow_arena: &mut crate::memory::UpvalueOverflowArena,
-    ) -> bool {
+    ) {
         if self.count < INLINE_UPVALUE_CAPACITY {
             self.inline_entries[self.count] = (closure_handle, upvalue_index);
             self.count += 1;
-            return true;
+            return;
         }
 
         // Need overflow storage
@@ -52,7 +52,7 @@ impl OpenUpvalueTracker {
                 if chunk.count < crate::memory::upvalue_overflow_arena::OVERFLOW_CHUNK_SIZE {
                     chunk.entries[chunk.count] = (closure_handle, upvalue_index);
                     chunk.count += 1;
-                    return true;
+                    return;
                 }
             }
 
@@ -70,7 +70,7 @@ impl OpenUpvalueTracker {
                 let new_chunk = overflow_arena.get_chunk_mut(new_handle);
                 new_chunk.entries[0] = (closure_handle, upvalue_index);
                 new_chunk.count = 1;
-                return true;
+                return;
             }
         }
     }

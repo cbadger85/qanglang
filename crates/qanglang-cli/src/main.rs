@@ -1,12 +1,11 @@
 mod repl;
 
 use qanglang_core::{
-    CompilerConfig, ErrorMessageFormat, GlobalCompilerPipeline, HeapAllocator, Vm,
-    disassemble_program,
+    ErrorMessageFormat, GlobalCompilerPipeline, HeapAllocator, SourceMap, Vm, disassemble_program,
 };
 use qanglang_ls::run_language_server;
 use repl::run_repl;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::{ArgAction, Parser, Subcommand};
 
@@ -118,7 +117,8 @@ fn main() {
                 }
             };
 
-            let error_format = match eformat.to_lowercase().as_str() {
+            // TODO we'll have to refactor how the checker displays errors to accommodate this.
+            let _error_format = match eformat.to_lowercase().as_str() {
                 "minimal" => ErrorMessageFormat::Minimal,
                 "compact" => ErrorMessageFormat::Compact,
                 "verbose" => ErrorMessageFormat::Verbose,
@@ -128,7 +128,7 @@ fn main() {
                 }
             };
 
-            let results = qanglang_test::check_files_from_sources(source_files, error_format);
+            let results = qanglang_test::check_files_from_sources(source_files);
             let output = qanglang_test::format_check_results(&results);
             print!("{}", output);
         }
@@ -194,9 +194,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         }
     };
 
-    let mut pipeline = GlobalCompilerPipeline::new().with_config(CompilerConfig {
-        error_message_format,
-    });
+    let mut pipeline = GlobalCompilerPipeline::new();
 
     let program = match pipeline
         .process_root(path.clone(), &mut allocator)
@@ -208,6 +206,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
                     qanglang_core::QangCompilerError::new_analysis_error(
                         "No main module found".to_string(),
                         qanglang_core::nodes::SourceSpan::default(),
+                        Arc::new(SourceMap::default()),
                     ),
                 ]));
             }
@@ -220,8 +219,13 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
             program
         }
         Err(errors) => {
-            for error in errors.all() {
-                eprintln!("Compile error: {}", error.message);
+            let messages = errors.all().iter().map(|error| match error_message_format {
+                ErrorMessageFormat::Compact => error.clone().message,
+                ErrorMessageFormat::Minimal => error.clone().into_short_formatted().message,
+                ErrorMessageFormat::Verbose => error.clone().into_formatted().message,
+            });
+            for message in messages {
+                eprintln!("Compile error: {}", message);
             }
             return;
         }

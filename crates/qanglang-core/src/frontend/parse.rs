@@ -106,6 +106,7 @@ impl<'a> Parser<'a> {
         Err(QangCompilerError::new_syntax_error(
             message.to_string(),
             span,
+            self.source_map.clone(),
         ))
     }
 
@@ -137,6 +138,7 @@ impl<'a> Parser<'a> {
             .report_error(QangCompilerError::new_syntax_error(
                 message,
                 SourceSpan::from_token(token),
+                self.source_map.clone(),
             ));
     }
 
@@ -171,6 +173,7 @@ impl<'a> Parser<'a> {
             Err(QangCompilerError::new_syntax_error(
                 "Expected identifier.".to_string(),
                 span,
+                self.source_map.clone(),
             ))
         }
     }
@@ -359,6 +362,7 @@ impl<'a> Parser<'a> {
                         .report_error(QangCompilerError::new_analysis_error(
                             format!("Error loading module '{}': {}", module_path.display(), err),
                             SourceSpan::default(),
+                            Arc::new(SourceMap::default()),
                         ));
                     continue;
                 }
@@ -425,8 +429,11 @@ impl<'a> Parser<'a> {
         match result {
             Ok(decl) => Some(decl),
             Err(error) => {
-                let formatted_error =
-                    QangCompilerError::new_syntax_error(error.message, error.span);
+                let formatted_error = QangCompilerError::new_syntax_error(
+                    error.message,
+                    error.span,
+                    self.source_map.clone(),
+                );
                 self.errors.report_error(formatted_error);
                 self.synchronize();
                 None
@@ -462,6 +469,7 @@ impl<'a> Parser<'a> {
                 return Err(QangCompilerError::new_syntax_error(
                     "Unable to get module path.".to_string(),
                     path_span,
+                    self.source_map.clone(),
                 ));
             }
         };
@@ -476,6 +484,7 @@ impl<'a> Parser<'a> {
                                 combined_path.as_path().display(),
                             ),
                             path_span,
+                            self.source_map.clone(),
                         ));
                 }
             }
@@ -487,6 +496,7 @@ impl<'a> Parser<'a> {
                             combined_path.as_path().display(),
                         ),
                         path_span,
+                        self.source_map.clone(),
                     ));
             }
         }
@@ -590,6 +600,7 @@ impl<'a> Parser<'a> {
             Err(QangCompilerError::new_syntax_error(
                 "Expected field or method declaration.".to_string(),
                 self.get_current_span(),
+                self.source_map.clone(),
             ))
         }
     }
@@ -643,6 +654,7 @@ impl<'a> Parser<'a> {
                     .as_ref()
                     .map(SourceSpan::from_token)
                     .unwrap_or_default(),
+                self.source_map.clone(),
             ))?
             .token_type;
 
@@ -718,6 +730,7 @@ impl<'a> Parser<'a> {
                     .as_ref()
                     .map(SourceSpan::from_token)
                     .unwrap_or_default(),
+                self.source_map.clone(),
             ))?
             .token_type;
 
@@ -939,6 +952,7 @@ impl<'a> Parser<'a> {
                             return Err(QangCompilerError::new_syntax_error(
                                 "Invalid assignment target".to_string(),
                                 span,
+                                self.source_map.clone(),
                             ));
                         }
                     }
@@ -947,6 +961,7 @@ impl<'a> Parser<'a> {
                     return Err(QangCompilerError::new_syntax_error(
                         "Invalid assignment target".to_string(),
                         span,
+                        self.source_map.clone(),
                     ));
                 }
             };
@@ -1055,7 +1070,11 @@ mod expression_parser {
             .collect::<String>()
             .parse::<f64>()
             .map_err(|_| {
-                crate::QangCompilerError::new_syntax_error("Expected number.".to_string(), span)
+                crate::QangCompilerError::new_syntax_error(
+                    "Expected number.".to_string(),
+                    span,
+                    parser.source_map.clone(),
+                )
             })?;
 
         let node_id = parser
@@ -1171,6 +1190,7 @@ mod expression_parser {
             _ => Err(crate::QangCompilerError::new_syntax_error(
                 "Unknown operator.".to_string(),
                 span,
+                parser.source_map.clone(),
             )),
         }
     }
@@ -1208,6 +1228,7 @@ mod expression_parser {
                     return Err(crate::QangCompilerError::new_syntax_error(
                         "Expect '.' after 'super'.".to_string(),
                         span,
+                        parser.source_map.clone(),
                     ));
                 }
 
@@ -1228,6 +1249,7 @@ mod expression_parser {
             _ => Err(crate::QangCompilerError::new_syntax_error(
                 "Unknown literal.".to_string(),
                 span,
+                parser.source_map.clone(),
             )),
         }
     }
@@ -1353,6 +1375,7 @@ mod expression_parser {
             return Err(crate::QangCompilerError::new_syntax_error(
                 "Expect parameter name before '->' in map expression.".to_string(),
                 parser.get_current_span(),
+                parser.source_map.clone(),
             ));
         };
 
@@ -1386,6 +1409,7 @@ mod expression_parser {
             return Err(crate::QangCompilerError::new_syntax_error(
                 "Expect parameter name before '->' in optional map expression.".to_string(),
                 parser.get_current_span(),
+                parser.source_map.clone(),
             ));
         };
 
@@ -1490,6 +1514,7 @@ mod expression_parser {
             return Err(QangCompilerError::new_syntax_error(
                 "Unexpected token.".to_string(),
                 SourceSpan::from_token(token),
+                parser.source_map.clone(),
             ));
         }
 
@@ -1637,6 +1662,7 @@ mod expression_parser {
             _ => Err(crate::QangCompilerError::new_syntax_error(
                 "Unknown operator.".to_string(),
                 span,
+                parser.source_map.clone(),
             )),
         }
     }
@@ -2019,6 +2045,7 @@ mod expression_parser {
                 return Err(crate::QangCompilerError::new_syntax_error(
                     "Expected expression.".to_string(),
                     span,
+                    parser.source_map.clone(),
                 ));
             }
         };
@@ -2066,6 +2093,7 @@ mod expression_parser {
                     return Err(crate::QangCompilerError::new_syntax_error(
                         "Unexpected oprand. Missing operator or ';'.".to_string(),
                         span,
+                        parser.source_map.clone(),
                     ));
                 }
                 _ => {}

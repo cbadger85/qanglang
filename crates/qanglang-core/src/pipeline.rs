@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    AnalysisPipeline, AnalysisPipelineConfig, CompilerConfig, ErrorReporter, HeapAllocator, NodeId,
-    Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap, TypedNodeArena,
+    AnalysisPipeline, AnalysisPipelineConfig, ErrorReporter, HeapAllocator, NodeId, Parser,
+    QangCompilerError, QangPipelineError, QangProgram, SourceMap, TypedNodeArena,
     backend::compiler::Assembler,
     frontend::{
         module_map::ModuleMap,
@@ -21,7 +21,6 @@ pub struct GlobalCompilerPipeline {
     pub nodes: TypedNodeArena,
     imported_files: HashSet<PathBuf>,
     processed_files: HashSet<PathBuf>,
-    config: CompilerConfig,
 }
 
 impl GlobalCompilerPipeline {
@@ -31,13 +30,7 @@ impl GlobalCompilerPipeline {
             nodes: TypedNodeArena::new(),
             imported_files: HashSet::new(),
             processed_files: HashSet::new(),
-            config: CompilerConfig::default(),
         }
-    }
-
-    pub fn with_config(mut self, config: CompilerConfig) -> Self {
-        self.config = config;
-        self
     }
 
     pub fn parse_from_root(
@@ -61,6 +54,7 @@ impl GlobalCompilerPipeline {
                             canonical_path.display()
                         ),
                         SourceSpan::default(),
+                        Arc::new(SourceMap::default()),
                     ),
                 ]));
             }
@@ -130,6 +124,7 @@ impl GlobalCompilerPipeline {
                             canonical_path.display()
                         ),
                         SourceSpan::default(),
+                        Arc::new(SourceMap::default()),
                     ),
                 ]));
             }
@@ -212,10 +207,7 @@ impl GlobalCompilerPipeline {
         &mut self,
         allocator: &mut HeapAllocator,
     ) -> Result<(), QangPipelineError> {
-        let analysis_config = AnalysisPipelineConfig {
-            error_message_format: self.config.error_message_format,
-            strict_mode: true,
-        };
+        let analysis_config = AnalysisPipelineConfig { strict_mode: true };
 
         // Use the new ModuleMap directly
         let analyzer = AnalysisPipeline::new(&mut allocator.strings).with_config(analysis_config);
@@ -238,6 +230,7 @@ impl GlobalCompilerPipeline {
             QangPipelineError::new(vec![QangCompilerError::new_analysis_error(
                 format!("Module not found: {}", module_path.display()),
                 SourceSpan::default(),
+                Arc::new(SourceMap::default()),
             )])
         })?;
 
@@ -367,6 +360,7 @@ impl GlobalCompilerPipeline {
                     QangCompilerError::new_analysis_error(
                         "No main module found during compilation".to_string(),
                         SourceSpan::default(),
+                        Arc::new(SourceMap::default()),
                     ),
                 ]));
             }

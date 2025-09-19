@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
-    HeapAllocator, NodeId, QangCompilerError, QangPipelineError, SourceLocation, SourceMap,
-    TypedNodeArena, Value,
+    ErrorReporter, FunctionHandle, FunctionObject, HeapAllocator, NodeId, QangCompilerError,
+    QangPipelineError, SourceLocation, SourceMap, TypedNodeArena, Value,
     backend::{
         chunk::{Chunk, OpCode},
         module_resolver::ModuleResolver,
@@ -39,28 +38,6 @@ impl QangProgram {
 
     pub fn into_modules(self) -> ModuleResolver {
         self.modules
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct CompilerConfig {
-    pub error_message_format: ErrorMessageFormat,
-}
-
-impl Default for CompilerConfig {
-    fn default() -> Self {
-        Self {
-            error_message_format: ErrorMessageFormat::Compact,
-        }
-    }
-}
-
-impl From<CompilerConfig> for AnalysisPipelineConfig {
-    fn from(value: CompilerConfig) -> Self {
-        Self {
-            error_message_format: value.error_message_format,
-            ..Default::default()
-        }
     }
 }
 
@@ -105,10 +82,15 @@ struct CompilerState {
     has_superclass: bool,
     blank_handle: crate::StringHandle,
     this_handle: crate::StringHandle,
+    source_map: Arc<SourceMap>,
 }
 
 impl CompilerState {
-    fn new(blank_handle: crate::StringHandle, this_handle: crate::StringHandle) -> Self {
+    fn new(
+        blank_handle: crate::StringHandle,
+        this_handle: crate::StringHandle,
+        source_map: Arc<SourceMap>,
+    ) -> Self {
         let mut locals = Vec::with_capacity(u8::MAX as usize);
         locals.push(Local::new(blank_handle));
         Self {
@@ -121,6 +103,7 @@ impl CompilerState {
             has_superclass: false,
             blank_handle,
             this_handle,
+            source_map,
         }
     }
 
@@ -146,6 +129,7 @@ impl CompilerState {
                 has_superclass,
                 blank_handle: self.blank_handle,
                 this_handle: self.this_handle,
+                source_map: self.source_map.clone(),
             },
         );
 
@@ -175,6 +159,7 @@ impl CompilerState {
                     return Err(QangCompilerError::new_assembler_error(
                         "Cannot read local variable during its initialization.".to_string(),
                         span,
+                        self.source_map.clone(),
                     ));
                 }
                 return Ok(Some(i));
@@ -224,6 +209,7 @@ impl CompilerState {
             return Err(QangCompilerError::new_assembler_error(
                 "Can only close over up to 256 variables.".to_string(),
                 span,
+                self.source_map.clone(),
             ));
         }
 
@@ -251,12 +237,12 @@ impl<'a> Assembler<'a> {
         let blank_handle = allocator.strings.intern("");
         let this_handle = allocator.strings.intern("this");
         Self {
-            source_map,
+            source_map: source_map.clone(),
             allocator,
             current_function: FunctionObject::new(handle, 0),
             current_function_id: None,
             loop_contexts: Vec::new(),
-            compiler_state: CompilerState::new(blank_handle, this_handle),
+            compiler_state: CompilerState::new(blank_handle, this_handle, source_map),
         }
     }
 
@@ -311,6 +297,7 @@ impl<'a> Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "Too much code to jump over.".to_string(),
                 span,
+                self.source_map.clone(),
             ));
         }
 
@@ -327,6 +314,7 @@ impl<'a> Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "Loop body too large.".to_string(),
                 span,
+                self.source_map.clone(),
             ));
         }
 
@@ -354,6 +342,7 @@ impl<'a> Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "Too many constants in function".to_string(),
                 span,
+                self.source_map.clone(),
             ));
         }
 
@@ -379,6 +368,7 @@ impl<'a> Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "Too many constants in function (max 65536)".to_string(),
                 span,
+                self.source_map.clone(),
             ));
         }
 
@@ -433,6 +423,7 @@ impl<'a> Assembler<'a> {
             Err(QangCompilerError::new_assembler_error(
                 "Too many local variables in scope.".to_string(),
                 span,
+                self.source_map.clone(),
             ))
         } else {
             let local = Local::new(handle);
@@ -469,6 +460,7 @@ impl<'a> Assembler<'a> {
                     return Err(QangCompilerError::new_assembler_error(
                         "Already a variable with this name in this scope.".to_string(),
                         span,
+                        self.source_map.clone(),
                     ));
                 }
             }
@@ -592,9 +584,10 @@ impl<'a> Assembler<'a> {
                 return Err(QangCompilerError::new_assembler_error(
                     format!(
                         "Unexpected node type for variable access: {:?}",
-                        ctx.nodes.get_node(node_id)
+                        ctx.nodes.get_node(node_id),
                     ),
                     span,
+                    self.source_map.clone(),
                 ));
             }
         };
@@ -904,6 +897,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             Err(QangCompilerError::new_assembler_error(
                 "Cannot use 'this' outside of a class method.".to_string(),
                 this_expr.node.span,
+                self.source_map.clone(),
             ))
         }
     }
@@ -920,6 +914,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "Cannot use 'super' outside of a class method.".to_string(),
                 super_expr.node.span,
+                self.source_map.clone(),
             ));
         }
 
@@ -927,6 +922,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "Can't use 'super' in a class with no superclass.".to_string(),
                 super_expr.node.span,
+                self.source_map.clone(),
             ));
         }
 
@@ -1303,6 +1299,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 return Err(QangCompilerError::new_assembler_error(
                     "Continue jump too large.".to_string(),
                     while_stmt.node.span,
+                    self.source_map.clone(),
                 ));
             }
 
@@ -1408,6 +1405,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     return Err(QangCompilerError::new_assembler_error(
                         "Continue jump too large.".to_string(),
                         for_stmt.node.span,
+                        self.source_map.clone(),
                     ));
                 }
                 let chunk = self.current_chunk_mut();
@@ -1419,6 +1417,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     return Err(QangCompilerError::new_assembler_error(
                         "Continue jump too large.".to_string(),
                         for_stmt.node.span,
+                        self.source_map.clone(),
                     ));
                 }
                 let chunk = self.current_chunk_mut();
@@ -1475,6 +1474,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "'break' can only be used inside loops.".to_string(),
                 break_stmt.node.span,
+                self.source_map.clone(),
             ));
         }
 
@@ -1496,6 +1496,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "'continue' can only be used inside loops.".to_string(),
                 continue_stmt.node.span,
+                self.source_map.clone(),
             ));
         }
 
@@ -1653,6 +1654,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     return Err(QangCompilerError::new_assembler_error(
                         "Functions may only take up to 256 arguments.".to_string(),
                         call.node.span,
+                        self.source_map.clone(),
                     ));
                 }
 
@@ -1664,6 +1666,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         return Err(QangCompilerError::new_assembler_error(
                             "Cannot use 'super' outside of a class method.".to_string(),
                             super_expr.span,
+                            self.source_map.clone(),
                         ));
                     }
 
@@ -1862,6 +1865,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                             return Err(QangCompilerError::new_assembler_error(
                                 "Functions may only take up to 256 arguments.".to_string(),
                                 pipe.node.span,
+                                self.source_map.clone(),
                             ));
                         }
 
@@ -1887,6 +1891,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                         return Err(QangCompilerError::new_assembler_error(
                             "Pipe expression with non-call operation not supported.".to_string(),
                             call_expr.span,
+                            self.source_map.clone(),
                         ));
                     }
                 }
@@ -1933,6 +1938,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 return Err(QangCompilerError::new_assembler_error(
                     "A class cannot inherit from itself.".to_string(),
                     superclass.node.span,
+                    self.source_map.clone(),
                 ));
             }
 
@@ -2024,6 +2030,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "An array literal cannot be initialized with more than 256 elements.".to_string(),
                 array.node.span,
+                self.source_map.clone(),
             ));
         }
 
@@ -2050,6 +2057,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             return Err(QangCompilerError::new_assembler_error(
                 "An object literal cannot be initialized with more than 256 entries.".to_string(),
                 object.node.span,
+                self.source_map.clone(),
             ));
         }
 

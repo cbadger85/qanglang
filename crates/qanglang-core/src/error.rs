@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 use crate::{SourceMap, Vm, backend::chunk::SourceLocation, nodes::SourceSpan};
 
@@ -9,7 +9,7 @@ pub enum ErrorMessageFormat {
     Minimal,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct QangPipelineError(Vec<QangCompilerError>);
 
 impl QangPipelineError {
@@ -43,51 +43,64 @@ impl std::fmt::Display for QangErrorKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct QangCompilerError {
     pub message: String,
     pub span: SourceSpan,
     pub kind: QangErrorKind,
+    pub source_map: Arc<SourceMap>,
 }
 
 impl QangCompilerError {
-    pub fn new_syntax_error(message: String, span: SourceSpan) -> Self {
+    pub fn new_syntax_error(message: String, span: SourceSpan, source_map: Arc<SourceMap>) -> Self {
         Self {
             message,
             span,
             kind: QangErrorKind::Syntax,
+            source_map,
         }
     }
 
-    pub fn new_analysis_error(message: String, span: SourceSpan) -> Self {
+    pub fn new_analysis_error(
+        message: String,
+        span: SourceSpan,
+        source_map: Arc<SourceMap>,
+    ) -> Self {
         Self {
             message,
             span,
             kind: QangErrorKind::Analysis,
+            source_map,
         }
     }
 
-    pub fn new_assembler_error(message: String, span: SourceSpan) -> Self {
+    pub fn new_assembler_error(
+        message: String,
+        span: SourceSpan,
+        source_map: Arc<SourceMap>,
+    ) -> Self {
         Self {
             message,
             span,
             kind: QangErrorKind::Assembler,
+            source_map,
         }
     }
 
-    pub fn into_formatted(self, source_map: &SourceMap) -> Self {
-        let message = pretty_print_error(source_map, self.kind, &self.message, self.span);
+    pub fn into_formatted(self) -> Self {
+        let message = pretty_print_error(&self.source_map, self.kind, &self.message, self.span);
 
         Self {
             message,
             span: self.span,
             kind: self.kind,
+            source_map: self.source_map,
         }
     }
 
-    pub fn into_short_formatted(self, source_map: &SourceMap) -> Self {
-        let line_num = source_map.get_line_number(self.span.start);
-        let col_num = source_map.get_column_number(self.span.start);
+    pub fn into_short_formatted(self) -> Self {
+        let line_num = self.source_map.get_line_number(self.span.start);
+        let col_num = self.source_map.get_column_number(self.span.start);
 
         let message = format!(
             "{} at line {}, column {}: {}\n",
@@ -98,6 +111,7 @@ impl QangCompilerError {
             message,
             span: self.span,
             kind: self.kind,
+            source_map: self.source_map,
         }
     }
 }
@@ -424,8 +438,9 @@ mod tests {
             QangCompilerError::new_syntax_error(
                 "Expected expression after '+'".to_string(),
                 SourceSpan::new(11, 11),
+                Arc::new(source_map),
             )
-            .into_formatted(&source_map),
+            .into_formatted(),
         );
 
         assert!(reporter.has_errors());
@@ -436,6 +451,7 @@ mod tests {
     fn test_multiple_errors() {
         let source = "var x = 5 +\nvar y = 10 *\nvar z;";
         let source_map = SourceMap::from_source(source.to_string());
+        let source_map = Arc::new(source_map);
         let mut reporter = ErrorReporter::new();
 
         // Report multiple errors
@@ -443,16 +459,18 @@ mod tests {
             QangCompilerError::new_syntax_error(
                 "Missing operand after '+'".to_string(),
                 SourceSpan::new(11, 11),
+                source_map.clone(),
             )
-            .into_formatted(&source_map),
+            .into_formatted(),
         );
 
         reporter.report_error(
             QangCompilerError::new_syntax_error(
                 "Missing operand after '*'".to_string(),
                 SourceSpan::new(23, 23),
+                source_map,
             )
-            .into_formatted(&source_map),
+            .into_formatted(),
         );
 
         assert_eq!(reporter.errors().len(), 2);
@@ -479,8 +497,9 @@ mod tests {
             QangCompilerError::new_syntax_error(
                 "Syntax error 1".to_string(),
                 SourceSpan::new(0, 3),
+                Arc::new(source_map),
             )
-            .into_formatted(&source_map),
+            .into_formatted(),
         );
 
         let summary = error_summary(reporter.errors());
@@ -491,21 +510,24 @@ mod tests {
     fn test_error_summary_multiple_errors() {
         let source = "var x = 5;";
         let source_map = SourceMap::from_source(source.to_string());
+        let source_map = Arc::new(source_map);
         let mut reporter = ErrorReporter::new();
 
         reporter.report_error(
             QangCompilerError::new_syntax_error(
                 "Syntax error 1".to_string(),
                 SourceSpan::new(0, 3),
+                source_map.clone(),
             )
-            .into_formatted(&source_map),
+            .into_formatted(),
         );
         reporter.report_error(
             QangCompilerError::new_syntax_error(
                 "Syntax error 2".to_string(),
                 SourceSpan::new(4, 5),
+                source_map,
             )
-            .into_formatted(&source_map),
+            .into_formatted(),
         );
 
         let summary = error_summary(reporter.errors());

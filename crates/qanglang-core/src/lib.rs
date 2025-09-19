@@ -7,7 +7,6 @@ pub mod memory;
 pub mod pipeline;
 
 pub use backend::chunk::SourceLocation;
-pub use backend::compiler::CompilerConfig;
 pub use backend::compiler::QangProgram;
 pub use backend::module_resolver::{ModuleResolver, RuntimeModule};
 pub use backend::object::{

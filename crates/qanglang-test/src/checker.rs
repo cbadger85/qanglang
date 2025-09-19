@@ -1,4 +1,4 @@
-use qanglang_core::{ErrorMessageFormat, GlobalCompilerPipeline};
+use qanglang_core::GlobalCompilerPipeline;
 
 use crate::test_file::SourceFile;
 
@@ -31,10 +31,7 @@ impl CheckResult {
     }
 }
 
-pub fn check_files_from_sources(
-    source_files: Vec<SourceFile>,
-    error_format: ErrorMessageFormat,
-) -> Vec<CheckResult> {
+pub fn check_files_from_sources(source_files: Vec<SourceFile>) -> Vec<CheckResult> {
     // Use GlobalCompilerPipeline to check multiple files efficiently
     // by parsing them all together (better module resolution)
     let file_paths: Vec<_> = source_files.iter().map(|sf| sf.file_path.clone()).collect();
@@ -55,16 +52,13 @@ pub fn check_files_from_sources(
             // Some files failed - check each individually to get specific errors
             source_files
                 .into_iter()
-                .map(|source_file| check_single_file(source_file, error_format))
+                .map(|source_file| check_single_file(source_file))
                 .collect()
         }
     }
 }
 
-pub fn check_single_file(
-    source_file: SourceFile,
-    _error_message_format: ErrorMessageFormat,
-) -> CheckResult {
+pub fn check_single_file(source_file: SourceFile) -> CheckResult {
     // Use the new GlobalCompilerPipeline for better module handling
     let mut pipeline = GlobalCompilerPipeline::new();
     let mut allocator = qanglang_core::HeapAllocator::new();

@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use crate::{
-    ErrorReporter, NodeId, QangCompilerError, TypedNodeArena,
+    ErrorReporter, NodeId, QangCompilerError, SourceMap, TypedNodeArena,
     frontend::node_visitor::{NodeVisitor, VisitorContext},
     memory::StringInterner,
     nodes::SourceSpan,
@@ -32,6 +34,7 @@ impl FunctionContext {
 }
 
 pub struct SemanticValidator<'a> {
+    source_map: Arc<SourceMap>,
     strings: &'a mut StringInterner,
     scope_depth: usize,
     functions: Vec<FunctionContext>,
@@ -39,12 +42,13 @@ pub struct SemanticValidator<'a> {
 }
 
 impl<'a> SemanticValidator<'a> {
-    pub fn new(strings: &'a mut StringInterner) -> Self {
+    pub fn new(strings: &'a mut StringInterner, source_map: Arc<SourceMap>) -> Self {
         Self {
             strings,
             scope_depth: 0,
             functions: vec![FunctionContext::new(FunctionKind::Script)],
             in_loop: false,
+            source_map,
         }
     }
 
@@ -123,6 +127,7 @@ impl<'a> SemanticValidator<'a> {
             errors.report_error(QangCompilerError::new_analysis_error(
                 "Cannot have more than 255 parameters.".to_string(),
                 span,
+                self.source_map.clone(),
             ));
         }
 
@@ -159,6 +164,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .report_error(QangCompilerError::new_analysis_error(
                     "Array literal cannot have more than 256 elements.".to_string(),
                     array.node.span,
+                    self.source_map.clone(),
                 ));
         }
 
@@ -184,6 +190,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .report_error(QangCompilerError::new_analysis_error(
                     "Object literal cannot have more than 256 entries.".to_string(),
                     object.node.span,
+                    self.source_map.clone(),
                 ));
         }
 
@@ -215,6 +222,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .report_error(QangCompilerError::new_analysis_error(
                     "Function call cannot have more than 256 arguments.".to_string(),
                     func_expr.node.span,
+                    self.source_map.clone(),
                 ));
         }
 
@@ -254,6 +262,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .report_error(QangCompilerError::new_analysis_error(
                     "Function call cannot have more than 256 arguments.".to_string(),
                     lambda_expr.node.span,
+                    self.source_map.clone(),
                 ));
         }
 
@@ -334,6 +343,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                         .report_error(QangCompilerError::new_analysis_error(
                             "Function call cannot have more than 256 arguments.".to_string(),
                             call_node.span,
+                            self.source_map.clone(),
                         ));
                 }
 
@@ -393,6 +403,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                                     "Function call cannot have more than 256 arguments."
                                         .to_string(),
                                     method.span,
+                                    self.source_map.clone(),
                                 ));
                         }
 
@@ -473,6 +484,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                     .report_error(QangCompilerError::new_analysis_error(
                         "Cannot use 'super' outside of a class method.".to_string(),
                         super_expr.node.span,
+                        self.source_map.clone(),
                     ));
             }
         } else {
@@ -480,6 +492,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .report_error(QangCompilerError::new_analysis_error(
                     "Cannot use 'super' outside of a class method.".to_string(),
                     super_expr.node.span,
+                    self.source_map.clone(),
                 ));
         }
 
@@ -542,6 +555,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .report_error(QangCompilerError::new_analysis_error(
                     "'break' can only be used inside loops.".to_string(),
                     break_stmt.node.span,
+                    self.source_map.clone(),
                 ));
         }
         Ok(())
@@ -557,6 +571,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .report_error(QangCompilerError::new_analysis_error(
                     "'continue' can only be used inside loops.".to_string(),
                     continue_stmt.node.span,
+                    self.source_map.clone(),
                 ));
         }
         Ok(())

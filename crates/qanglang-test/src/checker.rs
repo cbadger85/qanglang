@@ -1,4 +1,4 @@
-use qanglang_core::GlobalCompilerPipeline;
+use qanglang_core::{ErrorMessageFormat, GlobalCompilerPipeline};
 
 use crate::test_file::SourceFile;
 
@@ -31,7 +31,10 @@ impl CheckResult {
     }
 }
 
-pub fn check_files_from_sources(source_files: Vec<SourceFile>) -> Vec<CheckResult> {
+pub fn check_files_from_sources(
+    source_files: Vec<SourceFile>,
+    error_format: ErrorMessageFormat,
+) -> Vec<CheckResult> {
     // Use GlobalCompilerPipeline to check multiple files efficiently
     // by parsing them all together (better module resolution)
     let file_paths: Vec<_> = source_files.iter().map(|sf| sf.file_path.clone()).collect();
@@ -52,13 +55,16 @@ pub fn check_files_from_sources(source_files: Vec<SourceFile>) -> Vec<CheckResul
             // Some files failed - check each individually to get specific errors
             source_files
                 .into_iter()
-                .map(|source_file| check_single_file(source_file))
+                .map(|source_file| check_single_file(source_file, error_format))
                 .collect()
         }
     }
 }
 
-pub fn check_single_file(source_file: SourceFile) -> CheckResult {
+pub fn check_single_file(
+    source_file: SourceFile,
+    error_message_format: ErrorMessageFormat,
+) -> CheckResult {
     // Use the new GlobalCompilerPipeline for better module handling
     let mut pipeline = GlobalCompilerPipeline::new();
     let mut allocator = qanglang_core::HeapAllocator::new();
@@ -70,7 +76,11 @@ pub fn check_single_file(source_file: SourceFile) -> CheckResult {
             let error_messages: Vec<String> = analysis_error
                 .into_errors()
                 .into_iter()
-                .map(|e| e.message)
+                .map(|e| match error_message_format {
+                    ErrorMessageFormat::Compact => e.message,
+                    ErrorMessageFormat::Minimal => e.into_short_formatted().message,
+                    ErrorMessageFormat::Verbose => e.into_formatted().message,
+                })
                 .collect();
             CheckResult::failure(source_file.display_path, error_messages)
         }

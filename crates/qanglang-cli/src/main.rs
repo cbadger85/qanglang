@@ -117,8 +117,7 @@ fn main() {
                 }
             };
 
-            // TODO we'll have to refactor how the checker displays errors to accommodate this.
-            let _error_format = match eformat.to_lowercase().as_str() {
+            let error_format = match eformat.to_lowercase().as_str() {
                 "minimal" => ErrorMessageFormat::Minimal,
                 "compact" => ErrorMessageFormat::Compact,
                 "verbose" => ErrorMessageFormat::Verbose,
@@ -128,7 +127,7 @@ fn main() {
                 }
             };
 
-            let results = qanglang_test::check_files_from_sources(source_files);
+            let results = qanglang_test::check_files_from_sources(source_files, error_format);
             let output = qanglang_test::format_check_results(&results);
             print!("{}", output);
         }

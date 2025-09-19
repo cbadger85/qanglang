@@ -33,31 +33,18 @@ impl<'a> AnalysisPipeline<'a> {
         self
     }
 
-    // TODO revisit how the anaylzer works when analyzing modules and thier dependencies.
     pub fn analyze(
         self,
         modules: &ModuleMap,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {
-        for main_path in modules.get_main_modules() {
-            if let Some(main_module) = modules.get(main_path) {
-                SemanticValidator::new(self.strings, main_module.source_map.clone()).analyze(
-                    main_module.node,
-                    nodes,
-                    errors,
-                );
-            }
-        }
-
-        for (path, module) in modules.iter() {
-            if !modules.is_main_module(path) {
-                SemanticValidator::new(self.strings, module.source_map.clone()).analyze(
-                    module.node,
-                    nodes,
-                    errors,
-                );
-            }
+        for (_, module) in modules.iter() {
+            SemanticValidator::new(self.strings, module.source_map.clone()).analyze(
+                module.node,
+                nodes,
+                errors,
+            );
         }
 
         if self.config.strict_mode && errors.has_errors() {

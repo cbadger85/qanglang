@@ -188,7 +188,6 @@ pub(crate) struct CallFrame {
     pub ip: usize,
     pub value_slot: usize,
     pub module_export_target: Option<HashMapHandle>,
-    pub previous_function_module_context: Option<HashMapHandle>,
 }
 
 #[derive(Clone)]
@@ -1128,18 +1127,22 @@ impl Vm {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
 
-                    let previous_function_module_context = self.state.frames
-                        [self.state.frame_count - 1]
-                        .previous_function_module_context;
-
                     self.close_upvalue(value_slot);
                     self.state.frame_count -= 1;
 
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    // Restore function module context for regular function returns
-                    self.state.function_module_context = previous_function_module_context;
+                    // Restore function module context from previous call frame's closure
+                    if self.state.frame_count > 0 {
+                        let prev_closure = self
+                            .alloc
+                            .closures
+                            .get_closure(self.state.frames[self.state.frame_count - 1].closure);
+                        self.state.function_module_context = prev_closure.module_context;
+                    } else {
+                        self.state.function_module_context = None;
+                    }
 
                     if self.state.frame_count == 0 {
                         return Ok(result);
@@ -1723,7 +1726,6 @@ impl Vm {
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
         call_frame.module_export_target = None;
-        call_frame.previous_function_module_context = self.state.function_module_context;
         self.state.current_function_ptr = function as *const FunctionObject;
 
         // Set function module context if the closure has one

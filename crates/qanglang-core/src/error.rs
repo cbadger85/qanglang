@@ -9,7 +9,7 @@ pub enum ErrorMessageFormat {
     Minimal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QangPipelineError(Vec<QangCompilerError>);
 
 impl QangPipelineError {
@@ -43,7 +43,7 @@ impl std::fmt::Display for QangErrorKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QangCompilerError {
     pub message: String,
     pub span: SourceSpan,

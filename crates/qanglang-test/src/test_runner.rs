@@ -89,7 +89,8 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
 
     // Compile the test file
     let mut pipeline = GlobalCompilerPipeline::new();
-    let program = match pipeline.process_files(vec![source_file.file_path.clone()], &mut allocator) {
+    let program = match pipeline.process_files(vec![source_file.file_path.clone()], &mut allocator)
+    {
         Ok(_) => {
             let main_modules = pipeline.get_main_modules();
             if main_modules.is_empty() {

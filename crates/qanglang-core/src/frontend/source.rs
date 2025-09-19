@@ -144,4 +144,3 @@ impl SourceMap {
         (position - line_start + 1) as u32
     }
 }
-

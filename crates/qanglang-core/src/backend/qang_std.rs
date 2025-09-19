@@ -377,8 +377,9 @@ impl Vm {
     fn load_stdlib(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.load_constants();
         let stdlib_source = include_str!("stdlib.ql");
-        let program = GlobalCompilerPipeline::compile_source(stdlib_source.to_owned(), &mut self.alloc)
-            .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
+        let program =
+            GlobalCompilerPipeline::compile_source(stdlib_source.to_owned(), &mut self.alloc)
+                .map_err(|e| format!("Stdlib compilation failed: {:?}", e))?;
 
         // Execute stdlib to populate globals
         self.execute_stdlib(program)?;

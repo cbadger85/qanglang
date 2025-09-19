@@ -1,3 +1,5 @@
+mod hello_world = import("./module_other.ql");
+
 // Simple helper module for testing basic exports
 var exported_value = 42;
 

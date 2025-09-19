@@ -189,6 +189,7 @@ pub(crate) struct CallFrame {
     pub closure: ClosureHandle,
     pub ip: usize,
     pub value_slot: usize,
+    pub module_export_target: Option<HashMapHandle>,
     pub previous_module_target: Option<HashMapHandle>,
     pub previous_function_module_context: Option<HashMapHandle>,
 }
@@ -205,7 +206,6 @@ pub(crate) struct VmState {
     current_function_ptr: *const FunctionObject,
     keywords: FxHashMap<Keyword, StringHandle>,
     pub modules: ModuleResolver,
-    module_export_target: Option<HashMapHandle>,
     function_module_context: Option<HashMapHandle>,
     property_cache: [PropertyCache; Self::PROPERTY_CACHE_SIZE],
     method_cache: [MethodCache; Self::METHOD_CACHE_SIZE],
@@ -233,7 +233,6 @@ impl VmState {
             current_function_ptr: std::ptr::null(),
             keywords,
             modules: ModuleResolver::default(),
-            module_export_target: None,
             function_module_context: None,
             property_cache: [PropertyCache::default(); Self::PROPERTY_CACHE_SIZE],
             method_cache: [MethodCache::default(); Self::METHOD_CACHE_SIZE],
@@ -756,7 +755,9 @@ impl Vm {
                     let identifier_handle = read_string!(self);
                     let value = pop_value!(self);
 
-                    if let Some(module_target) = self.state.module_export_target {
+                    if let Some(module_target) =
+                        self.state.frames[self.state.frame_count - 1].module_export_target
+                    {
                         // Redirect to module exports
                         self.alloc.tables.insert(
                             module_target,
@@ -773,7 +774,9 @@ impl Vm {
                     let identifier_handle = read_string_16!(self);
                     let value = pop_value!(self);
 
-                    if let Some(module_target) = self.state.module_export_target {
+                    if let Some(module_target) =
+                        self.state.frames[self.state.frame_count - 1].module_export_target
+                    {
                         // Redirect to module exports
                         self.alloc.tables.insert(
                             module_target,
@@ -1158,8 +1161,8 @@ impl Vm {
                     let result = pop_value!(self);
                     let value_slot = self.state.frames[self.state.frame_count - 1].value_slot;
 
-                    let previous_module_target =
-                        self.state.frames[self.state.frame_count - 1].previous_module_target;
+                    let module_instance =
+                        self.state.frames[self.state.frame_count - 1].module_export_target;
 
                     self.close_upvalue(value_slot);
                     self.state.frame_count -= 1;
@@ -1167,9 +1170,8 @@ impl Vm {
                     #[cfg(feature = "profiler")]
                     coz::progress!("function_returns");
 
-                    if let Some(module_instance) = self.state.module_export_target {
+                    if let Some(module_instance) = module_instance {
                         self.state.stack[self.state.stack_top - 1] = Value::module(module_instance);
-                        self.state.module_export_target = previous_module_target;
                     } else {
                         if self.state.frame_count == 0 {
                             return Ok(result);
@@ -1212,15 +1214,10 @@ impl Vm {
                 .allocate_closure(ClosureObject::new(module_function, 0, None))
         });
 
-        let previous_module_target = self.state.module_export_target;
-
-        self.state.frames[self.state.frame_count - 1].previous_module_target =
-            previous_module_target;
-
-        self.state.module_export_target = Some(module_instance);
-
         push_value!(self, Value::closure(module_closure))?;
         self.call(module_closure, 0)?;
+
+        self.state.frames[self.state.frame_count - 1].module_export_target = Some(module_instance);
 
         Ok(())
     }
@@ -1236,7 +1233,11 @@ impl Vm {
             }
         };
         let upvalue_count = self.alloc.get_function(handle).upvalue_count;
-        let module_context = self.state.module_export_target;
+        let module_context = if self.state.frame_count > 0 {
+            self.state.frames[self.state.frame_count - 1].module_export_target
+        } else {
+            None
+        };
         let closure_handle = self.with_gc_check(|alloc| {
             alloc.closures.allocate_closure(ClosureObject::new(
                 handle,
@@ -1726,6 +1727,7 @@ impl Vm {
         call_frame.value_slot = value_slot;
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
+        call_frame.module_export_target = None;
         call_frame.previous_module_target = None; // Only used for module loading
         call_frame.previous_function_module_context = self.state.function_module_context;
         self.state.current_function_ptr = function as *const FunctionObject;
@@ -1828,7 +1830,6 @@ impl Vm {
         let saved_stack_top = self.state.stack_top;
         let saved_frame_count = self.state.frame_count;
         let saved_function_ptr = self.state.current_function_ptr;
-        let saved_export_target = self.state.module_export_target;
 
         push_value!(self, Value::closure(handle))?;
 
@@ -1843,7 +1844,6 @@ impl Vm {
         self.state.stack_top = saved_stack_top;
         self.state.frame_count = saved_frame_count;
         self.state.current_function_ptr = saved_function_ptr;
-        self.state.module_export_target = saved_export_target;
 
         result
     }
@@ -2236,10 +2236,13 @@ impl Vm {
         }
 
         // Try to get from module export target
-        if let Some(module_target) = self.state.module_export_target
-            && let Some(value) = self.try_get_from_table(module_target, &key)
-        {
-            return Ok(value);
+        if self.state.frame_count > 0 {
+            if let Some(module_target) =
+                self.state.frames[self.state.frame_count - 1].module_export_target
+                && let Some(value) = self.try_get_from_table(module_target, &key)
+            {
+                return Ok(value);
+            }
         }
 
         // Try to get from globals, with different behavior based on context
@@ -2257,7 +2260,14 @@ impl Vm {
     }
 
     fn has_module_context(&self) -> bool {
-        self.state.function_module_context.is_some() || self.state.module_export_target.is_some()
+        let has_frame_module_context = if self.state.frame_count > 0 {
+            self.state.frames[self.state.frame_count - 1]
+                .module_export_target
+                .is_some()
+        } else {
+            false
+        };
+        self.state.function_module_context.is_some() || has_frame_module_context
     }
 
     fn get_from_globals_or_nil(&self, identifier_handle: StringHandle) -> Value {
@@ -2292,10 +2302,13 @@ impl Vm {
         }
 
         // Try to set in module export target
-        if let Some(module_target) = self.state.module_export_target
-            && self.try_set_in_table(module_target, &key, value)
-        {
-            return Ok(());
+        if self.state.frame_count > 0 {
+            if let Some(module_target) =
+                self.state.frames[self.state.frame_count - 1].module_export_target
+                && self.try_set_in_table(module_target, &key, value)
+            {
+                return Ok(());
+            }
         }
 
         // Try to set in globals

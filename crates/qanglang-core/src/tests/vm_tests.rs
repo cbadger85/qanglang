@@ -1,6 +1,5 @@
 use crate::{
-    GlobalCompilerPipeline, HeapAllocator, Value, Vm, disassemble_program,
-    memory::ClosureHandle,
+    GlobalCompilerPipeline, HeapAllocator, Value, Vm, disassemble_program, memory::ClosureHandle,
 };
 
 #[test]
@@ -71,7 +70,8 @@ fn test_runtime_error_with_source_span() {
   "#;
     let mut allocator = HeapAllocator::new();
 
-    if let Ok(program) = GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+    if let Ok(program) = GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator)
+    {
         match Vm::new(allocator).set_gc_status(false).interpret(program) {
             Ok(_) => {
                 panic!("Expected runtime error for negating a string")

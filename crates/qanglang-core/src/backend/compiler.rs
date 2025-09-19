@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::{
-    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle,
-    FunctionObject, HeapAllocator, NodeId, QangCompilerError, QangPipelineError,
-    SourceLocation, SourceMap, TypedNodeArena, Value,
+    AnalysisPipelineConfig, ErrorMessageFormat, ErrorReporter, FunctionHandle, FunctionObject,
+    HeapAllocator, NodeId, QangCompilerError, QangPipelineError, SourceLocation, SourceMap,
+    TypedNodeArena, Value,
     backend::{
         chunk::{Chunk, OpCode},
         module_resolver::ModuleResolver,
@@ -63,7 +63,6 @@ impl From<CompilerConfig> for AnalysisPipelineConfig {
         }
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Default)]
 struct LoopContext {

@@ -83,3 +83,8 @@ fn test_module_with_closures() {
   assert_eq(arr[3], 9, "Expected arr[3] to be 9.");
 }
 
+fn test_nested_modules() {
+  mod simple = import("./module_helper_simple.ql");
+
+  assert_eq(simple.hello_world.hello(), "Hello world!");
+}

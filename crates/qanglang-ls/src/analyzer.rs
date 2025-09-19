@@ -19,4 +19,3 @@ pub fn analyze(source_map: Arc<SourceMap>) -> Result<(), QangPipelineError> {
 
     Ok(())
 }
-

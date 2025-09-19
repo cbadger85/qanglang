@@ -7,9 +7,9 @@ use std::{
 use crate::{
     ErrorReporter, QangCompilerError, SourceMap,
     frontend::{
+        module_map::ModuleMap,
         node_array_arena::NodeArrayId,
         nodes::*,
-        module_map::ModuleMap,
         tokenizer::{Token, TokenType, Tokenizer},
         typed_node_arena::{NodeId, TypedNodeArena},
     },

@@ -70,9 +70,10 @@ impl ModuleMap {
 
         // Update the module's dependency list
         if let Some(module) = self.modules.get_mut(&from_path)
-            && !module.dependencies.contains(&to_path) {
-                module.dependencies.push(to_path);
-            }
+            && !module.dependencies.contains(&to_path)
+        {
+            module.dependencies.push(to_path);
+        }
     }
 
     /// Get all main modules

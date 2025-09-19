@@ -1,7 +1,7 @@
 mod repl;
 
 use qanglang_core::{
-    CompilerConfig, GlobalCompilerPipeline, ErrorMessageFormat, HeapAllocator, Vm,
+    CompilerConfig, ErrorMessageFormat, GlobalCompilerPipeline, HeapAllocator, Vm,
     disassemble_program,
 };
 use qanglang_ls::run_language_server;
@@ -194,12 +194,12 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         }
     };
 
-    let mut pipeline = GlobalCompilerPipeline::new()
-        .with_config(CompilerConfig {
-            error_message_format,
-        });
+    let mut pipeline = GlobalCompilerPipeline::new().with_config(CompilerConfig {
+        error_message_format,
+    });
 
-    let program = match pipeline.process_files(vec![path], &mut allocator)
+    let program = match pipeline
+        .process_files(vec![path], &mut allocator)
         .and_then(|_| {
             let main_modules = pipeline.get_main_modules();
             if main_modules.is_empty() {
@@ -207,13 +207,12 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
                     qanglang_core::QangCompilerError::new_analysis_error(
                         "No main module found".to_string(),
                         qanglang_core::nodes::SourceSpan::default(),
-                    )
+                    ),
                 ]));
             }
             let main_module_path = main_modules[0].clone();
             pipeline.compile_module(&main_module_path, &mut allocator)
-        })
-    {
+        }) {
         Ok(program) => {
             if heap_dump {
                 disassemble_program(&allocator);

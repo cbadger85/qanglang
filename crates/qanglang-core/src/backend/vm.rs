@@ -188,7 +188,6 @@ pub(crate) struct CallFrame {
     pub ip: usize,
     pub value_slot: usize,
     pub module_export_target: Option<HashMapHandle>,
-    pub previous_module_target: Option<HashMapHandle>,
     pub previous_function_module_context: Option<HashMapHandle>,
 }
 
@@ -1724,7 +1723,6 @@ impl Vm {
         call_frame.closure = closure_handle;
         call_frame.ip = 0;
         call_frame.module_export_target = None;
-        call_frame.previous_module_target = None; // Only used for module loading
         call_frame.previous_function_module_context = self.state.function_module_context;
         self.state.current_function_ptr = function as *const FunctionObject;
 

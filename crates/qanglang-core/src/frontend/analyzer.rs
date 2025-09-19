@@ -43,14 +43,12 @@ impl<'a> AnalysisPipeline<'a> {
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {
-        // Analyze all main modules
         for main_path in modules.get_main_modules() {
             if let Some(main_module) = modules.get(main_path) {
                 SemanticValidator::new(self.strings).analyze(main_module.node, nodes, errors);
             }
         }
 
-        // Analyze all other modules
         for (path, module) in modules.iter() {
             if !modules.is_main_module(path) {
                 SemanticValidator::new(self.strings).analyze(module.node, nodes, errors);
@@ -60,6 +58,7 @@ impl<'a> AnalysisPipeline<'a> {
         if self.config.strict_mode && errors.has_errors() {
             let errors = errors.take_errors();
 
+            // TODO this isn't going to work, the error reporter is collecting errors across modules.
             // Use the first main module's source map for formatting
             let main_source_map = modules
                 .get_main_modules()

@@ -1,7 +1,5 @@
 use std::collections::VecDeque;
 
-#[cfg(feature = "profiler")]
-use coz;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 #[cfg(debug_assertions)]

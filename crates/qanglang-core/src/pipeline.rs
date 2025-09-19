@@ -15,6 +15,7 @@ use crate::{
     nodes::SourceSpan,
 };
 
+#[derive(Debug, Default, Clone)]
 pub struct GlobalCompilerPipeline {
     pub modules: ModuleMap,
     pub nodes: TypedNodeArena,
@@ -67,14 +68,14 @@ impl GlobalCompilerPipeline {
 
     fn parse_file_recursive(
         &mut self,
-        file_path: &PathBuf,
+        file_path: &Path,
         allocator: &mut HeapAllocator,
     ) -> Result<NodeId, QangPipelineError> {
         // Try to canonicalize the path, but fall back to the original if it fails
         // (this supports in-memory test scenarios where files don't exist on disk)
         let canonical_path = file_path
             .canonicalize()
-            .unwrap_or_else(|_| file_path.clone());
+            .unwrap_or_else(|_| file_path.to_path_buf());
 
         self.processed_files.insert(canonical_path.clone());
 
@@ -277,49 +278,6 @@ impl GlobalCompilerPipeline {
 
         extractor.import_paths
     }
-
-    /// Get all parsed modules
-    // pub fn get_all_modules(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
-    //     self.modules.iter()
-    // }
-
-    /// Get the total number of modules
-    // pub fn module_count(&self) -> usize {
-    //     self.modules.iter().count()
-    // }
-
-    /// Get modules with errors
-    // pub fn get_modules_with_errors(&self) -> Vec<&Path> {
-    //     self.modules
-    //         .modules_with_status(ModuleStatus::Error(Vec::new()))
-    // }
-
-    /// Get the dependency graph
-    // pub fn get_dependencies(&self, path: &Path) -> Option<&Vec<PathBuf>> {
-    //     self.modules.get_dependencies(path)
-    // }
-
-    /// Get reverse dependencies (what depends on this module)
-    // pub fn get_dependents(&self, path: &Path) -> Option<&Vec<PathBuf>> {
-    //     self.modules.get_dependents(path)
-    // }
-
-    /// Check for circular dependencies
-    // pub fn detect_circular_dependencies(&self) -> Vec<Vec<PathBuf>> {
-    // self.modules.detect_cycles()
-    // }
-
-    /// Get a module by path
-    // pub fn get_module(&self, path: &Path) -> Option<&ModuleSource> {
-    //     self.modules.get(path)
-    // }
-
-    /// Check if all modules have been successfully analyzed
-    // pub fn all_modules_analyzed(&self) -> bool {
-    //     self.modules
-    //         .iter()
-    //         .all(|(_, module)| matches!(module.status, ModuleStatus::Analyzed))
-    // }
 
     /// Compile source code directly from a string (for in-memory compilation)
     /// This is the primary method for tests and REPL usage

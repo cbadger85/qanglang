@@ -7,6 +7,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::{NodeId, SourceMap};
 
+#[derive(Debug, Default, Clone)]
 pub struct ModuleMap {
     modules: FxHashMap<PathBuf, ModuleSource>,
     pub main_modules: Vec<PathBuf>,
@@ -14,6 +15,7 @@ pub struct ModuleMap {
     reverse_dependencies: FxHashMap<PathBuf, Vec<PathBuf>>,
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct ModuleSource {
     pub node: NodeId,
     pub source_map: Arc<SourceMap>,

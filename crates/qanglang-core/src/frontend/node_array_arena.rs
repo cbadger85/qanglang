@@ -13,7 +13,7 @@ struct NodeArrayChunk {
     next_chunk: Option<NodeArrayId>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct NodeArrayArena {
     node_ids: Arena<NodeArrayChunk>,
 }

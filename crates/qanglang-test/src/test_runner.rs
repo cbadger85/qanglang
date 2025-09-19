@@ -94,7 +94,7 @@ pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -
         Ok(_) => {
             let main_modules = pipeline.get_main_modules();
             if main_modules.is_empty() {
-                let error_messages = vec!["No main module found".to_string()];
+                let error_messages = ["No main module found".to_string()];
                 let error = format!("Compilation failed: {}", error_messages.join("; "));
                 return TestSuiteResult::failure(source_file.display_path, error);
             }

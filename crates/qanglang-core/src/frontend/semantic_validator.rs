@@ -362,6 +362,19 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
         Ok(())
     }
 
+    fn visit_type_cast_expression(
+        &mut self,
+        type_cast: super::typed_node_arena::TypedNodeRef<super::nodes::TypeCastExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Visit the expression being cast
+        let expr = ctx.nodes.get_expr_node(type_cast.node.expr);
+        self.visit_expression(expr, ctx)?;
+
+        // Type cast validation will be implemented later during type checking phase
+        Ok(())
+    }
+
     fn visit_class_declaration(
         &mut self,
         class_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ClassDeclNode>,

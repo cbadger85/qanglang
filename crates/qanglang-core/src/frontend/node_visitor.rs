@@ -394,6 +394,9 @@ pub trait NodeVisitor {
             ExprNode::Call(call) => {
                 self.visit_call_expression(TypedNodeRef::new(expr.id, call), ctx)
             }
+            ExprNode::TypeCast(type_cast) => {
+                self.visit_type_cast_expression(TypedNodeRef::new(expr.id, type_cast), ctx)
+            }
             ExprNode::Primary(primary) => {
                 self.visit_primary_expression(TypedNodeRef::new(expr.id, primary), ctx)
             }
@@ -542,6 +545,14 @@ pub trait NodeVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_expression(ctx.nodes.get_expr_node(call.node.callee), ctx)?;
         self.visit_call_operation(ctx.nodes.get_call_operation_node(call.node.operation), ctx)
+    }
+
+    fn visit_type_cast_expression(
+        &mut self,
+        type_cast: TypedNodeRef<TypeCastExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(ctx.nodes.get_expr_node(type_cast.node.expr), ctx)
     }
 
     fn visit_call_operation(

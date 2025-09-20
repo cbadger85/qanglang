@@ -10,6 +10,7 @@ pub mod regression_tests;
 pub mod source_analysis_test;
 // pub mod tail_call_tests;
 pub mod tokenizing;
+pub mod type_parsing_tests;
 pub mod vm_closure_tests;
 pub mod vm_tests;
 

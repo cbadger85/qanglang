@@ -1804,6 +1804,20 @@ impl<'a> NodeVisitor for Assembler<'a> {
         }
     }
 
+    fn visit_type_cast_expression(
+        &mut self,
+        type_cast: TypedNodeRef<TypeCastExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // For now, type casts are erased at runtime - just compile the expression
+        let expr = ctx.nodes.get_expr_node(type_cast.node.expr);
+        self.visit_expression(expr, ctx)?;
+
+        // Type cast validation and potential runtime type checking will be implemented
+        // during the type checking phase. For now, casts are purely static.
+        Ok(())
+    }
+
     fn visit_pipe_expression(
         &mut self,
         pipe: TypedNodeRef<PipeExprNode>,

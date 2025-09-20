@@ -101,6 +101,7 @@ pub enum AstNode {
     FactorExpr(FactorExprNode),
     UnaryExpr(UnaryExprNode),
     CallExpr(CallExprNode),
+    TypeCastExpr(TypeCastExprNode),
     CallOperation(CallNode),
     PropertyAccess(PropertyNode),
     PropertyAssignment(PropertyAssignmentNode),
@@ -155,6 +156,7 @@ impl AstNode {
             AstNode::FactorExpr(node) => node.span,
             AstNode::UnaryExpr(node) => node.span,
             AstNode::CallExpr(node) => node.span,
+            AstNode::TypeCastExpr(node) => node.span,
             AstNode::CallOperation(node) => node.span,
             AstNode::PropertyAccess(node) => node.span,
             AstNode::PropertyAssignment(node) => node.span,
@@ -411,6 +413,14 @@ pub struct CallExprNode {
     pub span: SourceSpan,
 }
 
+/// Type cast expression: ( expression as Type )
+/// The target type is associated via TypeTable.set_node_type(node_id, target_type_id)
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct TypeCastExprNode {
+    pub expr: NodeId, // ExprNode - the expression being cast
+    pub span: SourceSpan,
+}
+
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct CallNode {
     pub args: NodeArrayId, // [ExprNode]
@@ -648,6 +658,7 @@ pub enum ExprNode {
     Factor(FactorExprNode),
     Unary(UnaryExprNode),
     Call(CallExprNode),
+    TypeCast(TypeCastExprNode),
     Primary(PrimaryNode),
 }
 
@@ -665,6 +676,7 @@ impl ExprNode {
             Self::Factor(factor_expr) => factor_expr.span,
             Self::Unary(unary_expr) => unary_expr.span,
             Self::Call(call_expr) => call_expr.span,
+            Self::TypeCast(type_cast_expr) => type_cast_expr.span,
             Self::Primary(primary) => primary.span(),
         }
     }
@@ -686,6 +698,7 @@ impl TryFrom<AstNode> for ExprNode {
             AstNode::FactorExpr(factor_expr) => Ok(ExprNode::Factor(factor_expr)),
             AstNode::UnaryExpr(unary_expr) => Ok(ExprNode::Unary(unary_expr)),
             AstNode::CallExpr(call_expr) => Ok(ExprNode::Call(call_expr)),
+            AstNode::TypeCastExpr(type_cast_expr) => Ok(ExprNode::TypeCast(type_cast_expr)),
             _ => Ok(ExprNode::Primary(PrimaryNode::try_from(value)?)),
         }
     }

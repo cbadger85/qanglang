@@ -632,10 +632,8 @@ impl<'a> Parser<'a> {
 
 
     fn is_method_with_generics(&mut self) -> bool {
-        // Look ahead to see if pattern is: <T>(...)
-        if !self.is_generic_not_comparison() {
-            return false;
-        }
+        // Simple heuristic: identifier<...> followed by ( is a method
+        // We already know we're looking at identifier<, so scan until > then check for (
 
         let mut lookahead_pos = 1; // Start after the <
         let mut angle_bracket_depth = 1;
@@ -657,12 +655,9 @@ impl<'a> Parser<'a> {
             lookahead_pos += 1;
         }
 
-        // Now check what follows the generic parameters
+        // Check if what follows the > is a (
         if let Some(token) = self.tokens.peek_ahead(lookahead_pos) {
-            match token.token_type {
-                TokenType::LeftParen => true, // name<T>(params)
-                _ => false,
-            }
+            token.token_type == TokenType::LeftParen
         } else {
             false
         }
@@ -1547,8 +1542,8 @@ impl<'a> Parser<'a> {
                 TokenType::GreaterEquals | TokenType::And | TokenType::Or => {
                     return false;
                 }
-                TokenType::LeftParen | TokenType::Colon => {
-                    // LeftParen or Colon after generics suggests method/function: method<T>() or method<T>():
+                TokenType::LeftParen => {
+                    // LeftParen after generics suggests method/function: method<T>(
                     // This is likely method/function generics, not a comparison
                     if depth == 0 {
                         return true;

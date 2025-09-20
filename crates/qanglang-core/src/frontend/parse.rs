@@ -2247,6 +2247,13 @@ mod expression_parser {
             let key = parser.get_identifier()?;
             let key_span = parser.nodes.get_node(key).span();
 
+            // Check for optional type annotation: key: Type
+            if parser.match_token(tokenizer::TokenType::Colon) {
+                let type_id = parser.parse_type_annotation()?;
+                // Associate the type with the key identifier
+                parser.nodes.type_table.set_node_type(key, type_id);
+            }
+
             if parser.match_token(tokenizer::TokenType::Equals) {
                 let value = parser.expression()?;
                 let value_span = parser.nodes.get_node(value).span();

@@ -825,6 +825,19 @@ fn test_lambda_generic_multiple_parameters() {
 }
 
 #[test]
+fn test_object_literal_with_typed_values() {
+    let source_code = r#"
+        var obj =  {{first: Number = 1, second: Number = 2}};
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
 fn test_lambda_generic_with_block_body() {
     let source_code = r#"
         var processor = <T>(item: T) -> {

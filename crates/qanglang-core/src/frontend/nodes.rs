@@ -125,6 +125,7 @@ pub enum AstNode {
     ForStmt(ForStmtNode),
     VariableDecl(VariableDeclNode),
     ImportModuleDecl(ImportModuleDeclNode),
+    TypeDecl(TypeAliasDeclNode),
 }
 
 impl AstNode {
@@ -178,6 +179,7 @@ impl AstNode {
             AstNode::ForStmt(node) => node.span,
             AstNode::VariableDecl(node) => node.span,
             AstNode::ImportModuleDecl(node) => node.span,
+            AstNode::TypeDecl(node) => node.span,
         }
     }
 }
@@ -533,6 +535,13 @@ pub struct ReturnStmtNode {
     pub span: SourceSpan,
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct TypeAliasDeclNode {
+    pub name: NodeId,            // IdentifierNode - the new type name
+    pub type_definition: NodeId, // TypeNode - what it aliases to
+    pub span: SourceSpan,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeConversionError(String);
 
@@ -545,6 +554,7 @@ pub enum DeclNode {
     Variable(VariableDeclNode),
     Stmt(StmtNode),
     Module(ImportModuleDeclNode),
+    Type(TypeAliasDeclNode),
 }
 
 impl DeclNode {
@@ -556,6 +566,7 @@ impl DeclNode {
             Self::Variable(variable_decl) => variable_decl.span,
             Self::Stmt(stmt) => stmt.span(),
             Self::Module(import_decl) => import_decl.span,
+            Self::Type(type_decl) => type_decl.span,
         }
     }
 }

@@ -7,14 +7,12 @@ use std::fmt;
 pub struct TypeId(pub usize);
 
 /// Main type table that maps AST nodes to their resolved types
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TypeTable {
     /// Maps AST node IDs to their resolved types
     node_types: FxHashMap<NodeId, TypeId>,
     /// Storage for all type information
     type_storage: Vec<TypeInfo>,
-    /// Cache for type unification results
-    unification_cache: FxHashMap<(TypeId, TypeId), Option<TypeId>>,
     /// Next available type ID
     next_type_id: usize,
 }
@@ -24,7 +22,6 @@ impl TypeTable {
         Self {
             node_types: FxHashMap::with_hasher(FxBuildHasher),
             type_storage: Vec::new(),
-            unification_cache: FxHashMap::with_hasher(FxBuildHasher),
             next_type_id: 0,
         }
     }
@@ -227,7 +224,7 @@ pub enum TypeNode {
     /// Type parameter: T, U, K, V
     TypeParameter(StringHandle),
 
-    /// Object/record type: {{ name: String, age: Number }}
+    /// Object/record type: { name: String, age: Number }
     Object(ObjectType),
 
     /// Class type: User-defined classes with inheritance
@@ -244,10 +241,10 @@ pub enum TypeNode {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PrimitiveType {
-    String,
-    Number,
-    Boolean,
-    Nil,
+    String,  // String
+    Number,  // Number
+    Boolean, // Boolean
+    Nil,     // not explicitly declarable.
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -605,6 +602,28 @@ impl TypeTable {
         } else {
             Err("Type is not a module".to_string())
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TypeEnvironment {
+    /// Maps type names to their definitions
+    type_names: FxHashMap<StringHandle, TypeId>,
+}
+
+impl TypeEnvironment {
+    pub fn new() -> Self {
+        Self {
+            type_names: FxHashMap::with_hasher(FxBuildHasher),
+        }
+    }
+
+    pub fn declare_type(&mut self, name: StringHandle, type_id: TypeId) {
+        self.type_names.insert(name, type_id);
+    }
+
+    pub fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
+        self.type_names.get(&name).copied()
     }
 }
 

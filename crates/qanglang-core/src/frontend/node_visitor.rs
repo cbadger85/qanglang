@@ -58,6 +58,9 @@ pub trait NodeVisitor {
             DeclNode::Module(import_decl) => {
                 self.visit_import_module_declaration(TypedNodeRef::new(decl.id, import_decl), ctx)
             }
+            DeclNode::Type(type_decl) => {
+                self.visit_type_alias_declaration(TypedNodeRef::new(decl.id, type_decl), ctx)
+            }
             DeclNode::Stmt(stmt) => self.visit_statement(TypedNodeRef::new(decl.id, stmt), ctx),
         }
     }
@@ -743,6 +746,14 @@ pub trait NodeVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_identifier(ctx.nodes.get_identifier_node(map.node.parameter), ctx)?;
         self.visit_expression(ctx.nodes.get_expr_node(map.node.body), ctx)
+    }
+
+    fn visit_type_alias_declaration(
+        &mut self,
+        _type_decl: TypedNodeRef<TypeAliasDeclNode>,
+        _ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 

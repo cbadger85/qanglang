@@ -277,6 +277,7 @@ pub struct ImportModuleDeclNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ClassDeclNode {
     pub name: NodeId,               // IdentifierNode
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: class Name<T, U> - array of identifier nodes
     pub superclass: Option<NodeId>, // IdentifierNode
     pub members: NodeArrayId,       // [FunctionExprNode | FieldDeclNode]
     pub span: SourceSpan,
@@ -301,6 +302,7 @@ pub struct FunctionDeclNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct FunctionExprNode {
     pub name: NodeId,            // IdentifierNode,
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: fn name<T, U> - array of identifier nodes
     pub parameters: NodeArrayId, // [IdentifierNode]
     pub body: NodeId,            // BlockStmtNode
     pub span: SourceSpan,
@@ -548,6 +550,7 @@ pub struct ReturnStmtNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct TypeAliasDeclNode {
     pub name: NodeId,               // IdentifierNode - the new type name
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: type Name<T, U> = Definition - array of identifier nodes
     pub type_definition: TypeId,    // TypeId - what it aliases to
     pub span: SourceSpan,
 }

@@ -568,7 +568,7 @@ impl<'a> Parser<'a> {
         let name = self.get_identifier()?;
 
         // Parse optional generic parameters: class Name<T, U>
-        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        let generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
         {
             Some(self.parse_generic_parameters()?)
         } else {
@@ -596,6 +596,7 @@ impl<'a> Parser<'a> {
 
         let node_id = self.nodes.create_node(AstNode::Class(ClassDeclNode {
             name,
+            generic_parameters,
             superclass,
             members,
             span,
@@ -611,7 +612,7 @@ impl<'a> Parser<'a> {
         let name = self.get_identifier()?;
 
         // Parse optional generic parameters: type Name<T, U> = Definition
-        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        let generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
         {
             Some(self.parse_generic_parameters()?)
         } else {
@@ -629,6 +630,7 @@ impl<'a> Parser<'a> {
 
         let node_id = self.nodes.create_node(AstNode::TypeDecl(TypeAliasDeclNode {
             name,
+            generic_parameters,
             type_definition,
             span,
         }));
@@ -715,7 +717,7 @@ impl<'a> Parser<'a> {
         let name = self.get_identifier()?;
 
         // Parse optional generic parameters: method<T, U>(params)
-        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        let generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
         {
             Some(self.parse_generic_parameters()?)
         } else {
@@ -739,6 +741,7 @@ impl<'a> Parser<'a> {
             .nodes
             .create_node(AstNode::FunctionExpr(FunctionExprNode {
                 name,
+                generic_parameters,
                 parameters,
                 body,
                 span,
@@ -1041,7 +1044,7 @@ impl<'a> Parser<'a> {
         let name = self.get_identifier()?;
 
         // Parse optional generic parameters: fn name<T, U>(params)
-        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        let generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
         {
             Some(self.parse_generic_parameters()?)
         } else {
@@ -1065,6 +1068,7 @@ impl<'a> Parser<'a> {
             .nodes
             .create_node(AstNode::FunctionExpr(FunctionExprNode {
                 name,
+                generic_parameters,
                 parameters,
                 body,
                 span,
@@ -1722,8 +1726,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse generic parameters: <T, U, V>
-    fn parse_generic_parameters(&mut self) -> ParseResult<Vec<StringHandle>> {
-        let mut parameters = Vec::new();
+    fn parse_generic_parameters(&mut self) -> ParseResult<NodeArrayId> {
+        let parameters = self.nodes.array.create();
 
         self.consume(TokenType::Less, "Expected '<' for generic parameters.")?;
 
@@ -1731,8 +1735,7 @@ impl<'a> Parser<'a> {
             // Parse first parameter
             self.consume(TokenType::Identifier, "Expected type parameter name.")?;
             let param_id = self.get_identifier()?;
-            let param_node = self.nodes.get_identifier_node(param_id);
-            parameters.push(param_node.node.name);
+            self.nodes.array.push(parameters, param_id);
 
             // Parse additional parameters
             while self.match_token(TokenType::Comma) {
@@ -1741,8 +1744,7 @@ impl<'a> Parser<'a> {
                 }
                 self.consume(TokenType::Identifier, "Expected type parameter name.")?;
                 let param_id = self.get_identifier()?;
-                let param_node = self.nodes.get_identifier_node(param_id);
-                parameters.push(param_node.node.name);
+                self.nodes.array.push(parameters, param_id);
             }
         }
 

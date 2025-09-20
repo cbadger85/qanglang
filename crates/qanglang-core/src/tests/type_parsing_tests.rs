@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use super::{assert_no_parse_errors, parse_source};
 use crate::{SourceMap, TypedNodeArena, memory::StringInterner};
+use std::sync::Arc;
 
 #[test]
 fn test_variable_type_annotations() {
@@ -197,7 +197,7 @@ fn test_lambda_parameter_types() {
 #[test]
 fn test_type_casting() {
     let source_code = r#"
-        var value = (someExpr as String);
+        var value = (someExpr as String) * 4;
         var number = (42 as Number);
         var complex = (expr as [String | Number]);
     "#;
@@ -276,7 +276,10 @@ fn test_invalid_type_syntax_errors() {
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
-    assert!(errors.has_errors(), "Expected parse errors for invalid type syntax");
+    assert!(
+        errors.has_errors(),
+        "Expected parse errors for invalid type syntax"
+    );
 }
 
 #[test]
@@ -289,7 +292,10 @@ fn test_incomplete_union_type_errors() {
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
-    assert!(errors.has_errors(), "Expected parse errors for incomplete union type");
+    assert!(
+        errors.has_errors(),
+        "Expected parse errors for incomplete union type"
+    );
 }
 
 #[test]
@@ -302,7 +308,10 @@ fn test_malformed_object_type_errors() {
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
-    assert!(errors.has_errors(), "Expected parse errors for malformed object type");
+    assert!(
+        errors.has_errors(),
+        "Expected parse errors for malformed object type"
+    );
 }
 
 // ============================================================================
@@ -559,7 +568,7 @@ fn test_class_method_type_annotations() {
             }
 
             complexMethod(a: String | Number, b: Boolean?) -> { result: String } {
-                return { result: "done" };
+                return {{ result = "done" }};
             }
         }
     "#;

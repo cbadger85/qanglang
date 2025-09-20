@@ -1,10 +1,6 @@
 use crate::{
     arena::{Arena, Index},
-    frontend::{
-        node_array_arena::NodeArrayArena,
-        nodes::*,
-        types::{TypeEnvironment, TypeTable},
-    },
+    frontend::{node_array_arena::NodeArrayArena, nodes::*, types::TypeTable},
 };
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
@@ -37,7 +33,6 @@ pub struct TypedNodeArena {
     nodes: Arena<AstNode>,
     pub array: NodeArrayArena,
     pub type_table: TypeTable,
-    pub type_env: TypeEnvironment,
 }
 
 impl TypedNodeArena {
@@ -46,7 +41,6 @@ impl TypedNodeArena {
             nodes: Arena::new(),
             array: NodeArrayArena::new(),
             type_table: TypeTable::new(),
-            type_env: TypeEnvironment::new(),
         }
     }
 

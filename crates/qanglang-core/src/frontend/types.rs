@@ -231,7 +231,7 @@ pub enum TypeNode {
     /// Unresolved type reference: semantic analysis will resolve to Class, TypeAlias, or TypeParameter
     UnresolvedReference {
         name: StringHandle,
-        identifier_node: NodeId,  // For error reporting and source location
+        identifier_node: NodeId, // For error reporting and source location
     },
 
     /// Object/record type: { name: String, age: Number }
@@ -612,28 +612,6 @@ impl TypeTable {
         } else {
             Err("Type is not a module".to_string())
         }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct TypeEnvironment {
-    /// Maps type names to their definitions
-    type_names: FxHashMap<StringHandle, TypeId>,
-}
-
-impl TypeEnvironment {
-    pub fn new() -> Self {
-        Self {
-            type_names: FxHashMap::with_hasher(FxBuildHasher),
-        }
-    }
-
-    pub fn declare_type(&mut self, name: StringHandle, type_id: TypeId) {
-        self.type_names.insert(name, type_id);
-    }
-
-    pub fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
-        self.type_names.get(&name).copied()
     }
 }
 

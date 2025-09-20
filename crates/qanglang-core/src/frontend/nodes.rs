@@ -1,6 +1,6 @@
 use crate::{
     StringHandle, Token,
-    frontend::{node_array_arena::NodeArrayId, typed_node_arena::NodeId},
+    frontend::{node_array_arena::NodeArrayId, typed_node_arena::NodeId, types::TypeId},
 };
 use std::convert::TryFrom;
 
@@ -547,8 +547,8 @@ pub struct ReturnStmtNode {
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct TypeAliasDeclNode {
-    pub name: NodeId,            // IdentifierNode - the new type name
-    pub type_definition: NodeId, // TypeNode - what it aliases to
+    pub name: NodeId,               // IdentifierNode - the new type name
+    pub type_definition: TypeId,    // TypeId - what it aliases to
     pub span: SourceSpan,
 }
 
@@ -591,6 +591,7 @@ impl TryFrom<AstNode> for DeclNode {
             AstNode::LambdaDecl(lambda_decl) => Ok(DeclNode::Lambda(lambda_decl)),
             AstNode::VariableDecl(var_decl) => Ok(DeclNode::Variable(var_decl)),
             AstNode::ImportModuleDecl(imprt_decl) => Ok(DeclNode::Module(imprt_decl)),
+            AstNode::TypeDecl(type_decl) => Ok(DeclNode::Type(type_decl)),
             _ => Ok(DeclNode::Stmt(StmtNode::try_from(value)?)),
         }
     }

@@ -648,3 +648,67 @@ fn test_mixed_class_members_with_types() {
     let (_program, errors) = parse_source(source_map, nodes, strings);
     assert_no_parse_errors(&errors);
 }
+
+#[test]
+fn test_simple_type_declarations() {
+    let source_code = r#"
+        type SimpleString = String;
+        type SimpleNumber = Number;
+        type SimpleBool = Boolean;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_complex_type_declarations() {
+    let source_code = r#"
+        type OptionalNumber = Number?;
+        type StringArray = [String];
+        type UserObject = { name: String, age: Number };
+        type UnionType = String | Number | Boolean;
+        type FunctionType = (String, Number) -> Boolean;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_generic_type_declarations() {
+    let source_code = r#"
+        type Container<T> = [T];
+        type Pair<T, U> = { first: T, second: U };
+        type Triple<A, B, C> = { a: A, b: B, c: C };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_complex_generic_type_declarations() {
+    let source_code = r#"
+        type ComplexGeneric<T> = Container<T | String>;
+        type NestedGeneric<T, U> = Pair<[T], { value: U }>;
+        type FunctionGeneric<T, U, R> = (T, U) -> R;
+        type OptionalGeneric<T> = T?;
+        type UnionGeneric<T, U> = T | U | Number;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}

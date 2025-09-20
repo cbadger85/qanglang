@@ -424,6 +424,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.import_module_declaration()
             }
+            TokenType::Type => {
+                self.advance();
+                self.type_declaration()
+            }
             _ => self.declaration_statement(),
         };
 
@@ -564,7 +568,8 @@ impl<'a> Parser<'a> {
         let name = self.get_identifier()?;
 
         // Parse optional generic parameters: class Name<T, U>
-        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison() {
+        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        {
             Some(self.parse_generic_parameters()?)
         } else {
             None
@@ -599,6 +604,38 @@ impl<'a> Parser<'a> {
         Ok(node_id)
     }
 
+    fn type_declaration(&mut self) -> ParseResult<NodeId> {
+        let start_span = self.get_previous_span();
+
+        self.consume(TokenType::Identifier, "Expect type name.")?;
+        let name = self.get_identifier()?;
+
+        // Parse optional generic parameters: type Name<T, U> = Definition
+        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        {
+            Some(self.parse_generic_parameters()?)
+        } else {
+            None
+        };
+
+        self.consume(TokenType::Equals, "Expect '=' after type name.")?;
+
+        // Parse the type definition
+        let type_definition = self.parse_type_annotation()?;
+
+        self.consume(TokenType::Semicolon, "Expect ';' after type declaration.")?;
+        let end_span = self.get_previous_span();
+        let span = SourceSpan::combine(start_span, end_span);
+
+        let node_id = self.nodes.create_node(AstNode::TypeDecl(TypeAliasDeclNode {
+            name,
+            type_definition,
+            span,
+        }));
+
+        Ok(node_id)
+    }
+
     fn class_member(&mut self) -> ParseResult<NodeId> {
         if self.check(TokenType::Identifier) {
             // Check if this is a method by looking ahead for method patterns:
@@ -606,10 +643,20 @@ impl<'a> Parser<'a> {
             // 2. name(): ReturnType - colon followed by type then left paren
             // 3. name<T>(...) - generic parameters then left paren
 
-            let is_method = if self.tokens.peek().map(|t| t.token_type == TokenType::LeftParen).unwrap_or(false) {
+            let is_method = if self
+                .tokens
+                .peek()
+                .map(|t| t.token_type == TokenType::LeftParen)
+                .unwrap_or(false)
+            {
                 // Pattern: name(params)
                 true
-            } else if self.tokens.peek().map(|t| t.token_type == TokenType::Less).unwrap_or(false) {
+            } else if self
+                .tokens
+                .peek()
+                .map(|t| t.token_type == TokenType::Less)
+                .unwrap_or(false)
+            {
                 // Pattern: name<T>(...) - check if generics followed by left paren
                 self.is_method_with_generics()
             } else {
@@ -629,7 +676,6 @@ impl<'a> Parser<'a> {
             ))
         }
     }
-
 
     fn is_method_with_generics(&mut self) -> bool {
         // Simple heuristic: identifier<...> followed by ( is a method
@@ -663,14 +709,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-
     fn class_method(&mut self) -> ParseResult<NodeId> {
         let start_span = self.get_current_span();
         self.consume(TokenType::Identifier, "Expect method name.")?;
         let name = self.get_identifier()?;
 
         // Parse optional generic parameters: method<T, U>(params)
-        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison() {
+        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        {
             Some(self.parse_generic_parameters()?)
         } else {
             None
@@ -995,7 +1041,8 @@ impl<'a> Parser<'a> {
         let name = self.get_identifier()?;
 
         // Parse optional generic parameters: fn name<T, U>(params)
-        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison() {
+        let _generic_parameters = if self.check(TokenType::Less) && self.is_generic_not_comparison()
+        {
             Some(self.parse_generic_parameters()?)
         } else {
             None
@@ -1352,7 +1399,10 @@ impl<'a> Parser<'a> {
                             }
                         }
 
-                        self.consume(TokenType::RightParen, "Expect ')' after function parameters.")?;
+                        self.consume(
+                            TokenType::RightParen,
+                            "Expect ')' after function parameters.",
+                        )?;
                         self.consume(TokenType::Arrow, "Expect '->' after function parameters.")?;
 
                         let return_type_id = self.parse_type_annotation()?;
@@ -1387,8 +1437,13 @@ impl<'a> Parser<'a> {
                         };
 
                         Ok(self.nodes.type_table.create_type(function_type))
-                    } else if self.check(TokenType::RightParen) &&
-                              self.tokens.peek().map(|t| t.token_type == TokenType::Arrow).unwrap_or(false) {
+                    } else if self.check(TokenType::RightParen)
+                        && self
+                            .tokens
+                            .peek()
+                            .map(|t| t.token_type == TokenType::Arrow)
+                            .unwrap_or(false)
+                    {
                         // Single parameter function type: (Type) -> ReturnType
                         self.advance(); // consume ')'
                         self.consume(TokenType::Arrow, "Expect '->' after function parameters.")?;
@@ -1537,9 +1592,16 @@ impl<'a> Parser<'a> {
                     }
                 }
                 // Expression operators suggest comparison, not generics
-                TokenType::Plus | TokenType::Minus | TokenType::Star | TokenType::Slash |
-                TokenType::EqualsEquals | TokenType::BangEquals | TokenType::LessEquals |
-                TokenType::GreaterEquals | TokenType::And | TokenType::Or => {
+                TokenType::Plus
+                | TokenType::Minus
+                | TokenType::Star
+                | TokenType::Slash
+                | TokenType::EqualsEquals
+                | TokenType::BangEquals
+                | TokenType::LessEquals
+                | TokenType::GreaterEquals
+                | TokenType::And
+                | TokenType::Or => {
                     return false;
                 }
                 TokenType::LeftParen => {
@@ -1581,7 +1643,11 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse generic type: Container<T, U>
-    fn parse_generic_type(&mut self, base_name: StringHandle, _base_identifier: NodeId) -> ParseResult<TypeId> {
+    fn parse_generic_type(
+        &mut self,
+        base_name: StringHandle,
+        _base_identifier: NodeId,
+    ) -> ParseResult<TypeId> {
         self.consume(TokenType::Less, "Expected '<' for generic type.")?;
 
         let mut type_arguments = Vec::new();
@@ -1615,7 +1681,10 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.consume(TokenType::Greater, "Expected '>' after generic type arguments.")?;
+        self.consume(
+            TokenType::Greater,
+            "Expected '>' after generic type arguments.",
+        )?;
 
         let generic_type = TypeInfo {
             type_node: TypeNode::Generic(GenericType {
@@ -2489,13 +2558,15 @@ mod expression_parser {
         let end_span = parser.get_previous_span();
         let span = SourceSpan::combine(left_span, end_span);
 
-        let node_id = parser.nodes.create_node(AstNode::TypeCastExpr(TypeCastExprNode {
-            expr: left,
-            span,
-        }));
+        let node_id = parser
+            .nodes
+            .create_node(AstNode::TypeCastExpr(TypeCastExprNode { expr: left, span }));
 
         // Associate the target type with the cast expression
-        parser.nodes.type_table.set_node_type(node_id, target_type_id);
+        parser
+            .nodes
+            .type_table
+            .set_node_type(node_id, target_type_id);
 
         Ok(node_id)
     }

@@ -1906,6 +1906,7 @@ mod expression_parser {
                 parameters,
                 body,
                 span,
+                generic_parameters: None,
             }));
 
         Ok(node_id)

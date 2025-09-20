@@ -474,6 +474,7 @@ pub struct LambdaDeclNode {
 /// Lambda expression: ( parameters? ) -> ( block | expression )
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct LambdaExprNode {
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: <T, U> - array of identifier nodes
     pub parameters: NodeArrayId, // [IdentifierNode]
     pub body: NodeId,            // BlockStmtNode | ExprNode
     pub span: SourceSpan,

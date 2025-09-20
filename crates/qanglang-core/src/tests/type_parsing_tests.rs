@@ -793,3 +793,146 @@ fn test_dynamic_types_in_complex_expressions() {
     let (_program, errors) = parse_source(source_map, nodes, strings);
     assert_no_parse_errors(&errors);
 }
+
+// ============================================================================
+// Lambda Generic Tests
+// ============================================================================
+
+#[test]
+fn test_lambda_generic_single_parameter() {
+    let source_code = r#"
+        var identity = <T>(value: T) -> value;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_multiple_parameters() {
+    let source_code = r#"
+        var pair = <T, U>(first: T, second: U) -> {{first = first, second = second}};
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_with_block_body() {
+    let source_code = r#"
+        var processor = <T>(item: T) -> {
+            return item;
+        };
+        var validator = <V>(value: V) -> {
+            if (value) {
+                return value;
+            }
+            return nil;
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_empty_parameters() {
+    // Let's start with the absolute simplest case
+    let source_code = r#"
+        var factory = <T>() -> nil;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_with_complex_types() {
+    let source_code = r#"
+        var arrayMapper = <T, U>(items, mapper) -> items;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_nested_calls() {
+    let source_code = r#"
+        var mapper = <T>(value) -> value;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_with_optional_types() {
+    let source_code = r#"
+        var nullable = <T>(value) -> value;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_trailing_comma() {
+    let source_code = r#"
+        var single = <T,>(value) -> value;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_in_function_calls() {
+    let source_code = r#"
+        var called = (<U>(x) -> x)(100);
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_lambda_generic_mixed_with_regular_lambdas() {
+    let source_code = r#"
+        var generic = <T>(value) -> value;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}

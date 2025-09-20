@@ -1836,11 +1836,16 @@ mod expression_parser {
         // At this point, '(' has been consumed, so we use is_lambda_start_after_paren
         let is_lambda = parser.is_lambda_start_after_paren();
 
-        if is_lambda {
+        if parser.check(TokenType::Less) {
+            // This is a generic lambda in grouping: (<T>(x) -> x)
+            let lambda_expr = lambda_with_generics(parser)?;
+            parser.consume(TokenType::RightParen, "Expect ')' after lambda expression.")?;
+            Ok(lambda_expr)
+        } else if is_lambda {
             // Check if we're parsing a grouped lambda (like "(() -> nil)") vs direct lambda
             let is_grouped_lambda = parser.check(TokenType::LeftParen);
 
-            let lambda_expr = lambda(parser)?;
+            let lambda_expr = lambda(parser, None)?;
 
             // Only consume closing ')' if this is a grouped lambda
             if is_grouped_lambda {
@@ -1863,7 +1868,41 @@ mod expression_parser {
         Ok(expr)
     }
 
-    fn lambda(parser: &mut Parser) -> ParseResult<NodeId> {
+    fn lambda_with_generics(parser: &mut Parser) -> ParseResult<NodeId> {
+        // Consume the '<' token if we're positioned at it (grouping case)
+        // vs already consumed (prefix parser case)
+        if parser.check(TokenType::Less) {
+            parser.advance();
+        }
+
+        // Parse generic parameters manually: <T, U, ...>
+        // We're positioned after '<', so we can directly parse the parameter list
+        let parameters = parser.nodes.array.create();
+
+        if !parser.check(TokenType::Greater) {
+            // Parse first parameter
+            parser.consume(TokenType::Identifier, "Expected type parameter name.")?;
+            let param_id = parser.get_identifier()?;
+            parser.nodes.array.push(parameters, param_id);
+
+            // Parse additional parameters
+            while parser.match_token(TokenType::Comma) {
+                if parser.check(TokenType::Greater) {
+                    break; // Trailing comma
+                }
+                parser.consume(TokenType::Identifier, "Expected type parameter name.")?;
+                let param_id = parser.get_identifier()?;
+                parser.nodes.array.push(parameters, param_id);
+            }
+        }
+
+        parser.consume(TokenType::Greater, "Expected '>' after generic parameters.")?;
+
+        // Now parse the lambda with the generic parameters
+        lambda(parser, Some(parameters))
+    }
+
+    fn lambda(parser: &mut Parser, generic_parameters: Option<NodeArrayId>) -> ParseResult<NodeId> {
         let start_span = parser.get_previous_span();
 
         // If we encounter a '(' at the start, consume it (start of parameter list)
@@ -1906,7 +1945,7 @@ mod expression_parser {
                 parameters,
                 body,
                 span,
-                generic_parameters: None,
+                generic_parameters,
             }));
 
         Ok(node_id)
@@ -2670,7 +2709,7 @@ mod expression_parser {
                 precedence: Precedence::Comparison,
             },
             tokenizer::TokenType::Less => ParseRule {
-                prefix: None,
+                prefix: Some(lambda_with_generics),
                 infix: Some(binary),
                 precedence: Precedence::Comparison,
             },

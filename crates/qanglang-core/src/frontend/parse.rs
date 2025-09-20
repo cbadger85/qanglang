@@ -1330,13 +1330,6 @@ impl<'a> Parser<'a> {
                         };
                         Ok(self.nodes.type_table.create_type(boolean_type))
                     }
-                    "dyn" => {
-                        let dyn_type = TypeInfo {
-                            type_node: TypeNode::Dynamic,
-                            origin: TypeOrigin::Annotation(identifier),
-                        };
-                        Ok(self.nodes.type_table.create_type(dyn_type))
-                    }
                     _ => {
                         // Check if this is a generic type: Container<T>
                         if self.check(TokenType::Less) && self.is_generic_not_comparison() {
@@ -1491,6 +1484,10 @@ impl<'a> Parser<'a> {
                 // Object type: { key: Type, ... }
                 self.parse_object_type()
             }
+            Some(TokenType::Dyn) => {
+                // Dynamic types: dyn, dyn?, dyn!
+                self.parse_dynamic_type()
+            }
             _ => Err(QangCompilerError::new_syntax_error(
                 "Expected type.".to_string(),
                 self.get_current_span(),
@@ -1554,6 +1551,29 @@ impl<'a> Parser<'a> {
         };
 
         Ok(self.nodes.type_table.create_type(object_type))
+    }
+
+    /// Parse dynamic types: dyn, dyn?, dyn!
+    fn parse_dynamic_type(&mut self) -> ParseResult<TypeId> {
+        self.consume(TokenType::Dyn, "Expected 'dyn'.")?;
+
+        let dynamic_variant = if self.match_token(TokenType::Question) {
+            // dyn? - dynamic nullable
+            TypeNode::DynamicNullable
+        } else if self.match_token(TokenType::Bang) {
+            // dyn! - top type
+            TypeNode::DynamicTop
+        } else {
+            // dyn - dynamic non-null
+            TypeNode::Dynamic
+        };
+
+        let dyn_type = TypeInfo {
+            type_node: dynamic_variant,
+            origin: TypeOrigin::Builtin,
+        };
+
+        Ok(self.nodes.type_table.create_type(dyn_type))
     }
 
     // ============================================================================

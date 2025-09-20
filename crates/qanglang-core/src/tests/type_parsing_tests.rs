@@ -761,3 +761,35 @@ fn test_complex_unresolved_references() {
     let (_program, errors) = parse_source(source_map, nodes, strings);
     assert_no_parse_errors(&errors);
 }
+
+#[test]
+fn test_dynamic_type_variants() {
+    let source_code = r#"
+        var basic: dyn;          // Dynamic non-null
+        var nullable: dyn?;      // Dynamic nullable
+        var topType: dyn!;       // Top type
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_dynamic_types_in_complex_expressions() {
+    let source_code = r#"
+        var unionWithDyn: String | dyn | Number;
+        var arrayOfDyn: [dyn?];
+        var funcWithDyn: (dyn) -> dyn!;
+        var optionalDyn: dyn?;
+        var objectWithDyn: { value: dyn, nullable: dyn? };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}

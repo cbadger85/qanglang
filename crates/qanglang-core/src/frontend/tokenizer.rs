@@ -69,6 +69,7 @@ pub enum TokenType {
     Import,             // import,
     Type,               // type,
     As,                 // as,
+    Dyn,                // dyn,
     Error,              // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -102,6 +103,7 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "import" => TokenType::Import,
     "type" => TokenType::Type,
     "as" => TokenType::As,
+    "dyn" => TokenType::Dyn,
 };
 
 #[derive(PartialEq, Clone, Debug)]

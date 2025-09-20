@@ -134,6 +134,10 @@ impl TypeTable {
                 from_mod.name == to_mod.name // Same module
             }
 
+            // Unresolved references cannot be assigned until resolved by semantic analysis
+            (TypeNode::UnresolvedReference { .. }, _) => false,
+            (_, TypeNode::UnresolvedReference { .. }) => false,
+
             _ => false,
         }
     }
@@ -223,6 +227,12 @@ pub enum TypeNode {
 
     /// Type parameter: T, U, K, V
     TypeParameter(StringHandle),
+
+    /// Unresolved type reference: semantic analysis will resolve to Class, TypeAlias, or TypeParameter
+    UnresolvedReference {
+        name: StringHandle,
+        identifier_node: NodeId,  // For error reporting and source location
+    },
 
     /// Object/record type: { name: String, age: Number }
     Object(ObjectType),
@@ -663,6 +673,7 @@ impl fmt::Display for TypeNode {
                 write!(f, ">")
             }
             TypeNode::TypeParameter(name) => write!(f, "{}", name),
+            TypeNode::UnresolvedReference { name, .. } => write!(f, "{}", name),
             TypeNode::Object(obj) => {
                 write!(f, "{{ ")?;
                 for (i, field) in obj.fields.iter().enumerate() {

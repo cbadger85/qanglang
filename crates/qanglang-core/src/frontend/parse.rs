@@ -1343,8 +1343,12 @@ impl<'a> Parser<'a> {
                             self.parse_generic_type(name, identifier)
                         } else {
                             // User-defined type reference (class, etc.) or type parameter
+                            // Use UnresolvedReference - semantic analysis will resolve to proper type
                             let user_type = TypeInfo {
-                                type_node: TypeNode::TypeParameter(name), // TODO: Resolve to actual user types
+                                type_node: TypeNode::UnresolvedReference {
+                                    name,
+                                    identifier_node: identifier,
+                                },
                                 origin: TypeOrigin::Annotation(identifier),
                             };
                             Ok(self.nodes.type_table.create_type(user_type))

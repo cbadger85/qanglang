@@ -712,3 +712,52 @@ fn test_complex_generic_type_declarations() {
     let (_program, errors) = parse_source(source_map, nodes, strings);
     assert_no_parse_errors(&errors);
 }
+
+#[test]
+fn test_unresolved_type_references() {
+    let source_code = r#"
+        var user: User;
+        var data: MyData = getData();
+        fn process(item: CustomType) -> Result {
+            return item;
+        }
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_user_defined_vs_primitives() {
+    let source_code = r#"
+        var primitive: String;        // Should be Primitive
+        var userType: User;          // Should be UnresolvedReference
+        var optional: String?;       // Should be Optional<Primitive>
+        var userOptional: User?;     // Should be Optional<UnresolvedReference>
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_complex_unresolved_references() {
+    let source_code = r#"
+        var unionWithUser: String | User | Number;
+        var arrayOfUser: [User];
+        var objectWithUser: { user: User, name: String };
+        var funcWithUser: (User) -> Result;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}

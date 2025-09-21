@@ -105,11 +105,10 @@ impl TypeTable {
                 }
 
                 // Check if from_class inherits from to_class (single level only)
-                if let Some(ref superclass) = from_class.superclass {
-                    if let TypeNode::Class(super_class) = superclass.as_ref() {
+                if let Some(ref superclass) = from_class.superclass
+                    && let TypeNode::Class(super_class) = superclass.as_ref() {
                         return super_class.name == to_class.name;
                     }
-                }
 
                 false
             }
@@ -500,8 +499,8 @@ impl TypeTable {
             }
         };
 
-        if let Some(superclass) = superclass_type {
-            if let TypeNode::Class(super_class) = superclass.as_ref() {
+        if let Some(superclass) = superclass_type
+            && let TypeNode::Class(super_class) = superclass.as_ref() {
                 // Clone the superclass fields and methods to avoid borrowing issues
                 let inherited_fields: Vec<ClassField> = super_class
                     .fields
@@ -537,7 +536,6 @@ impl TypeTable {
                     class.methods.splice(0..0, inherited_methods);
                 }
             }
-        }
 
         Ok(())
     }

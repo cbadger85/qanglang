@@ -28,6 +28,16 @@ impl<T: Clone + Copy> TypedNodeRef<T> {
     }
 }
 
+#[macro_export]
+macro_rules! get_ast_node {
+    ($arena:expr, $node_id:expr, $kind:path) => {
+        match $arena.nodes[$node_id.get()] {
+            $kind(node) => TypedNodeRef::new($node_id, node),
+            _ => panic!("Expected {}", stringify!($kind)),
+        }
+    };
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct TypedNodeArena {
     nodes: Arena<AstNode>,
@@ -86,12 +96,14 @@ impl TypedNodeArena {
     }
 
     pub fn get_var_decl_node(&self, node_id: NodeId) -> TypedNodeRef<VariableDeclNode> {
-        let node = self.nodes[node_id.get()];
+        // let node = self.nodes[node_id.get()];
 
-        match node {
-            AstNode::VariableDecl(decl) => TypedNodeRef::new(node_id, decl),
-            _ => panic!("Expected VariableDeclNode."),
-        }
+        // match node {
+        //     AstNode::VariableDecl(decl) => TypedNodeRef::new(node_id, decl),
+        //     _ => panic!("Expected VariableDeclNode."),
+        // }
+
+        get_ast_node!(self, node_id, AstNode::VariableDecl)
     }
 
     pub fn get_program_node(&self, node_id: NodeId) -> TypedNodeRef<Module> {
@@ -108,17 +120,6 @@ impl TypedNodeArena {
         match node {
             AstNode::Identifier(identifier) => TypedNodeRef::new(node_id, identifier),
             _ => panic!("Expected IdentifierNode"),
-        }
-    }
-
-    pub fn get_generic_parameter_node(
-        &self,
-        node_id: NodeId,
-    ) -> TypedNodeRef<GenericParameterNode> {
-        let node = self.nodes[node_id.get()];
-        match node {
-            AstNode::GenericParam(param) => TypedNodeRef::new(node_id, param),
-            _ => panic!("Expected GenericParameterNode"),
         }
     }
 

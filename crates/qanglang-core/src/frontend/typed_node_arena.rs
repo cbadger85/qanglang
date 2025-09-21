@@ -96,67 +96,35 @@ impl TypedNodeArena {
     }
 
     pub fn get_var_decl_node(&self, node_id: NodeId) -> TypedNodeRef<VariableDeclNode> {
-        // let node = self.nodes[node_id.get()];
-
-        // match node {
-        //     AstNode::VariableDecl(decl) => TypedNodeRef::new(node_id, decl),
-        //     _ => panic!("Expected VariableDeclNode."),
-        // }
-
         get_ast_node!(self, node_id, AstNode::VariableDecl)
     }
 
     pub fn get_program_node(&self, node_id: NodeId) -> TypedNodeRef<Module> {
-        let node = self.nodes[node_id.get()];
-
-        match node {
-            AstNode::Module(program) => TypedNodeRef::new(node_id, program),
-            _ => panic!("Expected ProgramNode"),
-        }
+        get_ast_node!(self, node_id, AstNode::Module)
     }
 
     pub fn get_identifier_node(&self, node_id: NodeId) -> TypedNodeRef<IdentifierNode> {
-        let node = self.nodes[node_id.get()];
-        match node {
-            AstNode::Identifier(identifier) => TypedNodeRef::new(node_id, identifier),
-            _ => panic!("Expected IdentifierNode"),
-        }
+        get_ast_node!(self, node_id, AstNode::Identifier)
     }
 
     pub fn get_func_expr_node(&self, node_id: NodeId) -> TypedNodeRef<FunctionExprNode> {
-        let node = self.nodes[node_id.get()];
-
-        match node {
-            AstNode::FunctionExpr(func) => TypedNodeRef::new(node_id, func),
-            _ => panic!("Expected FunctionExprNode"),
-        }
+        get_ast_node!(self, node_id, AstNode::FunctionExpr)
     }
 
     pub fn get_lambda_expr_node(&self, node_id: NodeId) -> TypedNodeRef<LambdaExprNode> {
-        let node = self.nodes[node_id.get()];
-
-        match node {
-            AstNode::LambdaExpr(lambda) => TypedNodeRef::new(node_id, lambda),
-            _ => panic!("Expected LambdaExprNode"),
-        }
+        get_ast_node!(self, node_id, AstNode::LambdaExpr)
     }
 
     pub fn get_block_stmt_node(&self, node_id: NodeId) -> TypedNodeRef<BlockStmtNode> {
-        let node = self.nodes[node_id.get()];
-
-        match node {
-            AstNode::BlockStmt(block) => TypedNodeRef::new(node_id, block),
-            _ => panic!("Expected BlockStmtNode."),
-        }
+        get_ast_node!(self, node_id, AstNode::BlockStmt)
     }
 
     pub fn get_obj_entry_node(&self, node_id: NodeId) -> TypedNodeRef<ObjectEntryNode> {
-        let node = self.nodes[node_id.get()];
+        get_ast_node!(self, node_id, AstNode::ObjectEntry)
+    }
 
-        match node {
-            AstNode::ObjectEntry(entry) => TypedNodeRef::new(node_id, entry),
-            _ => panic!("Expected ObjectEntryNode."),
-        }
+    pub fn get_generic_param_node(&self, node_id: NodeId) -> TypedNodeRef<GenericParameterNode> {
+        get_ast_node!(self, node_id, AstNode::GenericParam)
     }
 
     pub fn get_lambda_body_node(&self, node_id: NodeId) -> TypedNodeRef<LambdaBodyNode> {

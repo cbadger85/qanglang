@@ -80,6 +80,17 @@ pub trait NodeVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_identifier(ctx.nodes.get_identifier_node(class_decl.node.name), ctx)?;
 
+        if let Some(generic_parameters) = class_decl.node.generic_parameters {
+            let length = ctx.nodes.array.size(generic_parameters);
+
+            for i in 0..length {
+                if let Some(node_id) = ctx.nodes.array.get_node_id_at(generic_parameters, i) {
+                    let param = ctx.nodes.get_generic_param_node(node_id);
+                    self.visit_generic_parameter(param, ctx)?;
+                }
+            }
+        }
+
         if let Some(superclass_id) = class_decl.node.superclass {
             self.visit_identifier(ctx.nodes.get_identifier_node(superclass_id), ctx)?;
         }
@@ -140,6 +151,17 @@ pub trait NodeVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_identifier(ctx.nodes.get_identifier_node(func_expr.node.name), ctx)?;
 
+        if let Some(generic_parameters) = func_expr.node.generic_parameters {
+            let length = ctx.nodes.array.size(generic_parameters);
+
+            for i in 0..length {
+                if let Some(node_id) = ctx.nodes.array.get_node_id_at(generic_parameters, i) {
+                    let param = ctx.nodes.get_generic_param_node(node_id);
+                    self.visit_generic_parameter(param, ctx)?;
+                }
+            }
+        }
+
         let length = ctx.nodes.array.size(func_expr.node.parameters);
 
         for i in 0..length {
@@ -166,6 +188,17 @@ pub trait NodeVisitor {
         lambda_expr: TypedNodeRef<LambdaExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
+        if let Some(generic_parameters) = lambda_expr.node.generic_parameters {
+            let length = ctx.nodes.array.size(generic_parameters);
+
+            for i in 0..length {
+                if let Some(node_id) = ctx.nodes.array.get_node_id_at(generic_parameters, i) {
+                    let param = ctx.nodes.get_generic_param_node(node_id);
+                    self.visit_generic_parameter(param, ctx)?;
+                }
+            }
+        }
+
         let length = ctx.nodes.array.size(lambda_expr.node.parameters);
 
         for i in 0..length {
@@ -762,6 +795,14 @@ pub trait NodeVisitor {
     fn visit_type_alias_declaration(
         &mut self,
         _type_decl: TypedNodeRef<TypeAliasDeclNode>,
+        _ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn visit_generic_parameter(
+        &mut self,
+        _generic_param: TypedNodeRef<GenericParameterNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())

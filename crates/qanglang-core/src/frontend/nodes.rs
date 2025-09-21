@@ -498,7 +498,6 @@ pub struct LambdaDeclNode {
 pub struct LambdaExprNode {
     pub generic_parameters: Option<NodeArrayId>, // [GenericParameterNode]
     pub parameters: NodeArrayId,                 // [ParameterNode]
-    pub return_type: Option<TypeId>,
     pub body: NodeId,                            // BlockStmtNode | ExprNode
     pub span: SourceSpan,
 }

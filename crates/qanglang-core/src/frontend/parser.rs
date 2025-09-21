@@ -2004,7 +2004,6 @@ mod expression_parser {
             .create_node(AstNode::LambdaExpr(LambdaExprNode {
                 generic_parameters,
                 parameters,
-                return_type: None, // TODO: Add lambda return type annotation support
                 body,
                 span,
             }));

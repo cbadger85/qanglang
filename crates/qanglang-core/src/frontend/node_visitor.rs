@@ -166,8 +166,8 @@ pub trait NodeVisitor {
 
         for i in 0..length {
             if let Some(node_id) = ctx.nodes.array.get_node_id_at(func_expr.node.parameters, i) {
-                let param = ctx.nodes.get_identifier_node(node_id);
-                self.visit_identifier(param, ctx)?;
+                let param = ctx.nodes.get_parameter_node(node_id);
+                self.visit_parameter(param, ctx)?;
             }
         }
 
@@ -207,8 +207,8 @@ pub trait NodeVisitor {
                 .array
                 .get_node_id_at(lambda_expr.node.parameters, i)
             {
-                let param = ctx.nodes.get_identifier_node(node_id);
-                self.visit_identifier(param, ctx)?;
+                let param = ctx.nodes.get_parameter_node(node_id);
+                self.visit_parameter(param, ctx)?;
             }
         }
 
@@ -779,7 +779,8 @@ pub trait NodeVisitor {
         map: TypedNodeRef<MapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(ctx.nodes.get_identifier_node(map.node.parameter), ctx)?;
+        let param = ctx.nodes.get_parameter_node(map.node.parameter);
+        self.visit_identifier(ctx.nodes.get_identifier_node(param.node.name), ctx)?;
         self.visit_expression(ctx.nodes.get_expr_node(map.node.body), ctx)
     }
 
@@ -788,7 +789,8 @@ pub trait NodeVisitor {
         map: TypedNodeRef<OptionalMapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        self.visit_identifier(ctx.nodes.get_identifier_node(map.node.parameter), ctx)?;
+        let param = ctx.nodes.get_parameter_node(map.node.parameter);
+        self.visit_identifier(ctx.nodes.get_identifier_node(param.node.name), ctx)?;
         self.visit_expression(ctx.nodes.get_expr_node(map.node.body), ctx)
     }
 
@@ -806,6 +808,14 @@ pub trait NodeVisitor {
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         Ok(())
+    }
+
+    fn visit_parameter(
+        &mut self,
+        parameter: TypedNodeRef<ParameterNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.visit_identifier(ctx.nodes.get_identifier_node(parameter.node.name), ctx)
     }
 }
 

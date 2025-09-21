@@ -530,11 +530,11 @@ impl<'a> Parser<'a> {
         let identifier = self.get_identifier()?;
 
         // Check for optional type annotation: var name: Type
-        if self.match_token(TokenType::Colon) {
-            let type_id = self.parse_type_annotation(identifier)?;
-            // Associate the type with the variable identifier
-            self.nodes.type_table.set_node_type(identifier, type_id);
-        }
+        let variable_type = if self.match_token(TokenType::Colon) {
+            Some(self.parse_type_annotation(identifier)?)
+        } else {
+            None
+        };
 
         let initializer = if self.match_token(TokenType::Equals) {
             Some(self.expression()?)
@@ -554,6 +554,7 @@ impl<'a> Parser<'a> {
             .nodes
             .create_node(AstNode::VariableDecl(VariableDeclNode {
                 target: identifier,
+                variable_type,
                 initializer,
                 span,
             }));
@@ -743,14 +744,12 @@ impl<'a> Parser<'a> {
                 name,
                 generic_parameters,
                 parameters,
+                return_type: return_type_id,
                 body,
                 span,
             }));
 
-        // Associate return type with method node if specified
-        if let Some(return_type_id) = return_type_id {
-            self.nodes.type_table.set_node_type(node_id, return_type_id);
-        }
+        // Return type is now stored directly in the AST node
 
         Ok(node_id)
     }
@@ -761,11 +760,11 @@ impl<'a> Parser<'a> {
         let name = self.get_identifier()?;
 
         // Check for optional type annotation: field: Type
-        if self.match_token(TokenType::Colon) {
-            let type_id = self.parse_type_annotation(name)?;
-            // Associate the type with the field node
-            self.nodes.type_table.set_node_type(name, type_id);
-        }
+        let field_type = if self.match_token(TokenType::Colon) {
+            Some(self.parse_type_annotation(name)?)
+        } else {
+            None
+        };
 
         let initializer = if self.match_token(TokenType::Equals) {
             Some(self.expression()?)
@@ -779,6 +778,7 @@ impl<'a> Parser<'a> {
 
         let node_id = self.nodes.create_node(AstNode::FieldDecl(FieldDeclNode {
             name,
+            field_type,
             initializer,
             span,
         }));
@@ -1070,14 +1070,12 @@ impl<'a> Parser<'a> {
                 name,
                 generic_parameters,
                 parameters,
+                return_type: return_type_id,
                 body,
                 span,
             }));
 
-        // Associate return type with function node if specified
-        if let Some(return_type_id) = return_type_id {
-            self.nodes.type_table.set_node_type(node_id, return_type_id);
-        }
+        // Return type is now stored directly in the AST node
 
         Ok(node_id)
     }
@@ -1190,16 +1188,26 @@ impl<'a> Parser<'a> {
 
     /// Parse a parameter with optional type annotation: name | name: Type
     fn parse_parameter(&mut self) -> ParseResult<NodeId> {
-        let parameter = self.get_identifier()?;
+        let start_span = self.get_current_span();
+        let identifier = self.get_identifier()?;
 
         // Check if there's a type annotation
-        if self.match_token(TokenType::Colon) {
-            let type_id = self.parse_type_annotation(parameter)?;
-            // Associate the type with the parameter node
-            self.nodes.type_table.set_node_type(parameter, type_id);
-        }
+        let parameter_type = if self.match_token(TokenType::Colon) {
+            Some(self.parse_type_annotation(identifier)?)
+        } else {
+            None
+        };
 
-        Ok(parameter)
+        let end_span = self.get_previous_span();
+        let span = SourceSpan::combine(start_span, end_span);
+
+        let parameter_node = self.nodes.create_node(AstNode::Parameter(ParameterNode {
+            name: identifier,
+            parameter_type,
+            span,
+        }));
+
+        Ok(parameter_node)
     }
 
     // ============================================================================
@@ -1374,6 +1382,7 @@ impl<'a> Parser<'a> {
 
                     let function_type = TypeInfo {
                         type_node: TypeNode::Function(FunctionType {
+                            generic_parameters: None,
                             parameters: Vec::new(),
                             return_type: Box::new(return_type_node),
                         }),
@@ -1431,6 +1440,7 @@ impl<'a> Parser<'a> {
 
                         let function_type = TypeInfo {
                             type_node: TypeNode::Function(FunctionType {
+                                generic_parameters: None,
                                 parameters: param_type_nodes,
                                 return_type: Box::new(return_type_node),
                             }),
@@ -1470,6 +1480,7 @@ impl<'a> Parser<'a> {
 
                         let function_type = TypeInfo {
                             type_node: TypeNode::Function(FunctionType {
+                                generic_parameters: None,
                                 parameters: vec![param_type_node],
                                 return_type: Box::new(return_type_node),
                             }),
@@ -1919,7 +1930,13 @@ mod expression_parser {
         if !parser.check(TokenType::Greater) {
             // Parse first parameter
             parser.consume(TokenType::Identifier, "Expected type parameter name.")?;
-            let param_id = parser.get_identifier()?;
+            let name = parser.get_identifier()?;
+            let span = parser.get_previous_span();
+            let param_id = parser.nodes.create_node(AstNode::GenericParam(GenericParameterNode {
+                name,
+                constraint: None,
+                span,
+            }));
             parser.nodes.array.push(parameters, param_id);
 
             // Parse additional parameters
@@ -1928,7 +1945,13 @@ mod expression_parser {
                     break; // Trailing comma
                 }
                 parser.consume(TokenType::Identifier, "Expected type parameter name.")?;
-                let param_id = parser.get_identifier()?;
+                let name = parser.get_identifier()?;
+                let span = parser.get_previous_span();
+                let param_id = parser.nodes.create_node(AstNode::GenericParam(GenericParameterNode {
+                    name,
+                    constraint: None,
+                    span,
+                }));
                 parser.nodes.array.push(parameters, param_id);
             }
         }
@@ -1979,10 +2002,11 @@ mod expression_parser {
         let node_id = parser
             .nodes
             .create_node(AstNode::LambdaExpr(LambdaExprNode {
+                generic_parameters,
                 parameters,
+                return_type: None, // TODO: Add lambda return type annotation support
                 body,
                 span,
-                generic_parameters,
             }));
 
         Ok(node_id)
@@ -2194,7 +2218,13 @@ mod expression_parser {
         let start_span: SourceSpan = parser.nodes.get_node(left).span();
 
         let parameter = if parser.match_token(TokenType::Identifier) {
-            parser.get_identifier()?
+            let name_id = parser.get_identifier()?;
+            // Create ParameterNode for map expression parameter
+            parser.nodes.create_node(AstNode::Parameter(ParameterNode {
+                name: name_id,
+                parameter_type: None,
+                span: parser.nodes.get_node(name_id).span(),
+            }))
         } else {
             return Err(crate::QangCompilerError::new_syntax_error(
                 "Expect parameter name before '->' in map expression.".to_string(),
@@ -2228,7 +2258,13 @@ mod expression_parser {
 
         let parameter = if parser.check(TokenType::Identifier) {
             parser.advance();
-            parser.get_identifier()?
+            let name_id = parser.get_identifier()?;
+            // Create ParameterNode for optional map expression parameter
+            parser.nodes.create_node(AstNode::Parameter(ParameterNode {
+                name: name_id,
+                parameter_type: None,
+                span: parser.nodes.get_node(name_id).span(),
+            }))
         } else {
             return Err(crate::QangCompilerError::new_syntax_error(
                 "Expect parameter name before '->' in optional map expression.".to_string(),

@@ -262,8 +262,9 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
         for i in 0..arity {
             if let Some(param_id) = ctx.nodes.array.get_node_id_at(func_expr.node.parameters, i) {
-                let param = ctx.nodes.get_identifier_node(param_id);
-                if let Err(error) = self.declare_variable(param) {
+                let param = ctx.nodes.get_parameter_node(param_id);
+                let param_identifier = ctx.nodes.get_identifier_node(param.node.name);
+                if let Err(error) = self.declare_variable(param_identifier) {
                     ctx.errors.report_error(error);
                 };
             }
@@ -306,8 +307,9 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 .array
                 .get_node_id_at(lambda_expr.node.parameters, i)
             {
-                let param = ctx.nodes.get_identifier_node(param_id);
-                if let Err(error) = self.declare_variable(param) {
+                let param = ctx.nodes.get_parameter_node(param_id);
+                let param_identifier = ctx.nodes.get_identifier_node(param.node.name);
+                if let Err(error) = self.declare_variable(param_identifier) {
                     ctx.errors.report_error(error);
                 };
             }
@@ -462,8 +464,9 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                             if let Some(param_id) =
                                 ctx.nodes.array.get_node_id_at(method.parameters, j)
                             {
-                                let param = ctx.nodes.get_identifier_node(param_id);
-                                if let Err(error) = self.declare_variable(param) {
+                                let param = ctx.nodes.get_parameter_node(param_id);
+                                let param_identifier = ctx.nodes.get_identifier_node(param.node.name);
+                                if let Err(error) = self.declare_variable(param_identifier) {
                                     ctx.errors.report_error(error);
                                 };
                             }
@@ -624,8 +627,9 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
     ) -> Result<(), Self::Error> {
         self.begin_function(1, map_expr.node.span, FunctionKind::Function, ctx.errors);
 
-        let param = ctx.nodes.get_identifier_node(map_expr.node.parameter);
-        if let Err(error) = self.declare_variable(param) {
+        let param = ctx.nodes.get_parameter_node(map_expr.node.parameter);
+        let param_identifier = ctx.nodes.get_identifier_node(param.node.name);
+        if let Err(error) = self.declare_variable(param_identifier) {
             ctx.errors.report_error(error);
         };
 
@@ -649,8 +653,9 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
             ctx.errors,
         );
 
-        let param = ctx.nodes.get_identifier_node(opt_map_expr.node.parameter);
-        if let Err(error) = self.declare_variable(param) {
+        let param = ctx.nodes.get_parameter_node(opt_map_expr.node.parameter);
+        let param_identifier = ctx.nodes.get_identifier_node(param.node.name);
+        if let Err(error) = self.declare_variable(param_identifier) {
             ctx.errors.report_error(error);
         };
 

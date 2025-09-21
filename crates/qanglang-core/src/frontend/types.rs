@@ -263,6 +263,7 @@ pub enum PrimitiveType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionType {
+    pub generic_parameters: Option<Vec<StringHandle>>,
     pub parameters: Vec<TypeNode>,
     pub return_type: Box<TypeNode>,
 }
@@ -287,6 +288,7 @@ pub struct ObjectField {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassType {
     pub name: StringHandle,
+    pub generic_parameters: Option<Vec<StringHandle>>,
     pub superclass: Option<Box<TypeNode>>, // Direct parent only
     pub fields: Vec<ClassField>,
     pub methods: Vec<ClassMethod>,
@@ -370,6 +372,7 @@ impl TypeTable {
 
         self.create_type(TypeInfo {
             type_node: TypeNode::Function(FunctionType {
+                generic_parameters: None,
                 parameters: param_nodes,
                 return_type: Box::new(return_node),
             }),
@@ -405,6 +408,7 @@ impl TypeTable {
         // Start with empty fields and methods - they'll be populated during type checking
         let class_type = ClassType {
             name,
+            generic_parameters: None,
             superclass,
             fields: Vec::new(),
             methods: Vec::new(),

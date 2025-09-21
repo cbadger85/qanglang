@@ -127,6 +127,10 @@ impl TypedNodeArena {
         get_ast_node!(self, node_id, AstNode::GenericParam)
     }
 
+    pub fn get_parameter_node(&self, node_id: NodeId) -> TypedNodeRef<ParameterNode> {
+        get_ast_node!(self, node_id, AstNode::Parameter)
+    }
+
     pub fn get_lambda_body_node(&self, node_id: NodeId) -> TypedNodeRef<LambdaBodyNode> {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())

@@ -128,6 +128,7 @@ pub enum AstNode {
     ImportModuleDecl(ImportModuleDeclNode),
     TypeDecl(TypeAliasDeclNode),
     GenericParam(GenericParameterNode),
+    Parameter(ParameterNode),
 }
 
 impl AstNode {
@@ -184,6 +185,7 @@ impl AstNode {
             AstNode::ImportModuleDecl(node) => node.span,
             AstNode::TypeDecl(node) => node.span,
             AstNode::GenericParam(node) => node.span,
+            AstNode::Parameter(node) => node.span,
         }
     }
 }
@@ -283,6 +285,14 @@ pub struct GenericParameterNode {
     pub span: SourceSpan,
 }
 
+/// Function/lambda parameter with optional type annotation: name | name: Type
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct ParameterNode {
+    pub name: NodeId, // IdentifierNode
+    pub parameter_type: Option<TypeId>,
+    pub span: SourceSpan,
+}
+
 /// Class declaration: class IDENTIFIER ( : IDENTIFIER )? { classMember* }
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ClassDeclNode {
@@ -297,6 +307,7 @@ pub struct ClassDeclNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct FieldDeclNode {
     pub name: NodeId,                // IdentifierNode
+    pub field_type: Option<TypeId>,
     pub initializer: Option<NodeId>, // ExprNode
     pub span: SourceSpan,
 }
@@ -312,8 +323,9 @@ pub struct FunctionDeclNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct FunctionExprNode {
     pub name: NodeId,                            // IdentifierNode,
-    pub generic_parameters: Option<NodeArrayId>, // GenericParameterNode
-    pub parameters: NodeArrayId,                 // [IdentifierNode]
+    pub generic_parameters: Option<NodeArrayId>, // [GenericParameterNode]
+    pub parameters: NodeArrayId,                 // [ParameterNode]
+    pub return_type: Option<TypeId>,
     pub body: NodeId,                            // BlockStmtNode
     pub span: SourceSpan,
 }
@@ -484,8 +496,9 @@ pub struct LambdaDeclNode {
 /// Lambda expression: ( parameters? ) -> ( block | expression )
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct LambdaExprNode {
-    pub generic_parameters: Option<NodeArrayId>, // GenericParameterNode
-    pub parameters: NodeArrayId,                 // [IdentifierNode]
+    pub generic_parameters: Option<NodeArrayId>, // [GenericParameterNode]
+    pub parameters: NodeArrayId,                 // [ParameterNode]
+    pub return_type: Option<TypeId>,
     pub body: NodeId,                            // BlockStmtNode | ExprNode
     pub span: SourceSpan,
 }
@@ -494,6 +507,7 @@ pub struct LambdaExprNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct VariableDeclNode {
     pub target: NodeId,              // IdentifierNode
+    pub variable_type: Option<TypeId>,
     pub initializer: Option<NodeId>, // ExprNode
     pub span: SourceSpan,
 }

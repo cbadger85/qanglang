@@ -659,15 +659,16 @@ impl<'a> Assembler<'a> {
         let param_count = ctx.nodes.array.size(func_expr.parameters);
         for i in 0..param_count {
             if let Some(param_id) = ctx.nodes.array.get_node_id_at(func_expr.parameters, i) {
-                let param = ctx.nodes.get_identifier_node(param_id);
-                let is_local = self.parse_variable(param.node.name, param.node.span)?;
+                let param = ctx.nodes.get_parameter_node(param_id);
+                let param_name = ctx.nodes.get_identifier_node(param.node.name);
+                let is_local = self.parse_variable(param_name.node.name, param_name.node.span)?;
                 self.define_variable(
                     if is_local {
                         None
                     } else {
-                        Some(param.node.name)
+                        Some(param_name.node.name)
                     },
-                    param.node.span,
+                    param_name.node.span,
                 )?;
             }
         }
@@ -760,7 +761,8 @@ impl<'a> Assembler<'a> {
         self.compiler_state.push(false, FunctionKind::Function);
         self.begin_scope();
 
-        let param_identifier = ctx.nodes.get_identifier_node(map_expr.parameter);
+        let param = ctx.nodes.get_parameter_node(map_expr.parameter);
+        let param_identifier = ctx.nodes.get_identifier_node(param.node.name);
         let param_handle = param_identifier.node.name;
         let is_local = self.parse_variable(param_handle, param_identifier.node.span)?;
         self.define_variable(
@@ -1581,16 +1583,17 @@ impl<'a> NodeVisitor for Assembler<'a> {
                 .array
                 .get_node_id_at(lambda_expr.node.parameters, i)
             {
-                let param = ctx.nodes.get_identifier_node(param_id);
-                let is_local = self.parse_variable(param.node.name, param.node.span)?;
+                let param = ctx.nodes.get_parameter_node(param_id);
+                let param_name = ctx.nodes.get_identifier_node(param.node.name);
+                let is_local = self.parse_variable(param_name.node.name, param_name.node.span)?;
                 self.define_variable(
                     if is_local {
                         None
                     } else {
-                        Some(param.node.name)
+                        Some(param_name.node.name)
                     },
-                    param.node.span,
-                )?;
+                    param_name.node.span,
+                )?
             }
         }
 

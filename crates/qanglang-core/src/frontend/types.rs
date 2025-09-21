@@ -636,11 +636,29 @@ impl fmt::Display for TypeNode {
                 write!(f, ") -> {}", func.return_type)
             }
             TypeNode::Union(types) => {
-                for (i, t) in types.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, " | ")?;
+                // Check if the union contains nil
+                let has_nil = types.iter().any(|t| matches!(t, TypeNode::Primitive(PrimitiveType::Nil)));
+
+                if has_nil {
+                    // Nullable syntax: show non-nil types with ? suffix
+                    let non_nil_types: Vec<&TypeNode> = types.iter()
+                        .filter(|t| !matches!(t, TypeNode::Primitive(PrimitiveType::Nil)))
+                        .collect();
+
+                    for (i, t) in non_nil_types.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " | ")?;
+                        }
+                        write!(f, "{}?", t)?;
                     }
-                    write!(f, "{}", t)?;
+                } else {
+                    // Regular union syntax
+                    for (i, t) in types.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " | ")?;
+                        }
+                        write!(f, "{}", t)?;
+                    }
                 }
                 Ok(())
             }

@@ -531,7 +531,7 @@ impl<'a> Parser<'a> {
 
         // Check for optional type annotation: var name: Type
         if self.match_token(TokenType::Colon) {
-            let type_id = self.parse_type_annotation()?;
+            let type_id = self.parse_type_annotation(identifier)?;
             // Associate the type with the variable identifier
             self.nodes.type_table.set_node_type(identifier, type_id);
         }
@@ -622,7 +622,7 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::Equals, "Expect '=' after type name.")?;
 
         // Parse the type definition
-        let type_definition = self.parse_type_annotation()?;
+        let type_definition = self.parse_type_annotation(name)?;
 
         self.consume(TokenType::Semicolon, "Expect ';' after type declaration.")?;
         let end_span = self.get_previous_span();
@@ -728,7 +728,7 @@ impl<'a> Parser<'a> {
 
         // Check for return type annotation after parameters: method(params) -> ReturnType
         let return_type_id = if self.match_token(TokenType::Arrow) {
-            Some(self.parse_type_annotation()?)
+            Some(self.parse_type_annotation(name)?)
         } else {
             None
         };
@@ -762,7 +762,7 @@ impl<'a> Parser<'a> {
 
         // Check for optional type annotation: field: Type
         if self.match_token(TokenType::Colon) {
-            let type_id = self.parse_type_annotation()?;
+            let type_id = self.parse_type_annotation(name)?;
             // Associate the type with the field node
             self.nodes.type_table.set_node_type(name, type_id);
         }
@@ -1055,7 +1055,7 @@ impl<'a> Parser<'a> {
 
         // Check for optional return type: fn name(params) -> ReturnType
         let return_type_id = if self.match_token(TokenType::Arrow) {
-            Some(self.parse_type_annotation()?)
+            Some(self.parse_type_annotation(name)?)
         } else {
             None
         };
@@ -1194,7 +1194,7 @@ impl<'a> Parser<'a> {
 
         // Check if there's a type annotation
         if self.match_token(TokenType::Colon) {
-            let type_id = self.parse_type_annotation()?;
+            let type_id = self.parse_type_annotation(parameter)?;
             // Associate the type with the parameter node
             self.nodes.type_table.set_node_type(parameter, type_id);
         }
@@ -1208,16 +1208,16 @@ impl<'a> Parser<'a> {
 
     /// Parse a type annotation and return the TypeId
     /// Handles all type syntax: primitives, arrays, unions, optionals, etc.
-    fn parse_type_annotation(&mut self) -> ParseResult<TypeId> {
-        self.parse_union_type()
+    fn parse_type_annotation(&mut self, requesting_node: NodeId) -> ParseResult<TypeId> {
+        self.parse_union_type(requesting_node)
     }
 
     /// Parse union types: Type1 | Type2 | Type3
-    fn parse_union_type(&mut self) -> ParseResult<TypeId> {
-        let mut types = vec![self.parse_optional_type()?];
+    fn parse_union_type(&mut self, requesting_node: NodeId) -> ParseResult<TypeId> {
+        let mut types = vec![self.parse_optional_type(requesting_node)?];
 
         while self.match_token(TokenType::Bar) {
-            types.push(self.parse_optional_type()?);
+            types.push(self.parse_optional_type(requesting_node)?);
         }
 
         if types.len() == 1 {
@@ -1238,7 +1238,7 @@ impl<'a> Parser<'a> {
 
             let union_type = TypeInfo {
                 type_node: TypeNode::Union(type_nodes),
-                origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+                origin: TypeOrigin::Annotation(requesting_node),
             };
 
             Ok(self.nodes.type_table.create_type(union_type))
@@ -1246,8 +1246,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse optional types: BaseType?
-    fn parse_optional_type(&mut self) -> ParseResult<TypeId> {
-        let base_type_id = self.parse_array_type()?;
+    fn parse_optional_type(&mut self, requesting_node: NodeId) -> ParseResult<TypeId> {
+        let base_type_id = self.parse_array_type(requesting_node)?;
 
         if self.match_token(TokenType::Question) {
             // Create optional type as union: BaseType | Nil
@@ -1264,7 +1264,7 @@ impl<'a> Parser<'a> {
                     base_type_node,
                     TypeNode::Primitive(PrimitiveType::Nil),
                 ]),
-                origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+                origin: TypeOrigin::Annotation(requesting_node),
             };
 
             Ok(self.nodes.type_table.create_type(union_type))
@@ -1274,9 +1274,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse array types: [ElementType]
-    fn parse_array_type(&mut self) -> ParseResult<TypeId> {
+    fn parse_array_type(&mut self, requesting_node: NodeId) -> ParseResult<TypeId> {
         if self.match_token(TokenType::LeftSquareBracket) {
-            let element_type_id = self.parse_type_annotation()?;
+            let element_type_id = self.parse_type_annotation(requesting_node)?;
             self.consume(
                 TokenType::RightSquareBracket,
                 "Expect ']' after array element type.",
@@ -1292,17 +1292,17 @@ impl<'a> Parser<'a> {
 
             let array_type = TypeInfo {
                 type_node: TypeNode::Array(Box::new(element_type_node)),
-                origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+                origin: TypeOrigin::Annotation(requesting_node),
             };
 
             Ok(self.nodes.type_table.create_type(array_type))
         } else {
-            self.parse_primary_type()
+            self.parse_primary_type(requesting_node)
         }
     }
 
     /// Parse primary types: primitives, identifiers, function types, object types, etc.
-    fn parse_primary_type(&mut self) -> ParseResult<TypeId> {
+    fn parse_primary_type(&mut self, requesting_node: NodeId) -> ParseResult<TypeId> {
         match self.current_token.as_ref().map(|t| &t.token_type) {
             Some(TokenType::Identifier) => {
                 self.advance();
@@ -1337,7 +1337,7 @@ impl<'a> Parser<'a> {
                     _ => {
                         // Check if this is a generic type: Container<T>
                         if self.check(TokenType::Less) && self.is_generic_not_comparison() {
-                            self.parse_generic_type(name, identifier)
+                            self.parse_generic_type(name, identifier, requesting_node)
                         } else {
                             // User-defined type reference (class, etc.) or type parameter
                             // Use UnresolvedReference - semantic analysis will resolve to proper type
@@ -1363,7 +1363,7 @@ impl<'a> Parser<'a> {
                     self.advance(); // consume ')'
                     self.consume(TokenType::Arrow, "Expect '->' after function parameters.")?;
 
-                    let return_type_id = self.parse_type_annotation()?;
+                    let return_type_id = self.parse_type_annotation(requesting_node)?;
                     let return_type_node = self
                         .nodes
                         .type_table
@@ -1377,26 +1377,26 @@ impl<'a> Parser<'a> {
                             parameters: Vec::new(),
                             return_type: Box::new(return_type_node),
                         }),
-                        origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+                        origin: TypeOrigin::Annotation(requesting_node),
                     };
 
                     Ok(self.nodes.type_table.create_type(function_type))
                 } else {
                     // Parse the first type
-                    let first_type = self.parse_type_annotation()?;
+                    let first_type = self.parse_type_annotation(requesting_node)?;
 
                     if self.match_token(TokenType::Comma) {
                         // Multiple types - this is a function type: (Type1, Type2) -> ReturnType
                         let mut parameter_types = vec![first_type];
 
                         if !self.check(TokenType::RightParen) {
-                            parameter_types.push(self.parse_type_annotation()?);
+                            parameter_types.push(self.parse_type_annotation(requesting_node)?);
 
                             while self.match_token(TokenType::Comma) {
                                 if self.check(TokenType::RightParen) {
                                     break;
                                 }
-                                parameter_types.push(self.parse_type_annotation()?);
+                                parameter_types.push(self.parse_type_annotation(requesting_node)?);
                             }
                         }
 
@@ -1406,7 +1406,7 @@ impl<'a> Parser<'a> {
                         )?;
                         self.consume(TokenType::Arrow, "Expect '->' after function parameters.")?;
 
-                        let return_type_id = self.parse_type_annotation()?;
+                        let return_type_id = self.parse_type_annotation(requesting_node)?;
 
                         // Convert TypeIds to TypeNodes
                         let param_type_nodes = parameter_types
@@ -1434,7 +1434,7 @@ impl<'a> Parser<'a> {
                                 parameters: param_type_nodes,
                                 return_type: Box::new(return_type_node),
                             }),
-                            origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+                            origin: TypeOrigin::Annotation(requesting_node),
                         };
 
                         Ok(self.nodes.type_table.create_type(function_type))
@@ -1449,7 +1449,7 @@ impl<'a> Parser<'a> {
                         self.advance(); // consume ')'
                         self.consume(TokenType::Arrow, "Expect '->' after function parameters.")?;
 
-                        let return_type_id = self.parse_type_annotation()?;
+                        let return_type_id = self.parse_type_annotation(requesting_node)?;
 
                         // Convert TypeId to TypeNode for first_type
                         let param_type_node = self
@@ -1473,7 +1473,7 @@ impl<'a> Parser<'a> {
                                 parameters: vec![param_type_node],
                                 return_type: Box::new(return_type_node),
                             }),
-                            origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+                            origin: TypeOrigin::Annotation(requesting_node),
                         };
 
                         Ok(self.nodes.type_table.create_type(function_type))
@@ -1486,7 +1486,7 @@ impl<'a> Parser<'a> {
             }
             Some(TokenType::LeftBrace) => {
                 // Object type: { key: Type, ... }
-                self.parse_object_type()
+                self.parse_object_type(requesting_node)
             }
             Some(TokenType::Dyn) => {
                 // Dynamic types: dyn, dyn?, dyn!
@@ -1501,7 +1501,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse object types: { key: Type, other_key: Type, }
-    fn parse_object_type(&mut self) -> ParseResult<TypeId> {
+    fn parse_object_type(&mut self, requesting_node: NodeId) -> ParseResult<TypeId> {
         self.consume(TokenType::LeftBrace, "Expected '{'.")?;
 
         let mut fields = Vec::new();
@@ -1510,7 +1510,7 @@ impl<'a> Parser<'a> {
         if self.match_token(TokenType::RightBrace) {
             let object_type = TypeInfo {
                 type_node: TypeNode::Object(ObjectType { fields }),
-                origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+                origin: TypeOrigin::Annotation(requesting_node),
             };
             return Ok(self.nodes.type_table.create_type(object_type));
         }
@@ -1522,7 +1522,7 @@ impl<'a> Parser<'a> {
             let field_name_node = self.nodes.get_identifier_node(field_name);
 
             self.consume(TokenType::Colon, "Expected ':' after field name.")?;
-            let field_type_id = self.parse_type_annotation()?;
+            let field_type_id = self.parse_type_annotation(requesting_node)?;
 
             let field_type_node = self
                 .nodes
@@ -1535,7 +1535,6 @@ impl<'a> Parser<'a> {
             fields.push(ObjectField {
                 name: field_name_node.node.name,
                 field_type: field_type_node,
-                optional: false, // TODO: Handle optional fields
             });
 
             if self.match_token(TokenType::Comma) {
@@ -1551,7 +1550,7 @@ impl<'a> Parser<'a> {
 
         let object_type = TypeInfo {
             type_node: TypeNode::Object(ObjectType { fields }),
-            origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+            origin: TypeOrigin::Annotation(requesting_node),
         };
 
         Ok(self.nodes.type_table.create_type(object_type))
@@ -1675,6 +1674,7 @@ impl<'a> Parser<'a> {
         &mut self,
         base_name: StringHandle,
         _base_identifier: NodeId,
+        requesting_node: NodeId,
     ) -> ParseResult<TypeId> {
         self.consume(TokenType::Less, "Expected '<' for generic type.")?;
 
@@ -1682,7 +1682,7 @@ impl<'a> Parser<'a> {
 
         // Parse first type argument
         if !self.check(TokenType::Greater) {
-            let type_arg_id = self.parse_type_annotation()?;
+            let type_arg_id = self.parse_type_annotation(requesting_node)?;
             let type_arg_node = self
                 .nodes
                 .type_table
@@ -1697,7 +1697,7 @@ impl<'a> Parser<'a> {
                 if self.check(TokenType::Greater) {
                     break; // Trailing comma
                 }
-                let type_arg_id = self.parse_type_annotation()?;
+                let type_arg_id = self.parse_type_annotation(requesting_node)?;
                 let type_arg_node = self
                     .nodes
                     .type_table
@@ -1719,7 +1719,7 @@ impl<'a> Parser<'a> {
                 base_name,
                 type_arguments,
             }),
-            origin: TypeOrigin::Builtin, // TODO: Use proper origin tracking
+            origin: TypeOrigin::Annotation(requesting_node),
         };
 
         Ok(self.nodes.type_table.create_type(generic_type))
@@ -1734,7 +1734,25 @@ impl<'a> Parser<'a> {
         if !self.check(TokenType::Greater) {
             // Parse first parameter
             self.consume(TokenType::Identifier, "Expected type parameter name.")?;
-            let param_id = self.get_identifier()?;
+            let name = self.get_identifier()?;
+            let token = self.previous_token.as_ref();
+            let span = token
+                .map(SourceSpan::from_token)
+                .unwrap_or(SourceSpan { start: 0, end: 0 });
+
+            let constraint = if self.match_token(TokenType::Colon) {
+                Some(self.parse_type_annotation(name)?)
+            } else {
+                None
+            };
+
+            let param_id = self
+                .nodes
+                .create_node(AstNode::GenericParam(GenericParameterNode {
+                    name,
+                    constraint,
+                    span,
+                }));
             self.nodes.array.push(parameters, param_id);
 
             // Parse additional parameters
@@ -1743,7 +1761,26 @@ impl<'a> Parser<'a> {
                     break; // Trailing comma
                 }
                 self.consume(TokenType::Identifier, "Expected type parameter name.")?;
-                let param_id = self.get_identifier()?;
+                let name = self.get_identifier()?;
+                let token = self.previous_token.as_ref();
+                let span = token
+                    .map(SourceSpan::from_token)
+                    .unwrap_or(SourceSpan { start: 0, end: 0 });
+
+                let constraint = if self.match_token(TokenType::Colon) {
+                    Some(self.parse_type_annotation(name)?)
+                } else {
+                    None
+                };
+
+                let param_id =
+                    self.nodes
+                        .create_node(AstNode::GenericParam(GenericParameterNode {
+                            name,
+                            constraint,
+                            span,
+                        }));
+
                 self.nodes.array.push(parameters, param_id);
             }
         }
@@ -2249,7 +2286,7 @@ mod expression_parser {
 
             // Check for optional type annotation: key: Type
             if parser.match_token(tokenizer::TokenType::Colon) {
-                let type_id = parser.parse_type_annotation()?;
+                let type_id = parser.parse_type_annotation(key)?;
                 // Associate the type with the key identifier
                 parser.nodes.type_table.set_node_type(key, type_id);
             }
@@ -2625,7 +2662,7 @@ mod expression_parser {
 
     fn type_cast(parser: &mut Parser, left: NodeId) -> ParseResult<NodeId> {
         // Parse the target type
-        let target_type_id = parser.parse_type_annotation()?;
+        let target_type_id = parser.parse_type_annotation(left)?;
 
         let left_span = parser.nodes.get_node(left).span();
         let end_span = parser.get_previous_span();
@@ -2908,7 +2945,7 @@ mod expression_parser {
                         .map(|t| SourceSpan::from_token(t).end)
                         .unwrap_or(SourceSpan::from_token(current_token).start);
 
-                    let span = SourceSpan::new(location, location); // TODO move the logic to get this span into a helper in the Parser.
+                    let span = SourceSpan::new(location, location);
 
                     return Err(crate::QangCompilerError::new_syntax_error(
                         "Unexpected oprand. Missing operator or ';'.".to_string(),

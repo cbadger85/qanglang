@@ -202,9 +202,8 @@ pub struct TypeInfo {
 #[derive(Debug, Clone)]
 pub enum TypeOrigin {
     Builtin,
-    Annotation(NodeId),    // Explicitly annotated by user
-    Inferred(NodeId),      // Inferred from expression
-    Generic(StringHandle), // Generic type parameter
+    Annotation(NodeId), // Explicitly annotated by user
+    Inferred(NodeId),   // Inferred from expression
 }
 
 /// The actual type representation
@@ -227,6 +226,12 @@ pub enum TypeNode {
 
     /// Type parameter: T, U, K, V
     TypeParameter(StringHandle),
+
+    /// Constrained type parameter: T : [String]
+    ConstrainedTypeParameter {
+        name: StringHandle,
+        constraint: Box<TypeNode>,
+    },
 
     /// Unresolved type reference: semantic analysis will resolve to Class, TypeAlias, or TypeParameter
     UnresolvedReference {
@@ -278,7 +283,6 @@ pub struct ObjectType {
 pub struct ObjectField {
     pub name: StringHandle,
     pub field_type: TypeNode,
-    pub optional: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -651,6 +655,9 @@ impl fmt::Display for TypeNode {
                 write!(f, ">")
             }
             TypeNode::TypeParameter(name) => write!(f, "{}", name),
+            TypeNode::ConstrainedTypeParameter { name, constraint } => {
+                write!(f, "{} : {}", name, constraint)
+            }
             TypeNode::UnresolvedReference { name, .. } => write!(f, "{}", name),
             TypeNode::Object(obj) => {
                 write!(f, "{{ ")?;
@@ -658,13 +665,7 @@ impl fmt::Display for TypeNode {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(
-                        f,
-                        "{}{}: {}",
-                        field.name,
-                        if field.optional { "?" } else { "" },
-                        field.field_type
-                    )?;
+                    write!(f, "{}: {}", field.name, field.field_type)?;
                 }
                 write!(f, " }}")
             }

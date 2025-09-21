@@ -111,6 +111,17 @@ impl TypedNodeArena {
         }
     }
 
+    pub fn get_generic_parameter_node(
+        &self,
+        node_id: NodeId,
+    ) -> TypedNodeRef<GenericParameterNode> {
+        let node = self.nodes[node_id.get()];
+        match node {
+            AstNode::GenericParam(param) => TypedNodeRef::new(node_id, param),
+            _ => panic!("Expected GenericParameterNode"),
+        }
+    }
+
     pub fn get_func_expr_node(&self, node_id: NodeId) -> TypedNodeRef<FunctionExprNode> {
         let node = self.nodes[node_id.get()];
 

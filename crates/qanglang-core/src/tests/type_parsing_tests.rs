@@ -391,6 +391,36 @@ fn test_generic_function_types() {
 }
 
 #[test]
+fn test_generic_function_types_with_constraint() {
+    let source_code = r#"
+        fn function<T : Number>(value: T) -> T? {
+            return nil;
+        }
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_mutiple_gene_function_types_with_constraint() {
+    let source_code = r#"
+        fn function<T, U : Number>(value: T) -> U {
+            return 0;
+        }
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
 fn test_single_type_parameter_generic() {
     let source_code = r#"
         var single: List<T> = nil;

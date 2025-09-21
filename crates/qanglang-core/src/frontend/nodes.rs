@@ -127,6 +127,7 @@ pub enum AstNode {
     VariableDecl(VariableDeclNode),
     ImportModuleDecl(ImportModuleDeclNode),
     TypeDecl(TypeAliasDeclNode),
+    GenericParam(GenericParameterNode),
 }
 
 impl AstNode {
@@ -182,6 +183,7 @@ impl AstNode {
             AstNode::VariableDecl(node) => node.span,
             AstNode::ImportModuleDecl(node) => node.span,
             AstNode::TypeDecl(node) => node.span,
+            AstNode::GenericParam(node) => node.span,
         }
     }
 }
@@ -273,13 +275,21 @@ pub struct ImportModuleDeclNode {
     pub span: SourceSpan,
 }
 
+/// Generic Parameter
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct GenericParameterNode {
+    pub name: NodeId, // IdentifierNode,
+    pub constraint: Option<TypeId>,
+    pub span: SourceSpan,
+}
+
 /// Class declaration: class IDENTIFIER ( : IDENTIFIER )? { classMember* }
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ClassDeclNode {
-    pub name: NodeId,               // IdentifierNode
-    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: class Name<T, U> - array of identifier nodes
-    pub superclass: Option<NodeId>, // IdentifierNode
-    pub members: NodeArrayId,       // [FunctionExprNode | FieldDeclNode]
+    pub name: NodeId,                            // IdentifierNode
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: class Name<T, U> - array of generic paramter nodes
+    pub superclass: Option<NodeId>,              // IdentifierNode
+    pub members: NodeArrayId,                    // [FunctionExprNode | FieldDeclNode]
     pub span: SourceSpan,
 }
 
@@ -301,10 +311,10 @@ pub struct FunctionDeclNode {
 /// Function expression: IDENTIFIER ( parameters? ) block
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct FunctionExprNode {
-    pub name: NodeId,            // IdentifierNode,
-    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: fn name<T, U> - array of identifier nodes
-    pub parameters: NodeArrayId, // [IdentifierNode]
-    pub body: NodeId,            // BlockStmtNode
+    pub name: NodeId,                            // IdentifierNode,
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: fn name<T, U> - array of generic paramter nodes
+    pub parameters: NodeArrayId,                 // [IdentifierNode]
+    pub body: NodeId,                            // BlockStmtNode
     pub span: SourceSpan,
 }
 
@@ -474,9 +484,9 @@ pub struct LambdaDeclNode {
 /// Lambda expression: ( parameters? ) -> ( block | expression )
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct LambdaExprNode {
-    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: <T, U> - array of identifier nodes
-    pub parameters: NodeArrayId, // [IdentifierNode]
-    pub body: NodeId,            // BlockStmtNode | ExprNode
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: <T, U> - array of generic paramter nodes
+    pub parameters: NodeArrayId,                 // [IdentifierNode]
+    pub body: NodeId,                            // BlockStmtNode | ExprNode
     pub span: SourceSpan,
 }
 
@@ -550,9 +560,9 @@ pub struct ReturnStmtNode {
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct TypeAliasDeclNode {
-    pub name: NodeId,               // IdentifierNode - the new type name
-    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: type Name<T, U> = Definition - array of identifier nodes
-    pub type_definition: TypeId,    // TypeId - what it aliases to
+    pub name: NodeId,                            // IdentifierNode - the new type name
+    pub generic_parameters: Option<NodeArrayId>, // Generic type parameters: type Name<T, U> = Definition - array of generic paramter nodes
+    pub type_definition: TypeId,                 // TypeId - what it aliases to
     pub span: SourceSpan,
 }
 

@@ -281,20 +281,29 @@ impl<'a> Parser<'a> {
                     .map(|t| t.token_type == TokenType::Arrow)
                     .unwrap_or(false)
             } else {
-                // Non-empty parameter list: look for ) ->
+                // Non-empty parameter list: look for ) -> while handling nested parentheses
                 let mut offset = 0;
-                while self
-                    .tokens
-                    .peek_ahead(offset)
-                    .map(|t| t.token_type != TokenType::RightParen)
-                    .unwrap_or(false)
-                {
+                let mut paren_depth = 0;
+
+                // Scan through tokens, properly handling nested parentheses
+                while let Some(token) = self.tokens.peek_ahead(offset) {
+                    match token.token_type {
+                        TokenType::LeftParen => paren_depth += 1,
+                        TokenType::RightParen => {
+                            if paren_depth == 0 {
+                                // Found the closing paren for the lambda parameter list
+                                return self.tokens
+                                    .peek_ahead(offset + 1)
+                                    .map(|t| t.token_type == TokenType::Arrow)
+                                    .unwrap_or(false);
+                            }
+                            paren_depth -= 1;
+                        }
+                        _ => {}
+                    }
                     offset += 1;
                 }
-                self.tokens
-                    .peek_ahead(offset + 1)
-                    .map(|t| t.token_type == TokenType::Arrow)
-                    .unwrap_or(false)
+                false
             }
         } else {
             // Before paren case - must start with '(' immediately
@@ -1602,9 +1611,56 @@ impl<'a> Parser<'a> {
 
         // Extract path from string literal
         let path_token = self.previous_token.as_ref().unwrap();
+        let path_span = self.get_previous_span();
         let path_lexeme = path_token.lexeme(&self.source_map);
         let path_str = path_lexeme[1..path_lexeme.len() - 1].iter().collect::<String>();
-        let module_path = self.strings.intern(&path_str);
+
+        // Canonicalize path exactly like module declarations
+        let current_dir = self
+            .source_map
+            .get_path()
+            .parent()
+            .expect("Expected path to be file and to be within a dir");
+        let combined_path = match current_dir.join(Path::new(&path_str)).canonicalize() {
+            Ok(combined_path) => combined_path,
+            Err(_) => {
+                return Err(QangCompilerError::new_syntax_error(
+                    "Unable to get type import path.".to_string(),
+                    path_span,
+                    self.source_map.clone(),
+                ));
+            }
+        };
+
+        match std::fs::exists(combined_path.as_path()) {
+            Ok(exists) => {
+                if !exists {
+                    self.errors
+                        .report_error(QangCompilerError::new_syntax_error(
+                            format!(
+                                "module at path '{}' does not exist.",
+                                combined_path.as_path().display(),
+                            ),
+                            path_span,
+                            self.source_map.clone(),
+                        ));
+                }
+            }
+            Err(_) => {
+                self.errors
+                    .report_error(QangCompilerError::new_syntax_error(
+                        format!(
+                            "Unable to load module from path '{}'",
+                            combined_path.as_path().display(),
+                        ),
+                        path_span,
+                        self.source_map.clone(),
+                    ));
+            }
+        }
+
+        let combined_path_str = combined_path.to_string_lossy();
+        let module_path = self.strings.intern(&combined_path_str);
 
         self.consume(TokenType::RightParen, "Expected ')' after path.")?;
         self.consume(TokenType::Dot, "Expected '.' after import(...).")?;

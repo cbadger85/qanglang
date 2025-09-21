@@ -986,200 +986,531 @@ fn test_lambda_generic_mixed_with_regular_lambdas() {
 
 #[test]
 fn test_type_import_basic() {
-    let source_code = r#"
-        type TheClass = import("./module").TheClass;
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join("module.ql");
+    fs::write(&temp_file, "// temp module for testing").expect("Failed to create temp file");
+
+    // Create a main file that uses type import
+    let main_file = temp_dir.join("main.ql");
+    let relative_path = "module.ql";
+    let source_code = format!(r#"type TheClass = import("{}").TheClass;"#, relative_path);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&temp_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_variable_declarations() {
-    let source_code = r#"
-        var instance: import("./types").User = nil;
-        var data: import("../models").Data = nil;
-        var config: import("./config/settings").Config = nil;
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "variable_declarations";
+    let types_file = temp_dir.join(format!("types_{}.ql", test_id));
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let config_dir = temp_dir.join(format!("config_{}", test_id));
+    fs::create_dir_all(&config_dir).expect("Failed to create config dir");
+    let settings_file = config_dir.join(format!("settings_{}.ql", test_id));
+
+    fs::write(&types_file, "// temp module for testing").expect("Failed to create types file");
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&settings_file, "// temp module for testing").expect("Failed to create settings file");
+
+    // Create a main file in a subdirectory so "../models" works
+    let sub_dir = temp_dir.join(format!("sub_{}", test_id));
+    fs::create_dir_all(&sub_dir).expect("Failed to create sub dir");
+    let main_file = sub_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        var instance: import("../types_{}.ql").User = nil;
+        var data: import("../models_{}.ql").Data = nil;
+        var config: import("../config_{}/settings_{}.ql").Config = nil;
+    "#, test_id, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&types_file);
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&settings_file);
+    let _ = fs::remove_dir(&config_dir);
+    let _ = fs::remove_file(&main_file);
+    let _ = fs::remove_dir(&sub_dir);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_function_parameters() {
-    let source_code = r#"
-        fn process(item: import("./types").Item) -> String {
+    use std::fs;
+
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "function_parameters";
+    let types_file = temp_dir.join(format!("types_{}.ql", test_id));
+    let request_file = temp_dir.join(format!("request_{}.ql", test_id));
+    let response_file = temp_dir.join(format!("response_{}.ql", test_id));
+    let result_file = temp_dir.join(format!("result_{}.ql", test_id));
+
+    fs::write(&types_file, "// temp module for testing").expect("Failed to create types file");
+    fs::write(&request_file, "// temp module for testing").expect("Failed to create request file");
+    fs::write(&response_file, "// temp module for testing").expect("Failed to create response file");
+    fs::write(&result_file, "// temp module for testing").expect("Failed to create result file");
+
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        fn process(item: import("types_{}.ql").Item) -> String {{
             return "done";
-        }
+        }}
 
-        fn handle(req: import("./request").Request, res: import("./response").Response) -> import("./result").Result {
+        fn handle(req: import("request_{}.ql").Request, res: import("response_{}.ql").Response) -> import("result_{}.ql").Result {{
             return nil;
-        }
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+        }}
+    "#, test_id, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&types_file);
+    let _ = fs::remove_file(&request_file);
+    let _ = fs::remove_file(&response_file);
+    let _ = fs::remove_file(&result_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_function_return_types() {
-    let source_code = r#"
-        fn createUser() -> import("./models").User {
-            return nil;
-        }
+    use std::fs;
 
-        fn getConfig() -> import("./config").Settings {
-            return nil;
-        }
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "function_return_types";
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let config_file = temp_dir.join(format!("config_{}.ql", test_id));
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&config_file, "// temp module for testing").expect("Failed to create config file");
+
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        fn createUser() -> import("models_{}.ql").User {{
+            return nil;
+        }}
+
+        fn getConfig() -> import("config_{}.ql").Settings {{
+            return nil;
+        }}
+    "#, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&config_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_complex_expressions() {
-    let source_code = r#"
-        var users: [import("./models").User] = [];
-        var optional: import("./types").Data? = nil;
-        var union: String | import("./types").CustomType = "hello";
-        var callback: (import("./request").Request) -> import("./response").Response = nil;
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "complex_expressions";
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let types_file = temp_dir.join(format!("types_{}.ql", test_id));
+    let request_file = temp_dir.join(format!("request_{}.ql", test_id));
+    let response_file = temp_dir.join(format!("response_{}.ql", test_id));
+
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&types_file, "// temp module for testing").expect("Failed to create types file");
+    fs::write(&request_file, "// temp module for testing").expect("Failed to create request file");
+    fs::write(&response_file, "// temp module for testing").expect("Failed to create response file");
+
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        var users: [import("models_{}.ql").User] = [];
+        var optional: import("types_{}.ql").Data? = nil;
+        var union: String | import("types_{}.ql").CustomType = "hello";
+        var callback: (import("request_{}.ql").Request) -> import("response_{}.ql").Response = nil;
+    "#, test_id, test_id, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&types_file);
+    let _ = fs::remove_file(&request_file);
+    let _ = fs::remove_file(&response_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_nested_expressions() {
-    let source_code = r#"
-        var nested: [[import("./types").Item]] = [];
-        var complex: { users: [import("./models").User], config: import("./config").Settings } = nil;
-        var unionArray: [String | import("./types").CustomType] = [];
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "nested_expressions";
+    let types_file = temp_dir.join(format!("types_{}.ql", test_id));
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let config_file = temp_dir.join(format!("config_{}.ql", test_id));
+
+    fs::write(&types_file, "// temp module for testing").expect("Failed to create types file");
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&config_file, "// temp module for testing").expect("Failed to create config file");
+
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        var nested: [[import("types_{}.ql").Item]] = [];
+        var complex: {{ users: [import("models_{}.ql").User], config: import("config_{}.ql").Settings }} = nil;
+        var unionArray: [String | import("types_{}.ql").CustomType] = [];
+    "#, test_id, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&types_file);
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&config_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_with_generics() {
-    let source_code = r#"
-        var container: Container<import("./types").Item> = nil;
-        var map: Map<String, import("./models").User> = nil;
-        var complex: Result<import("./data").Response, import("./errors").Error> = nil;
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "with_generics";
+    let types_file = temp_dir.join(format!("types_{}.ql", test_id));
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let data_file = temp_dir.join(format!("data_{}.ql", test_id));
+    let errors_file = temp_dir.join(format!("errors_{}.ql", test_id));
+
+    fs::write(&types_file, "// temp module for testing").expect("Failed to create types file");
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&data_file, "// temp module for testing").expect("Failed to create data file");
+    fs::write(&errors_file, "// temp module for testing").expect("Failed to create errors file");
+
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        var container: Container<import("types_{}.ql").Item> = nil;
+        var map: Map<String, import("models_{}.ql").User> = nil;
+        var complex: Result<import("data_{}.ql").Response, import("errors_{}.ql").Error> = nil;
+    "#, test_id, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&types_file);
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&data_file);
+    let _ = fs::remove_file(&errors_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_class_fields() {
-    let source_code = r#"
-        class UserService {
-            user: import("./models").User;
-            config: import("./config").Settings = nil;
-            logger: import("./utils").Logger?;
-        }
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "class_fields";
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let config_file = temp_dir.join(format!("config_{}.ql", test_id));
+    let utils_file = temp_dir.join(format!("utils_{}.ql", test_id));
+
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&config_file, "// temp module for testing").expect("Failed to create config file");
+    fs::write(&utils_file, "// temp module for testing").expect("Failed to create utils file");
+
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        class UserService {{
+            user: import("models_{}.ql").User;
+            config: import("config_{}.ql").Settings = nil;
+            logger: import("utils_{}.ql").Logger?;
+        }}
+    "#, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&config_file);
+    let _ = fs::remove_file(&utils_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_class_methods() {
-    let source_code = r#"
-        class UserService {
-            getUser(id: String) -> import("./models").User {
-                return nil;
-            }
+    use std::fs;
 
-            updateUser(user: import("./models").User) -> import("./result").UpdateResult {
-                return nil;
-            }
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "class_methods";
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let result_file = temp_dir.join(format!("result_{}.ql", test_id));
+    let request_file = temp_dir.join(format!("request_{}.ql", test_id));
+    let config_file = temp_dir.join(format!("config_{}.ql", test_id));
+    let response_file = temp_dir.join(format!("response_{}.ql", test_id));
 
-            processRequest(req: import("./request").Request, config: import("./config").Settings) -> import("./response").Response {
-                return nil;
-            }
-        }
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&result_file, "// temp module for testing").expect("Failed to create result file");
+    fs::write(&request_file, "// temp module for testing").expect("Failed to create request file");
+    fs::write(&config_file, "// temp module for testing").expect("Failed to create config file");
+    fs::write(&response_file, "// temp module for testing").expect("Failed to create response file");
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        class UserService {{
+            getUser(id: String) -> import("models_{}.ql").User {{
+                return nil;
+            }}
+
+            updateUser(user: import("models_{}.ql").User) -> import("result_{}.ql").UpdateResult {{
+                return nil;
+            }}
+
+            processRequest(req: import("request_{}.ql").Request, config: import("config_{}.ql").Settings) -> import("response_{}.ql").Response {{
+                return nil;
+            }}
+        }}
+    "#, test_id, test_id, test_id, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&result_file);
+    let _ = fs::remove_file(&request_file);
+    let _ = fs::remove_file(&config_file);
+    let _ = fs::remove_file(&response_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_in_lambda_expressions() {
-    let source_code = r#"
-        var simple = (x: import("./models").User) -> x;
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join("models.ql");
+    fs::write(&temp_file, "// temp module for testing").expect("Failed to create temp file");
+
+    // Create a main file that uses type import in lambda
+    let main_file = temp_dir.join("main.ql");
+    let relative_path = "models.ql";
+    let source_code = format!(r#"var simple = (x: import("{}").User) -> x;"#, relative_path);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&temp_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_various_paths() {
-    let source_code = r#"
-        var local: import("./local").Type = nil;
-        var parent: import("../parent").Type = nil;
-        var deep: import("../../deep/path").Type = nil;
-        var absolute: import("/absolute/path").Type = nil;
-        var withExt: import("./module.ql").Type = nil;
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory structure for the test
+    let temp_dir = std::env::temp_dir();
+    let local_file = temp_dir.join("local.ql");
+    let parent_file = temp_dir.join("parent.ql");
+    let deep_dir = temp_dir.join("deep").join("path");
+    fs::create_dir_all(&deep_dir).expect("Failed to create deep dir");
+    let deep_file = deep_dir.join("module.ql");
+    let module_file = temp_dir.join("module.ql");
+
+    fs::write(&local_file, "// temp module for testing").expect("Failed to create local file");
+    fs::write(&parent_file, "// temp module for testing").expect("Failed to create parent file");
+    fs::write(&deep_file, "// temp module for testing").expect("Failed to create deep file");
+    fs::write(&module_file, "// temp module for testing").expect("Failed to create module file");
+
+    // Create a main file in a nested directory to test various relative paths
+    let sub_dir = temp_dir.join("sub").join("nested");
+    fs::create_dir_all(&sub_dir).expect("Failed to create sub dir");
+    let main_file = sub_dir.join("main.ql");
+    let source_code = format!(r#"
+        var local: import("../../local.ql").Type = nil;
+        var parent: import("../../parent.ql").Type = nil;
+        var deep: import("../../deep/path/module.ql").Type = nil;
+        var withExt: import("../../module.ql").Type = nil;
+    "#);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&local_file);
+    let _ = fs::remove_file(&parent_file);
+    let _ = fs::remove_file(&deep_file);
+    let _ = fs::remove_file(&module_file);
+    let _ = fs::remove_file(&main_file);
+    let _ = fs::remove_dir_all(&sub_dir.parent().unwrap());
+    let _ = fs::remove_dir_all(&deep_dir.parent().unwrap());
+
     assert_no_parse_errors(&errors);
 }
 
 #[test]
 fn test_type_import_mixed_with_regular_types() {
-    let source_code = r#"
-        var mixed: String | import("./types").CustomType | Number = nil;
-        var array: [String | import("./models").User] = [];
-        var func: (String, import("./request").Request) -> Number = nil;
-        var object: { name: String, user: import("./models").User } = nil;
-    "#;
-    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
-    let strings = StringInterner::new();
+    use std::fs;
 
-    let (_program, errors) = parse_source(source_map, nodes, strings);
+    // Create a temporary directory and files for the test
+    let temp_dir = std::env::temp_dir();
+    let test_id = "mixed_with_regular_types";
+    let types_file = temp_dir.join(format!("types_{}.ql", test_id));
+    let models_file = temp_dir.join(format!("models_{}.ql", test_id));
+    let request_file = temp_dir.join(format!("request_{}.ql", test_id));
+
+    fs::write(&types_file, "// temp module for testing").expect("Failed to create types file");
+    fs::write(&models_file, "// temp module for testing").expect("Failed to create models file");
+    fs::write(&request_file, "// temp module for testing").expect("Failed to create request file");
+
+    // Create a main file
+    let main_file = temp_dir.join(format!("main_{}.ql", test_id));
+    let source_code = format!(r#"
+        var mixed: String | import("types_{}.ql").CustomType | Number = nil;
+        var array: [String | import("models_{}.ql").User] = [];
+        var func: (String, import("request_{}.ql").Request) -> Number = nil;
+        var object: {{ name: String, user: import("models_{}.ql").User }} = nil;
+    "#, test_id, test_id, test_id, test_id);
+    fs::write(&main_file, &source_code).expect("Failed to create main file");
+
+    // Use the main file path for the source map
+    let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
+    let mut nodes = TypedNodeArena::new();
+    let mut strings = StringInterner::new();
+
+    let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);
+    let _modules = parser.parse();
+    let errors = parser.into_errors();
+
+    // Clean up
+    let _ = fs::remove_file(&types_file);
+    let _ = fs::remove_file(&models_file);
+    let _ = fs::remove_file(&request_file);
+    let _ = fs::remove_file(&main_file);
+
     assert_no_parse_errors(&errors);
 }

@@ -7,5 +7,6 @@ pub mod parser;
 pub mod semantic_validator;
 pub mod source;
 pub mod tokenizer;
+pub mod type_resolver;
 pub mod typed_node_arena;
 pub mod types;

@@ -1,6 +1,8 @@
 use crate::{
     ErrorReporter, QangPipelineError, TypedNodeArena,
-    frontend::{module_map::ModuleMap, semantic_validator::SemanticValidator},
+    frontend::{
+        module_map::ModuleMap, semantic_validator::SemanticValidator, type_resolver::TypeResolver,
+    },
     memory::StringInterner,
 };
 
@@ -47,7 +49,21 @@ impl<'a> AnalysisPipeline<'a> {
             );
         }
 
-        if self.config.strict_mode && errors.has_errors() {
+        if !self.config.strict_mode && errors.has_errors() {
+            let errors = errors.take_errors();
+
+            return Err(QangPipelineError::new(errors));
+        }
+
+        for (_, module) in modules.iter() {
+            TypeResolver::new(self.strings, module.source_map.clone()).resolve(
+                module.node,
+                nodes,
+                errors,
+            );
+        }
+
+        if errors.has_errors() {
             let errors = errors.take_errors();
 
             return Err(QangPipelineError::new(errors));

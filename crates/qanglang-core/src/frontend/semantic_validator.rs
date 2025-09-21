@@ -1,38 +1,11 @@
 use std::sync::Arc;
 
-use rustc_hash::{FxBuildHasher, FxHashMap};
-
 use crate::{
-    ErrorReporter, NodeId, QangCompilerError, SourceMap, StringHandle, TypedNodeArena,
-    frontend::{
-        node_visitor::{NodeVisitor, VisitorContext},
-        types::TypeId,
-    },
+    ErrorReporter, NodeId, QangCompilerError, SourceMap, TypedNodeArena,
+    frontend::node_visitor::{NodeVisitor, VisitorContext},
     memory::StringInterner,
     nodes::SourceSpan,
 };
-
-#[derive(Debug, Clone, Default)]
-pub struct TypeEnvironment {
-    /// Maps type names to their definitions
-    type_names: FxHashMap<StringHandle, TypeId>,
-}
-
-impl TypeEnvironment {
-    pub fn new() -> Self {
-        Self {
-            type_names: FxHashMap::with_hasher(FxBuildHasher),
-        }
-    }
-
-    pub fn declare_type(&mut self, name: StringHandle, type_id: TypeId) {
-        self.type_names.insert(name, type_id);
-    }
-
-    pub fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
-        self.type_names.get(&name).copied()
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionKind {
@@ -465,7 +438,8 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                                 ctx.nodes.array.get_node_id_at(method.parameters, j)
                             {
                                 let param = ctx.nodes.get_parameter_node(param_id);
-                                let param_identifier = ctx.nodes.get_identifier_node(param.node.name);
+                                let param_identifier =
+                                    ctx.nodes.get_identifier_node(param.node.name);
                                 if let Err(error) = self.declare_variable(param_identifier) {
                                     ctx.errors.report_error(error);
                                 };

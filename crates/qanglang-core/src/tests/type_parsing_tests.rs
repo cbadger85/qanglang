@@ -979,3 +979,207 @@ fn test_lambda_generic_mixed_with_regular_lambdas() {
     let (_program, errors) = parse_source(source_map, nodes, strings);
     assert_no_parse_errors(&errors);
 }
+
+// ============================================================================
+// Type Import Tests
+// ============================================================================
+
+#[test]
+fn test_type_import_basic() {
+    let source_code = r#"
+        type TheClass = import("./module").TheClass;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_variable_declarations() {
+    let source_code = r#"
+        var instance: import("./types").User = nil;
+        var data: import("../models").Data = nil;
+        var config: import("./config/settings").Config = nil;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_function_parameters() {
+    let source_code = r#"
+        fn process(item: import("./types").Item) -> String {
+            return "done";
+        }
+
+        fn handle(req: import("./request").Request, res: import("./response").Response) -> import("./result").Result {
+            return nil;
+        }
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_function_return_types() {
+    let source_code = r#"
+        fn createUser() -> import("./models").User {
+            return nil;
+        }
+
+        fn getConfig() -> import("./config").Settings {
+            return nil;
+        }
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_complex_expressions() {
+    let source_code = r#"
+        var users: [import("./models").User] = [];
+        var optional: import("./types").Data? = nil;
+        var union: String | import("./types").CustomType = "hello";
+        var callback: (import("./request").Request) -> import("./response").Response = nil;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_nested_expressions() {
+    let source_code = r#"
+        var nested: [[import("./types").Item]] = [];
+        var complex: { users: [import("./models").User], config: import("./config").Settings } = nil;
+        var unionArray: [String | import("./types").CustomType] = [];
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_with_generics() {
+    let source_code = r#"
+        var container: Container<import("./types").Item> = nil;
+        var map: Map<String, import("./models").User> = nil;
+        var complex: Result<import("./data").Response, import("./errors").Error> = nil;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_class_fields() {
+    let source_code = r#"
+        class UserService {
+            user: import("./models").User;
+            config: import("./config").Settings = nil;
+            logger: import("./utils").Logger?;
+        }
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_class_methods() {
+    let source_code = r#"
+        class UserService {
+            getUser(id: String) -> import("./models").User {
+                return nil;
+            }
+
+            updateUser(user: import("./models").User) -> import("./result").UpdateResult {
+                return nil;
+            }
+
+            processRequest(req: import("./request").Request, config: import("./config").Settings) -> import("./response").Response {
+                return nil;
+            }
+        }
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_in_lambda_expressions() {
+    let source_code = r#"
+        var simple = (x: import("./models").User) -> x;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_various_paths() {
+    let source_code = r#"
+        var local: import("./local").Type = nil;
+        var parent: import("../parent").Type = nil;
+        var deep: import("../../deep/path").Type = nil;
+        var absolute: import("/absolute/path").Type = nil;
+        var withExt: import("./module.ql").Type = nil;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_type_import_mixed_with_regular_types() {
+    let source_code = r#"
+        var mixed: String | import("./types").CustomType | Number = nil;
+        var array: [String | import("./models").User] = [];
+        var func: (String, import("./request").Request) -> Number = nil;
+        var object: { name: String, user: import("./models").User } = nil;
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = TypedNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+    assert_no_parse_errors(&errors);
+}

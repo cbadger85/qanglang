@@ -1503,6 +1503,10 @@ impl<'a> Parser<'a> {
                 // Dynamic types: dyn, dyn?, dyn!
                 self.parse_dynamic_type()
             }
+            Some(TokenType::Import) => {
+                // Type imports: import("path").TypeName
+                self.parse_type_import(requesting_node)
+            }
             _ => Err(QangCompilerError::new_syntax_error(
                 "Expected type.".to_string(),
                 self.get_current_span(),
@@ -1588,6 +1592,39 @@ impl<'a> Parser<'a> {
         };
 
         Ok(self.nodes.type_table.create_type(dyn_type))
+    }
+
+    /// Parse type imports: import("path").TypeName
+    fn parse_type_import(&mut self, requesting_node: NodeId) -> ParseResult<TypeId> {
+        self.consume(TokenType::Import, "Expected 'import'.")?;
+        self.consume(TokenType::LeftParen, "Expected '(' after import.")?;
+        self.consume(TokenType::String, "Expected string path.")?;
+
+        // Extract path from string literal
+        let path_token = self.previous_token.as_ref().unwrap();
+        let path_lexeme = path_token.lexeme(&self.source_map);
+        let path_str = path_lexeme[1..path_lexeme.len() - 1].iter().collect::<String>();
+        let module_path = self.strings.intern(&path_str);
+
+        self.consume(TokenType::RightParen, "Expected ')' after path.")?;
+        self.consume(TokenType::Dot, "Expected '.' after import(...).")?;
+        self.consume(TokenType::Identifier, "Expected type name.")?;
+
+        // Get type name
+        let type_name_identifier = self.get_identifier()?;
+        let type_name_node = self.nodes.get_identifier_node(type_name_identifier);
+        let type_name = type_name_node.node.name;
+
+        // Create TypeImport in TypeTable
+        let type_import = TypeInfo {
+            type_node: TypeNode::TypeImport {
+                module_path,
+                type_name,
+            },
+            origin: TypeOrigin::Annotation(requesting_node),
+        };
+
+        Ok(self.nodes.type_table.create_type(type_import))
     }
 
     // ============================================================================

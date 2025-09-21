@@ -137,6 +137,10 @@ impl TypeTable {
             (TypeNode::UnresolvedReference { .. }, _) => false,
             (_, TypeNode::UnresolvedReference { .. }) => false,
 
+            // Type imports cannot be assigned until resolved by semantic analysis
+            (TypeNode::TypeImport { .. }, _) => false,
+            (_, TypeNode::TypeImport { .. }) => false,
+
             _ => false,
         }
     }
@@ -251,6 +255,12 @@ pub enum TypeNode {
 
     /// Module type: Imported modules with exported symbols
     Module(ModuleType),
+
+    /// Type imported from another module: import("path").TypeName
+    TypeImport {
+        module_path: StringHandle,
+        type_name: StringHandle,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -697,6 +707,9 @@ impl fmt::Display for TypeNode {
             TypeNode::Dynamic => write!(f, "dyn"),
             TypeNode::Module(module) => {
                 write!(f, "module {}", module.name)
+            }
+            TypeNode::TypeImport { module_path, type_name } => {
+                write!(f, "import(\"{}\").{}", module_path, type_name)
             }
         }
     }

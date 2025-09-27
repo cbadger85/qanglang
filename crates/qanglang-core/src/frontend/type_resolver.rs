@@ -13,7 +13,6 @@ use crate::{
 
 #[derive(Debug, Clone, Default)]
 pub struct TypeEnvironment {
-    /// Maps type names to their definitions
     type_names: FxHashMap<StringHandle, TypeId>,
 }
 
@@ -22,6 +21,14 @@ impl TypeEnvironment {
         Self {
             type_names: FxHashMap::with_hasher(FxBuildHasher),
         }
+    }
+
+    pub fn with_globals(_nodes: &mut TypedNodeArena) -> Self {
+        let type_names = FxHashMap::with_hasher(FxBuildHasher);
+
+        // TODO insert globals from stdlib.ql
+
+        Self { type_names }
     }
 
     pub fn declare_type(&mut self, name: StringHandle, type_id: TypeId) {
@@ -36,26 +43,60 @@ impl TypeEnvironment {
 pub struct TypeResolver<'a> {
     strings: &'a mut StringInterner,
     source_map: Arc<SourceMap>,
+    scopes: Vec<TypeEnvironment>,
+    exported_types: FxHashMap<StringHandle, TypeId>,
 }
 
 impl<'a> TypeResolver<'a> {
-    pub fn new(strings: &'a mut StringInterner, source_map: Arc<SourceMap>) -> Self {
-        TypeResolver {
+    pub fn new(
+        strings: &'a mut StringInterner,
+        source_map: Arc<SourceMap>,
+        global_types: TypeEnvironment,
+    ) -> Self {
+        Self {
             strings,
             source_map,
+            scopes: vec![global_types],
+            exported_types: FxHashMap::with_hasher(FxBuildHasher),
         }
     }
 
-    pub fn resolve(
-        &mut self,
+    pub fn collect(
+        mut self,
         program: NodeId,
         nodes: &mut TypedNodeArena,
         errors: &mut ErrorReporter,
-    ) {
+    ) -> FxHashMap<StringHandle, TypeId> {
         let mut ctx = VisitorContext::new(nodes, errors);
         let program_node = ctx.nodes.get_program_node(program);
 
         let _ = self.visit_module(program_node, &mut ctx);
+
+        self.exported_types
+    }
+
+    fn start_scope(&mut self) {
+        self.scopes.push(TypeEnvironment::new());
+    }
+
+    fn end_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn get_scope_mut(&mut self) -> &mut TypeEnvironment {
+        self.scopes
+            .last_mut()
+            .expect("Unexpected empty scope stack.")
+    }
+
+    fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(type_id) = scope.lookup_type(name) {
+                return Some(type_id);
+            }
+        }
+
+        None
     }
 }
 

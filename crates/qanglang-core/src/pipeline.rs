@@ -206,7 +206,7 @@ impl GlobalCompilerPipeline {
 
         let analyzer = AnalysisPipeline::new(&mut allocator.strings).with_config(analysis_config);
         let mut errors = ErrorReporter::new();
-        analyzer.analyze(&self.modules, &mut self.nodes, &mut errors)?;
+        analyzer.analyze(&mut self.modules, &mut self.nodes, &mut errors)?;
 
         Ok(())
     }

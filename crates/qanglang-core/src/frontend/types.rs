@@ -106,9 +106,10 @@ impl TypeTable {
 
                 // Check if from_class inherits from to_class (single level only)
                 if let Some(ref superclass) = from_class.superclass
-                    && let TypeNode::Class(super_class) = superclass.as_ref() {
-                        return super_class.name == to_class.name;
-                    }
+                    && let TypeNode::Class(super_class) = superclass.as_ref()
+                {
+                    return super_class.name == to_class.name;
+                }
 
                 false
             }
@@ -514,42 +515,43 @@ impl TypeTable {
         };
 
         if let Some(superclass) = superclass_type
-            && let TypeNode::Class(super_class) = superclass.as_ref() {
-                // Clone the superclass fields and methods to avoid borrowing issues
-                let inherited_fields: Vec<ClassField> = super_class
-                    .fields
-                    .iter()
-                    .map(|field| ClassField {
-                        name: field.name,
-                        field_type: field.field_type.clone(),
-                        inherited: true,
-                    })
-                    .collect();
+            && let TypeNode::Class(super_class) = superclass.as_ref()
+        {
+            // Clone the superclass fields and methods to avoid borrowing issues
+            let inherited_fields: Vec<ClassField> = super_class
+                .fields
+                .iter()
+                .map(|field| ClassField {
+                    name: field.name,
+                    field_type: field.field_type.clone(),
+                    inherited: true,
+                })
+                .collect();
 
-                let inherited_methods: Vec<ClassMethod> = super_class
-                    .methods
-                    .iter()
-                    .map(|method| ClassMethod {
-                        name: method.name,
-                        function_type: method.function_type.clone(),
-                        inherited: true,
-                        is_initializer: false,
-                    })
-                    .collect();
+            let inherited_methods: Vec<ClassMethod> = super_class
+                .methods
+                .iter()
+                .map(|method| ClassMethod {
+                    name: method.name,
+                    function_type: method.function_type.clone(),
+                    inherited: true,
+                    is_initializer: false,
+                })
+                .collect();
 
-                // Now add them to the subclass
-                let type_info = self
-                    .type_storage
-                    .get_mut(class_type_id.0)
-                    .ok_or("Invalid class type ID")?;
+            // Now add them to the subclass
+            let type_info = self
+                .type_storage
+                .get_mut(class_type_id.0)
+                .ok_or("Invalid class type ID")?;
 
-                if let TypeNode::Class(ref mut class) = type_info.type_node {
-                    // Add inherited fields (at the beginning)
-                    class.fields.splice(0..0, inherited_fields);
-                    // Add inherited methods (at the beginning)
-                    class.methods.splice(0..0, inherited_methods);
-                }
+            if let TypeNode::Class(ref mut class) = type_info.type_node {
+                // Add inherited fields (at the beginning)
+                class.fields.splice(0..0, inherited_fields);
+                // Add inherited methods (at the beginning)
+                class.methods.splice(0..0, inherited_methods);
             }
+        }
 
         Ok(())
     }
@@ -649,11 +651,14 @@ impl fmt::Display for TypeNode {
             }
             TypeNode::Union(types) => {
                 // Check if the union contains nil
-                let has_nil = types.iter().any(|t| matches!(t, TypeNode::Primitive(PrimitiveType::Nil)));
+                let has_nil = types
+                    .iter()
+                    .any(|t| matches!(t, TypeNode::Primitive(PrimitiveType::Nil)));
 
                 if has_nil {
                     // Nullable syntax: show non-nil types with ? suffix
-                    let non_nil_types: Vec<&TypeNode> = types.iter()
+                    let non_nil_types: Vec<&TypeNode> = types
+                        .iter()
                         .filter(|t| !matches!(t, TypeNode::Primitive(PrimitiveType::Nil)))
                         .collect();
 
@@ -708,7 +713,10 @@ impl fmt::Display for TypeNode {
             TypeNode::Module(module) => {
                 write!(f, "module {}", module.name)
             }
-            TypeNode::TypeImport { module_path, type_name } => {
+            TypeNode::TypeImport {
+                module_path,
+                type_name,
+            } => {
                 write!(f, "import(\"{}\").{}", module_path, type_name)
             }
         }

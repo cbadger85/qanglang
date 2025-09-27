@@ -5,7 +5,15 @@ use std::{
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use crate::{NodeId, SourceMap};
+use crate::{NodeId, SourceMap, StringHandle, frontend::types::TypeId};
+
+#[derive(Debug, Default, Clone)]
+pub struct ModuleSource {
+    pub node: NodeId,
+    pub source_map: Arc<SourceMap>,
+    pub dependencies: Vec<PathBuf>,
+    pub exported_types: FxHashMap<StringHandle, TypeId>,
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct ModuleMap {
@@ -13,13 +21,6 @@ pub struct ModuleMap {
     pub main_modules: Vec<PathBuf>,
     dependency_graph: FxHashMap<PathBuf, Vec<PathBuf>>,
     reverse_dependencies: FxHashMap<PathBuf, Vec<PathBuf>>,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct ModuleSource {
-    pub node: NodeId,
-    pub source_map: Arc<SourceMap>,
-    pub dependencies: Vec<PathBuf>,
 }
 
 impl ModuleMap {
@@ -40,6 +41,7 @@ impl ModuleMap {
                 node,
                 source_map,
                 dependencies: Vec::new(),
+                exported_types: FxHashMap::with_hasher(FxBuildHasher),
             },
         );
     }
@@ -106,5 +108,22 @@ impl ModuleMap {
     /// Iterate over all modules
     pub fn iter(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
         self.modules.iter().map(|(k, v)| (k.as_path(), v))
+    }
+
+    /// Iterate over all modules mutably
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Path, &mut ModuleSource)> {
+        self.modules.iter_mut().map(|(k, v)| (k.as_path(), v))
+    }
+
+    /// Set the exported types for a module (called after its type resolution)
+    pub fn set_module_exports(&mut self, path: &Path, exports: FxHashMap<StringHandle, TypeId>) {
+        if let Some(module) = self.modules.get_mut(path) {
+            module.exported_types = exports;
+        }
+    }
+
+    /// Get exported types from a module
+    pub fn get_module_exports(&self, path: &Path) -> Option<&FxHashMap<StringHandle, TypeId>> {
+        self.modules.get(path).map(|m| &m.exported_types)
     }
 }

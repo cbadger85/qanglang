@@ -87,18 +87,17 @@ pub fn run_tests_from_files(
 pub fn run_test_file(source_file: SourceFile, vm_builder: Option<fn(&mut Vm)>) -> TestSuiteResult {
     let mut allocator = HeapAllocator::new();
 
-    // Compile the test file
     let mut pipeline = GlobalCompilerPipeline::new();
-    let program = match pipeline.process_files(vec![source_file.file_path.clone()], &mut allocator)
-    {
+    let program = match pipeline.parse_from_root(source_file.file_path.clone(), &mut allocator) {
         Ok(_) => {
-            let main_modules = pipeline.get_main_modules();
-            if main_modules.is_empty() {
-                let error_messages = ["No main module found".to_string()];
-                let error = format!("Compilation failed: {}", error_messages.join("; "));
-                return TestSuiteResult::failure(source_file.display_path, error);
-            }
-            let main_module_path = main_modules[0].clone();
+            let main_module_path = match pipeline.modules.get_main_path() {
+                Some(path) => path.to_path_buf(),
+                None => {
+                    let error_messages = ["No main module found".to_string()];
+                    let error = format!("Compilation failed: {}", error_messages.join("; "));
+                    return TestSuiteResult::failure(source_file.display_path, error);
+                }
+            };
             match pipeline.compile_module(&main_module_path, &mut allocator) {
                 Ok(program) => program,
                 Err(errors) => {

@@ -11,25 +11,20 @@ use crate::{NodeId, SourceMap, StringHandle, frontend::types::TypeId};
 pub struct ModuleSource {
     pub node: NodeId,
     pub source_map: Arc<SourceMap>,
-    pub dependencies: Vec<PathBuf>,
     pub exported_types: FxHashMap<StringHandle, TypeId>,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct ModuleMap {
     modules: FxHashMap<PathBuf, ModuleSource>,
-    pub main_modules: Vec<PathBuf>,
-    dependency_graph: FxHashMap<PathBuf, Vec<PathBuf>>,
-    reverse_dependencies: FxHashMap<PathBuf, Vec<PathBuf>>,
+    main_module: Option<PathBuf>,
 }
 
 impl ModuleMap {
     pub fn new() -> Self {
         Self {
             modules: FxHashMap::with_hasher(FxBuildHasher),
-            main_modules: Vec::new(),
-            dependency_graph: FxHashMap::with_hasher(FxBuildHasher),
-            reverse_dependencies: FxHashMap::with_hasher(FxBuildHasher),
+            main_module: None,
         }
     }
 
@@ -40,90 +35,38 @@ impl ModuleMap {
             ModuleSource {
                 node,
                 source_map,
-                dependencies: Vec::new(),
                 exported_types: FxHashMap::with_hasher(FxBuildHasher),
             },
         );
     }
 
-    /// Mark a module as a main module (not imported by others)
     pub fn add_main_module(&mut self, path: PathBuf) {
-        if !self.main_modules.contains(&path) {
-            self.main_modules.push(path);
-        }
+        self.main_module = Some(path);
     }
 
-    /// Add a dependency relationship
-    pub fn add_dependency(&mut self, from: &Path, to: &Path) {
-        let from_path = from.to_path_buf();
-        let to_path = to.to_path_buf();
-
-        // Add to dependency graph
-        self.dependency_graph
-            .entry(from_path.clone())
-            .or_default()
-            .push(to_path.clone());
-
-        // Add to reverse dependencies
-        self.reverse_dependencies
-            .entry(to_path.clone())
-            .or_default()
-            .push(from_path.clone());
-
-        // Update the module's dependency list
-        if let Some(module) = self.modules.get_mut(&from_path)
-            && !module.dependencies.contains(&to_path)
-        {
-            module.dependencies.push(to_path);
-        }
-    }
-
-    /// Get all main modules
-    pub fn get_main_modules(&self) -> &[PathBuf] {
-        &self.main_modules
-    }
-
-    /// Get the first main module (for backward compatibility)
     pub fn get_main(&self) -> Option<&ModuleSource> {
-        self.main_modules
-            .first()
+        self.main_module
+            .as_ref()
             .and_then(|path| self.modules.get(path))
     }
 
-    /// Get a specific module
+    pub fn get_main_path(&self) -> Option<&Path> {
+        self.main_module.as_ref().map(|p| p.as_path())
+    }
+
     pub fn get(&self, path: &Path) -> Option<&ModuleSource> {
         self.modules.get(path)
     }
 
-    /// Check if a module exists
     pub fn has(&self, path: &Path) -> bool {
         self.modules.contains_key(path)
     }
 
-    /// Check if a module is a main module (not imported by others)
-    pub fn is_main_module(&self, path: &Path) -> bool {
-        self.main_modules.contains(&path.to_path_buf())
-    }
-
-    /// Iterate over all modules
     pub fn iter(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
         self.modules.iter().map(|(k, v)| (k.as_path(), v))
     }
 
-    /// Iterate over all modules mutably
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Path, &mut ModuleSource)> {
         self.modules.iter_mut().map(|(k, v)| (k.as_path(), v))
-    }
-
-    /// Set the exported types for a module (called after its type resolution)
-    pub fn set_module_exports(&mut self, path: &Path, exports: FxHashMap<StringHandle, TypeId>) {
-        if let Some(module) = self.modules.get_mut(path) {
-            module.exported_types = exports;
-        }
-    }
-
-    /// Get exported types from a module
-    pub fn get_module_exports(&self, path: &Path) -> Option<&FxHashMap<StringHandle, TypeId>> {
-        self.modules.get(path).map(|m| &m.exported_types)
     }
 }

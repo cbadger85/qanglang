@@ -1,11 +1,11 @@
 mod repl;
 
 use qanglang_core::{
-    ErrorMessageFormat, GlobalCompilerPipeline, HeapAllocator, SourceMap, Vm, disassemble_program,
+    ErrorMessageFormat, GlobalCompilerPipeline, HeapAllocator, Vm, disassemble_program,
 };
 use qanglang_ls::run_language_server;
 use repl::run_repl;
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use clap::{ArgAction, Parser, Subcommand};
 
@@ -199,16 +199,7 @@ fn run_script(filename: &str, debug_mode: bool, heap_dump: bool, error_format: &
         .process_root(path.clone(), &mut allocator)
         .and_then(|_| {
             let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-            let main_modules = pipeline.get_main_modules();
-            if main_modules.is_empty() {
-                return Err(qanglang_core::QangPipelineError::new(vec![
-                    qanglang_core::QangCompilerError::new_analysis_error(
-                        "No main module found".to_string(),
-                        qanglang_core::nodes::SourceSpan::default(),
-                        Arc::new(SourceMap::default()),
-                    ),
-                ]));
-            }
+
             pipeline.compile_module(&canonical_path, &mut allocator)
         }) {
         Ok(program) => {

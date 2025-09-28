@@ -76,20 +76,8 @@ impl GlobalCompilerPipeline {
         file_paths: Vec<PathBuf>,
         allocator: &mut HeapAllocator,
     ) -> Result<(), QangPipelineError> {
-        // First pass: parse all files and track imports
         for file_path in &file_paths {
             self.parse_file_recursive(file_path, allocator)?;
-        }
-
-        // Second pass: determine main modules (files that aren't imported)
-        for file_path in file_paths {
-            let canonical_path = file_path
-                .canonicalize()
-                .unwrap_or_else(|_| file_path.clone());
-
-            if !self.imported_files.contains(&canonical_path) {
-                self.modules.main_modules.push(canonical_path);
-            }
         }
 
         Ok(())
@@ -155,8 +143,6 @@ impl GlobalCompilerPipeline {
         for import_path in import_paths {
             self.imported_files.insert(import_path.clone());
 
-            self.modules.add_dependency(module_path, &import_path);
-
             match self.parse_file_recursive(&import_path, allocator) {
                 Ok(_) => {}
                 Err(dep_error) => {
@@ -168,10 +154,6 @@ impl GlobalCompilerPipeline {
         }
 
         Ok(())
-    }
-
-    pub fn get_main_modules(&self) -> &[PathBuf] {
-        &self.modules.main_modules
     }
 
     pub fn process_files(
@@ -332,9 +314,9 @@ impl GlobalCompilerPipeline {
 
         pipeline.analyze_all_modules(allocator)?;
 
-        let main_module_path = {
-            let main_modules = pipeline.get_main_modules();
-            if main_modules.is_empty() {
+        let main_module_path = match pipeline.modules.get_main_path() {
+            Some(path) => path.to_path_buf(),
+            None => {
                 return Err(QangPipelineError::new(vec![
                     QangCompilerError::new_analysis_error(
                         "No main module found during compilation".to_string(),
@@ -343,7 +325,6 @@ impl GlobalCompilerPipeline {
                     ),
                 ]));
             }
-            main_modules[0].clone()
         };
 
         pipeline.compile_module(&main_module_path, allocator)

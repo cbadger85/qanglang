@@ -326,13 +326,37 @@ impl<'a> TypeResolver<'a> {
             }
         }
 
+        if all_resolved {
+            // All components resolved - update the type table with the resolved generic type
+            // The generic type is now fully resolved (base type and all arguments are resolved)
+            let resolved_generic_type = GenericType {
+                base_name: generic_type.base_name,
+                type_arguments: generic_type.type_arguments.clone(),
+            };
+
+            let resolved_type_info = TypeInfo {
+                type_node: TypeNode::Generic(resolved_generic_type),
+                origin: ctx
+                    .nodes
+                    .type_table
+                    .get_type_info(type_id)
+                    .unwrap()
+                    .origin
+                    .clone(),
+            };
+
+            ctx.nodes
+                .type_table
+                .replace_type(type_id, resolved_type_info);
+        }
+
         all_resolved
     }
 
     fn resolve_function_type(
         &mut self,
         func_type: &FunctionType,
-        _type_id: TypeId,
+        type_id: TypeId,
         ctx: &mut VisitorContext,
     ) -> bool {
         // Resolve all parameter types
@@ -777,6 +801,61 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
                         self.visit_block_statement(body, ctx)?;
 
                         self.end_scope(ctx);
+
+                        // Create function type for the method and add to class
+                        let method_name = method_name_node.node.name;
+
+                        // Collect parameter types
+                        let param_count = ctx.nodes.array.size(method.parameters);
+                        let mut param_types = Vec::new();
+                        for j in 0..param_count {
+                            if let Some(param_id) =
+                                ctx.nodes.array.get_node_id_at(method.parameters, j)
+                            {
+                                let param = ctx.nodes.get_parameter_node(param_id);
+                                if let Some(param_type_id) = param.node.parameter_type {
+                                    param_types.push(param_type_id);
+                                } else {
+                                    // If no explicit type, use dynamic type
+                                    let dyn_type = TypeInfo {
+                                        type_node: TypeNode::DynamicNullable,
+                                        origin: TypeOrigin::Builtin,
+                                    };
+                                    let dyn_type_id = ctx.nodes.type_table.create_type(dyn_type);
+                                    param_types.push(dyn_type_id);
+                                }
+                            }
+                        }
+
+                        // Get return type
+                        let return_type = if let Some(return_type_id) = method.return_type {
+                            return_type_id
+                        } else {
+                            // If no explicit return type, use dynamic type
+                            let dyn_type = TypeInfo {
+                                type_node: TypeNode::DynamicNullable,
+                                origin: TypeOrigin::Builtin,
+                            };
+                            ctx.nodes.type_table.create_type(dyn_type)
+                        };
+
+                        // Create function type for the method
+                        let method_function_type_id = ctx.nodes.type_table.create_function_type(
+                            param_types,
+                            return_type,
+                            member_id,
+                        );
+
+                        // Add method to class type with proper is_initializer flag
+                        if let Err(e) = ctx.nodes.type_table.add_class_method(
+                            class_type_id,
+                            method_name,
+                            method_function_type_id,
+                            is_initializer,
+                        ) {
+                            // Log error but continue processing
+                            eprintln!("Failed to add method to class: {}", e);
+                        }
                     }
                     super::nodes::ClassMemberNode::Field(field) => {
                         // Process field type annotation if present
@@ -813,8 +892,8 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         let module_path_str = self.strings.get_string(module_path);
         let module_path_buf = std::path::PathBuf::from(module_path_str);
 
-        // Check if the target module exists in ModuleMap
-        if let Some(target_module) = self.modules.get(&module_path_buf) {
+        // Verify module exists and create a module type for this import
+        if self.modules.has(&module_path_buf) {
             // Create a module type for this import
             let module_type_id = ctx
                 .nodes
@@ -828,7 +907,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
             // Note: Module types themselves don't need resolution, but their exported types
             // will be resolved when accessed via TypeImport nodes
         } else {
-            // Report error if module not found
+            // Report error if module not found (should be rare since modules are pre-parsed)
             let message = format!("Module '{}' not found during import", module_path_str);
             let span = ctx.nodes.get_node(import_decl.id).span();
             let error =
@@ -878,12 +957,8 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
     fn visit_parameter(
         &mut self,
         parameter: super::typed_node_arena::TypedNodeRef<super::nodes::ParameterNode>,
-        ctx: &mut VisitorContext,
+        _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // Get parameter name
-        let param_name_node = ctx.nodes.get_identifier_node(parameter.node.name);
-        let param_name = param_name_node.node.name;
-
         // Process parameter type annotation if present
         if let Some(param_type_id) = parameter.node.parameter_type {
             // Add parameter type to worklist for resolution

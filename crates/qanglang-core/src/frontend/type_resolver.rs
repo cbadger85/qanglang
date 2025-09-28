@@ -372,6 +372,31 @@ impl<'a> TypeResolver<'a> {
             all_resolved = false;
         }
 
+        if all_resolved {
+            // All components resolved - update the type table with the resolved function type
+            // The function type is now fully resolved (all parameters and return type are resolved)
+            let resolved_function_type = FunctionType {
+                generic_parameters: func_type.generic_parameters.clone(),
+                parameters: func_type.parameters.clone(),
+                return_type: func_type.return_type,
+            };
+
+            let resolved_type_info = TypeInfo {
+                type_node: TypeNode::Function(resolved_function_type),
+                origin: ctx
+                    .nodes
+                    .type_table
+                    .get_type_info(type_id)
+                    .unwrap()
+                    .origin
+                    .clone(),
+            };
+
+            ctx.nodes
+                .type_table
+                .replace_type(type_id, resolved_type_info);
+        }
+
         all_resolved
     }
 
@@ -858,9 +883,32 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
                         }
                     }
                     super::nodes::ClassMemberNode::Field(field) => {
-                        // Process field type annotation if present
-                        if let Some(field_type_id) = field.field_type {
+                        // Get field name
+                        let field_name_node = ctx.nodes.get_identifier_node(field.name);
+                        let field_name = field_name_node.node.name;
+
+                        // Get field type
+                        let field_type = if let Some(field_type_id) = field.field_type {
+                            // Add to worklist for resolution
                             self.unresolved_worklist.push(field_type_id);
+                            field_type_id
+                        } else {
+                            // If no explicit type, use dynamic type
+                            let dyn_type = TypeInfo {
+                                type_node: TypeNode::DynamicNullable,
+                                origin: TypeOrigin::Builtin,
+                            };
+                            ctx.nodes.type_table.create_type(dyn_type)
+                        };
+
+                        // Add field to class type
+                        if let Err(e) = ctx.nodes.type_table.add_class_field(
+                            class_type_id,
+                            field_name,
+                            field_type,
+                        ) {
+                            // Log error but continue processing
+                            eprintln!("Failed to add field to class: {}", e);
                         }
 
                         // Visit field initializer if present
@@ -963,9 +1011,6 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         if let Some(param_type_id) = parameter.node.parameter_type {
             // Add parameter type to worklist for resolution
             self.unresolved_worklist.push(param_type_id);
-
-            // TODO: In the future, we might want to register parameter names in scope
-            // for local variable type checking, but for now we only resolve types
         }
 
         Ok(())

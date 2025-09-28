@@ -77,8 +77,15 @@ impl TypeTable {
             (TypeNode::Primitive(a), TypeNode::Primitive(b)) => a == b,
 
             // Array types (covariant)
-            (TypeNode::Array(from_elem), TypeNode::Array(to_elem)) => {
-                self.is_type_assignable(from_elem, to_elem)
+            (TypeNode::Array(from_elem_id), TypeNode::Array(to_elem_id)) => {
+                if let (Some(from_elem), Some(to_elem)) = (
+                    self.get_type_info(*from_elem_id),
+                    self.get_type_info(*to_elem_id),
+                ) {
+                    self.is_type_assignable(&from_elem.type_node, &to_elem.type_node)
+                } else {
+                    false
+                }
             }
 
             // Function types (contravariant in params, covariant in return)
@@ -88,14 +95,29 @@ impl TypeTable {
                 }
 
                 // Parameters are contravariant
-                for (from_param, to_param) in from_fn.parameters.iter().zip(&to_fn.parameters) {
-                    if !self.is_type_assignable(to_param, from_param) {
+                for (from_param_id, to_param_id) in from_fn.parameters.iter().zip(&to_fn.parameters)
+                {
+                    if let (Some(from_param), Some(to_param)) = (
+                        self.get_type_info(*from_param_id),
+                        self.get_type_info(*to_param_id),
+                    ) {
+                        if !self.is_type_assignable(&to_param.type_node, &from_param.type_node) {
+                            return false;
+                        }
+                    } else {
                         return false;
                     }
                 }
 
                 // Return type is covariant
-                self.is_type_assignable(&from_fn.return_type, &to_fn.return_type)
+                if let (Some(from_ret), Some(to_ret)) = (
+                    self.get_type_info(from_fn.return_type),
+                    self.get_type_info(to_fn.return_type),
+                ) {
+                    self.is_type_assignable(&from_ret.type_node, &to_ret.type_node)
+                } else {
+                    false
+                }
             }
 
             // Class inheritance (subclass assignable to superclass)
@@ -105,19 +127,27 @@ impl TypeTable {
                 }
 
                 // Check if from_class inherits from to_class (single level only)
-                if let Some(ref superclass) = from_class.superclass
-                    && let TypeNode::Class(super_class) = superclass.as_ref()
-                {
-                    return super_class.name == to_class.name;
+                if let Some(superclass_id) = from_class.superclass {
+                    if let Some(super_info) = self.get_type_info(superclass_id) {
+                        if let TypeNode::Class(super_class) = &super_info.type_node {
+                            return super_class.name == to_class.name;
+                        }
+                    }
                 }
 
                 false
             }
 
             // Union types
-            (from_type, TypeNode::Union(union_types)) => union_types
-                .iter()
-                .any(|to_type| self.is_type_assignable(from_type, to_type)),
+            (from_type, TypeNode::Union(union_type_ids)) => {
+                union_type_ids.iter().any(|to_type_id| {
+                    if let Some(to_type) = self.get_type_info(*to_type_id) {
+                        self.is_type_assignable(from_type, &to_type.type_node)
+                    } else {
+                        false
+                    }
+                })
+            }
 
             // Generic types (nominal typing for now)
             (TypeNode::Generic(from_gen), TypeNode::Generic(to_gen)) => {
@@ -127,7 +157,16 @@ impl TypeTable {
                         .type_arguments
                         .iter()
                         .zip(&to_gen.type_arguments)
-                        .all(|(from_arg, to_arg)| self.is_type_assignable(from_arg, to_arg))
+                        .all(|(from_arg_id, to_arg_id)| {
+                            if let (Some(from_arg), Some(to_arg)) = (
+                                self.get_type_info(*from_arg_id),
+                                self.get_type_info(*to_arg_id),
+                            ) {
+                                self.is_type_assignable(&from_arg.type_node, &to_arg.type_node)
+                            } else {
+                                false
+                            }
+                        })
             }
 
             (TypeNode::Module(from_mod), TypeNode::Module(to_mod)) => {
@@ -217,13 +256,13 @@ pub enum TypeNode {
     Primitive(PrimitiveType),
 
     /// Array type: [T]
-    Array(Box<TypeNode>),
+    Array(TypeId),
 
     /// Function type: (T1, T2) -> R
     Function(FunctionType),
 
     /// Union type: T1 | T2 | T3
-    Union(Vec<TypeNode>),
+    Union(Vec<TypeId>),
 
     /// Generic type: Array<T>, Map<K, V>
     Generic(GenericType),
@@ -234,7 +273,7 @@ pub enum TypeNode {
     /// Constrained type parameter: T : [String]
     ConstrainedTypeParameter {
         name: StringHandle,
-        constraint: Box<TypeNode>,
+        constraint: TypeId,
     },
 
     /// Unresolved type reference: semantic analysis will resolve to Class, TypeAlias, or TypeParameter
@@ -275,14 +314,14 @@ pub enum PrimitiveType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionType {
     pub generic_parameters: Option<Vec<StringHandle>>,
-    pub parameters: Vec<TypeNode>,
-    pub return_type: Box<TypeNode>,
+    pub parameters: Vec<TypeId>,
+    pub return_type: TypeId,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericType {
-    pub base_name: StringHandle,       // Array, Map, etc.
-    pub type_arguments: Vec<TypeNode>, // [T], [K, V], etc.
+    pub base_name: StringHandle,     // Array, Map, etc.
+    pub type_arguments: Vec<TypeId>, // [T], [K, V], etc.
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -293,14 +332,14 @@ pub struct ObjectType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectField {
     pub name: StringHandle,
-    pub field_type: TypeNode,
+    pub field_type: TypeId,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassType {
     pub name: StringHandle,
     pub generic_parameters: Option<Vec<StringHandle>>,
-    pub superclass: Option<Box<TypeNode>>, // Direct parent only
+    pub superclass: Option<TypeId>, // Direct parent only
     pub fields: Vec<ClassField>,
     pub methods: Vec<ClassMethod>,
     pub node_id: NodeId, // Reference to the class declaration AST node
@@ -309,7 +348,7 @@ pub struct ClassType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassField {
     pub name: StringHandle,
-    pub field_type: TypeNode,
+    pub field_type: TypeId,
     pub inherited: bool, // True if inherited from parent
 }
 
@@ -331,7 +370,7 @@ pub struct ModuleType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleExport {
     pub name: StringHandle,
-    pub export_type: TypeNode,
+    pub export_type: TypeId,
 }
 
 /// Common built-in types for convenience
@@ -349,18 +388,10 @@ pub struct BuiltinTypes {
 impl TypeTable {
     /// Helper to create an array type
     pub fn create_array_type(&mut self, element_type: TypeId, node: NodeId) -> TypeId {
-        if let Some(element_info) = self.get_type_info(element_type) {
-            self.create_type(TypeInfo {
-                type_node: TypeNode::Array(Box::new(element_info.type_node.clone())),
-                origin: TypeOrigin::Inferred(node),
-            })
-        } else {
-            // Fallback to dyn! array
-            self.create_type(TypeInfo {
-                type_node: TypeNode::Array(Box::new(TypeNode::DynamicTop)),
-                origin: TypeOrigin::Inferred(node),
-            })
-        }
+        self.create_type(TypeInfo {
+            type_node: TypeNode::Array(element_type),
+            origin: TypeOrigin::Inferred(node),
+        })
     }
 
     /// Helper to create a function type
@@ -370,22 +401,11 @@ impl TypeTable {
         return_type: TypeId,
         node: NodeId,
     ) -> TypeId {
-        let param_nodes: Vec<TypeNode> = param_types
-            .into_iter()
-            .filter_map(|id| self.get_type_info(id))
-            .map(|info| info.type_node.clone())
-            .collect();
-
-        let return_node = self
-            .get_type_info(return_type)
-            .map(|info| info.type_node.clone())
-            .unwrap_or(TypeNode::DynamicTop);
-
         self.create_type(TypeInfo {
             type_node: TypeNode::Function(FunctionType {
                 generic_parameters: None,
-                parameters: param_nodes,
-                return_type: Box::new(return_node),
+                parameters: param_types,
+                return_type,
             }),
             origin: TypeOrigin::Inferred(node),
         })
@@ -393,14 +413,8 @@ impl TypeTable {
 
     /// Helper to create a union type
     pub fn create_union_type(&mut self, type_ids: Vec<TypeId>, node: NodeId) -> TypeId {
-        let type_nodes: Vec<TypeNode> = type_ids
-            .into_iter()
-            .filter_map(|id| self.get_type_info(id))
-            .map(|info| info.type_node.clone())
-            .collect();
-
         self.create_type(TypeInfo {
-            type_node: TypeNode::Union(type_nodes),
+            type_node: TypeNode::Union(type_ids),
             origin: TypeOrigin::Inferred(node),
         })
     }
@@ -412,15 +426,11 @@ impl TypeTable {
         superclass_type: Option<TypeId>,
         node_id: NodeId,
     ) -> TypeId {
-        let superclass = superclass_type
-            .and_then(|id| self.get_type_info(id))
-            .map(|info| Box::new(info.type_node.clone()));
-
         // Start with empty fields and methods - they'll be populated during type checking
         let class_type = ClassType {
             name,
             generic_parameters: None,
-            superclass,
+            superclass: superclass_type,
             fields: Vec::new(),
             methods: Vec::new(),
             node_id,
@@ -439,12 +449,6 @@ impl TypeTable {
         field_name: StringHandle,
         field_type: TypeId,
     ) -> Result<(), String> {
-        let field_type_node = self
-            .get_type_info(field_type)
-            .ok_or("Invalid field type")?
-            .type_node
-            .clone();
-
         let type_info = self
             .type_storage
             .get_mut(class_type_id.0)
@@ -453,7 +457,7 @@ impl TypeTable {
         if let TypeNode::Class(ref mut class) = type_info.type_node {
             class.fields.push(ClassField {
                 name: field_name,
-                field_type: field_type_node,
+                field_type,
                 inherited: false,
             });
             Ok(())
@@ -514,42 +518,46 @@ impl TypeTable {
             }
         };
 
-        if let Some(superclass) = superclass_type
-            && let TypeNode::Class(super_class) = superclass.as_ref()
-        {
-            // Clone the superclass fields and methods to avoid borrowing issues
-            let inherited_fields: Vec<ClassField> = super_class
-                .fields
-                .iter()
-                .map(|field| ClassField {
-                    name: field.name,
-                    field_type: field.field_type.clone(),
-                    inherited: true,
-                })
-                .collect();
+        if let Some(superclass_id) = superclass_type {
+            let super_class_info = self
+                .get_type_info(superclass_id)
+                .ok_or("Invalid superclass type ID")?;
 
-            let inherited_methods: Vec<ClassMethod> = super_class
-                .methods
-                .iter()
-                .map(|method| ClassMethod {
-                    name: method.name,
-                    function_type: method.function_type.clone(),
-                    inherited: true,
-                    is_initializer: false,
-                })
-                .collect();
+            if let TypeNode::Class(super_class) = &super_class_info.type_node {
+                // Clone the superclass fields and methods to avoid borrowing issues
+                let inherited_fields: Vec<ClassField> = super_class
+                    .fields
+                    .iter()
+                    .map(|field| ClassField {
+                        name: field.name,
+                        field_type: field.field_type.clone(),
+                        inherited: true,
+                    })
+                    .collect();
 
-            // Now add them to the subclass
-            let type_info = self
-                .type_storage
-                .get_mut(class_type_id.0)
-                .ok_or("Invalid class type ID")?;
+                let inherited_methods: Vec<ClassMethod> = super_class
+                    .methods
+                    .iter()
+                    .map(|method| ClassMethod {
+                        name: method.name,
+                        function_type: method.function_type.clone(),
+                        inherited: true,
+                        is_initializer: false,
+                    })
+                    .collect();
 
-            if let TypeNode::Class(ref mut class) = type_info.type_node {
-                // Add inherited fields (at the beginning)
-                class.fields.splice(0..0, inherited_fields);
-                // Add inherited methods (at the beginning)
-                class.methods.splice(0..0, inherited_methods);
+                // Now add them to the subclass
+                let type_info = self
+                    .type_storage
+                    .get_mut(class_type_id.0)
+                    .ok_or("Invalid class type ID")?;
+
+                if let TypeNode::Class(ref mut class) = type_info.type_node {
+                    // Add inherited fields (at the beginning)
+                    class.fields.splice(0..0, inherited_fields);
+                    // Add inherited methods (at the beginning)
+                    class.methods.splice(0..0, inherited_methods);
+                }
             }
         }
 
@@ -610,12 +618,6 @@ impl TypeTable {
         export_name: StringHandle,
         export_type: TypeId,
     ) -> Result<(), String> {
-        let export_type_node = self
-            .get_type_info(export_type)
-            .ok_or("Invalid export type")?
-            .type_node
-            .clone();
-
         let type_info = self
             .type_storage
             .get_mut(module_type_id.0)
@@ -624,100 +626,124 @@ impl TypeTable {
         if let TypeNode::Module(ref mut module) = type_info.type_node {
             module.exports.push(ModuleExport {
                 name: export_name,
-                export_type: export_type_node,
+                export_type,
             });
             Ok(())
         } else {
             Err("Type is not a module".to_string())
         }
     }
-}
 
-// Display implementations for nice error messages
-impl fmt::Display for TypeNode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TypeNode::Primitive(prim) => write!(f, "{}", prim),
-            TypeNode::Array(elem) => write!(f, "[{}]", elem),
-            TypeNode::Function(func) => {
-                write!(f, "(")?;
-                for (i, param) in func.parameters.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", param)?;
-                }
-                write!(f, ") -> {}", func.return_type)
+    /// Format a type for display purposes
+    pub fn format_type(&self, type_id: TypeId) -> String {
+        if let Some(type_info) = self.get_type_info(type_id) {
+            self.format_type_node(&type_info.type_node)
+        } else {
+            "<unknown type>".to_string()
+        }
+    }
+
+    /// Format a TypeNode for display purposes
+    fn format_type_node(&self, type_node: &TypeNode) -> String {
+        match type_node {
+            TypeNode::Primitive(prim) => format!("{}", prim),
+            TypeNode::Array(elem_id) => {
+                format!("[{}]", self.format_type(*elem_id))
             }
-            TypeNode::Union(types) => {
-                // Check if the union contains nil
-                let has_nil = types
-                    .iter()
-                    .any(|t| matches!(t, TypeNode::Primitive(PrimitiveType::Nil)));
-
-                if has_nil {
-                    // Nullable syntax: show non-nil types with ? suffix
-                    let non_nil_types: Vec<&TypeNode> = types
-                        .iter()
-                        .filter(|t| !matches!(t, TypeNode::Primitive(PrimitiveType::Nil)))
-                        .collect();
-
-                    for (i, t) in non_nil_types.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, " | ")?;
-                        }
-                        write!(f, "{}?", t)?;
+            TypeNode::Function(func) => {
+                let mut result = String::from("(");
+                for (i, param_id) in func.parameters.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
                     }
+                    result.push_str(&self.format_type(*param_id));
+                }
+                result.push_str(") -> ");
+                result.push_str(&self.format_type(func.return_type));
+                result
+            }
+            TypeNode::Union(type_ids) => {
+                // Check if the union contains nil by resolving each TypeId
+                let mut nil_found = false;
+                let mut non_nil_types = Vec::new();
+
+                for type_id in type_ids {
+                    if let Some(type_info) = self.get_type_info(*type_id) {
+                        if matches!(type_info.type_node, TypeNode::Primitive(PrimitiveType::Nil)) {
+                            nil_found = true;
+                        } else {
+                            non_nil_types.push(*type_id);
+                        }
+                    }
+                }
+
+                if nil_found && !non_nil_types.is_empty() {
+                    // Nullable syntax: show non-nil types with ? suffix
+                    let mut result = String::new();
+                    for (i, type_id) in non_nil_types.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(" | ");
+                        }
+                        result.push_str(&format!("{}?", self.format_type(*type_id)));
+                    }
+                    result
                 } else {
                     // Regular union syntax
-                    for (i, t) in types.iter().enumerate() {
+                    let mut result = String::new();
+                    for (i, type_id) in type_ids.iter().enumerate() {
                         if i > 0 {
-                            write!(f, " | ")?;
+                            result.push_str(" | ");
                         }
-                        write!(f, "{}", t)?;
+                        result.push_str(&self.format_type(*type_id));
                     }
+                    result
                 }
-                Ok(())
             }
-            TypeNode::Generic(genr) => {
-                write!(f, "{}<", genr.base_name)?;
-                for (i, arg) in genr.type_arguments.iter().enumerate() {
+            TypeNode::Generic(generic) => {
+                let mut result = format!("{}<", generic.base_name);
+                for (i, arg_id) in generic.type_arguments.iter().enumerate() {
                     if i > 0 {
-                        write!(f, ", ")?;
+                        result.push_str(", ");
                     }
-                    write!(f, "{}", arg)?;
+                    result.push_str(&self.format_type(*arg_id));
                 }
-                write!(f, ">")
+                result.push('>');
+                result
             }
-            TypeNode::TypeParameter(name) => write!(f, "{}", name),
+            TypeNode::TypeParameter(name) => format!("{}", name),
             TypeNode::ConstrainedTypeParameter { name, constraint } => {
-                write!(f, "{} : {}", name, constraint)
+                format!("{} : {}", name, self.format_type(*constraint))
             }
-            TypeNode::UnresolvedReference { name, .. } => write!(f, "{}", name),
+            TypeNode::UnresolvedReference { name, .. } => format!("{}", name),
             TypeNode::Object(obj) => {
-                write!(f, "{{ ")?;
+                let mut result = String::from("{ ");
                 for (i, field) in obj.fields.iter().enumerate() {
                     if i > 0 {
-                        write!(f, ", ")?;
+                        result.push_str(", ");
                     }
-                    write!(f, "{}: {}", field.name, field.field_type)?;
+                    result.push_str(&format!(
+                        "{}: {}",
+                        field.name,
+                        self.format_type(field.field_type)
+                    ));
                 }
-                write!(f, " }}")
+                result.push_str(" }");
+                result
             }
             TypeNode::Class(class) => {
-                write!(f, "class {}", class.name)
+                format!("class {}", class.name)
             }
-            TypeNode::DynamicTop => write!(f, "dyn!"),
-            TypeNode::DynamicNullable => write!(f, "dyn?"),
-            TypeNode::Dynamic => write!(f, "dyn"),
+            TypeNode::DynamicTop => "dyn!".to_string(),
+            TypeNode::DynamicNullable => "dyn?".to_string(),
+            TypeNode::Dynamic => "dyn".to_string(),
             TypeNode::Module(module) => {
-                write!(f, "module {}", module.name)
+                format!("module {}", module.name)
             }
             TypeNode::TypeImport {
                 module_path,
                 type_name,
             } => {
-                write!(f, "import(\"{}\").{}", module_path, type_name)
+                format!("import(\"{}\").{}", module_path, type_name)
             }
         }
     }

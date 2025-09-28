@@ -1240,21 +1240,8 @@ impl<'a> Parser<'a> {
         if types.len() == 1 {
             Ok(types.into_iter().next().unwrap())
         } else {
-            // Convert TypeIds to TypeNodes for the union
-            let type_nodes = types
-                .into_iter()
-                .map(|type_id| {
-                    self.nodes
-                        .type_table
-                        .get_type_info(type_id)
-                        .unwrap()
-                        .type_node
-                        .clone()
-                })
-                .collect();
-
             let union_type = TypeInfo {
-                type_node: TypeNode::Union(type_nodes),
+                type_node: TypeNode::Union(types),
                 origin: TypeOrigin::Annotation(requesting_node),
             };
 
@@ -1268,19 +1255,13 @@ impl<'a> Parser<'a> {
 
         if self.match_token(TokenType::Question) {
             // Create optional type as union: BaseType | Nil
-            let base_type_node = self
-                .nodes
-                .type_table
-                .get_type_info(base_type_id)
-                .unwrap()
-                .type_node
-                .clone();
+            let nil_type = self.nodes.type_table.create_type(TypeInfo {
+                type_node: TypeNode::Primitive(PrimitiveType::Nil),
+                origin: TypeOrigin::Builtin,
+            });
 
             let union_type = TypeInfo {
-                type_node: TypeNode::Union(vec![
-                    base_type_node,
-                    TypeNode::Primitive(PrimitiveType::Nil),
-                ]),
+                type_node: TypeNode::Union(vec![base_type_id, nil_type]),
                 origin: TypeOrigin::Annotation(requesting_node),
             };
 
@@ -1299,16 +1280,8 @@ impl<'a> Parser<'a> {
                 "Expect ']' after array element type.",
             )?;
 
-            let element_type_node = self
-                .nodes
-                .type_table
-                .get_type_info(element_type_id)
-                .unwrap()
-                .type_node
-                .clone();
-
             let array_type = TypeInfo {
-                type_node: TypeNode::Array(Box::new(element_type_node)),
+                type_node: TypeNode::Array(element_type_id),
                 origin: TypeOrigin::Annotation(requesting_node),
             };
 
@@ -1381,19 +1354,12 @@ impl<'a> Parser<'a> {
                     self.consume(TokenType::Arrow, "Expect '->' after function parameters.")?;
 
                     let return_type_id = self.parse_type_annotation(requesting_node)?;
-                    let return_type_node = self
-                        .nodes
-                        .type_table
-                        .get_type_info(return_type_id)
-                        .unwrap()
-                        .type_node
-                        .clone();
 
                     let function_type = TypeInfo {
                         type_node: TypeNode::Function(FunctionType {
                             generic_parameters: None,
                             parameters: Vec::new(),
-                            return_type: Box::new(return_type_node),
+                            return_type: return_type_id,
                         }),
                         origin: TypeOrigin::Annotation(requesting_node),
                     };
@@ -1426,32 +1392,11 @@ impl<'a> Parser<'a> {
 
                         let return_type_id = self.parse_type_annotation(requesting_node)?;
 
-                        // Convert TypeIds to TypeNodes
-                        let param_type_nodes = parameter_types
-                            .into_iter()
-                            .map(|type_id| {
-                                self.nodes
-                                    .type_table
-                                    .get_type_info(type_id)
-                                    .unwrap()
-                                    .type_node
-                                    .clone()
-                            })
-                            .collect();
-
-                        let return_type_node = self
-                            .nodes
-                            .type_table
-                            .get_type_info(return_type_id)
-                            .unwrap()
-                            .type_node
-                            .clone();
-
                         let function_type = TypeInfo {
                             type_node: TypeNode::Function(FunctionType {
                                 generic_parameters: None,
-                                parameters: param_type_nodes,
-                                return_type: Box::new(return_type_node),
+                                parameters: parameter_types,
+                                return_type: return_type_id,
                             }),
                             origin: TypeOrigin::Annotation(requesting_node),
                         };
@@ -1470,28 +1415,11 @@ impl<'a> Parser<'a> {
 
                         let return_type_id = self.parse_type_annotation(requesting_node)?;
 
-                        // Convert TypeId to TypeNode for first_type
-                        let param_type_node = self
-                            .nodes
-                            .type_table
-                            .get_type_info(first_type)
-                            .unwrap()
-                            .type_node
-                            .clone();
-
-                        let return_type_node = self
-                            .nodes
-                            .type_table
-                            .get_type_info(return_type_id)
-                            .unwrap()
-                            .type_node
-                            .clone();
-
                         let function_type = TypeInfo {
                             type_node: TypeNode::Function(FunctionType {
                                 generic_parameters: None,
-                                parameters: vec![param_type_node],
-                                return_type: Box::new(return_type_node),
+                                parameters: vec![first_type],
+                                return_type: return_type_id,
                             }),
                             origin: TypeOrigin::Annotation(requesting_node),
                         };
@@ -1548,17 +1476,9 @@ impl<'a> Parser<'a> {
             self.consume(TokenType::Colon, "Expected ':' after field name.")?;
             let field_type_id = self.parse_type_annotation(requesting_node)?;
 
-            let field_type_node = self
-                .nodes
-                .type_table
-                .get_type_info(field_type_id)
-                .unwrap()
-                .type_node
-                .clone();
-
             fields.push(ObjectField {
                 name: field_name_node.node.name,
-                field_type: field_type_node,
+                field_type: field_type_id,
             });
 
             if self.match_token(TokenType::Comma) {
@@ -1787,14 +1707,7 @@ impl<'a> Parser<'a> {
         // Parse first type argument
         if !self.check(TokenType::Greater) {
             let type_arg_id = self.parse_type_annotation(requesting_node)?;
-            let type_arg_node = self
-                .nodes
-                .type_table
-                .get_type_info(type_arg_id)
-                .unwrap()
-                .type_node
-                .clone();
-            type_arguments.push(type_arg_node);
+            type_arguments.push(type_arg_id);
 
             // Parse additional type arguments
             while self.match_token(TokenType::Comma) {
@@ -1802,14 +1715,7 @@ impl<'a> Parser<'a> {
                     break; // Trailing comma
                 }
                 let type_arg_id = self.parse_type_annotation(requesting_node)?;
-                let type_arg_node = self
-                    .nodes
-                    .type_table
-                    .get_type_info(type_arg_id)
-                    .unwrap()
-                    .type_node
-                    .clone();
-                type_arguments.push(type_arg_node);
+                type_arguments.push(type_arg_id);
             }
         }
 

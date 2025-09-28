@@ -1950,6 +1950,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         self.handle_variable(class_handle, name.node.span, false)?;
 
+        self.begin_scope();
         if let Some(superclass) = superclass {
             if class_handle == superclass.node.name {
                 return Err(QangCompilerError::new_assembler_error(
@@ -1958,8 +1959,6 @@ impl<'a> NodeVisitor for Assembler<'a> {
                     self.source_map.clone(),
                 ));
             }
-
-            self.begin_scope();
 
             self.handle_variable(class_handle, name.node.span, false)?;
 
@@ -2029,9 +2028,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
         self.emit_opcode(OpCode::Pop, class_decl.node.span);
 
-        if class_decl.node.superclass.is_some() {
-            self.end_scope(class_decl.node.span);
-        }
+        self.end_scope(class_decl.node.span);
 
         Ok(())
     }

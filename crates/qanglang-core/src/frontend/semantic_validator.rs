@@ -387,14 +387,13 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
             ctx.errors.report_error(error);
         }
 
+        self.begin_scope();
         let has_superclass = class_decl.node.superclass.is_some();
         if has_superclass {
             if let Some(superclass_id) = class_decl.node.superclass {
                 let superclass = ctx.nodes.get_identifier_node(superclass_id);
                 self.visit_identifier(superclass, ctx)?;
             }
-
-            self.begin_scope();
 
             if let Some(func) = self.functions.last_mut() {
                 func.add_local();
@@ -461,9 +460,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
             }
         }
 
-        if has_superclass {
-            self.end_scope();
-        }
+        self.end_scope();
 
         Ok(())
     }
@@ -525,10 +522,8 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
         self.visit_expression(condition, ctx)?;
 
         self.begin_loop();
-        self.begin_scope();
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
-        self.end_scope();
         self.end_loop();
 
         Ok(())

@@ -31,11 +31,11 @@ impl TypeEnvironment {
         Self { type_names }
     }
 
-    pub fn declare_type(&mut self, name: StringHandle, type_id: TypeId) {
+    fn declare_type(&mut self, name: StringHandle, type_id: TypeId) {
         self.type_names.insert(name, type_id);
     }
 
-    pub fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
+    fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
         self.type_names.get(&name).copied()
     }
 }
@@ -61,7 +61,7 @@ impl<'a> TypeResolver<'a> {
         }
     }
 
-    pub fn collect(
+    pub fn resolve(
         mut self,
         program: NodeId,
         nodes: &mut TypedNodeArena,
@@ -75,12 +75,16 @@ impl<'a> TypeResolver<'a> {
         self.exported_types
     }
 
-    fn start_scope(&mut self) {
+    fn begin_scope(&mut self) {
         self.scopes.push(TypeEnvironment::new());
     }
 
     fn end_scope(&mut self) {
         self.scopes.pop();
+    }
+
+    fn is_global_scope(&self) -> bool {
+        self.scopes.len() == 1
     }
 
     fn get_scope_mut(&mut self) -> &mut TypeEnvironment {
@@ -102,4 +106,263 @@ impl<'a> TypeResolver<'a> {
 
 impl<'a> NodeVisitor for TypeResolver<'a> {
     type Error = QangCompilerError;
+
+    fn visit_declaration(
+        &mut self,
+        decl: super::typed_node_arena::TypedNodeRef<super::nodes::DeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        if self.is_global_scope() {
+            // TODO add to module exports
+        }
+        match decl.node {
+            super::nodes::DeclNode::Class(class_decl) => self.visit_class_declaration(
+                super::typed_node_arena::TypedNodeRef::new(decl.id, class_decl),
+                ctx,
+            ),
+            super::nodes::DeclNode::Function(func_decl) => self.visit_function_declaration(
+                super::typed_node_arena::TypedNodeRef::new(decl.id, func_decl),
+                ctx,
+            ),
+            super::nodes::DeclNode::Lambda(lambda_decl) => self.visit_lambda_declaration(
+                super::typed_node_arena::TypedNodeRef::new(decl.id, lambda_decl),
+                ctx,
+            ),
+            super::nodes::DeclNode::Variable(var_decl) => self.visit_variable_declaration(
+                super::typed_node_arena::TypedNodeRef::new(decl.id, var_decl),
+                ctx,
+            ),
+            super::nodes::DeclNode::Module(import_decl) => self.visit_import_module_declaration(
+                super::typed_node_arena::TypedNodeRef::new(decl.id, import_decl),
+                ctx,
+            ),
+            super::nodes::DeclNode::Type(type_decl) => self.visit_type_alias_declaration(
+                super::typed_node_arena::TypedNodeRef::new(decl.id, type_decl),
+                ctx,
+            ),
+            super::nodes::DeclNode::Stmt(stmt) => self.visit_statement(
+                super::typed_node_arena::TypedNodeRef::new(decl.id, stmt),
+                ctx,
+            ),
+        }
+    }
+
+    fn visit_function_expression(
+        &mut self,
+        func_expr: super::typed_node_arena::TypedNodeRef<super::nodes::FunctionExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // TODO declare function type in current scope
+
+        self.begin_scope();
+
+        // TODO add the parameters types to current scope
+
+        // TODO visit body to gather types
+
+        // TODO visit body again to resolve types that were not declared yet
+
+        self.end_scope();
+
+        Ok(())
+    }
+
+    fn visit_lambda_expression(
+        &mut self,
+        lambda_expr: super::typed_node_arena::TypedNodeRef<super::nodes::LambdaExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
+        // TODO add the parameters types to current scope
+
+        // TODO visit body to gather types
+
+        // TODO visit body again to resolve types that were not declared yet
+
+        self.end_scope();
+
+        Ok(())
+    }
+
+    fn visit_map_expression(
+        &mut self,
+        map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::MapExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
+        let body = ctx.nodes.get_expr_node(map_expr.node.body);
+        self.visit_expression(body, ctx)?;
+
+        // TODO visit expression again to resolve types that were not declared yet
+
+        self.end_scope();
+
+        Ok(())
+    }
+
+    fn visit_optional_map_expression(
+        &mut self,
+        map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::OptionalMapExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
+        let body = ctx.nodes.get_expr_node(map_expr.node.body);
+        self.visit_expression(body, ctx)?;
+
+        // TODO visit expression again to resolve types that were not declared yet
+
+        self.end_scope();
+
+        Ok(())
+    }
+
+    fn visit_block_statement(
+        &mut self,
+        block_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BlockStmtNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
+        let decl_count = ctx.nodes.array.size(block_stmt.node.decls);
+        for i in 0..decl_count {
+            if let Some(decl_id) = ctx.nodes.array.get_node_id_at(block_stmt.node.decls, i) {
+                let decl = ctx.nodes.get_decl_node(decl_id);
+                self.visit_declaration(decl, ctx)?;
+            }
+        }
+
+        // TODO visit statements again to resolve types that were not declared yet
+
+        self.end_scope();
+        Ok(())
+    }
+
+    fn visit_for_statement(
+        &mut self,
+        for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.begin_scope();
+
+        if let Some(initializer_id) = for_stmt.node.initializer {
+            let initializer = ctx.nodes.get_for_initializer_node(initializer_id);
+            self.visit_for_initializer(initializer, ctx)?;
+        }
+
+        if let Some(condition_id) = for_stmt.node.condition {
+            self.visit_expression(ctx.nodes.get_expr_node(condition_id), ctx)?;
+        }
+
+        if let Some(increment_id) = for_stmt.node.increment {
+            self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
+        }
+
+        self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
+
+        self.end_scope();
+
+        Ok(())
+    }
+
+    fn visit_class_declaration(
+        &mut self,
+        class_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ClassDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // TODO declare class type in current scope
+
+        self.begin_scope();
+
+        let member_count = ctx.nodes.array.size(class_decl.node.members);
+        for i in 0..member_count {
+            if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {
+                let member = ctx.nodes.get_class_member_node(member_id);
+                match member.node {
+                    super::nodes::ClassMemberNode::Method(method) => {
+                        let method_name = ctx.nodes.get_identifier_node(method.name);
+                        let init_name = self.strings.intern("init");
+                        let is_initializer = method_name.node.name == init_name;
+                        let arity = ctx.nodes.array.size(method.parameters);
+
+                        self.begin_scope();
+
+                        for j in 0..arity {
+                            if let Some(param_id) =
+                                ctx.nodes.array.get_node_id_at(method.parameters, j)
+                            {
+                                // TODO add the parameters types to current scope
+                            }
+                        }
+
+                        let body = ctx.nodes.get_block_stmt_node(method.body);
+                        self.visit_block_statement(body, ctx)?;
+
+                        // TODO visit body again to resolve types that were not declared yet
+
+                        self.end_scope();
+                    }
+                    super::nodes::ClassMemberNode::Field(field) => {
+                        if let Some(init_id) = field.initializer {
+                            let initializer = ctx.nodes.get_expr_node(init_id);
+                            self.visit_expression(initializer, ctx)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.end_scope();
+
+        // TODO update class type with method/field type data
+
+        Ok(())
+    }
+
+    fn visit_import_module_declaration(
+        &mut self,
+        import_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ImportModuleDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // TODO
+        Ok(())
+    }
+
+    fn visit_generic_parameter(
+        &mut self,
+        _generic_param: super::typed_node_arena::TypedNodeRef<super::nodes::GenericParameterNode>,
+        _ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // TODO
+        Ok(())
+    }
+
+    fn visit_parameter(
+        &mut self,
+        parameter: super::typed_node_arena::TypedNodeRef<super::nodes::ParameterNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // TODO
+        Ok(())
+    }
+
+    fn visit_type_alias_declaration(
+        &mut self,
+        _type_decl: super::typed_node_arena::TypedNodeRef<super::nodes::TypeAliasDeclNode>,
+        _ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // TODO
+        Ok(())
+    }
+
+    fn visit_type_cast_expression(
+        &mut self,
+        type_cast: super::typed_node_arena::TypedNodeRef<super::nodes::TypeCastExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // TODO
+        Ok(())
+    }
 }

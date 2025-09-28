@@ -62,7 +62,7 @@ impl<'a> AnalysisPipeline<'a> {
         for (_, module) in modules.iter_mut() {
             let exported_types =
                 TypeResolver::new(self.strings, module.source_map.clone(), gobal_types.clone())
-                    .collect(module.node, nodes, errors);
+                    .resolve(module.node, nodes, errors);
             module.exported_types = exported_types;
         }
 

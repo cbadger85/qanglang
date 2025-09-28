@@ -7,7 +7,7 @@ use crate::{
     TypedNodeArena,
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
-        types::{TypeId, TypeNode},
+        types::{FunctionType, GenericType, TypeId, TypeInfo, TypeNode, TypeOrigin},
     },
 };
 
@@ -138,38 +138,312 @@ impl<'a> TypeResolver<'a> {
 
     fn try_resolve_type(&mut self, type_id: TypeId, ctx: &mut VisitorContext) -> bool {
         if self.currently_resolving.contains(&type_id) {
-            // TODO report circular reference
+            // Circular reference detected
+            self.report_circular_reference_error(type_id, ctx);
             return false;
         }
 
         self.currently_resolving.insert(type_id);
 
-        let type_info = ctx.nodes.type_table.get_type_info(type_id).unwrap();
-        let result = if let TypeNode::UnresolvedReference { name, .. } = &type_info.type_node {
-            if let Some(resolved_type_id) = self.lookup_type(*name) {
-                // Recursively resolve the target (this catches A->B->A cycles)
-                if self.try_resolve_type(resolved_type_id, ctx) {
-                    // Replace with resolved type
-                    let resolved_info = ctx
-                        .nodes
-                        .type_table
-                        .get_type_info(resolved_type_id)
-                        .unwrap()
-                        .clone();
-                    ctx.nodes.type_table.replace_type(type_id, resolved_info);
-                    true
+        let type_info = ctx.nodes.type_table.get_type_info(type_id).unwrap().clone();
+        let result = match &type_info.type_node {
+            TypeNode::UnresolvedReference {
+                name,
+                identifier_node,
+            } => self.resolve_unresolved_reference(*name, *identifier_node, type_id, ctx),
+            TypeNode::TypeImport {
+                module_path,
+                type_name,
+            } => self.resolve_type_import(*module_path, *type_name, type_id, ctx),
+            TypeNode::Generic(generic_type) => {
+                self.resolve_generic_type(generic_type, type_id, ctx)
+            }
+            TypeNode::Array(element_type_id) => {
+                // Recursively resolve array element type
+                if self.try_resolve_type(*element_type_id, ctx) {
+                    true // Array type is resolved when element type is resolved
                 } else {
                     false
                 }
-            } else {
-                false // Not found
             }
-        } else {
-            true // Already resolved
+            TypeNode::Function(func_type) => self.resolve_function_type(func_type, type_id, ctx),
+            TypeNode::Union(type_ids) => {
+                // Resolve all union member types
+                let mut all_resolved = true;
+                for &member_type_id in type_ids {
+                    if !self.try_resolve_type(member_type_id, ctx) {
+                        all_resolved = false;
+                    }
+                }
+                all_resolved
+            }
+            TypeNode::ConstrainedTypeParameter { constraint, .. } => {
+                // Resolve constraint type
+                self.try_resolve_type(*constraint, ctx)
+            }
+            // These types are already resolved
+            TypeNode::Primitive(_)
+            | TypeNode::TypeParameter(_)
+            | TypeNode::Object(_)
+            | TypeNode::Class(_)
+            | TypeNode::DynamicTop
+            | TypeNode::DynamicNullable
+            | TypeNode::Dynamic
+            | TypeNode::Module(_) => true,
         };
 
         self.currently_resolving.remove(&type_id);
         result
+    }
+
+    fn resolve_unresolved_reference(
+        &mut self,
+        name: StringHandle,
+        identifier_node: NodeId,
+        type_id: TypeId,
+        ctx: &mut VisitorContext,
+    ) -> bool {
+        // First try local scopes
+        if let Some(resolved_type_id) = self.lookup_type(name) {
+            // Recursively resolve the target (this catches A->B->A cycles)
+            if self.try_resolve_type(resolved_type_id, ctx) {
+                // Replace with resolved type
+                let resolved_info = ctx
+                    .nodes
+                    .type_table
+                    .get_type_info(resolved_type_id)
+                    .unwrap()
+                    .clone();
+                ctx.nodes.type_table.replace_type(type_id, resolved_info);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        // If not found locally, try current module's exported types
+        if let Some(module) = self.modules.get(&self.module_path) {
+            if let Some(&exported_type_id) = module.exported_types.get(&name) {
+                if self.try_resolve_type(exported_type_id, ctx) {
+                    let resolved_info = ctx
+                        .nodes
+                        .type_table
+                        .get_type_info(exported_type_id)
+                        .unwrap()
+                        .clone();
+                    ctx.nodes.type_table.replace_type(type_id, resolved_info);
+                    return true;
+                }
+            }
+        }
+
+        // Type not found - report error
+        self.report_unresolved_type_error(name, identifier_node, ctx);
+        false
+    }
+
+    fn resolve_type_import(
+        &mut self,
+        module_path: StringHandle,
+        type_name: StringHandle,
+        type_id: TypeId,
+        ctx: &mut VisitorContext,
+    ) -> bool {
+        let module_path_str = self.strings.get_string(module_path);
+        let module_path_buf = std::path::PathBuf::from(module_path_str);
+
+        // Check if target module exists and has been parsed
+        if let Some(target_module) = self.modules.get(&module_path_buf) {
+            // Check for circular import prevention
+            if target_module.resolving_handles.contains(&type_name) {
+                self.report_circular_import_error(module_path, type_name, ctx);
+                return false;
+            }
+
+            // Check if type is exported by target module
+            if let Some(&exported_type_id) = target_module.exported_types.get(&type_name) {
+                // Mark as resolving to prevent circular imports
+                if let Some(target_module) = self.modules.get_mut(&module_path_buf) {
+                    target_module.resolving_handles.insert(type_name);
+                }
+
+                // Recursively resolve the imported type
+                let resolved = self.try_resolve_type(exported_type_id, ctx);
+
+                // Mark as resolved and remove from resolving
+                if let Some(target_module) = self.modules.get_mut(&module_path_buf) {
+                    target_module.resolving_handles.remove(&type_name);
+                    if resolved {
+                        target_module.resolved_handles.insert(type_name);
+                    }
+                }
+
+                if resolved {
+                    // Replace TypeImport with resolved type
+                    let resolved_info = ctx
+                        .nodes
+                        .type_table
+                        .get_type_info(exported_type_id)
+                        .unwrap()
+                        .clone();
+                    ctx.nodes.type_table.replace_type(type_id, resolved_info);
+                    return true;
+                }
+            } else {
+                // Type not exported by target module
+                self.report_type_not_exported_error(module_path, type_name, ctx);
+            }
+        } else {
+            // Target module not found
+            self.report_module_not_found_error(module_path, ctx);
+        }
+
+        false
+    }
+
+    fn resolve_generic_type(
+        &mut self,
+        generic_type: &GenericType,
+        type_id: TypeId,
+        ctx: &mut VisitorContext,
+    ) -> bool {
+        // First resolve the base type
+        let base_type_name = generic_type.base_name;
+        if let Some(base_type_id) = self.lookup_type(base_type_name) {
+            if !self.try_resolve_type(base_type_id, ctx) {
+                return false;
+            }
+        } else {
+            self.report_unresolved_base_type_error(base_type_name, ctx);
+            return false;
+        }
+
+        // Resolve all type arguments
+        let mut all_resolved = true;
+        for &arg_type_id in &generic_type.type_arguments {
+            if !self.try_resolve_type(arg_type_id, ctx) {
+                all_resolved = false;
+            }
+        }
+
+        all_resolved
+    }
+
+    fn resolve_function_type(
+        &mut self,
+        func_type: &FunctionType,
+        _type_id: TypeId,
+        ctx: &mut VisitorContext,
+    ) -> bool {
+        // Resolve all parameter types
+        let mut all_resolved = true;
+        for &param_type_id in &func_type.parameters {
+            if !self.try_resolve_type(param_type_id, ctx) {
+                all_resolved = false;
+            }
+        }
+
+        // Resolve return type
+        if !self.try_resolve_type(func_type.return_type, ctx) {
+            all_resolved = false;
+        }
+
+        all_resolved
+    }
+
+    // Error reporting methods
+    fn report_circular_reference_error(&mut self, type_id: TypeId, ctx: &mut VisitorContext) {
+        let message = format!("Circular type reference detected");
+        let error = crate::QangCompilerError::new_type_error(
+            message,
+            crate::nodes::SourceSpan::default(), // TODO: Extract span from type_id
+            self.source_map.clone(),
+        );
+        ctx.errors.report_error(error);
+    }
+
+    fn report_unresolved_type_error(
+        &mut self,
+        name: StringHandle,
+        identifier_node: NodeId,
+        ctx: &mut VisitorContext,
+    ) {
+        let type_name = self.strings.get_string(name);
+        let span = ctx.nodes.get_node(identifier_node).span();
+        let message = format!("Unresolved type '{}'", type_name);
+        let error =
+            crate::QangCompilerError::new_type_error(message, span, self.source_map.clone());
+        ctx.errors.report_error(error);
+    }
+
+    fn report_circular_import_error(
+        &mut self,
+        module_path: StringHandle,
+        type_name: StringHandle,
+        ctx: &mut VisitorContext,
+    ) {
+        let module_path_str = self.strings.get_string(module_path);
+        let type_name_str = self.strings.get_string(type_name);
+        let message = format!(
+            "Circular type import detected for type '{}' from module '{}'",
+            type_name_str, module_path_str
+        );
+        let error = crate::QangCompilerError::new_type_error(
+            message,
+            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            self.source_map.clone(),
+        );
+        ctx.errors.report_error(error);
+    }
+
+    fn report_type_not_exported_error(
+        &mut self,
+        module_path: StringHandle,
+        type_name: StringHandle,
+        ctx: &mut VisitorContext,
+    ) {
+        let module_path_str = self.strings.get_string(module_path);
+        let type_name_str = self.strings.get_string(type_name);
+        let message = format!(
+            "Type '{}' is not exported by module '{}'",
+            type_name_str, module_path_str
+        );
+        let error = crate::QangCompilerError::new_type_error(
+            message,
+            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            self.source_map.clone(),
+        );
+        ctx.errors.report_error(error);
+    }
+
+    fn report_module_not_found_error(
+        &mut self,
+        module_path: StringHandle,
+        ctx: &mut VisitorContext,
+    ) {
+        let module_path_str = self.strings.get_string(module_path);
+        let message = format!("Module '{}' not found", module_path_str);
+        let error = crate::QangCompilerError::new_type_error(
+            message,
+            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            self.source_map.clone(),
+        );
+        ctx.errors.report_error(error);
+    }
+
+    fn report_unresolved_base_type_error(
+        &mut self,
+        base_type_name: StringHandle,
+        ctx: &mut VisitorContext,
+    ) {
+        let type_name_str = self.strings.get_string(base_type_name);
+        let message = format!("Unresolved base type '{}' in generic type", type_name_str);
+        let error = crate::QangCompilerError::new_type_error(
+            message,
+            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            self.source_map.clone(),
+        );
+        ctx.errors.report_error(error);
     }
 }
 
@@ -221,15 +495,36 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         func_expr: super::typed_node_arena::TypedNodeRef<super::nodes::FunctionExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // TODO declare function type in current scope
-
         self.begin_scope();
 
-        // TODO add the parameters types to current scope
+        // Process generic parameters if present
+        if let Some(generic_parameters) = func_expr.node.generic_parameters {
+            let param_count = ctx.nodes.array.size(generic_parameters);
+            for i in 0..param_count {
+                if let Some(param_id) = ctx.nodes.array.get_node_id_at(generic_parameters, i) {
+                    let param = ctx.nodes.get_generic_param_node(param_id);
+                    self.visit_generic_parameter(param, ctx)?;
+                }
+            }
+        }
 
-        // TODO visit body to gather types
+        // Process function parameters
+        let param_count = ctx.nodes.array.size(func_expr.node.parameters);
+        for i in 0..param_count {
+            if let Some(param_id) = ctx.nodes.array.get_node_id_at(func_expr.node.parameters, i) {
+                let param = ctx.nodes.get_parameter_node(param_id);
+                self.visit_parameter(param, ctx)?;
+            }
+        }
 
-        // TODO visit body again to resolve types that were not declared yet
+        // Process return type annotation if present
+        if let Some(return_type_id) = func_expr.node.return_type {
+            self.unresolved_worklist.push(return_type_id);
+        }
+
+        // Visit function body
+        let body = ctx.nodes.get_block_stmt_node(func_expr.node.body);
+        self.visit_block_statement(body, ctx)?;
 
         self.end_scope(ctx);
 
@@ -243,11 +538,33 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
     ) -> Result<(), Self::Error> {
         self.begin_scope();
 
-        // TODO add the parameters types to current scope
+        // Process generic parameters if present
+        if let Some(generic_parameters) = lambda_expr.node.generic_parameters {
+            let param_count = ctx.nodes.array.size(generic_parameters);
+            for i in 0..param_count {
+                if let Some(param_id) = ctx.nodes.array.get_node_id_at(generic_parameters, i) {
+                    let param = ctx.nodes.get_generic_param_node(param_id);
+                    self.visit_generic_parameter(param, ctx)?;
+                }
+            }
+        }
 
-        // TODO visit body to gather types
+        // Process lambda parameters
+        let param_count = ctx.nodes.array.size(lambda_expr.node.parameters);
+        for i in 0..param_count {
+            if let Some(param_id) = ctx
+                .nodes
+                .array
+                .get_node_id_at(lambda_expr.node.parameters, i)
+            {
+                let param = ctx.nodes.get_parameter_node(param_id);
+                self.visit_parameter(param, ctx)?;
+            }
+        }
 
-        // TODO visit body again to resolve types that were not declared yet
+        // Visit lambda body
+        let body = ctx.nodes.get_lambda_body_node(lambda_expr.node.body);
+        self.visit_lambda_body(body, ctx)?;
 
         self.end_scope(ctx);
 
@@ -264,8 +581,6 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         let body = ctx.nodes.get_expr_node(map_expr.node.body);
         self.visit_expression(body, ctx)?;
 
-        // TODO visit expression again to resolve types that were not declared yet
-
         self.end_scope(ctx);
 
         Ok(())
@@ -280,8 +595,6 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         let body = ctx.nodes.get_expr_node(map_expr.node.body);
         self.visit_expression(body, ctx)?;
-
-        // TODO visit expression again to resolve types that were not declared yet
 
         self.end_scope(ctx);
 
@@ -302,8 +615,6 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
                 self.visit_declaration(decl, ctx)?;
             }
         }
-
-        // TODO visit statements again to resolve types that were not declared yet
 
         self.end_scope(ctx);
         Ok(())
@@ -341,39 +652,91 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         class_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ClassDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // TODO declare class type in current scope
+        // Get class name
+        let class_name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
+        let class_name = class_name_node.node.name;
+
+        // Handle superclass type if present
+        let superclass_type = if let Some(superclass_id) = class_decl.node.superclass {
+            let superclass_name_node = ctx.nodes.get_identifier_node(superclass_id);
+            let superclass_name = superclass_name_node.node.name;
+
+            // Create UnresolvedReference for superclass - will be resolved later
+            let superclass_type_info = TypeInfo {
+                type_node: TypeNode::UnresolvedReference {
+                    name: superclass_name,
+                    identifier_node: superclass_id,
+                },
+                origin: TypeOrigin::Annotation(superclass_id),
+            };
+            Some(ctx.nodes.type_table.create_type(superclass_type_info))
+        } else {
+            None
+        };
+
+        // Create ClassType and register it
+        let class_type_id =
+            ctx.nodes
+                .type_table
+                .create_class_type(class_name, superclass_type, class_decl.id);
+
+        // Declare class type in current scope
+        self.get_scope_mut().declare_type(class_name, class_type_id);
+
+        // If at global scope, add to module exports
+        if self.is_global_scope() {
+            if let Some(module) = self.modules.get_mut(&self.module_path) {
+                module.exported_types.insert(class_name, class_type_id);
+            }
+        }
+
+        // Add superclass to worklist if it needs resolution
+        if let Some(superclass_type_id) = superclass_type {
+            self.unresolved_worklist.push(superclass_type_id);
+        }
 
         self.begin_scope();
 
+        // Process class members
         let member_count = ctx.nodes.array.size(class_decl.node.members);
         for i in 0..member_count {
             if let Some(member_id) = ctx.nodes.array.get_node_id_at(class_decl.node.members, i) {
                 let member = ctx.nodes.get_class_member_node(member_id);
                 match member.node {
                     super::nodes::ClassMemberNode::Method(method) => {
-                        let method_name = ctx.nodes.get_identifier_node(method.name);
+                        let method_name_node = ctx.nodes.get_identifier_node(method.name);
                         let init_name = self.strings.intern("init");
-                        let is_initializer = method_name.node.name == init_name;
-                        let arity = ctx.nodes.array.size(method.parameters);
+                        let is_initializer = method_name_node.node.name == init_name;
 
                         self.begin_scope();
 
-                        for j in 0..arity {
+                        // Add method parameters to scope
+                        let param_count = ctx.nodes.array.size(method.parameters);
+                        for j in 0..param_count {
                             if let Some(param_id) =
                                 ctx.nodes.array.get_node_id_at(method.parameters, j)
                             {
-                                // TODO add the parameters types to current scope
+                                let param = ctx.nodes.get_parameter_node(param_id);
+                                self.visit_parameter(param, ctx)?;
                             }
                         }
 
+                        // Visit method body
                         let body = ctx.nodes.get_block_stmt_node(method.body);
                         self.visit_block_statement(body, ctx)?;
 
-                        // TODO visit body again to resolve types that were not declared yet
-
                         self.end_scope(ctx);
+
+                        // Create function type for method and add to class
+                        // TODO: This will be enhanced when we implement function type creation
                     }
                     super::nodes::ClassMemberNode::Field(field) => {
+                        // Process field type annotation if present
+                        if let Some(field_type_id) = field.field_type {
+                            self.unresolved_worklist.push(field_type_id);
+                        }
+
+                        // Visit field initializer if present
                         if let Some(init_id) = field.initializer {
                             let initializer = ctx.nodes.get_expr_node(init_id);
                             self.visit_expression(initializer, ctx)?;
@@ -385,8 +748,6 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         self.end_scope(ctx);
 
-        // TODO update class type with method/field type data
-
         Ok(())
     }
 
@@ -395,16 +756,74 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         import_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ImportModuleDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // TODO
+        // Get module name and path
+        let module_name_node = ctx.nodes.get_identifier_node(import_decl.node.name);
+        let module_name = module_name_node.node.name;
+        let module_path = import_decl.node.path;
+
+        // Convert string handle to PathBuf
+        let module_path_str = self.strings.get_string(module_path);
+        let module_path_buf = std::path::PathBuf::from(module_path_str);
+
+        // Check if the target module exists in ModuleMap
+        if let Some(target_module) = self.modules.get(&module_path_buf) {
+            // Create a module type for this import
+            let module_type_id = ctx
+                .nodes
+                .type_table
+                .create_module_type(module_name, import_decl.id);
+
+            // Register module in current scope
+            self.get_scope_mut()
+                .declare_type(module_name, module_type_id);
+
+            // Note: Module types themselves don't need resolution, but their exported types
+            // will be resolved when accessed via TypeImport nodes
+        } else {
+            // Report error if module not found
+            let message = format!("Module '{}' not found during import", module_path_str);
+            let span = ctx.nodes.get_node(import_decl.id).span();
+            let error =
+                crate::QangCompilerError::new_type_error(message, span, self.source_map.clone());
+            ctx.errors.report_error(error);
+        }
+
         Ok(())
     }
 
     fn visit_generic_parameter(
         &mut self,
-        _generic_param: super::typed_node_arena::TypedNodeRef<super::nodes::GenericParameterNode>,
-        _ctx: &mut VisitorContext,
+        generic_param: super::typed_node_arena::TypedNodeRef<super::nodes::GenericParameterNode>,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // TODO
+        // Get generic parameter name
+        let param_name_node = ctx.nodes.get_identifier_node(generic_param.node.name);
+        let param_name = param_name_node.node.name;
+
+        // Create type parameter and register it in current scope
+        let type_param_info = if let Some(constraint_type_id) = generic_param.node.constraint {
+            // Add constraint to worklist for resolution
+            self.unresolved_worklist.push(constraint_type_id);
+
+            TypeInfo {
+                type_node: TypeNode::ConstrainedTypeParameter {
+                    name: param_name,
+                    constraint: constraint_type_id,
+                },
+                origin: TypeOrigin::Annotation(generic_param.id),
+            }
+        } else {
+            TypeInfo {
+                type_node: TypeNode::TypeParameter(param_name),
+                origin: TypeOrigin::Annotation(generic_param.id),
+            }
+        };
+
+        let type_param_id = ctx.nodes.type_table.create_type(type_param_info);
+
+        // Register type parameter in current scope
+        self.get_scope_mut().declare_type(param_name, type_param_id);
+
         Ok(())
     }
 
@@ -413,16 +832,79 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         parameter: super::typed_node_arena::TypedNodeRef<super::nodes::ParameterNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // TODO
+        // Get parameter name
+        let param_name_node = ctx.nodes.get_identifier_node(parameter.node.name);
+        let param_name = param_name_node.node.name;
+
+        // Process parameter type annotation if present
+        if let Some(param_type_id) = parameter.node.parameter_type {
+            // Add parameter type to worklist for resolution
+            self.unresolved_worklist.push(param_type_id);
+
+            // TODO: In the future, we might want to register parameter names in scope
+            // for local variable type checking, but for now we only resolve types
+        }
+
         Ok(())
     }
 
     fn visit_type_alias_declaration(
         &mut self,
-        _type_decl: super::typed_node_arena::TypedNodeRef<super::nodes::TypeAliasDeclNode>,
-        _ctx: &mut VisitorContext,
+        type_decl: super::typed_node_arena::TypedNodeRef<super::nodes::TypeAliasDeclNode>,
+        ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // TODO
+        // Get type alias name
+        let alias_name_node = ctx.nodes.get_identifier_node(type_decl.node.name);
+        let alias_name = alias_name_node.node.name;
+
+        // Get the type definition being aliased
+        let type_definition_id = type_decl.node.type_definition;
+
+        // Register type alias in current scope
+        self.get_scope_mut()
+            .declare_type(alias_name, type_definition_id);
+
+        // If at global scope, add to module exports
+        if self.is_global_scope() {
+            if let Some(module) = self.modules.get_mut(&self.module_path) {
+                module.exported_types.insert(alias_name, type_definition_id);
+            }
+        }
+
+        // Add the aliased type to the worklist for resolution
+        self.unresolved_worklist.push(type_definition_id);
+
+        // Process generic parameters if present
+        if let Some(generic_parameters) = type_decl.node.generic_parameters {
+            let param_count = ctx.nodes.array.size(generic_parameters);
+            for i in 0..param_count {
+                if let Some(param_id) = ctx.nodes.array.get_node_id_at(generic_parameters, i) {
+                    let param = ctx.nodes.get_generic_param_node(param_id);
+                    self.visit_generic_parameter(param, ctx)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn visit_variable_declaration(
+        &mut self,
+        var_decl: super::typed_node_arena::TypedNodeRef<super::nodes::VariableDeclNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Process variable type annotation if present
+        if let Some(var_type_id) = var_decl.node.variable_type {
+            // Add variable type to worklist for resolution
+            self.unresolved_worklist.push(var_type_id);
+        }
+
+        // Visit initializer expression if present
+        if let Some(init_id) = var_decl.node.initializer {
+            let initializer = ctx.nodes.get_expr_node(init_id);
+            self.visit_expression(initializer, ctx)?;
+        }
+
         Ok(())
     }
 
@@ -431,7 +913,16 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         type_cast: super::typed_node_arena::TypedNodeRef<super::nodes::TypeCastExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        // TODO
+        // Visit the expression being cast
+        let expr = ctx.nodes.get_expr_node(type_cast.node.expr);
+        self.visit_expression(expr, ctx)?;
+
+        // The target type of the cast is stored in the TypeTable via set_node_type
+        // We need to get it and add to worklist for resolution
+        if let Some(cast_target_type_id) = ctx.nodes.type_table.get_node_type(type_cast.id) {
+            self.unresolved_worklist.push(cast_target_type_id);
+        }
+
         Ok(())
     }
 }

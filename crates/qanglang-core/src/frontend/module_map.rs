@@ -73,6 +73,10 @@ impl ModuleMap {
         self.modules.get(path)
     }
 
+    pub fn get_mut(&mut self, path: &Path) -> Option<&mut ModuleSource> {
+        self.modules.get_mut(path)
+    }
+
     pub fn has(&self, path: &Path) -> bool {
         self.modules.contains_key(path)
     }

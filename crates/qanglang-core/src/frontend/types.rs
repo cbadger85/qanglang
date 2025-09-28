@@ -1,4 +1,5 @@
 use crate::{NodeId, StringHandle};
+use crate::memory::StringInterner;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::fmt;
 
@@ -635,20 +636,20 @@ impl TypeTable {
     }
 
     /// Format a type for display purposes
-    pub fn format_type(&self, type_id: TypeId) -> String {
+    pub fn format_type(&self, type_id: TypeId, interner: &StringInterner) -> String {
         if let Some(type_info) = self.get_type_info(type_id) {
-            self.format_type_node(&type_info.type_node)
+            self.format_type_node(&type_info.type_node, interner)
         } else {
             "<unknown type>".to_string()
         }
     }
 
     /// Format a TypeNode for display purposes
-    fn format_type_node(&self, type_node: &TypeNode) -> String {
+    fn format_type_node(&self, type_node: &TypeNode, interner: &StringInterner) -> String {
         match type_node {
             TypeNode::Primitive(prim) => format!("{}", prim),
             TypeNode::Array(elem_id) => {
-                format!("[{}]", self.format_type(*elem_id))
+                format!("[{}]", self.format_type(*elem_id, interner))
             }
             TypeNode::Function(func) => {
                 let mut result = String::from("(");
@@ -656,10 +657,10 @@ impl TypeTable {
                     if i > 0 {
                         result.push_str(", ");
                     }
-                    result.push_str(&self.format_type(*param_id));
+                    result.push_str(&self.format_type(*param_id, interner));
                 }
                 result.push_str(") -> ");
-                result.push_str(&self.format_type(func.return_type));
+                result.push_str(&self.format_type(func.return_type, interner));
                 result
             }
             TypeNode::Union(type_ids) => {
@@ -684,7 +685,7 @@ impl TypeTable {
                         if i > 0 {
                             result.push_str(" | ");
                         }
-                        result.push_str(&format!("{}?", self.format_type(*type_id)));
+                        result.push_str(&format!("{}?", self.format_type(*type_id, interner)));
                     }
                     result
                 } else {
@@ -694,27 +695,27 @@ impl TypeTable {
                         if i > 0 {
                             result.push_str(" | ");
                         }
-                        result.push_str(&self.format_type(*type_id));
+                        result.push_str(&self.format_type(*type_id, interner));
                     }
                     result
                 }
             }
             TypeNode::Generic(generic) => {
-                let mut result = format!("{}<", generic.base_name);
+                let mut result = format!("{}<", interner.get_string(generic.base_name));
                 for (i, arg_id) in generic.type_arguments.iter().enumerate() {
                     if i > 0 {
                         result.push_str(", ");
                     }
-                    result.push_str(&self.format_type(*arg_id));
+                    result.push_str(&self.format_type(*arg_id, interner));
                 }
                 result.push('>');
                 result
             }
-            TypeNode::TypeParameter(name) => format!("{}", name),
+            TypeNode::TypeParameter(name) => format!("{}", interner.get_string(*name)),
             TypeNode::ConstrainedTypeParameter { name, constraint } => {
-                format!("{} : {}", name, self.format_type(*constraint))
+                format!("{} : {}", interner.get_string(*name), self.format_type(*constraint, interner))
             }
-            TypeNode::UnresolvedReference { name, .. } => format!("{}", name),
+            TypeNode::UnresolvedReference { name, .. } => format!("{}", interner.get_string(*name)),
             TypeNode::Object(obj) => {
                 let mut result = String::from("{ ");
                 for (i, field) in obj.fields.iter().enumerate() {
@@ -723,27 +724,27 @@ impl TypeTable {
                     }
                     result.push_str(&format!(
                         "{}: {}",
-                        field.name,
-                        self.format_type(field.field_type)
+                        interner.get_string(field.name),
+                        self.format_type(field.field_type, interner)
                     ));
                 }
                 result.push_str(" }");
                 result
             }
             TypeNode::Class(class) => {
-                format!("class {}", class.name)
+                format!("class {}", interner.get_string(class.name))
             }
             TypeNode::DynamicTop => "dyn!".to_string(),
             TypeNode::DynamicNullable => "dyn?".to_string(),
             TypeNode::Dynamic => "dyn".to_string(),
             TypeNode::Module(module) => {
-                format!("module {}", module.name)
+                format!("module {}", interner.get_string(module.name))
             }
             TypeNode::TypeImport {
                 module_path,
                 type_name,
             } => {
-                format!("import(\"{}\").{}", module_path, type_name)
+                format!("import(\"{}\").{}", interner.get_string(*module_path), interner.get_string(*type_name))
             }
         }
     }

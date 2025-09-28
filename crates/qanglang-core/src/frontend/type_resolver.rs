@@ -108,11 +108,11 @@ impl<'a> TypeResolver<'a> {
             }
         }
 
-        for &_type_id in &self.unresolved_worklist {
-            // TODO Report as "type not found" since circular refs were already reported
+        // Report remaining unresolved types as "type not found"
+        let remaining_unresolved = std::mem::take(&mut self.unresolved_worklist);
+        for type_id in remaining_unresolved {
+            self.report_type_not_found_error(type_id, ctx);
         }
-
-        self.unresolved_worklist.clear();
         self.scopes.pop();
     }
 
@@ -351,14 +351,30 @@ impl<'a> TypeResolver<'a> {
         all_resolved
     }
 
+    // Helper methods
+    fn extract_span_from_type(
+        &self,
+        type_id: TypeId,
+        ctx: &VisitorContext,
+    ) -> crate::nodes::SourceSpan {
+        if let Some(type_info) = ctx.nodes.type_table.get_type_info(type_id) {
+            match &type_info.origin {
+                TypeOrigin::Annotation(node_id) | TypeOrigin::Inferred(node_id) => {
+                    ctx.nodes.get_node(*node_id).span()
+                }
+                TypeOrigin::Builtin => crate::nodes::SourceSpan::default(),
+            }
+        } else {
+            crate::nodes::SourceSpan::default()
+        }
+    }
+
     // Error reporting methods
     fn report_circular_reference_error(&mut self, type_id: TypeId, ctx: &mut VisitorContext) {
         let message = format!("Circular type reference detected");
-        let error = crate::QangCompilerError::new_type_error(
-            message,
-            crate::nodes::SourceSpan::default(), // TODO: Extract span from type_id
-            self.source_map.clone(),
-        );
+        let span = self.extract_span_from_type(type_id, ctx);
+        let error =
+            crate::QangCompilerError::new_type_error(message, span, self.source_map.clone());
         ctx.errors.report_error(error);
     }
 
@@ -388,9 +404,10 @@ impl<'a> TypeResolver<'a> {
             "Circular type import detected for type '{}' from module '{}'",
             type_name_str, module_path_str
         );
+        // For import errors, we use default span since we don't have the specific import node context
         let error = crate::QangCompilerError::new_type_error(
             message,
-            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            crate::nodes::SourceSpan::default(),
             self.source_map.clone(),
         );
         ctx.errors.report_error(error);
@@ -408,9 +425,10 @@ impl<'a> TypeResolver<'a> {
             "Type '{}' is not exported by module '{}'",
             type_name_str, module_path_str
         );
+        // For import errors, we use default span since we don't have the specific import node context
         let error = crate::QangCompilerError::new_type_error(
             message,
-            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            crate::nodes::SourceSpan::default(),
             self.source_map.clone(),
         );
         ctx.errors.report_error(error);
@@ -423,9 +441,10 @@ impl<'a> TypeResolver<'a> {
     ) {
         let module_path_str = self.strings.get_string(module_path);
         let message = format!("Module '{}' not found", module_path_str);
+        // For module errors, we use default span since we don't have the specific import node context
         let error = crate::QangCompilerError::new_type_error(
             message,
-            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            crate::nodes::SourceSpan::default(),
             self.source_map.clone(),
         );
         ctx.errors.report_error(error);
@@ -438,11 +457,46 @@ impl<'a> TypeResolver<'a> {
     ) {
         let type_name_str = self.strings.get_string(base_type_name);
         let message = format!("Unresolved base type '{}' in generic type", type_name_str);
+        // For generic base type errors, we use default span since we don't have the specific context
         let error = crate::QangCompilerError::new_type_error(
             message,
-            crate::nodes::SourceSpan::default(), // TODO: Extract proper span
+            crate::nodes::SourceSpan::default(),
             self.source_map.clone(),
         );
+        ctx.errors.report_error(error);
+    }
+
+    fn report_type_not_found_error(&mut self, type_id: TypeId, ctx: &mut VisitorContext) {
+        let type_info = ctx.nodes.type_table.get_type_info(type_id).unwrap();
+        let message = match &type_info.type_node {
+            TypeNode::UnresolvedReference { name, .. } => {
+                let type_name = self.strings.get_string(*name);
+                format!("Type '{}' not found", type_name)
+            }
+            TypeNode::TypeImport {
+                module_path,
+                type_name,
+            } => {
+                let module_path_str = self.strings.get_string(*module_path);
+                let type_name_str = self.strings.get_string(*type_name);
+                format!(
+                    "Type '{}' not found in module '{}'",
+                    type_name_str, module_path_str
+                )
+            }
+            TypeNode::Generic(generic_type) => {
+                let base_name_str = self.strings.get_string(generic_type.base_name);
+                format!(
+                    "Generic type '{}' could not be fully resolved",
+                    base_name_str
+                )
+            }
+            _ => "Unresolved type".to_string(),
+        };
+
+        let span = self.extract_span_from_type(type_id, ctx);
+        let error =
+            crate::QangCompilerError::new_type_error(message, span, self.source_map.clone());
         ctx.errors.report_error(error);
     }
 }
@@ -455,9 +509,6 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         decl: super::typed_node_arena::TypedNodeRef<super::nodes::DeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if self.is_global_scope() {
-            // TODO add to module exports
-        }
         match decl.node {
             super::nodes::DeclNode::Class(class_decl) => self.visit_class_declaration(
                 super::typed_node_arena::TypedNodeRef::new(decl.id, class_decl),
@@ -726,9 +777,6 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
                         self.visit_block_statement(body, ctx)?;
 
                         self.end_scope(ctx);
-
-                        // Create function type for method and add to class
-                        // TODO: This will be enhanced when we implement function type creation
                     }
                     super::nodes::ClassMemberNode::Field(field) => {
                         // Process field type annotation if present

@@ -1,5 +1,5 @@
-use crate::{NodeId, StringHandle};
 use crate::memory::StringInterner;
+use crate::{NodeId, StringHandle};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::fmt;
 
@@ -33,6 +33,10 @@ impl TypeTable {
         self.next_type_id += 1;
         self.type_storage.push(type_info);
         type_id
+    }
+
+    pub fn replace_type(&mut self, type_id: TypeId, new_type_info: TypeInfo) {
+        self.type_storage[type_id.0] = new_type_info;
     }
 
     /// Get type information by TypeId
@@ -713,7 +717,11 @@ impl TypeTable {
             }
             TypeNode::TypeParameter(name) => format!("{}", interner.get_string(*name)),
             TypeNode::ConstrainedTypeParameter { name, constraint } => {
-                format!("{} : {}", interner.get_string(*name), self.format_type(*constraint, interner))
+                format!(
+                    "{} : {}",
+                    interner.get_string(*name),
+                    self.format_type(*constraint, interner)
+                )
             }
             TypeNode::UnresolvedReference { name, .. } => format!("{}", interner.get_string(*name)),
             TypeNode::Object(obj) => {
@@ -744,7 +752,11 @@ impl TypeTable {
                 module_path,
                 type_name,
             } => {
-                format!("import(\"{}\").{}", interner.get_string(*module_path), interner.get_string(*type_name))
+                format!(
+                    "import(\"{}\").{}",
+                    interner.get_string(*module_path),
+                    interner.get_string(*type_name)
+                )
             }
         }
     }

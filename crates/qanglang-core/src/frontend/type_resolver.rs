@@ -1,13 +1,13 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use crate::{
-    ErrorReporter, NodeId, QangCompilerError, SourceMap, StringHandle, StringInterner,
+    ErrorReporter, ModuleMap, NodeId, QangCompilerError, SourceMap, StringHandle, StringInterner,
     TypedNodeArena,
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
-        types::TypeId,
+        types::{TypeId, TypeNode},
     },
 };
 
@@ -44,42 +44,75 @@ pub struct TypeResolver<'a> {
     strings: &'a mut StringInterner,
     source_map: Arc<SourceMap>,
     scopes: Vec<TypeEnvironment>,
-    exported_types: FxHashMap<StringHandle, TypeId>,
+    modules: &'a mut ModuleMap,
+    module_path: PathBuf,
+    unresolved_worklist: Vec<TypeId>,
+    currently_resolving: FxHashSet<TypeId>,
 }
 
 impl<'a> TypeResolver<'a> {
     pub fn new(
         strings: &'a mut StringInterner,
         source_map: Arc<SourceMap>,
+        module_path: PathBuf,
+        modules: &'a mut ModuleMap,
         global_types: TypeEnvironment,
     ) -> Self {
         Self {
             strings,
             source_map,
             scopes: vec![global_types],
-            exported_types: FxHashMap::with_hasher(FxBuildHasher),
+            modules,
+            unresolved_worklist: Vec::new(),
+            module_path,
+            currently_resolving: FxHashSet::with_hasher(FxBuildHasher),
         }
     }
 
-    pub fn resolve(
-        mut self,
-        program: NodeId,
-        nodes: &mut TypedNodeArena,
-        errors: &mut ErrorReporter,
-    ) -> FxHashMap<StringHandle, TypeId> {
+    pub fn resolve(mut self, nodes: &mut TypedNodeArena, errors: &mut ErrorReporter) {
+        let module_node_id = self.modules.get(&self.module_path).map(|m| m.node).expect(
+            format!(
+                "Expected module {} to be parsed.",
+                self.module_path.display()
+            )
+            .as_str(),
+        );
         let mut ctx = VisitorContext::new(nodes, errors);
-        let program_node = ctx.nodes.get_program_node(program);
+        let module_node = ctx.nodes.get_program_node(module_node_id);
 
-        let _ = self.visit_module(program_node, &mut ctx);
-
-        self.exported_types
+        let _ = self.visit_module(module_node, &mut ctx);
     }
 
     fn begin_scope(&mut self) {
         self.scopes.push(TypeEnvironment::new());
     }
 
-    fn end_scope(&mut self) {
+    fn end_scope(&mut self, ctx: &mut VisitorContext) {
+        // Process the worklist until no more progress
+        let mut progress = true;
+        while progress && !self.unresolved_worklist.is_empty() {
+            progress = false;
+
+            // Use mem::take to avoid clone - takes ownership of the vec and replaces with empty
+            let mut type_ids_to_check = std::mem::take(&mut self.unresolved_worklist);
+
+            for type_id in type_ids_to_check.drain(..) {
+                // Use try_resolve_type which handles circular references
+                if self.try_resolve_type(type_id, ctx) {
+                    progress = true;
+                    // Successfully resolved - don't add back to worklist
+                } else {
+                    // Keep in worklist - either circular or not found yet
+                    self.unresolved_worklist.push(type_id);
+                }
+            }
+        }
+
+        for &_type_id in &self.unresolved_worklist {
+            // TODO Report as "type not found" since circular refs were already reported
+        }
+
+        self.unresolved_worklist.clear();
         self.scopes.pop();
     }
 
@@ -101,6 +134,42 @@ impl<'a> TypeResolver<'a> {
         }
 
         None
+    }
+
+    fn try_resolve_type(&mut self, type_id: TypeId, ctx: &mut VisitorContext) -> bool {
+        if self.currently_resolving.contains(&type_id) {
+            // TODO report circular reference
+            return false;
+        }
+
+        self.currently_resolving.insert(type_id);
+
+        let type_info = ctx.nodes.type_table.get_type_info(type_id).unwrap();
+        let result = if let TypeNode::UnresolvedReference { name, .. } = &type_info.type_node {
+            if let Some(resolved_type_id) = self.lookup_type(*name) {
+                // Recursively resolve the target (this catches A->B->A cycles)
+                if self.try_resolve_type(resolved_type_id, ctx) {
+                    // Replace with resolved type
+                    let resolved_info = ctx
+                        .nodes
+                        .type_table
+                        .get_type_info(resolved_type_id)
+                        .unwrap()
+                        .clone();
+                    ctx.nodes.type_table.replace_type(type_id, resolved_info);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false // Not found
+            }
+        } else {
+            true // Already resolved
+        };
+
+        self.currently_resolving.remove(&type_id);
+        result
     }
 }
 
@@ -162,7 +231,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         // TODO visit body again to resolve types that were not declared yet
 
-        self.end_scope();
+        self.end_scope(ctx);
 
         Ok(())
     }
@@ -180,7 +249,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         // TODO visit body again to resolve types that were not declared yet
 
-        self.end_scope();
+        self.end_scope(ctx);
 
         Ok(())
     }
@@ -197,7 +266,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         // TODO visit expression again to resolve types that were not declared yet
 
-        self.end_scope();
+        self.end_scope(ctx);
 
         Ok(())
     }
@@ -214,7 +283,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         // TODO visit expression again to resolve types that were not declared yet
 
-        self.end_scope();
+        self.end_scope(ctx);
 
         Ok(())
     }
@@ -236,7 +305,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         // TODO visit statements again to resolve types that were not declared yet
 
-        self.end_scope();
+        self.end_scope(ctx);
         Ok(())
     }
 
@@ -262,7 +331,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
 
-        self.end_scope();
+        self.end_scope(ctx);
 
         Ok(())
     }
@@ -302,7 +371,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
 
                         // TODO visit body again to resolve types that were not declared yet
 
-                        self.end_scope();
+                        self.end_scope(ctx);
                     }
                     super::nodes::ClassMemberNode::Field(field) => {
                         if let Some(init_id) = field.initializer {
@@ -314,7 +383,7 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
             }
         }
 
-        self.end_scope();
+        self.end_scope(ctx);
 
         // TODO update class type with method/field type data
 

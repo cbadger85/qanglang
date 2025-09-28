@@ -59,11 +59,25 @@ impl<'a> AnalysisPipeline<'a> {
 
         let gobal_types = TypeEnvironment::with_globals(nodes);
 
-        for (_, module) in modules.iter_mut() {
-            let exported_types =
-                TypeResolver::new(self.strings, module.source_map.clone(), gobal_types.clone())
-                    .resolve(module.node, nodes, errors);
-            module.exported_types = exported_types;
+        let module_paths_to_resolve = modules
+            .iter()
+            .map(|(path, _)| path.to_path_buf())
+            .collect::<Vec<_>>();
+
+        for path in module_paths_to_resolve {
+            let source_map = {
+                let module = modules
+                    .get(path.as_path())
+                    .expect(format!("Expect module {} to be parsed.", path.display()).as_str());
+
+                if module.is_resolved() {
+                    continue;
+                }
+
+                module.source_map.clone()
+            };
+            TypeResolver::new(self.strings, source_map, path, modules, gobal_types.clone())
+                .resolve(nodes, errors);
         }
 
         if errors.has_errors() {

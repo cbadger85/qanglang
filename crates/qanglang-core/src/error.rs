@@ -31,6 +31,7 @@ pub enum QangErrorKind {
     Syntax,
     Analysis,
     Assembler,
+    Type,
 }
 
 impl std::fmt::Display for QangErrorKind {
@@ -39,6 +40,7 @@ impl std::fmt::Display for QangErrorKind {
             Self::Syntax => write!(f, "Syntax Error"),
             Self::Analysis => write!(f, "Analysis Error"),
             Self::Assembler => write!(f, "Assembler Error"),
+            Self::Type => write!(f, "Type Error"),
         }
     }
 }
@@ -87,7 +89,17 @@ impl QangCompilerError {
         }
     }
 
+    pub fn new_type_error(message: String, span: SourceSpan, source_map: Arc<SourceMap>) -> Self {
+        Self {
+            message,
+            span,
+            kind: QangErrorKind::Type,
+            source_map,
+        }
+    }
+
     pub fn into_formatted(self) -> Self {
+        // TODO maybe use a different formatter for type errors.
         let message = pretty_print_error(&self.source_map, self.kind, &self.message, self.span);
 
         Self {

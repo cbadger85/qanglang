@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use crate::{NodeId, SourceMap, StringHandle, frontend::types::TypeId};
 
@@ -12,6 +12,19 @@ pub struct ModuleSource {
     pub node: NodeId,
     pub source_map: Arc<SourceMap>,
     pub exported_types: FxHashMap<StringHandle, TypeId>,
+    pub resolved_handles: FxHashSet<StringHandle>,
+    pub resolving_handles: FxHashSet<StringHandle>,
+}
+
+impl ModuleSource {
+    pub fn is_resolved(&self) -> bool {
+        let keys = self
+            .exported_types
+            .keys()
+            .copied()
+            .collect::<FxHashSet<_>>();
+        keys == self.resolved_handles
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -36,6 +49,8 @@ impl ModuleMap {
                 node,
                 source_map,
                 exported_types: FxHashMap::with_hasher(FxBuildHasher),
+                resolved_handles: FxHashSet::with_hasher(FxBuildHasher),
+                resolving_handles: FxHashSet::with_hasher(FxBuildHasher),
             },
         );
     }
@@ -64,9 +79,5 @@ impl ModuleMap {
 
     pub fn iter(&self) -> impl Iterator<Item = (&Path, &ModuleSource)> {
         self.modules.iter().map(|(k, v)| (k.as_path(), v))
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Path, &mut ModuleSource)> {
-        self.modules.iter_mut().map(|(k, v)| (k.as_path(), v))
     }
 }

@@ -66,7 +66,7 @@ impl ModuleMap {
     }
 
     pub fn get_main_path(&self) -> Option<&Path> {
-        self.main_module.as_ref().map(|p| p.as_path())
+        self.main_module.as_deref()
     }
 
     pub fn get(&self, path: &Path) -> Option<&ModuleSource> {

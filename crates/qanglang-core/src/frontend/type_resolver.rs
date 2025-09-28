@@ -70,13 +70,8 @@ impl<'a> TypeResolver<'a> {
     }
 
     pub fn resolve(mut self, nodes: &mut TypedNodeArena, errors: &mut ErrorReporter) {
-        let module_node_id = self.modules.get(&self.module_path).map(|m| m.node).expect(
-            format!(
-                "Expected module {} to be parsed.",
-                self.module_path.display()
-            )
-            .as_str(),
-        );
+        let module_node_id = self.modules.get(&self.module_path).map(|m| m.node).unwrap_or_else(|| panic!("Expected module {} to be parsed.",
+                self.module_path.display()));
         let mut ctx = VisitorContext::new(nodes, errors);
         let module_node = ctx.nodes.get_program_node(module_node_id);
 
@@ -222,20 +217,18 @@ impl<'a> TypeResolver<'a> {
         }
 
         // If not found locally, try current module's exported types
-        if let Some(module) = self.modules.get(&self.module_path) {
-            if let Some(&exported_type_id) = module.exported_types.get(&name) {
-                if self.try_resolve_type(exported_type_id, ctx) {
-                    let resolved_info = ctx
-                        .nodes
-                        .type_table
-                        .get_type_info(exported_type_id)
-                        .unwrap()
-                        .clone();
-                    ctx.nodes.type_table.replace_type(type_id, resolved_info);
-                    return true;
-                }
+        if let Some(module) = self.modules.get(&self.module_path)
+            && let Some(&exported_type_id) = module.exported_types.get(&name)
+            && self.try_resolve_type(exported_type_id, ctx) {
+                let resolved_info = ctx
+                    .nodes
+                    .type_table
+                    .get_type_info(exported_type_id)
+                    .unwrap()
+                    .clone();
+                ctx.nodes.type_table.replace_type(type_id, resolved_info);
+                return true;
             }
-        }
 
         // Type not found - report error
         self.report_unresolved_type_error(name, identifier_node, ctx);
@@ -420,7 +413,7 @@ impl<'a> TypeResolver<'a> {
 
     // Error reporting methods
     fn report_circular_reference_error(&mut self, type_id: TypeId, ctx: &mut VisitorContext) {
-        let message = format!("Circular type reference detected");
+        let message = "Circular type reference detected".to_string();
         let span = self.extract_span_from_type(type_id, ctx);
         let error =
             crate::QangCompilerError::new_type_error(message, span, self.source_map.clone());
@@ -784,11 +777,10 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         self.get_scope_mut().declare_type(class_name, class_type_id);
 
         // If at global scope, add to module exports
-        if self.is_global_scope() {
-            if let Some(module) = self.modules.get_mut(&self.module_path) {
+        if self.is_global_scope()
+            && let Some(module) = self.modules.get_mut(&self.module_path) {
                 module.exported_types.insert(class_name, class_type_id);
             }
-        }
 
         // Add superclass to worklist if it needs resolution
         if let Some(superclass_type_id) = superclass_type {
@@ -1033,11 +1025,10 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
             .declare_type(alias_name, type_definition_id);
 
         // If at global scope, add to module exports
-        if self.is_global_scope() {
-            if let Some(module) = self.modules.get_mut(&self.module_path) {
+        if self.is_global_scope()
+            && let Some(module) = self.modules.get_mut(&self.module_path) {
                 module.exported_types.insert(alias_name, type_definition_id);
             }
-        }
 
         // Add the aliased type to the worklist for resolution
         self.unresolved_worklist.push(type_definition_id);

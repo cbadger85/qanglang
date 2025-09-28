@@ -68,7 +68,7 @@ impl<'a> AnalysisPipeline<'a> {
             let source_map = {
                 let module = modules
                     .get(path.as_path())
-                    .expect(format!("Expect module {} to be parsed.", path.display()).as_str());
+                    .unwrap_or_else(|| panic!("Expect module {} to be parsed.", path.display()));
 
                 if module.is_resolved() {
                     continue;

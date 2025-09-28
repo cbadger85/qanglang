@@ -132,13 +132,11 @@ impl TypeTable {
                 }
 
                 // Check if from_class inherits from to_class (single level only)
-                if let Some(superclass_id) = from_class.superclass {
-                    if let Some(super_info) = self.get_type_info(superclass_id) {
-                        if let TypeNode::Class(super_class) = &super_info.type_node {
-                            return super_class.name == to_class.name;
-                        }
+                if let Some(superclass_id) = from_class.superclass
+                    && let Some(super_info) = self.get_type_info(superclass_id)
+                    && let TypeNode::Class(super_class) = &super_info.type_node {
+                        return super_class.name == to_class.name;
                     }
-                }
 
                 false
             }
@@ -517,7 +515,7 @@ impl TypeTable {
                 .ok_or("Invalid class type ID")?;
 
             if let TypeNode::Class(ref class) = type_info.type_node {
-                class.superclass.clone()
+                class.superclass
             } else {
                 return Err("Type is not a class".to_string());
             }
@@ -535,7 +533,7 @@ impl TypeTable {
                     .iter()
                     .map(|field| ClassField {
                         name: field.name,
-                        field_type: field.field_type.clone(),
+                        field_type: field.field_type,
                         inherited: true,
                     })
                     .collect();
@@ -715,7 +713,7 @@ impl TypeTable {
                 result.push('>');
                 result
             }
-            TypeNode::TypeParameter(name) => format!("{}", interner.get_string(*name)),
+            TypeNode::TypeParameter(name) => interner.get_string(*name).to_string(),
             TypeNode::ConstrainedTypeParameter { name, constraint } => {
                 format!(
                     "{} : {}",
@@ -723,7 +721,7 @@ impl TypeTable {
                     self.format_type(*constraint, interner)
                 )
             }
-            TypeNode::UnresolvedReference { name, .. } => format!("{}", interner.get_string(*name)),
+            TypeNode::UnresolvedReference { name, .. } => interner.get_string(*name).to_string(),
             TypeNode::Object(obj) => {
                 let mut result = String::from("{ ");
                 for (i, field) in obj.fields.iter().enumerate() {

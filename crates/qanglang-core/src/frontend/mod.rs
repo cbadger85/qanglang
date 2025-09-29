@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod inference_engine;
 pub mod module_map;
 pub mod node_array_arena;
 pub mod node_visitor;
@@ -8,5 +9,6 @@ pub mod semantic_validator;
 pub mod source;
 pub mod tokenizer;
 pub mod type_resolver;
+pub mod type_scope_manager;
 pub mod typed_node_arena;
 pub mod types;

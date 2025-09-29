@@ -1,53 +1,25 @@
 use std::{path::PathBuf, sync::Arc};
 
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashSet};
 
 use crate::{
     ErrorReporter, ModuleMap, NodeId, QangCompilerError, SourceMap, StringHandle, StringInterner,
     TypedNodeArena,
     frontend::{
         node_visitor::{NodeVisitor, VisitorContext},
+        type_scope_manager::{TypeEnvironment, TypeScopeManager},
         types::{FunctionType, GenericType, TypeId, TypeInfo, TypeNode, TypeOrigin},
     },
 };
 
-#[derive(Debug, Clone, Default)]
-pub struct TypeEnvironment {
-    type_names: FxHashMap<StringHandle, TypeId>,
-}
-
-impl TypeEnvironment {
-    pub fn new() -> Self {
-        Self {
-            type_names: FxHashMap::with_hasher(FxBuildHasher),
-        }
-    }
-
-    pub fn with_globals(_nodes: &mut TypedNodeArena) -> Self {
-        let type_names = FxHashMap::with_hasher(FxBuildHasher);
-
-        // TODO insert globals from stdlib.ql
-
-        Self { type_names }
-    }
-
-    fn declare_type(&mut self, name: StringHandle, type_id: TypeId) {
-        self.type_names.insert(name, type_id);
-    }
-
-    fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
-        self.type_names.get(&name).copied()
-    }
-}
-
 pub struct TypeResolver<'a> {
     strings: &'a mut StringInterner,
     source_map: Arc<SourceMap>,
-    scopes: Vec<TypeEnvironment>,
     modules: &'a mut ModuleMap,
     module_path: PathBuf,
     unresolved_worklist: Vec<TypeId>,
     currently_resolving: FxHashSet<TypeId>,
+    scopes: TypeScopeManager,
 }
 
 impl<'a> TypeResolver<'a> {
@@ -61,7 +33,7 @@ impl<'a> TypeResolver<'a> {
         Self {
             strings,
             source_map,
-            scopes: vec![global_types],
+            scopes: TypeScopeManager::new(global_types),
             modules,
             unresolved_worklist: Vec::new(),
             module_path,
@@ -69,9 +41,17 @@ impl<'a> TypeResolver<'a> {
         }
     }
 
-    pub fn resolve(mut self, nodes: &mut TypedNodeArena, errors: &mut ErrorReporter) {
-        let module_node_id = self.modules.get(&self.module_path).map(|m| m.node).unwrap_or_else(|| panic!("Expected module {} to be parsed.",
-                self.module_path.display()));
+    pub fn resolve(&mut self, nodes: &mut TypedNodeArena, errors: &mut ErrorReporter) {
+        let module_node_id = self
+            .modules
+            .get(&self.module_path)
+            .map(|m| m.node)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Expected module {} to be parsed.",
+                    self.module_path.display()
+                )
+            });
         let mut ctx = VisitorContext::new(nodes, errors);
         let module_node = ctx.nodes.get_program_node(module_node_id);
 
@@ -79,7 +59,7 @@ impl<'a> TypeResolver<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.scopes.push(TypeEnvironment::new());
+        self.scopes.begin_scope();
     }
 
     fn end_scope(&mut self, ctx: &mut VisitorContext) {
@@ -108,27 +88,7 @@ impl<'a> TypeResolver<'a> {
         for type_id in remaining_unresolved {
             self.report_type_not_found_error(type_id, ctx);
         }
-        self.scopes.pop();
-    }
-
-    fn is_global_scope(&self) -> bool {
-        self.scopes.len() == 1
-    }
-
-    fn get_scope_mut(&mut self) -> &mut TypeEnvironment {
-        self.scopes
-            .last_mut()
-            .expect("Unexpected empty scope stack.")
-    }
-
-    fn lookup_type(&self, name: StringHandle) -> Option<TypeId> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(type_id) = scope.lookup_type(name) {
-                return Some(type_id);
-            }
-        }
-
-        None
+        self.scopes.end_scope();
     }
 
     fn try_resolve_type(&mut self, type_id: TypeId, ctx: &mut VisitorContext) -> bool {
@@ -199,7 +159,7 @@ impl<'a> TypeResolver<'a> {
         ctx: &mut VisitorContext,
     ) -> bool {
         // First try local scopes
-        if let Some(resolved_type_id) = self.lookup_type(name) {
+        if let Some(resolved_type_id) = self.scopes.lookup_type(name) {
             // Recursively resolve the target (this catches A->B->A cycles)
             if self.try_resolve_type(resolved_type_id, ctx) {
                 // Replace with resolved type
@@ -219,16 +179,17 @@ impl<'a> TypeResolver<'a> {
         // If not found locally, try current module's exported types
         if let Some(module) = self.modules.get(&self.module_path)
             && let Some(&exported_type_id) = module.exported_types.get(&name)
-            && self.try_resolve_type(exported_type_id, ctx) {
-                let resolved_info = ctx
-                    .nodes
-                    .type_table
-                    .get_type_info(exported_type_id)
-                    .unwrap()
-                    .clone();
-                ctx.nodes.type_table.replace_type(type_id, resolved_info);
-                return true;
-            }
+            && self.try_resolve_type(exported_type_id, ctx)
+        {
+            let resolved_info = ctx
+                .nodes
+                .type_table
+                .get_type_info(exported_type_id)
+                .unwrap()
+                .clone();
+            ctx.nodes.type_table.replace_type(type_id, resolved_info);
+            return true;
+        }
 
         // Type not found - report error
         self.report_unresolved_type_error(name, identifier_node, ctx);
@@ -302,7 +263,7 @@ impl<'a> TypeResolver<'a> {
     ) -> bool {
         // First resolve the base type
         let base_type_name = generic_type.base_name;
-        if let Some(base_type_id) = self.lookup_type(base_type_name) {
+        if let Some(base_type_id) = self.scopes.lookup_type(base_type_name) {
             if !self.try_resolve_type(base_type_id, ctx) {
                 return false;
             }
@@ -774,13 +735,16 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
                 .create_class_type(class_name, superclass_type, class_decl.id);
 
         // Declare class type in current scope
-        self.get_scope_mut().declare_type(class_name, class_type_id);
+        self.scopes
+            .get_scope_mut()
+            .declare_type(class_name, class_type_id);
 
         // If at global scope, add to module exports
-        if self.is_global_scope()
-            && let Some(module) = self.modules.get_mut(&self.module_path) {
-                module.exported_types.insert(class_name, class_type_id);
-            }
+        if self.scopes.is_global_scope()
+            && let Some(module) = self.modules.get_mut(&self.module_path)
+        {
+            module.exported_types.insert(class_name, class_type_id);
+        }
 
         // Add superclass to worklist if it needs resolution
         if let Some(superclass_type_id) = superclass_type {
@@ -941,7 +905,8 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
                 .create_module_type(module_name, import_decl.id);
 
             // Register module in current scope
-            self.get_scope_mut()
+            self.scopes
+                .get_scope_mut()
                 .declare_type(module_name, module_type_id);
 
             // Note: Module types themselves don't need resolution, but their exported types
@@ -989,7 +954,9 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         let type_param_id = ctx.nodes.type_table.create_type(type_param_info);
 
         // Register type parameter in current scope
-        self.get_scope_mut().declare_type(param_name, type_param_id);
+        self.scopes
+            .get_scope_mut()
+            .declare_type(param_name, type_param_id);
 
         Ok(())
     }
@@ -1021,14 +988,16 @@ impl<'a> NodeVisitor for TypeResolver<'a> {
         let type_definition_id = type_decl.node.type_definition;
 
         // Register type alias in current scope
-        self.get_scope_mut()
+        self.scopes
+            .get_scope_mut()
             .declare_type(alias_name, type_definition_id);
 
         // If at global scope, add to module exports
-        if self.is_global_scope()
-            && let Some(module) = self.modules.get_mut(&self.module_path) {
-                module.exported_types.insert(alias_name, type_definition_id);
-            }
+        if self.scopes.is_global_scope()
+            && let Some(module) = self.modules.get_mut(&self.module_path)
+        {
+            module.exported_types.insert(alias_name, type_definition_id);
+        }
 
         // Add the aliased type to the worklist for resolution
         self.unresolved_worklist.push(type_definition_id);

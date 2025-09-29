@@ -1,9 +1,9 @@
 use crate::{
     ErrorReporter, QangPipelineError, TypedNodeArena,
     frontend::{
-        module_map::ModuleMap,
-        semantic_validator::SemanticValidator,
-        type_resolver::{TypeEnvironment, TypeResolver},
+        inference_engine::InferenceEngine, module_map::ModuleMap,
+        semantic_validator::SemanticValidator, type_resolver::TypeResolver,
+        type_scope_manager::TypeEnvironment,
     },
     memory::StringInterner,
 };
@@ -57,7 +57,7 @@ impl<'a> AnalysisPipeline<'a> {
             return Err(QangPipelineError::new(errors));
         }
 
-        let gobal_types = TypeEnvironment::with_globals(nodes);
+        let global_types = TypeEnvironment::with_globals(nodes);
 
         let module_paths_to_resolve = modules
             .iter()
@@ -76,8 +76,23 @@ impl<'a> AnalysisPipeline<'a> {
 
                 module.source_map.clone()
             };
-            TypeResolver::new(self.strings, source_map, path, modules, gobal_types.clone())
-                .resolve(nodes, errors);
+            TypeResolver::new(
+                self.strings,
+                source_map,
+                path,
+                modules,
+                global_types.clone(),
+            )
+            .resolve(nodes, errors);
+        }
+
+        for (_, module) in modules.iter() {
+            InferenceEngine::new(
+                self.strings,
+                module.source_map.clone(),
+                global_types.clone(),
+            )
+            .infer(module.node, nodes, errors);
         }
 
         if errors.has_errors() {

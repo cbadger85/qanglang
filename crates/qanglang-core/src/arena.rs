@@ -1,6 +1,10 @@
 use core::mem;
 
 /// A minimal generational arena implementation
+///
+/// Forked from: https://github.com/fitzgen/generational-arena
+/// Original author: Nick Fitzgerald
+/// Licensed under MPL-2.0
 #[derive(Clone, Debug)]
 pub struct Arena<T> {
     items: Vec<Entry<T>>,

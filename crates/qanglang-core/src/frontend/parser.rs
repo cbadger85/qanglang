@@ -344,7 +344,7 @@ impl<'a> Parser<'a> {
         // Insert the main module
         let main_path = self.source_map.get_path().to_path_buf();
         modules.insert(&main_path, main_id, self.source_map.clone());
-        modules.add_main_module(main_path);
+        modules.set_main_module(main_path);
 
         if self.config.skip_modules {
             return modules;

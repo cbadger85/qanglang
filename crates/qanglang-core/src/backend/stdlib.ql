@@ -112,6 +112,10 @@ class Iterator {
     }
     return n;
   }
+
+  join(other_iterator) {
+    return ChainIterator(this, other_iterator);
+  }
 }
 
 class ArrayIterator : Iterator {
@@ -215,6 +219,37 @@ class TakeIterator : Iterator {
 
     this.taken += 1;
     return this.iterator.next();
+  }
+}
+
+class ChainIterator : Iterator {
+  first_exhausted = false;
+
+  init(first, second) {
+    this.first = first;
+    this.second = second;
+  }
+
+  has_next() {
+    if (!this.first_exhausted) {
+      if (this.first.has_next()) {
+        return true;
+      }
+      this.first_exhausted = true;
+    }
+    return this.second.has_next();
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    if (!this.first_exhausted) {
+      return this.first.next();
+    }
+
+    return this.second.next();
   }
 }
 

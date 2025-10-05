@@ -14,7 +14,6 @@ pub fn analyze(source_map: Arc<SourceMap>) -> Result<(), QangPipelineError> {
 
     let mut errors = parser.into_errors();
 
-    // Parser now returns ModuleMap directly
     AnalysisPipeline::new(&mut strings).analyze(&modules, &mut nodes, &mut errors)?;
 
     Ok(())

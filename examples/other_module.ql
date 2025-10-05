@@ -1,6 +1,6 @@
-var create_array = (length, init) -> Range(0, length) 
-  |> iter_map(init) 
-  |> iter_collect();
+var create_array = (length, init) -> Range(0, length)
+  .map(init)
+  .collect();
 
 var value = 0;
 

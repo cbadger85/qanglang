@@ -214,14 +214,11 @@ impl Backend {
 }
 
 pub fn run_language_server() {
-    // Initialize logging for the language server first
-    // Ensure logs go to stderr, not stdout (which LSP uses)
     env_logger::Builder::from_default_env()
         .target(env_logger::Target::Stderr)
         .init();
     info!("Starting QangLang Language Server...");
 
-    // Create a new tokio runtime for the language server
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     rt.block_on(async {

@@ -1547,8 +1547,7 @@ impl Vm {
                     ));
                 }
 
-                // TODO add instance methods to method cache.
-                self.invoke_from_class(instance.clazz, method_handle, arg_count)
+                self.invoke_from_class_cached(instance.clazz, method_handle, arg_count)
             }
 
             ValueKind::ObjectLiteral(handle) => {
@@ -1914,6 +1913,56 @@ impl Vm {
                 .expect("Expected keyword.");
             if method_handle == init_handle {
                 // Pop arguments but leave receiver on stack
+                for _ in 0..arg_count {
+                    pop_value!(self);
+                }
+                // Push nil as return value
+                push_value!(self, Value::nil())?;
+                Ok(())
+            } else {
+                Err(QangRuntimeError::new(
+                    format!(
+                        "{} does not exist on class {}.",
+                        Value::string(method_handle).to_display_string(&self.alloc),
+                        Value::class(clazz_handle).to_display_string(&self.alloc),
+                    ),
+                    self.state.get_previous_loc(),
+                ))
+            }
+        }
+    }
+
+    fn invoke_from_class_cached(
+        &mut self,
+        clazz_handle: ClassHandle,
+        method_handle: StringHandle,
+        arg_count: usize,
+    ) -> RuntimeResult<()> {
+        let clazz = self.alloc.get_class(clazz_handle);
+        let object_type = CachedObjectType::Instance(clazz_handle);
+
+        if let Some(method_value) =
+            self.get_method_cached(object_type, clazz.method_table, method_handle)
+        {
+            if let Some(method) = method_value.as_closure() {
+                self.call(method, arg_count)
+            } else {
+                Err(QangRuntimeError::new(
+                    format!(
+                        "{} is not a method on class {}.",
+                        Value::string(method_handle).to_display_string(&self.alloc),
+                        Value::class(clazz_handle).to_display_string(&self.alloc),
+                    ),
+                    self.state.get_previous_loc(),
+                ))
+            }
+        } else {
+            let init_handle = *self
+                .state
+                .keywords
+                .get(&Keyword::Init)
+                .expect("Expected keyword.");
+            if method_handle == init_handle {
                 for _ in 0..arg_count {
                     pop_value!(self);
                 }

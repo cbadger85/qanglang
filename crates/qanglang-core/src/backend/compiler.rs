@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
 use crate::{
-    ErrorReporter, FunctionHandle, FunctionObject, HeapAllocator, NodeId, QangCompilerError,
-    QangPipelineError, SourceLocation, SourceMap, TypedNodeArena, Value,
+    AstNodeArena, ErrorReporter, FunctionHandle, FunctionObject, HeapAllocator, NodeId,
+    QangCompilerError, QangPipelineError, SourceLocation, SourceMap, Value,
     backend::{
         chunk::{Chunk, OpCode},
         module_resolver::ModuleResolver,
     },
     frontend::{
+        ast_node_arena::TypedNodeRef,
         node_visitor::{NodeVisitor, VisitorContext},
         semantic_validator::FunctionKind,
-        typed_node_arena::TypedNodeRef,
     },
     nodes::*,
 };
@@ -249,7 +249,7 @@ impl<'a> Assembler<'a> {
     pub fn assemble(
         mut self,
         program: NodeId,
-        nodes: &mut TypedNodeArena,
+        nodes: &mut AstNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<FunctionObject, QangPipelineError> {
         let mut ctx = VisitorContext::new(nodes, errors);

@@ -1,18 +1,18 @@
 use crate::{
     ErrorReporter,
     frontend::{
+        ast_node_arena::{AstNodeArena, TypedNodeRef},
         nodes::*,
-        typed_node_arena::{TypedNodeArena, TypedNodeRef},
     },
 };
 
 pub struct VisitorContext<'a> {
-    pub nodes: &'a mut TypedNodeArena,
+    pub nodes: &'a mut AstNodeArena,
     pub errors: &'a mut ErrorReporter,
 }
 
 impl<'a> VisitorContext<'a> {
-    pub fn new(nodes: &'a mut TypedNodeArena, errors: &'a mut ErrorReporter) -> Self {
+    pub fn new(nodes: &'a mut AstNodeArena, errors: &'a mut ErrorReporter) -> Self {
         Self { nodes, errors }
     }
 }
@@ -776,7 +776,7 @@ mod tests {
 
     #[test]
     fn test_node_visitor() {
-        let mut arena = TypedNodeArena::new();
+        let mut arena = AstNodeArena::new();
         let identifier = IdentifierNode {
             name: 0,
             span: SourceSpan::new(0, 4),

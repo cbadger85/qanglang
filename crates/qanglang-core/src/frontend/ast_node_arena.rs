@@ -29,12 +29,12 @@ impl<T: Clone + Copy> TypedNodeRef<T> {
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct TypedNodeArena {
+pub struct AstNodeArena {
     nodes: Arena<AstNode>,
     pub array: NodeArrayArena,
 }
 
-impl TypedNodeArena {
+impl AstNodeArena {
     pub fn new() -> Self {
         Self {
             nodes: Arena::new(),

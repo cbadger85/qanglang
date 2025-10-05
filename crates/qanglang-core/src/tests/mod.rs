@@ -15,7 +15,7 @@ pub mod vm_tests;
 
 pub fn parse_source(
     source_map: Arc<crate::SourceMap>,
-    mut nodes: crate::TypedNodeArena,
+    mut nodes: crate::AstNodeArena,
     mut strings: crate::memory::StringInterner,
 ) -> (crate::NodeId, crate::ErrorReporter) {
     let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);

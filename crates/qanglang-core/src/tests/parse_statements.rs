@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::{assert_no_parse_errors, parse_source};
-use crate::{SourceMap, TypedNodeArena, memory::StringInterner};
+use crate::{SourceMap, AstNodeArena, memory::StringInterner};
 
 #[test]
 fn test_if_statement() {
@@ -13,7 +13,7 @@ fn test_if_statement() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -29,7 +29,7 @@ fn test_if_statement_without_else() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -47,7 +47,7 @@ fn test_if_else_statement() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (__program, errors) = parse_source(source_map, nodes, strings);
@@ -61,7 +61,7 @@ fn test_if_expression_statement() {
             if (condition) do_something();
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (__program, errors) = parse_source(source_map, nodes, strings);
@@ -75,7 +75,7 @@ fn test_else_expression_statement() {
             if (condition) do_something(); else do_something_else();
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (__program, errors) = parse_source(source_map, nodes, strings);
@@ -91,7 +91,7 @@ fn test_while_statement() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -107,7 +107,7 @@ fn test_for_statement_with_all_clauses() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -123,7 +123,7 @@ fn test_for_statement_with_expression_initializer() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -139,7 +139,7 @@ fn test_for_statement_minimal() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -161,7 +161,7 @@ fn test_break_and_continue_statements() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -177,7 +177,7 @@ fn test_return_statement() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -193,7 +193,7 @@ fn test_return_statement_without_value() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -211,7 +211,7 @@ fn test_block_statements() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -227,7 +227,7 @@ fn test_expression_statements() {
             x + y;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -245,7 +245,7 @@ fn test_comments_ignored() {
             var y = 10;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -267,7 +267,7 @@ fn test_block_scope_variables() {
         print(two);
   "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);

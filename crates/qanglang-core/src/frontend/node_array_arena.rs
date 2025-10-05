@@ -1,6 +1,6 @@
 use crate::{
     arena::{Arena, Index},
-    frontend::typed_node_arena::NodeId,
+    frontend::ast_node_arena::NodeId,
 };
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]

@@ -1,5 +1,5 @@
 use crate::{
-    ErrorReporter, QangPipelineError, TypedNodeArena,
+    ErrorReporter, QangPipelineError, AstNodeArena,
     frontend::{module_map::ModuleMap, semantic_validator::SemanticValidator},
     memory::StringInterner,
 };
@@ -36,7 +36,7 @@ impl<'a> AnalysisPipeline<'a> {
     pub fn analyze(
         self,
         modules: &ModuleMap,
-        nodes: &mut TypedNodeArena,
+        nodes: &mut AstNodeArena,
         errors: &mut ErrorReporter,
     ) -> Result<(), QangPipelineError> {
         for (_, module) in modules.iter() {

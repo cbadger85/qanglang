@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::{assert_parse_error, parse_source};
-use crate::{SourceMap, TypedNodeArena, memory::StringInterner};
+use crate::{SourceMap, AstNodeArena, memory::StringInterner};
 
 #[test]
 fn test_error_recovery() {
@@ -11,7 +11,7 @@ fn test_error_recovery() {
             var z = 10; // This should still parse
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -23,7 +23,7 @@ fn test_error_recovery() {
 fn test_missing_arrow_in_lambda() {
     let source_code = r#"var func = (x) x + 1;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -35,7 +35,7 @@ fn test_missing_arrow_in_lambda() {
 fn test_unexpected_token_in_expression() {
     let source_code = r#"var x = 5 @ 3;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -47,7 +47,7 @@ fn test_unexpected_token_in_expression() {
 fn test_missing_semicolon_error() {
     let source_code = r#"var x = 5"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -59,7 +59,7 @@ fn test_missing_semicolon_error() {
 fn test_unterminated_string_error() {
     let source_code = r#"var msg = "unterminated string"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -75,7 +75,7 @@ fn test_missing_closing_brace_error() {
                 // Missing closing brace
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -87,7 +87,7 @@ fn test_missing_closing_brace_error() {
 fn test_invalid_assignment_target_error() {
     let source_code = r#"5 = x;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -99,7 +99,7 @@ fn test_invalid_assignment_target_error() {
 fn test_missing_function_name_error() {
     let source_code = r#"fn () { return 42; }"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -111,7 +111,7 @@ fn test_missing_function_name_error() {
 fn test_missing_variable_name_error() {
     let source_code = r#"var = 5;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -123,7 +123,7 @@ fn test_missing_variable_name_error() {
 fn test_missing_class_name_error() {
     let source_code = r#"class { }"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -139,7 +139,7 @@ fn test_missing_parentheses_in_if() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -155,7 +155,7 @@ fn test_missing_parentheses_in_while() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -171,7 +171,7 @@ fn test_missing_parentheses_in_for() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -183,7 +183,7 @@ fn test_missing_parentheses_in_for() {
 fn test_unterminated_array() {
     let source = r#"var array = [1, 2, 3"#;
     let source_map = Arc::new(SourceMap::from_source(source.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
     let (_program, errors) = parse_source(source_map, nodes, strings);
 
@@ -194,7 +194,7 @@ fn test_unterminated_array() {
 fn test_unterminated_with_trailing_comma() {
     let source = r#"var array = [1, 2, 3,"#;
     let source_map = Arc::new(SourceMap::from_source(source.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
     let (_program, errors) = parse_source(source_map, nodes, strings);
 

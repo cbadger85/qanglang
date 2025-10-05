@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use super::{assert_no_parse_errors, parse_source};
-use crate::{SourceMap, TypedNodeArena, memory::StringInterner};
+use crate::{SourceMap, AstNodeArena, memory::StringInterner};
 
 #[test]
 fn test_simple_variable_declaration() {
     let source_code = r#"var x = 42;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -19,7 +19,7 @@ fn test_simple_variable_declaration() {
 fn test_variable_declaration_without_initializer() {
     let source_code = r#"var x;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -35,7 +35,7 @@ fn test_function_declaration() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -51,7 +51,7 @@ fn test_function_declaration_with_trailing_comma() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -67,7 +67,7 @@ fn test_function_without_parameters() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -88,7 +88,7 @@ fn test_class_declaration() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -106,7 +106,7 @@ fn test_class_declaration_with_method_containing_trailing_comma_in_parameters() 
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -122,7 +122,7 @@ fn test_class_with_inheritance() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -134,7 +134,7 @@ fn test_class_with_inheritance() {
 fn test_lambda_declaration() {
     let source_code = r#"var add = (a, b) -> a + b;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -146,7 +146,7 @@ fn test_lambda_declaration() {
 fn test_lambda_declaration_with_trailing_comma_in_parameters() {
     let source_code = r#"var add = (a, b,) -> a + b;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -158,7 +158,7 @@ fn test_lambda_declaration_with_trailing_comma_in_parameters() {
 fn test_lambda_with_block_body() {
     let source_code = r#"var calc = (x) -> { return x * 2; };"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -170,7 +170,7 @@ fn test_lambda_with_block_body() {
 fn test_empty_lambda_parameters() {
     let source_code = r#"var func = () -> 42;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -182,7 +182,7 @@ fn test_empty_lambda_parameters() {
 fn test_variable_declaration_with_call_and_lambda() {
     let source_code = r#"var y = identity(() -> "hello world");"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_, errors) = parse_source(source_map, nodes, strings);
@@ -207,7 +207,7 @@ fn test_module_import_declaration() {
 
     // Use the main file path for the source map
     let source_map = Arc::new(SourceMap::new(source_code, main_file.clone()));
-    let mut nodes = TypedNodeArena::new();
+    let mut nodes = AstNodeArena::new();
     let mut strings = StringInterner::new();
 
     let mut parser = crate::Parser::new(source_map, &mut nodes, &mut strings);

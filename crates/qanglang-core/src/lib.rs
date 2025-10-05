@@ -25,10 +25,10 @@ pub use frontend::source::SourceMap;
 pub use frontend::tokenizer::{Token, TokenType, Tokenizer};
 pub use frontend::{
     analyzer::{AnalysisPipeline, AnalysisPipelineConfig},
+    ast_node_arena::{AstNodeArena, NodeId},
     node_array_arena::NodeArrayId,
     nodes,
     parser::{Parser, ParserConfig},
-    typed_node_arena::{NodeId, TypedNodeArena},
 };
 pub use memory::{
     BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, ClosureHandle, FunctionHandle,

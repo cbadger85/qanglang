@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    AnalysisPipeline, AnalysisPipelineConfig, ErrorReporter, HeapAllocator, NodeId, Parser,
-    QangCompilerError, QangPipelineError, QangProgram, SourceMap, TypedNodeArena,
+    AnalysisPipeline, AnalysisPipelineConfig, AstNodeArena, ErrorReporter, HeapAllocator, NodeId,
+    Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap,
     backend::compiler::Assembler,
     frontend::{
         module_map::ModuleMap,
@@ -18,7 +18,7 @@ use crate::{
 #[derive(Debug, Default, Clone)]
 pub struct GlobalCompilerPipeline {
     pub modules: ModuleMap,
-    pub nodes: TypedNodeArena,
+    pub nodes: AstNodeArena,
     imported_files: HashSet<PathBuf>,
     processed_files: HashSet<PathBuf>,
 }
@@ -27,7 +27,7 @@ impl GlobalCompilerPipeline {
     pub fn new() -> Self {
         Self {
             modules: ModuleMap::new(),
-            nodes: TypedNodeArena::new(),
+            nodes: AstNodeArena::new(),
             imported_files: HashSet::new(),
             processed_files: HashSet::new(),
         }
@@ -254,7 +254,7 @@ impl GlobalCompilerPipeline {
     fn extract_import_paths(
         module_node: NodeId,
         module_path: &Path,
-        nodes: &mut TypedNodeArena,
+        nodes: &mut AstNodeArena,
         allocator: &mut HeapAllocator,
     ) -> Vec<PathBuf> {
         struct ModuleImportExtractor<'a> {
@@ -268,7 +268,7 @@ impl GlobalCompilerPipeline {
 
             fn visit_import_module_declaration(
                 &mut self,
-                import_decl: crate::frontend::typed_node_arena::TypedNodeRef<
+                import_decl: crate::frontend::ast_node_arena::TypedNodeRef<
                     crate::nodes::ImportModuleDeclNode,
                 >,
                 _ctx: &mut VisitorContext,

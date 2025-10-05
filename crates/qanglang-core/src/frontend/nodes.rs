@@ -1,6 +1,6 @@
 use crate::{
     StringHandle, Token,
-    frontend::{node_array_arena::NodeArrayId, typed_node_arena::NodeId},
+    frontend::{ast_node_arena::NodeId, node_array_arena::NodeArrayId},
 };
 use std::convert::TryFrom;
 

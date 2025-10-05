@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod ast_node_arena;
 pub mod module_map;
 pub mod node_array_arena;
 pub mod node_visitor;
@@ -7,4 +8,3 @@ pub mod parser;
 pub mod semantic_validator;
 pub mod source;
 pub mod tokenizer;
-pub mod typed_node_arena;

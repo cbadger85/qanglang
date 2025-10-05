@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    ErrorReporter, NodeId, QangCompilerError, SourceMap, TypedNodeArena,
+    AstNodeArena, ErrorReporter, NodeId, QangCompilerError, SourceMap,
     frontend::node_visitor::{NodeVisitor, VisitorContext},
     memory::StringInterner,
     nodes::SourceSpan,
@@ -55,7 +55,7 @@ impl<'a> SemanticValidator<'a> {
     pub fn analyze(
         mut self,
         program: NodeId,
-        nodes: &mut TypedNodeArena,
+        nodes: &mut AstNodeArena,
         errors: &mut ErrorReporter,
     ) {
         let mut ctx = VisitorContext::new(nodes, errors);
@@ -88,7 +88,7 @@ impl<'a> SemanticValidator<'a> {
 
     fn declare_variable(
         &mut self,
-        identifier: crate::frontend::typed_node_arena::TypedNodeRef<
+        identifier: crate::frontend::ast_node_arena::TypedNodeRef<
             crate::frontend::nodes::IdentifierNode,
         >,
     ) -> Result<(), QangCompilerError> {
@@ -98,7 +98,7 @@ impl<'a> SemanticValidator<'a> {
 
     fn declare_variable_with_init(
         &mut self,
-        _identifier: crate::frontend::typed_node_arena::TypedNodeRef<
+        _identifier: crate::frontend::ast_node_arena::TypedNodeRef<
             crate::frontend::nodes::IdentifierNode,
         >,
         _is_initialized: bool,
@@ -154,7 +154,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_array_literal(
         &mut self,
-        array: super::typed_node_arena::TypedNodeRef<super::nodes::ArrayLiteralExprNode>,
+        array: super::ast_node_arena::TypedNodeRef<super::nodes::ArrayLiteralExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let size = ctx.nodes.array.size(array.node.elements);
@@ -180,7 +180,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_object_literal(
         &mut self,
-        object: super::typed_node_arena::TypedNodeRef<super::nodes::ObjectLiteralExprNode>,
+        object: super::ast_node_arena::TypedNodeRef<super::nodes::ObjectLiteralExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let size = ctx.nodes.array.size(object.node.entries);
@@ -206,7 +206,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_function_expression(
         &mut self,
-        func_expr: super::typed_node_arena::TypedNodeRef<super::nodes::FunctionExprNode>,
+        func_expr: super::ast_node_arena::TypedNodeRef<super::nodes::FunctionExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let arity = ctx.nodes.array.size(func_expr.node.parameters);
@@ -252,7 +252,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_lambda_expression(
         &mut self,
-        lambda_expr: super::typed_node_arena::TypedNodeRef<super::nodes::LambdaExprNode>,
+        lambda_expr: super::ast_node_arena::TypedNodeRef<super::nodes::LambdaExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let arity = ctx.nodes.array.size(lambda_expr.node.parameters);
@@ -296,7 +296,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_variable_declaration(
         &mut self,
-        var_decl: super::typed_node_arena::TypedNodeRef<super::nodes::VariableDeclNode>,
+        var_decl: super::ast_node_arena::TypedNodeRef<super::nodes::VariableDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(var_decl.node.target);
@@ -315,7 +315,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_import_module_declaration(
         &mut self,
-        import_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ImportModuleDeclNode>,
+        import_decl: super::ast_node_arena::TypedNodeRef<super::nodes::ImportModuleDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(import_decl.node.name);
@@ -327,7 +327,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_call_expression(
         &mut self,
-        call: super::typed_node_arena::TypedNodeRef<super::nodes::CallExprNode>,
+        call: super::ast_node_arena::TypedNodeRef<super::nodes::CallExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let callee = ctx.nodes.get_expr_node(call.node.callee);
@@ -364,7 +364,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_class_declaration(
         &mut self,
-        class_decl: super::typed_node_arena::TypedNodeRef<super::nodes::ClassDeclNode>,
+        class_decl: super::ast_node_arena::TypedNodeRef<super::nodes::ClassDeclNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let name_node = ctx.nodes.get_identifier_node(class_decl.node.name);
@@ -453,7 +453,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_block_statement(
         &mut self,
-        block_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BlockStmtNode>,
+        block_stmt: super::ast_node_arena::TypedNodeRef<super::nodes::BlockStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         self.begin_scope();
@@ -472,7 +472,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_super_expression(
         &mut self,
-        super_expr: super::typed_node_arena::TypedNodeRef<super::nodes::SuperExprNode>,
+        super_expr: super::ast_node_arena::TypedNodeRef<super::nodes::SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if let Some(current_function) = &self.functions.last() {
@@ -501,7 +501,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_while_statement(
         &mut self,
-        while_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::WhileStmtNode>,
+        while_stmt: super::ast_node_arena::TypedNodeRef<super::nodes::WhileStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         let condition = ctx.nodes.get_expr_node(while_stmt.node.condition);
@@ -519,7 +519,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_for_statement(
         &mut self,
-        for_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
+        for_stmt: super::ast_node_arena::TypedNodeRef<super::nodes::ForStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         self.begin_loop();
@@ -547,7 +547,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_break_statement(
         &mut self,
-        break_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::BreakStmtNode>,
+        break_stmt: super::ast_node_arena::TypedNodeRef<super::nodes::BreakStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if !self.in_current_loop() {
@@ -563,7 +563,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_continue_statement(
         &mut self,
-        continue_stmt: super::typed_node_arena::TypedNodeRef<super::nodes::ContinueStmtNode>,
+        continue_stmt: super::ast_node_arena::TypedNodeRef<super::nodes::ContinueStmtNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if !self.in_current_loop() {
@@ -579,7 +579,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_map_expression(
         &mut self,
-        map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::MapExprNode>,
+        map_expr: super::ast_node_arena::TypedNodeRef<super::nodes::MapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         self.begin_function(1, map_expr.node.span, FunctionKind::Function, ctx.errors);
@@ -599,7 +599,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_optional_map_expression(
         &mut self,
-        opt_map_expr: super::typed_node_arena::TypedNodeRef<super::nodes::OptionalMapExprNode>,
+        opt_map_expr: super::ast_node_arena::TypedNodeRef<super::nodes::OptionalMapExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         self.begin_function(
@@ -624,7 +624,7 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
     fn visit_call_operation(
         &mut self,
-        operation: super::typed_node_arena::TypedNodeRef<super::nodes::CallOperationNode>,
+        operation: super::ast_node_arena::TypedNodeRef<super::nodes::CallOperationNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         use super::nodes::CallOperationNode;
@@ -646,11 +646,11 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 self.visit_expression(ctx.nodes.get_expr_node(index.index), ctx)
             }
             CallOperationNode::Map(map) => self.visit_map_expression(
-                super::typed_node_arena::TypedNodeRef::new(operation.id, map),
+                super::ast_node_arena::TypedNodeRef::new(operation.id, map),
                 ctx,
             ),
             CallOperationNode::OptionalMap(map) => self.visit_optional_map_expression(
-                super::typed_node_arena::TypedNodeRef::new(operation.id, map),
+                super::ast_node_arena::TypedNodeRef::new(operation.id, map),
                 ctx,
             ),
         }

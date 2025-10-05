@@ -7,11 +7,11 @@ use std::{
 use crate::{
     ErrorReporter, QangCompilerError, SourceMap,
     frontend::{
+        ast_node_arena::{AstNodeArena, NodeId},
         module_map::ModuleMap,
         node_array_arena::NodeArrayId,
         nodes::*,
         tokenizer::{Token, TokenType, Tokenizer},
-        typed_node_arena::{NodeId, TypedNodeArena},
     },
     memory::StringInterner,
 };
@@ -30,7 +30,7 @@ pub struct Parser<'a> {
     current_token: Option<Token>,
     errors: ErrorReporter,
     strings: &'a mut StringInterner,
-    nodes: &'a mut TypedNodeArena,
+    nodes: &'a mut AstNodeArena,
     module_queue: VecDeque<PathBuf>,
     config: ParserConfig,
 }
@@ -38,7 +38,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(
         source_map: Arc<SourceMap>,
-        nodes: &'a mut TypedNodeArena,
+        nodes: &'a mut AstNodeArena,
         strings: &'a mut StringInterner,
     ) -> Self {
         let errors = ErrorReporter::new();

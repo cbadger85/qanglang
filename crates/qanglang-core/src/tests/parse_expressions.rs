@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::{assert_no_parse_errors, parse_source};
-use crate::{SourceMap, TypedNodeArena, memory::StringInterner};
+use crate::{SourceMap, AstNodeArena, memory::StringInterner};
 
 #[test]
 fn test_object_literals() {
@@ -15,7 +15,7 @@ fn test_object_literals() {
         }};
     "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -34,7 +34,7 @@ fn test_object_literals_with_trailing_comma() {
         }};
     "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -46,7 +46,7 @@ fn test_object_literals_with_trailing_comma() {
 fn test_arithmetic_expressions() {
     let source_code = r#"var result = a + b * c - d / e % f;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -58,7 +58,7 @@ fn test_arithmetic_expressions() {
 fn test_comparison_expressions() {
     let source_code = r#"var check = x > y and a <= b or c != d and e == f;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -70,7 +70,7 @@ fn test_comparison_expressions() {
 fn test_unary_expressions() {
     let source_code = r#"var result = !condition and -number;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -85,7 +85,7 @@ fn test_assignment_expressions() {
             obj.property = "value";
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -97,7 +97,7 @@ fn test_assignment_expressions() {
 fn test_ternary_expressions() {
     let source_code = r#"var result = condition ? trueValue : falseValue;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -109,7 +109,7 @@ fn test_ternary_expressions() {
 fn test_pipe_expressions() {
     let source_code = r#"var result = value |> transform |> finalize;"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -125,7 +125,7 @@ fn test_function_calls() {
             result3 = obj.method(arg);
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -139,7 +139,7 @@ fn test_function_calls_with_trailing_comma() {
             result2 = func(a, b, c,);
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -154,7 +154,7 @@ fn test_property_access() {
             value2 = obj.nested.deep.property;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -169,7 +169,7 @@ fn test_array_access() {
             value2 = matrix[row][col];
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -185,7 +185,7 @@ fn test_array_literals() {
             mixed = [1, "string", true, nil];
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -197,7 +197,7 @@ fn test_array_literals() {
 fn test_array_literals_with_trailing_commas() {
     let source_code = r#"numbers = [1, 2, 3, 4,];"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -209,7 +209,7 @@ fn test_array_literals_with_trailing_commas() {
 fn test_grouping_expressions() {
     let source_code = r#"var result = (a + b) * (c - d);"#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -227,7 +227,7 @@ fn test_literals() {
             var nothing = nil;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -245,7 +245,7 @@ fn test_this_and_super() {
             }
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -259,7 +259,7 @@ fn test_nested_function_calls() {
             var result = outer(inner(deep(value)));
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -273,7 +273,7 @@ fn test_operator_precedence() {
             var result = a + b * c == d - e / f;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -287,7 +287,7 @@ fn test_right_associative_ternary() {
             var result = a ? b ? c : d : e;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -301,7 +301,7 @@ fn test_chained_method_calls() {
             var result = obj.method1().method2().method3();
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -315,7 +315,7 @@ fn test_mixed_property_and_method_access() {
             var result = obj.property.method().field[index];
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -329,7 +329,7 @@ fn test_complex_array_access() {
             var result = matrix[row + 1][col - 1];
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -343,7 +343,7 @@ fn test_assignment_chaining() {
             a = b = c = 5;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -357,7 +357,7 @@ fn test_nested_ternary_expressions() {
             var result = a ? b : c ? d : e ? f : g;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -371,7 +371,7 @@ fn test_complex_boolean_logic() {
             var condition = !a and (b or c) and !(d or e);
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -385,7 +385,7 @@ fn test_pipe_operator_precedence() {
             var result = value + 1 |> transform |> process - 2;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -399,7 +399,7 @@ fn test_deeply_nested_expressions() {
             var result = ((((a + b) * c) - d) / e) % f;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -413,7 +413,7 @@ fn test_lambda_as_expression() {
             assert_throws(() -> 1 / 0);
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (__program, errors) = parse_source(source_map, nodes, strings);
@@ -427,7 +427,7 @@ fn test_lambda_as_immediately_invoked_expression() {
             var test = (() -> nil)();
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -441,7 +441,7 @@ fn test_lambda_as_immediately_invoked_expression_with_args() {
             var result = ((x) -> x * 2)(5);
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -455,7 +455,7 @@ fn test_index_assignment() {
         foo[1] = true;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (__program, errors) = parse_source(source_map, nodes, strings);
@@ -474,7 +474,7 @@ fn test_map_expressions() {
             var logical_test = flags||f -> f and true|;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -491,7 +491,7 @@ fn test_map_expression_chaining() {
         println(foo());
     "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);
@@ -507,7 +507,7 @@ fn test_optional_map_expressions() {
             var optional_logical = flags?|f -> f or false|;
         "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
-    let nodes = TypedNodeArena::new();
+    let nodes = AstNodeArena::new();
     let strings = StringInterner::new();
 
     let (_program, errors) = parse_source(source_map, nodes, strings);

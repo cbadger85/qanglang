@@ -366,3 +366,69 @@ fn array_of(length, init) {
 
   return arr;
 }
+
+class Result {
+  init(is_ok, value, err) {
+    this.is_ok = is_ok or false;
+    this.value = value;
+    this.error = err;
+  }
+
+  get() {
+    assert(this.is_ok, to_string(this.error));
+    return this.value;
+  }
+
+  expect(message) {
+    assert(this.is_ok, message);
+    return this.value;
+  }
+
+  get_or(value) {
+    return this.is_ok ? this.value : value;
+  }
+
+  get_or_else(cb) {
+    return this.is_ok ? this.value : cb();
+  }
+
+  or_else(cb) {
+    return this.is_ok ? this : cb();
+  }
+
+  map(transform) {
+    return this.is_ok ? Result(true, transform(this.value)) : this;
+  }
+
+  flat_map(transform) {
+    return this.is_ok ? transform(this.value) : this;
+  }
+
+  map_err(transform) {
+    return this.is_ok ? this : Result(false, nil, transform(this.error));
+  }
+
+  is_ok() {
+    return this.is_ok;
+  }
+
+  is_err() {
+    return !this.is_ok;
+  }
+
+  ok() {
+    return this.is_ok ? this.value : nil;
+  }
+
+  err() {
+    return this.is_ok ? nil : this.error;
+  }
+}
+
+fn Ok(value) {
+  return Result(true, value);
+}
+
+fn Err(err) {
+  return Result(false, nil, err);
+}

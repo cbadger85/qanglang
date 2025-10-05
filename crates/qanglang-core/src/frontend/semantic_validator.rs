@@ -508,10 +508,8 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
         self.visit_expression(condition, ctx)?;
 
         self.begin_loop();
-        self.begin_scope();
         let body = ctx.nodes.get_stmt_node(while_stmt.node.body);
         self.visit_statement(body, ctx)?;
-        self.end_scope();
         self.end_loop();
 
         Ok(())

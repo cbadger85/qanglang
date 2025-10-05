@@ -7,7 +7,7 @@ use std::{
 use crate::{
     AnalysisPipeline, AnalysisPipelineConfig, AstNodeArena, ErrorReporter, HeapAllocator, NodeId,
     Parser, QangCompilerError, QangPipelineError, QangProgram, SourceMap,
-    backend::compiler::Assembler,
+    backend::assembler::Assembler,
     frontend::{
         module_map::ModuleMap,
         node_visitor::{NodeVisitor, VisitorContext},

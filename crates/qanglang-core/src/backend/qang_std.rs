@@ -4,7 +4,7 @@ use crate::{
     GlobalCompilerPipeline, HeapAllocator, NativeFunctionError, QangProgram, QangRuntimeError,
     Value, ValueKind, Vm,
     backend::{
-        compiler::STACK_MAX,
+        assembler::STACK_MAX,
         object::{IntrinsicKind, IntrinsicMethod},
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,

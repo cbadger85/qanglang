@@ -9,8 +9,8 @@ use crate::{
     HeapAllocator, NativeFn, NativeFunctionError, NativeFunctionHandle, NativeFunctionObject,
     QangProgram, QangRuntimeError, StringHandle, Value, ValueKind,
     backend::{
+        assembler::{FRAME_MAX, STACK_MAX},
         chunk::{OpCode, SourceLocation},
-        compiler::{FRAME_MAX, STACK_MAX},
         module_resolver::ModuleResolver,
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{

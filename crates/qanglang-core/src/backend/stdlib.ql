@@ -15,8 +15,16 @@ class Iterator {
     return MapIterator(this, transform);
   }
 
+  map_indexed(transform) {
+    return MapIndexedIterator(this, transform);
+  }
+
   filter(predicate) {
     return FilterIterator(this, predicate);
+  }
+
+  filter_indexed(predicate) {
+    return FilterIndexedIterator(this, predicate);
   }
 
   collect() {
@@ -32,6 +40,14 @@ class Iterator {
   for_each(cb) {
     while (this.has_next()) {
       cb(this.next());
+    }
+  }
+
+  for_each_indexed(cb) {
+    var index = 0;
+    while (this.has_next()) {
+      cb(index, this.next());
+      index += 1;
     }
   }
 
@@ -161,6 +177,30 @@ class MapIterator : Iterator {
   }
 }
 
+class MapIndexedIterator : Iterator {
+  index = 0;
+
+  init(iterator, transform) {
+    this.iterator = iterator;
+    this.transform = transform;
+  }
+
+  has_next() {
+    return this.iterator.has_next();
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    var value = this.iterator.next();
+    var result = this.transform(this.index, value);
+    this.index += 1;
+    return result;
+  }
+}
+
 class FilterIterator : Iterator {
   next_value = nil;
   has_cached_value = false;
@@ -183,6 +223,49 @@ class FilterIterator : Iterator {
         this.has_cached_value = true;
         return true;
       }
+    }
+
+    return false;
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    var value = this.next_value;
+    this.has_cached_value = false;
+    this.next_value = nil;
+    return value;
+  }
+}
+
+class FilterIndexedIterator : Iterator {
+  next_value = nil;
+  has_cached_value = false;
+  index = 0;
+
+  init(iterator, predicate) {
+    this.iterator = iterator;
+    this.predicate = predicate;
+  }
+
+  has_next() {
+    if (this.has_cached_value) {
+      return true;
+    }
+
+    while (this.iterator.has_next()) {
+      var value = this.iterator.next();
+
+      if (this.predicate(this.index, value)) {
+        this.next_value = value;
+        this.has_cached_value = true;
+        this.index += 1;
+        return true;
+      }
+
+      this.index += 1;
     }
 
     return false;

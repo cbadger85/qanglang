@@ -1,7 +1,7 @@
 {
   "name": "qang-language-client",
   "description": "VSCode part of a the Qang language server",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.85.0"

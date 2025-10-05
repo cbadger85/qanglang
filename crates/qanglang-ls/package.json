@@ -4,7 +4,7 @@
   "repository": {
     "url": "https://github.com/cbadger85/qanglang/tree/lsp/crates/qanglang-ls"
   },
-  "license": "MIT",
+  "license": "MPL-2.0",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.66.0"

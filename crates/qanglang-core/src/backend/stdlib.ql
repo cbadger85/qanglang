@@ -547,7 +547,8 @@ class HashMap {
   _capacity = 64;
 
   set(key, value) {
-    var bucket = this._buckets[this._get_bucket_index(key)];
+    var index = this._get_bucket_index(key);
+    var bucket = this._buckets[index];
 
     for (var i = 0; i < bucket.length(); i += 1) {
       var entry = bucket[i];
@@ -567,7 +568,8 @@ class HashMap {
   }
 
   get(key) {
-    var bucket = this._buckets[this._get_bucket_index(key)];
+    var index = this._get_bucket_index(key);
+    var bucket = this._buckets[index];
 
     for (var i = 0; i < bucket.length(); i += 1) {
       var entry = bucket[i];
@@ -666,7 +668,7 @@ class HashMap {
 class Entry {
   init(key, value) {
     this.key = key;
-    this._value = value;
+    this.value = value;
   }
 }
 

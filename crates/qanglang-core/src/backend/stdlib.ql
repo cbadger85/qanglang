@@ -482,7 +482,7 @@ class Result {
     this._error = err;
   }
 
-  get() {
+  unwrap() {
     assert(this._is_ok, to_string(this._error));
     return this._value;
   }
@@ -492,11 +492,11 @@ class Result {
     return this._value;
   }
 
-  get_or(value) {
+  unwrap_or(value) {
     return this._is_ok ? this._value : value;
   }
 
-  get_or_else(cb) {
+  unwrap_or_else(cb) {
     return this._is_ok ? this._value : cb();
   }
 

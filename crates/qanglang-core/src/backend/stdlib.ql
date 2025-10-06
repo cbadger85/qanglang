@@ -633,4 +633,41 @@ class HashSet {
   values() {
     return this._map.keys();
   }
+
+  union(other) {
+    var set = HashSet();
+
+    this.values()
+      .join(other.values())
+      .for_each((value) -> set.add(value));
+
+    return set;
+  }
+  
+  intersection(other) {
+    var set = HashSet();
+
+    var smaller = this.size() <= other.size() ? this : other;
+    var larger = this.size() > other.size() ? this : other;
+
+    smaller.values().for_each((value) -> {
+      if (larger.has(value)) {
+        set.add(value);
+      }
+    });
+
+    return set;
+  }
+  
+  difference(other) {
+    var set = HashSet();
+
+    this.values().for_each((value) -> {
+      if (!other.has(value)) {
+        set.add(value);
+      }
+    });
+
+    return set;
+  }
 }

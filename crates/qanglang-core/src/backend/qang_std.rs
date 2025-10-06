@@ -20,7 +20,7 @@ pub fn qang_assert(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, Nativ
     let args = vm.get_function_args(arg_count);
     let assertion = args
         .first()
-        .ok_or(NativeFunctionError::new("No arguments provided."))?;
+        .ok_or_else(|| NativeFunctionError::new("No arguments provided."))?;
 
     if assertion.is_truthy() {
         return Ok(None);
@@ -74,7 +74,7 @@ pub fn qang_assert_throws(
     let args = vm.get_function_args(arg_count);
     let assertion = args
         .first()
-        .ok_or(NativeFunctionError::new("No arguments provided."))?;
+        .ok_or_else(|| NativeFunctionError::new("No arguments provided."))?;
     let message_handle = args.get(1).copied();
 
     let function_handle = match assertion.as_closure() {
@@ -479,6 +479,93 @@ pub fn qang_hash(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeF
     }
 }
 
+pub fn qang_number_ceil(
+    receiver: Value,
+    _arg_count: usize,
+    _vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(value) = receiver.as_number() {
+        Ok(Some(Value::number(value.ceil())))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected number but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_number_floor(
+    receiver: Value,
+    _arg_count: usize,
+    _vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(value) = receiver.as_number() {
+        Ok(Some(Value::number(value.floor())))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected number but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_number_trunc(
+    receiver: Value,
+    _arg_count: usize,
+    _vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(value) = receiver.as_number() {
+        Ok(Some(Value::number(value.trunc())))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected number but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_number_min(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let min = vm
+        .get_function_args(arg_count)
+        .first()
+        .and_then(|v| v.as_number())
+        .ok_or_else(|| NativeFunctionError::new("Min value must be a number."))?;
+
+    if let Some(value) = receiver.as_number() {
+        Ok(Some(Value::number(value.min(min))))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected number but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_number_max(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let max = vm
+        .get_function_args(arg_count)
+        .first()
+        .and_then(|v| v.as_number())
+        .ok_or_else(|| NativeFunctionError::new("Max value must be a number."))?;
+
+    if let Some(value) = receiver.as_number() {
+        Ok(Some(Value::number(value.max(max))))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected number but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
 impl Vm {
     pub(crate) fn with_stdlib(mut self) -> Self {
         if let Err(err) = self.load_stdlib() {
@@ -634,6 +721,46 @@ impl Vm {
             IntrinsicKind::Array(array_join_handle),
             IntrinsicMethod::Native {
                 function: qang_array_join,
+                arity: 1,
+            },
+        );
+        let number_ceil_handle = alloc.strings.intern("ceil");
+        intrinsics.insert(
+            IntrinsicKind::Number(number_ceil_handle),
+            IntrinsicMethod::Native {
+                function: qang_number_ceil,
+                arity: 0,
+            },
+        );
+        let number_floor_handle = alloc.strings.intern("floor");
+        intrinsics.insert(
+            IntrinsicKind::Number(number_floor_handle),
+            IntrinsicMethod::Native {
+                function: qang_number_floor,
+                arity: 0,
+            },
+        );
+        let number_trunc_handle = alloc.strings.intern("trunc");
+        intrinsics.insert(
+            IntrinsicKind::Number(number_trunc_handle),
+            IntrinsicMethod::Native {
+                function: qang_number_trunc,
+                arity: 0,
+            },
+        );
+        let number_min_handle = alloc.strings.intern("min");
+        intrinsics.insert(
+            IntrinsicKind::Number(number_min_handle),
+            IntrinsicMethod::Native {
+                function: qang_number_min,
+                arity: 1,
+            },
+        );
+        let number_max_handle = alloc.strings.intern("max");
+        intrinsics.insert(
+            IntrinsicKind::Number(number_max_handle),
+            IntrinsicMethod::Native {
+                function: qang_number_max,
                 arity: 1,
             },
         );

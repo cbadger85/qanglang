@@ -98,7 +98,7 @@
         },
         {
           "name": "support.function.builtin",
-          "match": "\\.(call|apply|to_uppercase|to_lowercase|length|push|pop|reverse|slice|get|concat|remove_at|split|join)(?=\\s|\\(|$)"
+          "match": "\\.(call|apply|to_uppercase|to_lowercase|length|push|pop|reverse|slice|get|concat|remove_at|split|join|ceil|floor|trunc|min|max)(?=\\s|\\(|$)"
         }
       ]
     },

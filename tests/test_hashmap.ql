@@ -34,6 +34,22 @@ fn test_hashmap_delete() {
   assert_eq(map.size(), 0);
 }
 
+fn test_hashmap_delete_no_value_found() {
+  var map = HashMap();
+
+  assert(!map.delete("key"));
+  assert_eq(map.size(), 0);
+}
+
+fn test_hashmap_clear() {
+  var map = HashMap();
+
+  map.set("key", "value");
+  assert_eq(map.size(), 1);
+  map.clear();
+  assert_eq(map.size(), 0);
+}
+
 fn test_hashmap_entries() {
   var map = HashMap();
   map.set(1, "value");

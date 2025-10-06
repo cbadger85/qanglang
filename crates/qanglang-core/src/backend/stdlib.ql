@@ -676,6 +676,7 @@ class Entry {
 
 class HashSet {
   init(arr) {
+    assert(arr == nil or arr is ARRAY, "Provided value must be an array.");
     this._map = HashMap();
 
     if (arr) {

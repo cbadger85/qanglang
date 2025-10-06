@@ -180,3 +180,56 @@ fn test_array_remove_at_negative_index() {
   assert_eq(arr[0], 1);
   assert_eq(arr[1], 2);
 }
+
+fn test_array_join() {
+  var arr = [1, 2, 3,];
+
+  var string = arr.join();
+
+  assert_eq(string, "123");
+}
+
+fn test_array_join_with_delimeter() {
+  var arr = [1, 2, 3,];
+
+  var string = arr.join(",");
+
+  assert_eq(string, "1,2,3");
+}
+
+fn test_array_from_split_string() {
+  var string = "123";
+
+  var arr = string.split();
+
+  assert(arr is ARRAY);
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], "1");
+  assert_eq(arr[1], "2");
+  assert_eq(arr[2], "3");
+}
+
+
+fn test_array_from_split_string_with_delimeter() {
+  var string = "1,2,3";
+
+  var arr = string.split(",");
+
+  assert(arr is ARRAY);
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], "1");
+  assert_eq(arr[1], "2");
+  assert_eq(arr[2], "3");
+}
+
+fn test_array_from_split_string_with_empty_string_delimeter() {
+  var string = "123";
+
+  var arr = string.split("");
+
+  assert(arr is ARRAY);
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], "1");
+  assert_eq(arr[1], "2");
+  assert_eq(arr[2], "3");
+}

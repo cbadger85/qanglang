@@ -542,9 +542,11 @@ fn Err(err) {
 }
 
 class HashMap {
-  _buckets = array_of(64, () -> []);
-  _entry_count = 0;
-  _capacity = 64;
+  init() {
+    this._buckets = array_of(64, () -> []);
+    this._entry_count = 0;
+    this._capacity = 64;
+  }
 
   set(key, value) {
     var index = this._get_bucket_index(key);

@@ -5,9 +5,13 @@ fn identity(x) {
 }
 
 class Iterator {
-  has_next() {}
+  has_next() {
+    return false;
+  }
 
-  next() {}
+  next() {
+    return nil;
+  }
 
   map(transform) {
     return MapIterator(this, transform);
@@ -63,11 +67,7 @@ class Iterator {
     return accumulator;
   }
 
-  reduce(reducer, initial) {
-    if (initial != nil) {
-      return this.fold(initial, reducer);
-    }
-
+  reduce(reducer) {
     if (!this.has_next()) {
       return nil;
     }
@@ -131,8 +131,16 @@ class Iterator {
     return n;
   }
 
-  join(other_iterator) {
-    return ChainIterator(this, other_iterator);
+  chain(other) {
+    return ChainIterator(this, other);
+  }
+
+  zip(other) {
+    return ZipIterator(this, other);
+  }
+
+  enumerate(start) {
+    return EnumerateIterator(this, start);
   }
 }
 
@@ -140,11 +148,11 @@ class ArrayIterator : Iterator {
   _index = 0;
 
   init(arr) {
-    this.arr = arr;
+    this._arr = arr;
   }
 
   has_next() {
-    return this._index < this.arr.length();
+    return this._index < this._arr.length();
   }
 
   next() {
@@ -152,7 +160,7 @@ class ArrayIterator : Iterator {
       return nil;
     }
 
-    var value = this.arr[this._index];
+    var value = this._arr[this._index];
     this._index += 1;
 
     return value;
@@ -326,7 +334,7 @@ class TakeIterator : Iterator {
   }
 
   has_next() {
-    return this.taken < this._limit and this._iterator.has_next();
+    return this._taken < this._limit and this._iterator.has_next();
   }
 
   next() {
@@ -334,7 +342,7 @@ class TakeIterator : Iterator {
       return nil;
     }
 
-    this.taken += 1;
+    this._taken += 1;
     return this._iterator.next();
   }
 }
@@ -370,24 +378,83 @@ class ChainIterator : Iterator {
   }
 }
 
-class Range : Iterator {
-  init(start, end) {
-    this._current = start;
-    this.end = end;
+class ZipIterator : Iterator {
+
+  init(left, right) {
+    this._left = left;
+    this._right = right;
   }
 
   has_next() {
-    return this._current < this.end;
+    return this._left.has_next() and this._right.has_next();
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    return Pair(this._left.next(), this._right.next());
+  }
+}
+
+class Sequence : Iterator {
+  init(start, step) {
+    this._current = start;
+    this._step = step;
+  }
+
+  has_next() {
+    return true;
+  }
+
+  next() {
+    var current = this._current;
+    this._current += this._step;
+    return current;
+  }
+}
+
+class Range : Sequence {
+  init(start, end) {
+    super.init(start, 1);
+    this._end = end;
+  }
+
+  has_next() {
+    return this._current < this._end;
   }
 
   next() {
     if (this.has_next()) {
       var current = this._current;
-      this._current += 1;
+      this._current += this._step;
       return current;
     }
 
     return nil;
+  }
+}
+
+class EnumerateIterator : Iterator {
+
+  init(iterator, start) {
+    this._iterator = iterator;
+    this._current = start or 0;
+  }
+
+  has_next() {
+    return this._iterator.has_next();
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    var current = this._current;
+    this._current += 1;
+    return Pair(current, this._iterator.next());
   }
 }
 
@@ -399,6 +466,13 @@ fn array_of(length, init) {
   }
 
   return arr;
+}
+
+class Pair {
+  init(left, right) {
+    this.left = left;
+    this.right = right;
+  }
 }
 
 class Result {
@@ -638,7 +712,7 @@ class HashSet {
     var set = HashSet();
 
     this.values()
-      .join(other.values())
+      .chain(other.values())
       .for_each((value) -> set.add(value));
 
     return set;

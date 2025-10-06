@@ -154,15 +154,19 @@ impl ArrayArena {
     }
 
     pub fn remove_at(&mut self, handle: ArrayHandle, index: isize) -> Option<Value> {
-        let index = index as usize;
-        let length = self.heads[handle].length;
+        let length = self.heads[handle].length as isize;
 
-        if index >= length {
+        // Handle negative indices (from the end)
+        let actual_index = if index < 0 { length + index } else { index };
+
+        // Check bounds - negative index too large or positive index out of bounds
+        if actual_index < 0 || actual_index >= length {
             return None;
         }
 
-        let chunk_index = index / CHUNK_SIZE;
-        let slot_index = index % CHUNK_SIZE;
+        let actual_index = actual_index as usize;
+        let chunk_index = actual_index / CHUNK_SIZE;
+        let slot_index = actual_index % CHUNK_SIZE;
 
         // Find the chunk containing the element to remove
         let mut current_chunk = self.heads[handle].first_chunk;
@@ -189,7 +193,8 @@ impl ArrayArena {
         };
 
         // Shift all subsequent elements left by one position
-        for i in index..(length - 1) {
+        let length_usize = length as usize;
+        for i in actual_index..(length_usize - 1) {
             let next_index = i + 1;
             let value = self.get(handle, next_index as isize);
 
@@ -218,9 +223,9 @@ impl ArrayArena {
         }
 
         // Clear the last element (it's been shifted)
-        let last_index = length - 1;
-        let last_chunk_idx = last_index / CHUNK_SIZE;
-        let last_slot_idx = last_index % CHUNK_SIZE;
+        let last_index = (length_usize - 1) as usize;
+        let last_chunk_idx = last_index / CHUNK_SIZE as usize;
+        let last_slot_idx = last_index % CHUNK_SIZE as usize;
 
         let mut last_chunk = self.heads[handle].first_chunk;
         for _ in 0..last_chunk_idx {
@@ -1530,5 +1535,121 @@ mod tests {
 
         // Try to remove from empty array
         assert_eq!(arena.remove_at(handle, 0), None);
+    }
+
+    #[test]
+    fn test_remove_at_negative_indexing() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(5);
+
+        // Fill array with [0, 1, 2, 3, 4]
+        for i in 0..5 {
+            arena.insert(handle, i, Value::number(i as f64));
+        }
+
+        // Remove last element using -1
+        let removed = arena.remove_at(handle, -1);
+        assert_eq!(removed, Some(Value::number(4.0)));
+        assert_eq!(arena.length(handle), 4);
+
+        // Array should now be [0, 1, 2, 3]
+        assert_eq!(arena.get(handle, 3), Value::number(3.0));
+        assert_eq!(arena.get(handle, 4), Value::nil());
+
+        // Remove second to last element using -2
+        let removed = arena.remove_at(handle, -2);
+        assert_eq!(removed, Some(Value::number(2.0)));
+        assert_eq!(arena.length(handle), 3);
+
+        // Array should now be [0, 1, 3]
+        assert_eq!(arena.get(handle, 0), Value::number(0.0));
+        assert_eq!(arena.get(handle, 1), Value::number(1.0));
+        assert_eq!(arena.get(handle, 2), Value::number(3.0));
+    }
+
+    #[test]
+    fn test_remove_at_negative_out_of_bounds() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(3);
+
+        arena.insert(handle, 0, Value::number(10.0));
+        arena.insert(handle, 1, Value::number(20.0));
+        arena.insert(handle, 2, Value::number(30.0));
+
+        // Try to remove beyond negative bounds
+        let removed = arena.remove_at(handle, -4);
+        assert_eq!(removed, None);
+        assert_eq!(arena.length(handle), 3); // Length unchanged
+
+        let removed = arena.remove_at(handle, -10);
+        assert_eq!(removed, None);
+        assert_eq!(arena.length(handle), 3);
+    }
+
+    #[test]
+    fn test_remove_at_negative_first_element() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(5);
+
+        // Fill array with [0, 1, 2, 3, 4]
+        for i in 0..5 {
+            arena.insert(handle, i, Value::number(i as f64));
+        }
+
+        // Remove first element using -5
+        let removed = arena.remove_at(handle, -5);
+        assert_eq!(removed, Some(Value::number(0.0)));
+        assert_eq!(arena.length(handle), 4);
+
+        // Array should now be [1, 2, 3, 4]
+        assert_eq!(arena.get(handle, 0), Value::number(1.0));
+        assert_eq!(arena.get(handle, 1), Value::number(2.0));
+        assert_eq!(arena.get(handle, 2), Value::number(3.0));
+        assert_eq!(arena.get(handle, 3), Value::number(4.0));
+    }
+
+    #[test]
+    fn test_remove_at_negative_middle_element() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(7);
+
+        // Fill array with [0, 1, 2, 3, 4, 5, 6]
+        for i in 0..7 {
+            arena.insert(handle, i, Value::number(i as f64));
+        }
+
+        // Remove middle element using -4 (which is index 3)
+        let removed = arena.remove_at(handle, -4);
+        assert_eq!(removed, Some(Value::number(3.0)));
+        assert_eq!(arena.length(handle), 6);
+
+        // Array should now be [0, 1, 2, 4, 5, 6]
+        assert_eq!(arena.get(handle, 0), Value::number(0.0));
+        assert_eq!(arena.get(handle, 1), Value::number(1.0));
+        assert_eq!(arena.get(handle, 2), Value::number(2.0));
+        assert_eq!(arena.get(handle, 3), Value::number(4.0));
+        assert_eq!(arena.get(handle, 4), Value::number(5.0));
+        assert_eq!(arena.get(handle, 5), Value::number(6.0));
+    }
+
+    #[test]
+    fn test_remove_at_negative_cross_chunks() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push values across multiple chunks
+        for i in 0..50 {
+            arena.push(handle, Value::number(i as f64));
+        }
+
+        // Remove element from end using negative index
+        let removed = arena.remove_at(handle, -10);
+        assert_eq!(removed, Some(Value::number(40.0)));
+        assert_eq!(arena.length(handle), 49);
+
+        // Verify elements shifted correctly
+        assert_eq!(arena.get(handle, 39), Value::number(39.0));
+        assert_eq!(arena.get(handle, 40), Value::number(41.0));
+        assert_eq!(arena.get(handle, 48), Value::number(49.0));
     }
 }

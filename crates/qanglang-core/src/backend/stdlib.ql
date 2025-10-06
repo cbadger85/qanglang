@@ -1,6 +1,4 @@
-fn transform(value, transformer) {
-  return transformer(value);
-}
+
 
 fn identity(x) {
   return x;
@@ -25,6 +23,10 @@ class Iterator {
 
   filter_indexed(predicate) {
     return FilterIndexedIterator(this, predicate);
+  }
+
+  flat_map(transform) {
+    return FlatMapIterator(this, transform);
   }
 
   collect() {
@@ -135,14 +137,14 @@ class Iterator {
 }
 
 class ArrayIterator : Iterator {
-  index = 0;
+  _index = 0;
 
   init(arr) {
     this.arr = arr;
   }
 
   has_next() {
-    return this.index < this.arr.length();
+    return this._index < this.arr.length();
   }
 
   next() {
@@ -150,8 +152,8 @@ class ArrayIterator : Iterator {
       return nil;
     }
 
-    var value = this.arr[this.index];
-    this.index += 1;
+    var value = this.arr[this._index];
+    this._index += 1;
 
     return value;
   }
@@ -159,12 +161,12 @@ class ArrayIterator : Iterator {
 
 class MapIterator : Iterator {
   init(iterator, transform) {
-    this.iterator = iterator;
-    this.transform = transform;
+    this._iterator = iterator;
+    this._transform = transform;
   }
 
   has_next() {
-    return this.iterator.has_next();
+    return this._iterator.has_next();
   }
 
   next() {
@@ -172,21 +174,21 @@ class MapIterator : Iterator {
       return nil;
     }
 
-    var value = this.iterator.next();
-    return this.transform(value);
+    var value = this._iterator.next();
+    return this._transform(value);
   }
 }
 
 class MapIndexedIterator : Iterator {
-  index = 0;
+  _index = 0;
 
   init(iterator, transform) {
-    this.iterator = iterator;
-    this.transform = transform;
+    this._iterator = iterator;
+    this._transform = transform;
   }
 
   has_next() {
-    return this.iterator.has_next();
+    return this._iterator.has_next();
   }
 
   next() {
@@ -194,33 +196,33 @@ class MapIndexedIterator : Iterator {
       return nil;
     }
 
-    var value = this.iterator.next();
-    var result = this.transform(this.index, value);
-    this.index += 1;
+    var value = this._iterator.next();
+    var result = this._transform(this._index, value);
+    this._index += 1;
     return result;
   }
 }
 
 class FilterIterator : Iterator {
-  next_value = nil;
-  has_cached_value = false;
+  _next_value = nil;
+  _has_cached_value = false;
 
   init(iterator, predicate) {
-    this.iterator = iterator;
-    this.predicate = predicate;
+    this._iterator = iterator;
+    this._predicate = predicate;
   }
 
   has_next() {
-    if (this.has_cached_value) {
+    if (this._has_cached_value) {
       return true;
     }
 
-    while (this.iterator.has_next()) {
-      var value = this.iterator.next();
+    while (this._iterator.has_next()) {
+      var value = this._iterator.next();
 
-      if (this.predicate(value)) {
-        this.next_value = value;
-        this.has_cached_value = true;
+      if (this._predicate(value)) {
+        this._next_value = value;
+        this._has_cached_value = true;
         return true;
       }
     }
@@ -233,39 +235,39 @@ class FilterIterator : Iterator {
       return nil;
     }
 
-    var value = this.next_value;
-    this.has_cached_value = false;
-    this.next_value = nil;
+    var value = this._next_value;
+    this._has_cached_value = false;
+    this._next_value = nil;
     return value;
   }
 }
 
 class FilterIndexedIterator : Iterator {
-  next_value = nil;
-  has_cached_value = false;
-  index = 0;
+  _next_value = nil;
+  _has_cached_value = false;
+  _index = 0;
 
   init(iterator, predicate) {
-    this.iterator = iterator;
-    this.predicate = predicate;
+    this._iterator = iterator;
+    this._predicate = predicate;
   }
 
   has_next() {
-    if (this.has_cached_value) {
+    if (this._has_cached_value) {
       return true;
     }
 
-    while (this.iterator.has_next()) {
-      var value = this.iterator.next();
+    while (this._iterator.has_next()) {
+      var value = this._iterator.next();
 
-      if (this.predicate(this.index, value)) {
-        this.next_value = value;
-        this.has_cached_value = true;
-        this.index += 1;
+      if (this._predicate(this._index, value)) {
+        this._next_value = value;
+        this._has_cached_value = true;
+        this._index += 1;
         return true;
       }
 
-      this.index += 1;
+      this._index += 1;
     }
 
     return false;
@@ -276,23 +278,55 @@ class FilterIndexedIterator : Iterator {
       return nil;
     }
 
-    var value = this.next_value;
-    this.has_cached_value = false;
-    this.next_value = nil;
+    var value = this._next_value;
+    this._has_cached_value = false;
+    this._next_value = nil;
     return value;
   }
 }
 
-class TakeIterator : Iterator {
-  taken = 0;
+class FlatMapIterator : Iterator {
+  _current_inner_iterator = nil;
 
-  init(iterator, limit) {
-    this.iterator = iterator;
-    this.limit = limit;
+  init(iterator, transform) {
+    this._iterator = iterator;
+    this._transform = transform;
   }
 
   has_next() {
-    return this.taken < this.limit and this.iterator.has_next();
+    while (true) {
+      if (this._current_inner_iterator != nil and this._current_inner_iterator.has_next()) {
+        return true;
+      }
+
+      if (!this._iterator.has_next()) {
+        return false;
+      }
+
+      var next_value = this._iterator.next();
+      this._current_inner_iterator = this._transform(next_value);
+    }
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    return this._current_inner_iterator.next();
+  }
+}
+
+class TakeIterator : Iterator {
+  _taken = 0;
+
+  init(iterator, limit) {
+    this._iterator = iterator;
+    this._limit = limit;
+  }
+
+  has_next() {
+    return this.taken < this._limit and this._iterator.has_next();
   }
 
   next() {
@@ -301,26 +335,26 @@ class TakeIterator : Iterator {
     }
 
     this.taken += 1;
-    return this.iterator.next();
+    return this._iterator.next();
   }
 }
 
 class ChainIterator : Iterator {
-  first_exhausted = false;
+  _first_exhausted = false;
 
   init(first, second) {
-    this.first = first;
-    this.second = second;
+    this._first = first;
+    this._second = second;
   }
 
   has_next() {
-    if (!this.first_exhausted) {
-      if (this.first.has_next()) {
+    if (!this._first_exhausted) {
+      if (this._first.has_next()) {
         return true;
       }
-      this.first_exhausted = true;
+      this._first_exhausted = true;
     }
-    return this.second.has_next();
+    return this._second.has_next();
   }
 
   next() {
@@ -328,28 +362,28 @@ class ChainIterator : Iterator {
       return nil;
     }
 
-    if (!this.first_exhausted) {
-      return this.first.next();
+    if (!this._first_exhausted) {
+      return this._first.next();
     }
 
-    return this.second.next();
+    return this._second.next();
   }
 }
 
 class Range : Iterator {
   init(start, end) {
-    this.current = start;
+    this._current = start;
     this.end = end;
   }
 
   has_next() {
-    return this.current < this.end;
+    return this._current < this.end;
   }
 
   next() {
     if (this.has_next()) {
-      var current = this.current;
-      this.current += 1;
+      var current = this._current;
+      this._current += 1;
       return current;
     }
 
@@ -369,59 +403,59 @@ fn array_of(length, init) {
 
 class Result {
   init(is_ok, value, err) {
-    this.is_ok = is_ok or false;
-    this.value = value;
-    this.error = err;
+    this._is_ok = is_ok or false;
+    this._value = value;
+    this._error = err;
   }
 
   get() {
-    assert(this.is_ok, to_string(this.error));
-    return this.value;
+    assert(this._is_ok, to_string(this._error));
+    return this._value;
   }
 
   expect(message) {
-    assert(this.is_ok, message);
-    return this.value;
+    assert(this._is_ok, message);
+    return this._value;
   }
 
   get_or(value) {
-    return this.is_ok ? this.value : value;
+    return this._is_ok ? this._value : value;
   }
 
   get_or_else(cb) {
-    return this.is_ok ? this.value : cb();
+    return this._is_ok ? this._value : cb();
   }
 
   or_else(cb) {
-    return this.is_ok ? this : cb();
+    return this._is_ok ? this : cb();
   }
 
   map(transform) {
-    return this.is_ok ? Result(true, transform(this.value)) : this;
+    return this._is_ok ? Result(true, transform(this._value)) : this;
   }
 
   flat_map(transform) {
-    return this.is_ok ? transform(this.value) : this;
+    return this._is_ok ? transform(this._value) : this;
   }
 
   map_err(transform) {
-    return this.is_ok ? this : Result(false, nil, transform(this.error));
+    return this._is_ok ? this : Result(false, nil, transform(this._error));
   }
 
   is_ok() {
-    return this.is_ok;
+    return this._is_ok;
   }
 
   is_err() {
-    return !this.is_ok;
+    return !this._is_ok;
   }
 
   ok() {
-    return this.is_ok ? this.value : nil;
+    return this._is_ok ? this._value : nil;
   }
 
   err() {
-    return this.is_ok ? nil : this.error;
+    return this._is_ok ? nil : this._error;
   }
 }
 
@@ -431,4 +465,172 @@ fn Ok(value) {
 
 fn Err(err) {
   return Result(false, nil, err);
+}
+
+class HashMap {
+  _buckets = array_of(64, () -> []);
+  _entry_count = 0;
+  _capacity = 64;
+
+  set(key, value) {
+    var bucket = this._buckets[this._get_bucket_index(key)];
+
+    for (var i = 0; i < bucket.length(); i += 1) {
+      var entry = bucket[i];
+
+      if (entry.key == key) {
+        entry.value = value;
+        return;
+      }
+    }
+
+    bucket.push(Entry(key, value));
+    this._entry_count += 1;
+
+    if (this._entry_count / this._capacity > 0.75) {
+      this._resize();
+    }
+  }
+
+  get(key) {
+    var bucket = this._buckets[this._get_bucket_index(key)];
+
+    for (var i = 0; i < bucket.length(); i += 1) {
+      var entry = bucket[i];
+
+      if (entry.key == key) {
+        return entry.value;
+      }
+    }
+
+    return nil;
+  }
+
+  has(key) {
+    var bucket = this._buckets[this._get_bucket_index(key)];
+
+    for (var i = 0; i < bucket.length(); i += 1) {
+      var entry = bucket[i];
+
+      if (entry.key == key) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  clear() {
+    this._buckets = array_of(64, () -> []);
+    this._entry_count = 0;
+    this._capacity = 64;
+  }
+
+  size() {
+    return this._entry_count;
+  }
+
+  delete(key) {
+    var bucket = this._buckets[this._get_bucket_index(key)];
+
+    var index_to_remove = nil;
+    for (var i = 0; i < bucket.length(); i += 1) {
+      var entry = bucket[i];
+
+      if (entry.key == key) {
+        index_to_remove = i;
+        break;
+      }
+    }
+
+    if (index_to_remove != nil) {
+        bucket.remove_at(index_to_remove);
+        this._entry_count -=1;
+        return true;
+    }
+
+    return false;
+  }
+  
+  entries() {
+    return ArrayIterator(this._buckets).flat_map((bucket) -> ArrayIterator(bucket));
+  }
+
+  keys() {
+    return this.entries().map((entry) -> entry.key);
+  }
+
+  values() {
+    return this.entries().map((entry) -> entry.value);
+  }
+
+  _get_bucket_index(key) {
+    return hash(key) % this._capacity;
+  }
+
+  _resize() {
+    this._capacity *= 2;
+
+    var buckets = array_of(this._capacity, () -> []);
+
+    for (var i = 0; i < this._buckets.length(); i += 1) {
+      var bucket = this._buckets[i];
+
+      for (var j = 0; j < bucket.length(); j += 1) {
+        var entry = bucket[j];
+
+        var index = this._get_bucket_index(entry.key);
+
+        buckets[index].push(entry);
+      }
+    }
+
+    this._buckets = buckets;
+  }
+}
+
+class Entry {
+  init(key, value) {
+    this.key = key;
+    this._value = value;
+  }
+}
+
+class HashSet {
+  init(arr) {
+    this._map = HashMap();
+
+    if (arr) {
+      for (var i = 0; i < arr.length(); i += 1) {
+        this.add(arr[i]);
+      }
+    }
+  }
+
+  add(value) {
+    var before_size = this._map.size();
+    this._map.set(value, nil);
+
+    return this._map.size() > before_size;
+  }
+
+  has(value) {
+    return this._map.has(value);
+  }
+
+  delete(value) {
+    return this._map.delete(value);
+  }
+
+  size() {
+    return this._map.size();
+  }
+
+  clear() {
+    return this._map.clear();
+  }
+
+  values() {
+    return this._map.keys();
+  }
 }

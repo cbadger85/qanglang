@@ -342,6 +342,28 @@ pub fn qang_array_concat(
     }
 }
 
+pub fn qang_array_remove_at(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    match (receiver.kind(), args.first().map(|a| a.kind())) {
+        (ValueKind::Array(handle), Some(ValueKind::Number(index))) => {
+            vm.alloc.arrays.remove_at(handle, index.trunc() as isize);
+
+            Ok(None)
+        }
+        (ValueKind::Array(_), _) => Err(NativeFunctionError::new(
+            "An array can only be indexed by a number.",
+        )),
+        _ => Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        ))),
+    }
+}
+
 pub fn qang_array_construct(
     arg_count: usize,
     vm: &mut Vm,
@@ -497,6 +519,14 @@ impl Vm {
             IntrinsicKind::Array(concat_handle),
             IntrinsicMethod::Native {
                 function: qang_array_concat,
+                arity: 1,
+            },
+        );
+        let array_remove_at_handle = alloc.strings.intern("remove_at");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_remove_at_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_remove_at,
                 arity: 1,
             },
         );

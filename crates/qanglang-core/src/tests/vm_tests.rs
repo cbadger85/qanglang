@@ -2012,6 +2012,9 @@ fn test_op_constant_16() {
 fn test_stdlib_call() {
     let source = r#"
         var one = 1;
+        fn transform(value, transformer) {
+            return transformer(value);
+        }
 
         var three = one |> transform((x) -> x + 2);
 

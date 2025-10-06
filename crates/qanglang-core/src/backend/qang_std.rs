@@ -189,6 +189,54 @@ pub fn qang_string_to_lowercase(
     }
 }
 
+pub fn qang_string_split(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(handle) = receiver.as_string() {
+        let args = vm.get_function_args(arg_count);
+        let delimeter = if let Some(delimeter) = args.first() {
+            if let Some(delimeter_handle) = delimeter.as_string() {
+                delimeter_handle
+            } else {
+                return Err(NativeFunctionError::new("Delimeter must be a string."));
+            }
+        } else {
+            vm.alloc.strings.intern("")
+        };
+
+        let arr = vm.alloc.arrays.create_array(0);
+        let delimeter = vm.alloc.strings.get_string(delimeter).to_owned();
+        let string_to_split = vm.alloc.strings.get_string(handle).to_owned();
+
+        if delimeter.is_empty() {
+            // Split into individual characters when no delimiter
+            for ch in string_to_split.chars() {
+                let handle = vm.alloc.strings.intern(&ch.to_string());
+                vm.alloc.arrays.push(arr, Value::string(handle));
+            }
+        } else {
+            // Normal split with delimiter
+            let strings = string_to_split
+                .split(&delimeter)
+                .map(|s| s.to_owned())
+                .collect::<Vec<_>>();
+            for string in strings {
+                let handle = vm.alloc.strings.intern(string.as_str());
+                vm.alloc.arrays.push(arr, Value::string(handle));
+            }
+        }
+
+        Ok(Some(Value::array(arr)))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
 pub fn qang_array_length(
     receiver: Value,
     _arg_count: usize,
@@ -364,6 +412,49 @@ pub fn qang_array_remove_at(
     }
 }
 
+pub fn qang_array_join(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(handle) = receiver.as_array() {
+        let args = vm.get_function_args(arg_count);
+
+        let delimeter = if let Some(delimeter) = args.first() {
+            if let Some(delimeter_handle) = delimeter.as_string() {
+                delimeter_handle
+            } else {
+                return Err(NativeFunctionError::new("Delimeter must be a string."));
+            }
+        } else {
+            vm.alloc.strings.intern("")
+        };
+
+        let mut combined_string = String::new();
+        let delimeter_str = vm.alloc.strings.get_string(delimeter);
+
+        let mut first = true;
+        for value in vm.alloc.arrays.iter(handle) {
+            if !first {
+                combined_string += delimeter_str;
+            }
+            first = false;
+
+            let string = value.to_display_string(&vm.alloc);
+            combined_string += &string;
+        }
+
+        let combined_string_handle = vm.alloc.strings.intern(&combined_string);
+
+        Ok(Some(Value::string(combined_string_handle)))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
 pub fn qang_array_construct(
     arg_count: usize,
     vm: &mut Vm,
@@ -442,8 +533,8 @@ impl Vm {
         self.alloc.strings.intern(OBJECT_TYPE_STRING);
         self.alloc.strings.intern("ARRAY");
         self.alloc.strings.intern(ARRAY_TYPE_STRING);
-        self.alloc.strings.intern(MODULE_TYPE_STRING);
         self.alloc.strings.intern("MODULE");
+        self.alloc.strings.intern(MODULE_TYPE_STRING);
     }
 
     pub(crate) fn load_intrinsics(
@@ -464,6 +555,14 @@ impl Vm {
             IntrinsicMethod::Native {
                 function: qang_string_to_lowercase,
                 arity: 0,
+            },
+        );
+        let split_handle = alloc.strings.intern("split");
+        intrinsics.insert(
+            IntrinsicKind::String(split_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_split,
+                arity: 1,
             },
         );
         let length_handle = alloc.strings.intern("length");
@@ -527,6 +626,14 @@ impl Vm {
             IntrinsicKind::Array(array_remove_at_handle),
             IntrinsicMethod::Native {
                 function: qang_array_remove_at,
+                arity: 1,
+            },
+        );
+        let array_join_handle = alloc.strings.intern("join");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_join_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_join,
                 arity: 1,
             },
         );

@@ -197,26 +197,18 @@ fn test_array_join_with_delimeter() {
   assert_eq(string, "1,2,3");
 }
 
-fn test_array_from_split_string() {
-  var string = "123";
+fn test_array_index_of() {
+  var arr = [1, 2, 3,];
 
-  var arr = string.split();
-
-  assert(arr is ARRAY);
-  assert_eq(arr.length(), 3);
-  assert_eq(arr[0], "1");
-  assert_eq(arr[1], "2");
-  assert_eq(arr[2], "3");
+  assert_eq(arr.index_of(2), 1);
+  assert_eq(arr.index_of(4), -1);
+  assert_throws(() -> arr.index_of());
 }
 
-fn test_array_from_split_string_with_empty_string_delimeter() {
-  var string = "123";
+fn test_array_contains() {
+  var arr = [1, 2, 3,];
 
-  var arr = string.split("");
-
-  assert(arr is ARRAY);
-  assert_eq(arr.length(), 3);
-  assert_eq(arr[0], "1");
-  assert_eq(arr[1], "2");
-  assert_eq(arr[2], "3");
+  assert(arr.contains(2));
+  assert(!arr.contains(4));
+  assert_throws(() -> arr.contains());
 }

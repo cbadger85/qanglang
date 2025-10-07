@@ -435,6 +435,60 @@ pub fn qang_array_remove_at(
     }
 }
 
+pub fn qang_array_index_of(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if arg_count < 1 {
+        return Err(NativeFunctionError::new(
+            "An argument must be provided for index_of.",
+        ));
+    }
+    let value = vm
+        .get_function_args(arg_count)
+        .first()
+        .copied()
+        .unwrap_or(Value::nil());
+
+    if let Some(handle) = receiver.as_array() {
+        for (index, item) in vm.alloc.arrays.iter(handle).enumerate() {
+            if item == value {
+                return Ok(Some(Value::number(index as f64)));
+            }
+        }
+    }
+
+    return Ok(Some(Value::number(-1.0)));
+}
+
+pub fn qang_array_contains(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if arg_count < 1 {
+        return Err(NativeFunctionError::new(
+            "An argument must be provided for contains.",
+        ));
+    }
+    let value = vm
+        .get_function_args(arg_count)
+        .first()
+        .copied()
+        .unwrap_or(Value::nil());
+
+    if let Some(handle) = receiver.as_array() {
+        for item in vm.alloc.arrays.iter(handle) {
+            if item == value {
+                return Ok(Some(Value::boolean(true)));
+            }
+        }
+    }
+
+    return Ok(Some(Value::boolean(false)));
+}
+
 pub fn qang_array_join(
     receiver: Value,
     arg_count: usize,
@@ -757,6 +811,22 @@ impl Vm {
             IntrinsicKind::Array(array_join_handle),
             IntrinsicMethod::Native {
                 function: qang_array_join,
+                arity: 1,
+            },
+        );
+        let array_index_of_handle = alloc.strings.intern("index_of");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_index_of_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_index_of,
+                arity: 1,
+            },
+        );
+        let array_contains_handle = alloc.strings.intern("contains");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_contains_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_contains,
                 arity: 1,
             },
         );

@@ -67,6 +67,7 @@ pub enum Keyword {
     Call,
     Apply,
     Module,
+    ArrayIterator,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -200,13 +201,13 @@ pub(crate) struct VmState {
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
-    keywords: FxHashMap<Keyword, StringHandle>,
+    pub(crate) keywords: FxHashMap<Keyword, StringHandle>,
     pub modules: ModuleResolver,
     function_module_context: Option<HashMapHandle>,
     property_cache: [PropertyCache; Self::PROPERTY_CACHE_SIZE],
     method_cache: [MethodCache; Self::METHOD_CACHE_SIZE],
     cache_generation: u32,
-    arg_buffer: [Value; 256],
+    pub(crate) arg_buffer: [Value; 256],
 }
 
 impl VmState {
@@ -407,6 +408,8 @@ impl Vm {
             alloc.strings.intern("MODULE"),
             Value::string(module_type_value_handle),
         );
+        let array_iterator_handle = alloc.strings.intern("ArrayIterator");
+        keywords.insert(Keyword::ArrayIterator, array_iterator_handle);
 
         let vm = Self {
             is_debug: false,
@@ -1465,6 +1468,7 @@ impl Vm {
             ValueKind::Closure(handle) => self.call(handle, arg_count),
             ValueKind::NativeFunction(function) => self.call_native_function(function, arg_count),
             ValueKind::Class(handle) => {
+                println!("calling {:?}", value.kind());
                 let clazz = self.alloc.get_class(handle);
                 let clazz_method_table = clazz.method_table;
                 let clazz_value_table = clazz.value_table;
@@ -1487,6 +1491,7 @@ impl Vm {
                     .get_class_method(clazz_method_table, Value::string(constructor_handle))
                     .and_then(|v| v.as_closure())
                 {
+                    println!("constructing...");
                     self.call(constructor, arg_count)?;
                 } else {
                     // No constructor found, pop the arguments from the stack
@@ -1879,6 +1884,7 @@ impl Vm {
             }
             IntrinsicMethod::Apply => self.handle_function_intrinsic_apply(receiver, arg_count),
             IntrinsicMethod::Call => self.handle_function_intrinsic_call(receiver, arg_count),
+            IntrinsicMethod::Iter => self.handle_array_intrinsic_iter(receiver, arg_count),
             IntrinsicMethod::NilSafeCall | IntrinsicMethod::NilSafeApply => {
                 // For nil-safe call, consume arguments and return nil
                 for _ in 0..arg_count {

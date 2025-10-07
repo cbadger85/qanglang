@@ -724,6 +724,11 @@ impl Vm {
                 arity: 1,
             },
         );
+        let array_iter_handle = alloc.strings.intern("iter");
+        intrinsics.insert(
+            IntrinsicKind::Array(array_iter_handle),
+            IntrinsicMethod::Iter,
+        );
         let number_ceil_handle = alloc.strings.intern("ceil");
         intrinsics.insert(
             IntrinsicKind::Number(number_ceil_handle),
@@ -844,5 +849,27 @@ impl Vm {
                 self.state.get_previous_loc(),
             )),
         }
+    }
+
+    pub(crate) fn handle_array_intrinsic_iter(
+        &mut self,
+        receiver: Value,
+        _arg_count: usize,
+    ) -> RuntimeResult<()> {
+        println!("receiver kind: {:?}", receiver.kind());
+        let array_iterator = *self
+            .globals()
+            .get(
+                self.state
+                    .keywords
+                    .get(&super::vm::Keyword::ArrayIterator)
+                    .expect("Expected ArrayIterator to be interned."),
+            )
+            .expect("Expected ArrayIterator to be loaded from stdlib.");
+
+        self.state.arg_buffer[0] = receiver;
+        println!("array_iterator kind: {:?}", array_iterator.kind());
+
+        self.call_value(array_iterator, 1)
     }
 }

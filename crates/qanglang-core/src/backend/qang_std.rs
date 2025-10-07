@@ -856,7 +856,6 @@ impl Vm {
         receiver: Value,
         _arg_count: usize,
     ) -> RuntimeResult<()> {
-        println!("receiver kind: {:?}", receiver.kind());
         let array_iterator = *self
             .globals()
             .get(
@@ -867,9 +866,16 @@ impl Vm {
             )
             .expect("Expected ArrayIterator to be loaded from stdlib.");
 
-        self.state.arg_buffer[0] = receiver;
-        println!("array_iterator kind: {:?}", array_iterator.kind());
+        // Pop the bound intrinsic from the stack (cleaning up after the method call)
+        pop_value!(self);
 
+        // Push the ArrayIterator class constructor
+        push_value!(self, array_iterator)?;
+
+        // Push the receiver (array) as the argument
+        push_value!(self, receiver)?;
+
+        // Call the constructor - this will replace ArrayIterator class with the instance on the stack
         self.call_value(array_iterator, 1)
     }
 }

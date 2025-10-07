@@ -1468,7 +1468,6 @@ impl Vm {
             ValueKind::Closure(handle) => self.call(handle, arg_count),
             ValueKind::NativeFunction(function) => self.call_native_function(function, arg_count),
             ValueKind::Class(handle) => {
-                println!("calling {:?}", value.kind());
                 let clazz = self.alloc.get_class(handle);
                 let clazz_method_table = clazz.method_table;
                 let clazz_value_table = clazz.value_table;
@@ -1491,7 +1490,6 @@ impl Vm {
                     .get_class_method(clazz_method_table, Value::string(constructor_handle))
                     .and_then(|v| v.as_closure())
                 {
-                    println!("constructing...");
                     self.call(constructor, arg_count)?;
                 } else {
                     // No constructor found, pop the arguments from the stack

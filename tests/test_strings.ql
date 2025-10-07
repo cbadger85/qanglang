@@ -1,4 +1,4 @@
-var test_description = "Testing the standard library included with QangLang.";
+var test_description = "Testing string functions and intrinisic methods";
 
 fn test_to_string() {
   var foo = 12 |> to_string;
@@ -32,4 +32,26 @@ fn test_to_number_err() {
   assert(num_result is Result);
   assert(num_result.is_err());
   assert_throws(() -> num_result.unwrap());
+}
+
+
+
+fn test_array_from_split_string_with_delimeter() {
+  var string = "1,2,3";
+
+  var arr = string.split(",");
+
+  assert(arr is ARRAY);
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], "1");
+  assert_eq(arr[1], "2");
+  assert_eq(arr[2], "3");
+}
+
+fn test_concat_strings() {
+  var str1 = "foo";
+  var str2 = "bar";
+
+  assert_eq(str1 + str2, "foobar");
+  assert_eq(str1.concat(str2), "foobar");
 }

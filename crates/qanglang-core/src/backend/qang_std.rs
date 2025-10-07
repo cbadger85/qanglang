@@ -237,6 +237,29 @@ pub fn qang_string_split(
     }
 }
 
+pub fn qang_string_concat(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(string_handle) = receiver.as_string() {
+        let args = vm.get_function_args(arg_count);
+        if let Some(other_string) = args.first()
+            && let Some(other_handle) = other_string.as_string()
+        {
+            let result = vm.alloc.strings.concat_strings(string_handle, other_handle);
+            Ok(Some(Value::string(result)))
+        } else {
+            Err(NativeFunctionError::new("Value must be a string."))
+        }
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
 pub fn qang_array_length(
     receiver: Value,
     _arg_count: usize,
@@ -649,6 +672,15 @@ impl Vm {
             IntrinsicKind::String(to_number_handle),
             IntrinsicMethod::ToNumber,
         );
+        let concat_handle = alloc.strings.intern("concat");
+
+        intrinsics.insert(
+            IntrinsicKind::String(concat_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_concat,
+                arity: 1,
+            },
+        );
         let split_handle = alloc.strings.intern("split");
         intrinsics.insert(
             IntrinsicKind::String(split_handle),
@@ -705,7 +737,6 @@ impl Vm {
                 arity: 1,
             },
         );
-        let concat_handle = alloc.strings.intern("concat");
         intrinsics.insert(
             IntrinsicKind::Array(concat_handle),
             IntrinsicMethod::Native {

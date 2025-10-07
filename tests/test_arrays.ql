@@ -209,19 +209,6 @@ fn test_array_from_split_string() {
   assert_eq(arr[2], "3");
 }
 
-
-fn test_array_from_split_string_with_delimeter() {
-  var string = "1,2,3";
-
-  var arr = string.split(",");
-
-  assert(arr is ARRAY);
-  assert_eq(arr.length(), 3);
-  assert_eq(arr[0], "1");
-  assert_eq(arr[1], "2");
-  assert_eq(arr[2], "3");
-}
-
 fn test_array_from_split_string_with_empty_string_delimeter() {
   var string = "123";
 

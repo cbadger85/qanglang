@@ -120,6 +120,7 @@ pub enum IntrinsicMethod {
     NilSafeCall,
     NilSafeApply,
     Iter,
+    ToNumber,
 }
 
 #[derive(Debug, Clone)]

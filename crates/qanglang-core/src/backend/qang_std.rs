@@ -644,6 +644,11 @@ impl Vm {
                 arity: 0,
             },
         );
+        let to_number_handle = alloc.strings.intern("to_number");
+        intrinsics.insert(
+            IntrinsicKind::String(to_number_handle),
+            IntrinsicMethod::ToNumber,
+        );
         let split_handle = alloc.strings.intern("split");
         intrinsics.insert(
             IntrinsicKind::String(split_handle),
@@ -866,16 +871,59 @@ impl Vm {
             )
             .expect("Expected ArrayIterator to be loaded from stdlib.");
 
-        // Pop the bound intrinsic from the stack (cleaning up after the method call)
         pop_value!(self);
 
-        // Push the ArrayIterator class constructor
         push_value!(self, array_iterator)?;
 
-        // Push the receiver (array) as the argument
         push_value!(self, receiver)?;
 
-        // Call the constructor - this will replace ArrayIterator class with the instance on the stack
         self.call_value(array_iterator, 1)
+    }
+
+    pub(crate) fn handle_string_intrinsic_to_number(
+        &mut self,
+        receiver: Value,
+        _arg_count: usize,
+    ) -> RuntimeResult<()> {
+        let result = *self
+            .globals()
+            .get(
+                self.state
+                    .keywords
+                    .get(&super::vm::Keyword::Result)
+                    .expect("Expected Result to be interned."),
+            )
+            .expect("Expected Result to be loaded from stdlib.");
+
+        pop_value!(self);
+
+        push_value!(self, result)?;
+
+        let value = receiver.as_string().ok_or_else(|| {
+            QangRuntimeError::new(
+                "Expected string.".to_string(),
+                self.state.get_previous_loc(),
+            )
+        })?;
+        let value = self.alloc.strings.get_string(value);
+
+        match value.parse::<f64>() {
+            Ok(number) => {
+                push_value!(self, Value::boolean(true))?;
+                push_value!(self, Value::number(number))?;
+                push_value!(self, Value::nil())?;
+            }
+            Err(_) => {
+                push_value!(self, Value::boolean(false))?;
+                push_value!(self, Value::nil())?;
+                let err_msg = self
+                    .alloc
+                    .strings
+                    .intern(format!("Unable to parse value '{:?}' as number.", value).as_str());
+                push_value!(self, Value::string(err_msg))?;
+            }
+        }
+
+        self.call_value(result, 3)
     }
 }

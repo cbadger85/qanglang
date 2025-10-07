@@ -68,6 +68,7 @@ pub enum Keyword {
     Apply,
     Module,
     ArrayIterator,
+    Result,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -410,6 +411,8 @@ impl Vm {
         );
         let array_iterator_handle = alloc.strings.intern("ArrayIterator");
         keywords.insert(Keyword::ArrayIterator, array_iterator_handle);
+        let result_handle = alloc.strings.intern("Result");
+        keywords.insert(Keyword::Result, result_handle);
 
         let vm = Self {
             is_debug: false,
@@ -1883,6 +1886,9 @@ impl Vm {
             IntrinsicMethod::Apply => self.handle_function_intrinsic_apply(receiver, arg_count),
             IntrinsicMethod::Call => self.handle_function_intrinsic_call(receiver, arg_count),
             IntrinsicMethod::Iter => self.handle_array_intrinsic_iter(receiver, arg_count),
+            IntrinsicMethod::ToNumber => {
+                self.handle_string_intrinsic_to_number(receiver, arg_count)
+            }
             IntrinsicMethod::NilSafeCall | IntrinsicMethod::NilSafeApply => {
                 // For nil-safe call, consume arguments and return nil
                 for _ in 0..arg_count {

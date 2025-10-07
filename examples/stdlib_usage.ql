@@ -5,5 +5,3 @@ var new_arr = ArrayIterator(arr)
   .filter((item) -> item % 2 == 0)
   .collect();
 println(new_arr);
-
-var hashmap = HashMap();

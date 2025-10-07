@@ -242,21 +242,18 @@ pub fn qang_string_concat(
     arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    if let Some(string_handle) = receiver.as_string() {
-        let args = vm.get_function_args(arg_count);
-        if let Some(other_string) = args.first()
-            && let Some(other_handle) = other_string.as_string()
-        {
-            let result = vm.alloc.strings.concat_strings(string_handle, other_handle);
-            Ok(Some(Value::string(result)))
-        } else {
-            Err(NativeFunctionError::new("Value must be a string."))
-        }
-    } else {
-        Err(NativeFunctionError(format!(
+    let args = vm.get_function_args(arg_count);
+    match (receiver.kind(), args.first().copied().map(|a| a.kind())) {
+        (ValueKind::String(handle1), Some(ValueKind::String(handle2))) => Ok(Some(Value::string(
+            vm.alloc.strings.concat_strings(handle1, handle2),
+        ))),
+        (ValueKind::String(_), _) => Err(NativeFunctionError::new(
+            "A string can only be concatenated with another string.",
+        )),
+        _ => Err(NativeFunctionError(format!(
             "Expected string but recieved {}.",
             receiver.to_type_string()
-        )))
+        ))),
     }
 }
 

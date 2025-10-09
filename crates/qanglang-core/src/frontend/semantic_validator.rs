@@ -16,20 +16,78 @@ pub enum FunctionKind {
 }
 
 #[derive(Debug, Clone)]
+struct Local {
+    name: crate::StringHandle,
+    depth: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
 struct FunctionContext {
     pub kind: FunctionKind,
     pub local_count: usize,
+    pub locals: Vec<Local>,
 }
 
 impl FunctionContext {
-    fn new(kind: FunctionKind) -> Self {
-        let local_count = 1;
+    fn new(kind: FunctionKind, blank_handle: crate::StringHandle, this_handle: crate::StringHandle, scope_depth: usize) -> Self {
+        let mut locals = Vec::with_capacity(256);
+        let is_method = matches!(kind, FunctionKind::Method | FunctionKind::Initializer);
 
-        Self { kind, local_count }
+        if is_method {
+            // For methods, slot 0 is "this" and is initialized
+            locals.push(Local {
+                name: this_handle,
+                depth: Some(scope_depth),
+            });
+        } else {
+            // For functions and scripts, slot 0 is a blank slot (not initialized initially)
+            locals.push(Local {
+                name: blank_handle,
+                depth: None,
+            });
+        }
+
+        Self {
+            kind,
+            local_count: 1,
+            locals,
+        }
     }
 
-    fn add_local(&mut self) {
+    fn add_local(&mut self, name: crate::StringHandle, depth: Option<usize>) {
+        if self.local_count < self.locals.len() {
+            self.locals[self.local_count] = Local { name, depth };
+        } else {
+            self.locals.push(Local { name, depth });
+        }
         self.local_count += 1;
+    }
+
+    fn mark_initialized(&mut self, scope_depth: usize) {
+        if self.local_count > 0 {
+            if let Some(local) = self.locals.get_mut(self.local_count - 1) {
+                local.depth = Some(scope_depth);
+            }
+        }
+    }
+
+    fn has_local_in_current_scope(&self, name: crate::StringHandle, scope_depth: usize) -> bool {
+        for i in (0..self.local_count).rev() {
+            if let Some(local) = self.locals.get(i) {
+                if local
+                    .depth
+                    .map(|local_depth| local_depth < scope_depth)
+                    .unwrap_or(false)
+                {
+                    break;
+                }
+
+                if local.name == name {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 
@@ -39,16 +97,23 @@ pub struct SemanticValidator<'a> {
     scope_depth: usize,
     functions: Vec<FunctionContext>,
     in_loop: bool,
+    blank_handle: crate::StringHandle,
+    this_handle: crate::StringHandle,
 }
 
 impl<'a> SemanticValidator<'a> {
     pub fn new(strings: &'a mut StringInterner, source_map: Arc<SourceMap>) -> Self {
+        let blank_handle = strings.intern("");
+        let this_handle = strings.intern("this");
+
         Self {
-            strings,
             scope_depth: 0,
-            functions: vec![FunctionContext::new(FunctionKind::Script)],
+            functions: vec![FunctionContext::new(FunctionKind::Script, blank_handle, this_handle, 0)],
             in_loop: false,
             source_map,
+            strings,
+            blank_handle,
+            this_handle,
         }
     }
 
@@ -74,6 +139,30 @@ impl<'a> SemanticValidator<'a> {
 
     fn end_scope(&mut self) {
         if self.scope_depth > 0 {
+            // Before decrementing scope_depth, remove locals from the current scope
+            if let Some(function) = self.functions.last_mut() {
+                let mut locals_to_remove = 0;
+
+                for i in (0..function.local_count).rev() {
+                    if let Some(local) = function.locals.get(i) {
+                        if let Some(depth) = local.depth {
+                            if depth >= self.scope_depth {
+                                locals_to_remove += 1;
+                            } else {
+                                break;
+                            }
+                        } else {
+                            // Uninitialized local - shouldn't happen at end_scope but handle it
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                function.local_count -= locals_to_remove;
+            }
+
             self.scope_depth -= 1;
         }
     }
@@ -98,18 +187,44 @@ impl<'a> SemanticValidator<'a> {
 
     fn declare_variable_with_init(
         &mut self,
-        _identifier: crate::frontend::ast_node_arena::TypedNodeRef<
+        identifier: crate::frontend::ast_node_arena::TypedNodeRef<
             crate::frontend::nodes::IdentifierNode,
         >,
-        _is_initialized: bool,
+        is_initialized: bool,
     ) -> Result<(), QangCompilerError> {
-        if self.current_scope_depth() > 0
-            && let Some(function) = self.functions.last_mut()
-        {
-            function.add_local();
+        // Only check for duplicates in local scope
+        if self.current_scope_depth() > 0 {
+            // Check for duplicate declarations in the current scope
+            if let Some(function) = self.functions.last() {
+                if function.has_local_in_current_scope(identifier.node.name, self.scope_depth) {
+                    return Err(QangCompilerError::new_analysis_error(
+                        "Already a variable with this name in this scope.".to_string(),
+                        identifier.node.span,
+                        self.source_map.clone(),
+                    ));
+                }
+            }
+
+            // Add the local variable
+            if let Some(function) = self.functions.last_mut() {
+                let depth = if is_initialized {
+                    Some(self.scope_depth)
+                } else {
+                    None
+                };
+                function.add_local(identifier.node.name, depth);
+            }
         }
 
         Ok(())
+    }
+
+    fn mark_initialized(&mut self) {
+        if self.current_scope_depth() > 0 {
+            if let Some(function) = self.functions.last_mut() {
+                function.mark_initialized(self.scope_depth);
+            }
+        }
     }
 
     fn in_current_loop(&self) -> bool {
@@ -131,10 +246,13 @@ impl<'a> SemanticValidator<'a> {
             ));
         }
 
-        let function = FunctionContext::new(kind);
+        self.in_loop = false;
+
+        // Create new function context with scope_depth 0 (mimicking assembler's State::push)
+        let function = FunctionContext::new(kind, self.blank_handle, self.this_handle, 0);
         self.functions.push(function);
 
-        self.in_loop = false;
+        // Then increment scope depth for the function body
         self.begin_scope();
     }
 
@@ -301,13 +419,22 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
     ) -> Result<(), Self::Error> {
         let identifier = ctx.nodes.get_identifier_node(var_decl.node.target);
 
+        // Declare the variable as uninitialized first
         if let Err(error) = self.declare_variable_with_init(identifier, false) {
             ctx.errors.report_error(error);
         }
 
+        // Visit the initializer expression (if present)
         if let Some(initializer_id) = var_decl.node.initializer {
             let initializer = ctx.nodes.get_expr_node(initializer_id);
             self.visit_expression(initializer, ctx)?;
+
+            // Mark the variable as initialized after visiting the initializer
+            self.mark_initialized();
+        } else {
+            // Even without an initializer, we need to mark it as initialized
+            // (the variable exists but has an undefined value)
+            self.mark_initialized();
         }
 
         Ok(())
@@ -382,7 +509,8 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
             self.begin_scope();
 
             if let Some(func) = self.functions.last_mut() {
-                func.add_local();
+                let super_handle = self.strings.intern("super");
+                func.add_local(super_handle, Some(self.scope_depth));
             }
         }
 
@@ -652,5 +780,32 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                 ctx,
             ),
         }
+    }
+
+    fn visit_identifier(
+        &mut self,
+        identifier: super::ast_node_arena::TypedNodeRef<super::nodes::IdentifierNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Check if we're trying to read a variable during its own initialization
+        if self.current_scope_depth() > 0 {
+            if let Some(function) = self.functions.last() {
+                for i in (0..function.local_count).rev() {
+                    if let Some(local) = function.locals.get(i) {
+                        if local.name == identifier.node.name {
+                            if local.depth.is_none() {
+                                ctx.errors.report_error(QangCompilerError::new_analysis_error(
+                                    "Cannot read local variable during its initialization.".to_string(),
+                                    identifier.node.span,
+                                    self.source_map.clone(),
+                                ));
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }

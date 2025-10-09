@@ -17,12 +17,7 @@
       "request": "launch",
       "name": "Debug unit tests in library 'qanglang_core'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=qanglang-core"
-        ],
+        "args": ["test", "--no-run", "--lib", "--package=qanglang-core"],
         "filter": {
           "name": "qanglang_core",
           "kind": "lib"
@@ -36,11 +31,7 @@
       "request": "launch",
       "name": "Debug executable 'qang'",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=qang",
-          "--package=qanglang-cli"
-        ],
+        "args": ["build", "--bin=qang", "--package=qanglang-cli"],
         "filter": {
           "name": "qang",
           "kind": "bin"
@@ -54,12 +45,7 @@
       "request": "launch",
       "name": "Debug unit tests in executable 'qang'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--bin=qang",
-          "--package=qanglang-cli"
-        ],
+        "args": ["test", "--no-run", "--bin=qang", "--package=qanglang-cli"],
         "filter": {
           "name": "qang",
           "kind": "bin"
@@ -73,12 +59,7 @@
       "request": "launch",
       "name": "Debug unit tests in library 'qanglang_ls'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=qanglang-ls"
-        ],
+        "args": ["test", "--no-run", "--lib", "--package=qanglang-ls"],
         "filter": {
           "name": "qanglang_ls",
           "kind": "lib"
@@ -86,6 +67,12 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "command": "./node_modules/.bin/astro dev",
+      "name": "Development server",
+      "request": "launch",
+      "type": "node-terminal"
     }
   ]
 }

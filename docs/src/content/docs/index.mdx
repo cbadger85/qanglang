@@ -1,0 +1,338 @@
+---
+title: Get Started with QangLang
+description: An introduction to the QangLang programming language.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+QangLang is a dynamically-typed scripting language featuring a familiar C-like syntax. It can either with in its own stand-alone runtime, or embedded in a Rust application.
+
+## Print to Console
+
+`print` can be used to write something to the console.
+
+```QangLang
+print("Hello");
+print(" ");
+print("World!");
+// Hello World
+```
+
+`println` prints it's argument and adds a line break.
+
+```QangLang
+println("Hello World");
+// Hello World
+```
+
+## Variables
+
+Variables are declared using the `var` keyword. All variables are mutable.
+
+```QangLang
+var value = 0;
+value += 1;
+println(value); // 1
+```
+
+With the exception of the global scope, variable names cannot be reused in teh same scope.
+
+```QangLang
+// In global scope
+var value;
+var value = true; // `value` can be reused.
+
+{
+	var value; // Variable shadowing is allowed.
+	var value = false; // This is an error because value cannot be redeclared
+}
+```
+
+## Functions and Lambdas
+
+QangLang has two ways of declaring functions. The `fn` keyword can be used to declare function statements.
+
+```QangLang
+fn get_hello_world() {
+	return "Hello World!";
+}
+
+fn print_hello_world() {
+	println(get_hello_world()); // Hello World!
+}
+```
+
+Additionally, functions can be declared as lambda expressions.
+
+```QangLang
+var hello = () -> "Hello";
+var world = () -> "World";
+
+var hello_world = () -> {
+	return hello() + " " + world() + "!";
+}
+
+var print_hello_world = () -> {
+	println(hello_world); // Hello World!
+};
+```
+
+## Classes and Instances
+
+Classes are dynamically declared at runtime and can be declared in any scope.
+
+```QangLang
+class MyClass { }
+
+var my_class = MyClass()
+```
+
+Fields and methods are accessed using the `.` operator.
+
+```QangLang
+
+class MyClass {
+	init(value) {
+		this.value = value;
+	}
+
+	get_value() {
+		return this.value;
+	}
+}
+
+var my_class = MyClass(true);
+var value = my_class.get_value() // true
+```
+
+If there are fields that need to be added to the class, they can either be declared as class fields or in the constructor.
+
+```QangLang
+class MyClass {
+	value_one = 1;
+
+	init() {
+		this.value_two = 2;
+	}
+
+}
+```
+
+Classes can inherit methods and field declarations from other classes.
+
+```QangLang
+class MySuperClass {
+	value;
+
+	init(value) {
+		this.value = value;
+	 }
+
+	 one() {
+		return 1;
+	 }
+}
+
+class MyChildClass : MySuperClass {
+	init(value) {
+		super.init(value)
+	}
+
+	two() {
+		return this.one() + 1;
+	}
+}
+```
+
+<Aside type="caution">
+	Field initialization happens when the class is declared. When constructed, 
+	the values are copied into the instance. In the case of reference values, 
+	This could unintentionally cause state to be shared across instances.
+
+    As a best practice, field declarations should be kept to primitive values.
+
+</Aside>
+
+## Object Literals
+
+Object literals allow for the creation of static objects where each entry consists of a key and value pair.
+
+```QangLang
+var obj = {{
+ value = nil,
+}};
+```
+
+If a variable has the same name as a key, object entry can be condensed.
+
+```QangLang
+var value = nil;
+var obj = {{ value }};
+```
+
+Like classes, fields can be accessed with the `.` operator.
+
+```QangLang
+var obj = {{
+ value = true,
+}};
+
+assert(obj.value);
+```
+
+## Arrays
+
+```QangLang
+var arr = [1, 2, 3];
+```
+
+The value at each index can be accessed using square brackets. Arrays are indexed starting at `0`. Values greater than the highest index will return `nil`.
+
+```QangLang
+var arr = [1, 2, 3];
+var first = arr[0]; // 1
+var no_element = arr[3]; // nil
+```
+
+Arrays can also be negatively indexed to get the items starting at the end.
+
+```QangLang
+var arr = [1, 2, 3];
+var last = arr[-1]; // 3
+var no_element = arr[-4]; // nil
+```
+
+## Comments
+
+```QangLang
+// This is single line comments
+
+var variable; // I can also place them at the end of a line
+
+/*
+  This is a multi-line comment.
+*/
+
+/* The don't have to be on multiple lines. */
+
+var /* They can even be in the middle of a line. */ variable;
+```
+
+## Conditional Statements and Expressions
+
+`if` and `else` can be used to control the flow of logic.
+
+```QangLang
+if (this_variable_is_true) {
+	do_this_thing();
+} else {
+	do_this_other_thing();
+}
+```
+
+While `ternary` expressions can be used to conditionally evaluate parts of an expression.
+
+```QangLang
+var absolute_value = (num) -> num >= 0 ? num : num * -1;
+
+```
+
+## `nil` Handling
+
+QangLang uses optional chaining to handle nullable values.
+
+```QangLang
+var maybe_length = maybe_array?.length();
+```
+
+The logical `or` operator can be used to provide a fallback if the value should not be `nil`.
+
+```QangLang
+var length = maybe_array?.length() or 0;
+```
+
+If trying to access the index of an array that might be `nil`, the `get` method can be used with optional chaining.
+
+```QangLang
+var maybe_first = maybe_array?.get(0);
+```
+
+Similarly, functions have a `call` method that can be used to call a function that might be `nil`.
+
+```QangLang
+// Same as `maybe_function()` provided `maybe_function` is not `nil`.
+var maybe_value = maybe_function?.call();
+```
+
+## `while` Loops
+
+```QangLang
+while (true) {
+	do_the_thing();
+}
+```
+
+## `for` Loops
+
+```QangLang
+for (var n = 0; n <= 10; n += 1) {
+	do_the_thing_n_times(n);
+}
+```
+
+## Iterators
+
+In addition to loops, QangLang has iterators to support additional operations.
+
+```QangLang
+var numbers = [1, 2, 3, 4, 5];
+
+var even_numbers_times_two = numbers.iter() // Convert the array to an iterator
+	.filter((n) -> n % 2 == 0) // keep only the even numbers
+	.map((n) -> n * 2) // mulitply them by 2
+	.collect(); // collect them back into an array
+```
+
+## Map Expressions
+
+Map expressions and optional map expressions can be used to transform a value in a fluent expression.
+
+```QangLang
+var truncated_value = 1.2
+	||v -> v * 2| // Take the current value of the expression and multiply it by 2
+	.trunc(); // 2
+
+var num_string = "This is not a number.";
+var maybe_truncated_value = num_string
+	.to_number() // Convert the string to a number
+	.ok() // If the result is ok, return the value. Otherwise `nil`
+	?|v -> v * 2| // If the value is not `nil`, multiply it by 2
+	?.trunc(); // nil
+```
+
+## Error Handling with `Result`
+
+QangLang has no built in keywords for handling errors. Instead, a `Result` class is provided that will exit the program with a runtime error if it is unwrapped while in an error state.
+
+```QangLang
+var value = maybe_value
+	|| v -> v == nil // if the value is `nil`, return an error result. Otherwise, wrap in ok result.
+		? Err("Value cannot be nil")
+		: Ok(v)
+	|
+	.unwrap();
+```
+
+## Modules
+
+Code can be split into modules using the `mod` keyword
+
+```QangLang
+// in ./lib.ql
+fn lib_function() { }
+
+// in ./main.ql
+mod lib = import('./lib.ql');
+
+lib.lib_function();
+```

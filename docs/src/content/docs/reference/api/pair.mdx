@@ -5,7 +5,7 @@ description: A reference for the Pair object.
 
 A `Pair` allows two values to be stored and accessed together.
 
-```QangLang
+```ql
 var pair = Pair(1, 2);
 var left = pair.left; // 1
 var right = pair.right; // 2
@@ -17,7 +17,7 @@ var right = pair.right; // 2
 
 Can be used to access to first element of the pair to set/get it.
 
-```QangLang
+```ql
 var pair = Pair(nil, 2);
 pair.left = 1;
 var left = pair.left; // 1
@@ -31,7 +31,7 @@ var left = pair.left; // 1
 
 Can be used to access to second element of the pair to set/get it.
 
-```QangLang
+```ql
 var pair = Pair(1, nil);
 pair.right = 2;
 var right = pair.right; // 2
@@ -47,7 +47,7 @@ var right = pair.right; // 2
 
 Returns an array of the `Pair` values.
 
-```QangLang
+```ql
 var pair = Pair(1, 2);
 var arr = pair.to_array(); // [1, 2]
 ```

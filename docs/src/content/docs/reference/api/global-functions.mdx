@@ -11,7 +11,7 @@ import { Badge } from "@astrojs/starlight/components";
 
 Creates an array of the provided length and initializing each element to its index.
 
-```QangLang
+```ql
 var arr1 = array_of(3); // [0, 1, 2]
 var arr2 = array_of(3, (i) -> i + 1); // [1, 2, 3]
 ```
@@ -30,7 +30,7 @@ initializer: `(Number) -> dyn!` <Badge text="optional" /> - An optional function
 
 Creates an array of the provided length.
 
-```QangLang
+```ql
 var arr = array_of_length(3); // [nil, nil, nil]
 ```
 
@@ -46,7 +46,7 @@ length: `Number` - The length of the array.
 
 Asserts the value is truthy. Ends the program if not.
 
-```QangLang
+```ql
 assert(true); // Assertion is true, so nothing happens.
 assert(false, "This is going to error."); // Assertion is false, the program exits, giving an error using the message if provided.
 
@@ -70,7 +70,7 @@ Throws an error if the value is `false` or `nil`.
 
 Asserts two values are equal. Ends the program if not.
 
-```QangLang
+```ql
 assert_eq(1, 1); // Assertion is true, so nothing happens.
 assert_eq(1, 0, "This is going to error."); // Assertion is false, the program exits, giving an error using the message if provided.
 
@@ -96,7 +96,7 @@ Throws an error if the values are not equal.
 
 Asserts a function will throw an error. If no error is thrown, the program exits with an error.
 
-```QangLang
+```ql
 assert_throws(() -> 1 / 0); // Nothing happens as 1 / 0 throws an error.
 assert_throws(println("Hello World", "This is going to error.")); // Assertion is false because this does not error. The program exits, giving an error using the message if provided.
 
@@ -120,7 +120,7 @@ Throws an error if the provided function does not throw an error.
 
 An identity function.
 
-```QangLang
+```ql
 var value = identity(1); // 1
 
 ```
@@ -137,7 +137,7 @@ value: `dyn!` - Any value.
 
 Prints a value to the console. All values are implicitly converted to strings.
 
-```QangLang
+```ql
 print("Hello World!"); // prints Hello World!
 
 ```
@@ -154,7 +154,7 @@ value: `dyn!` - Any value.
 
 Prints a value to the console followed by a newline. All values are implicitly converted to strings.
 
-```QangLang
+```ql
 println("Hello World!"); // prints Hello World!\n
 
 ```
@@ -171,7 +171,7 @@ value: `dyn!` - Any value.
 
 Returns the value as a string.
 
-```QangLang
+```ql
 var one_string = to_string(1); // "1"
 
 ```
@@ -188,7 +188,7 @@ value: `dyn!` - Any value.
 
 Returns the type as a string.
 
-```QangLang
+```ql
 println(typeof("Hello World!")); // string
 
 ```
@@ -205,7 +205,7 @@ value: `dyn!` - Any value.
 
 Returns the time in milliseconds since the start of the Unix epoch.
 
-```QangLang
+```ql
 var start = system_time();
 complex_operation();
 var end = system_time();
@@ -227,7 +227,7 @@ None
 
 a constant containing the string `"array"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 assert([] is ARRAY);
 ```
 
@@ -235,7 +235,7 @@ assert([] is ARRAY);
 
 a constant containing the string `"boolean"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 assert(true is BOOLEAN);
 ```
 
@@ -243,7 +243,7 @@ assert(true is BOOLEAN);
 
 a constant containing the string `"class"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 class MyClass { }
 assert(MyClass is CLASS);
 ```
@@ -252,7 +252,7 @@ assert(MyClass is CLASS);
 
 a constant containing the string `"function"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 assert(() -> nil is FUNCTION);
 ```
 
@@ -260,7 +260,7 @@ assert(() -> nil is FUNCTION);
 
 a constant containing the string `"module"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 mod utils = import("./utils.ql");
 assert(utils is MODULE);
 ```
@@ -269,7 +269,7 @@ assert(utils is MODULE);
 
 a constant containing the string `"nil"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 assert(nil is NIL);
 ```
 
@@ -277,7 +277,7 @@ assert(nil is NIL);
 
 a constant containing the string `"number"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 assert(0 is NUMBER);
 ```
 
@@ -285,7 +285,7 @@ assert(0 is NUMBER);
 
 a constant containing the string `"object"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 assert({{ }} is OBJECT);
 class MyClass { }
 assert(MyClass() is OBJECT);
@@ -295,6 +295,6 @@ assert(MyClass() is OBJECT);
 
 a constant containing the string `"string"`, used with the [`typeof`](#typeof) function can return the runtime type.
 
-```QangLang
+```ql
 assert("" is STRING);
 ```

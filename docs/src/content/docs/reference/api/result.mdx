@@ -5,7 +5,7 @@ description: A reference for the Result object.
 
 A `Result` represents either success (`Ok`) or failure (`Err`), commonly used for error handling without exceptions.
 
-```QangLang
+```ql
 var success = Ok(42);
 var failure = Err("Something went wrong");
 ```
@@ -16,7 +16,7 @@ var failure = Err("Something went wrong");
 
 Creates a `Result` representing a successful value.
 
-```QangLang
+```ql
 var result = Ok(100);
 ```
 
@@ -32,7 +32,7 @@ var result = Ok(100);
 
 Creates a `Result` representing an error.
 
-```QangLang
+```ql
 var result = Err("File not found");
 ```
 
@@ -50,7 +50,7 @@ var result = Err("File not found");
 
 Returns `true` if the result is `Ok`.
 
-```QangLang
+```ql
 var result = Ok(42);
 println(result.is_ok()); // true
 ```
@@ -67,7 +67,7 @@ None
 
 Returns `true` if the result is `Err`.
 
-```QangLang
+```ql
 var result = Err("error");
 println(result.is_err()); // true
 ```
@@ -84,7 +84,7 @@ None
 
 Returns the success value if `Ok`, otherwise returns `nil`.
 
-```QangLang
+```ql
 var result = Ok(42);
 println(result.ok()); // 42
 
@@ -104,7 +104,7 @@ None
 
 Returns the error value if `Err`, otherwise returns `nil`.
 
-```QangLang
+```ql
 var result = Err("Something went wrong");
 println(result.err()); // "Something went wrong"
 
@@ -124,7 +124,7 @@ None
 
 Returns the success value if `Ok`, otherwise throws an error.
 
-```QangLang
+```ql
 var result = Ok(42);
 var value = result.unwrap(); // 42
 
@@ -148,7 +148,7 @@ Throws an error if the result is `Err`
 
 Returns the success value if `Ok`, otherwise throws an error with a custom message.
 
-```QangLang
+```ql
 var result = Ok(42);
 var value = result.expect("Expected a valid number"); // 42
 
@@ -172,7 +172,7 @@ Throws an error with the provided message if the result is `Err`
 
 Returns the success value if `Ok`, otherwise returns the provided default value.
 
-```QangLang
+```ql
 var result = Ok(42);
 var value = result.unwrap_or(0); // 42
 
@@ -192,7 +192,7 @@ var value = error.unwrap_or(0); // 0
 
 Returns the success value if `Ok`, otherwise calls the provided function and returns its result.
 
-```QangLang
+```ql
 var result = Ok(42);
 var value = result.unwrap_or_else(() -> 0); // 42
 
@@ -212,7 +212,7 @@ var value = error.unwrap_or_else(() -> 0); // 0
 
 Returns the current result if `Ok`, otherwise calls the provided function and returns its result.
 
-```QangLang
+```ql
 var result = Ok(42);
 var new_result = result.or_else(() -> Ok(0)); // Ok(42)
 
@@ -232,7 +232,7 @@ var new_result = error.or_else(() -> Ok(0)); // Ok(0)
 
 Transforms the success value if `Ok`, otherwise returns the error unchanged.
 
-```QangLang
+```ql
 var result = Ok(5);
 var doubled = result.map((x) -> x * 2); // Ok(10)
 
@@ -252,7 +252,7 @@ var still_error = error.map((x) -> x * 2); // Err("error")
 
 Transforms the success value with a function that returns a `Result`, otherwise returns the error unchanged.
 
-```QangLang
+```ql
 var result = Ok(5);
 var new_result = result.flat_map((x) -> Ok(x * 2)); // Ok(10)
 
@@ -272,7 +272,7 @@ var still_error = error.flat_map((x) -> Ok(x * 2)); // Err("error")
 
 Transforms the error value if `Err`, otherwise returns the success unchanged.
 
-```QangLang
+```ql
 var result = Ok(42);
 var still_ok = result.map_err((err) -> "New " + err); // Ok(42)
 

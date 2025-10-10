@@ -188,7 +188,12 @@ export default defineConfig({
       ],
       expressiveCode: {
         shiki: {
-          langs: [JSON.parse(langSyntax)],
+          langs: [
+            {
+              ...JSON.parse(langSyntax),
+              aliases: ["ql"],
+            },
+          ],
         },
       },
     }),

@@ -36,7 +36,7 @@ qang check script.ql
 
 ## Example
 
-```QangLang
+```ql
 fn greet(name) {
   return "Hello, " + name;
 }

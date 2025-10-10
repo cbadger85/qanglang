@@ -11,7 +11,7 @@ QangLang is a dynamically-typed scripting language featuring a familiar C-like s
 
 `print` can be used to write something to the console.
 
-```QangLang
+```ql
 print("Hello");
 print(" ");
 print("World!");
@@ -20,7 +20,7 @@ print("World!");
 
 `println` prints it's argument and adds a line break.
 
-```QangLang
+```ql
 println("Hello World");
 // Hello World
 ```
@@ -29,7 +29,7 @@ println("Hello World");
 
 Variables are declared using the `var` keyword. All variables are mutable.
 
-```QangLang
+```ql
 var value = 0;
 value += 1;
 println(value); // 1
@@ -37,7 +37,7 @@ println(value); // 1
 
 With the exception of the global scope, variable names cannot be reused in teh same scope.
 
-```QangLang
+```ql
 // In global scope
 var value;
 var value = true; // `value` can be reused.
@@ -52,7 +52,7 @@ var value = true; // `value` can be reused.
 
 QangLang has two ways of declaring functions. The `fn` keyword can be used to declare function statements.
 
-```QangLang
+```ql
 fn get_hello_world() {
 	return "Hello World!";
 }
@@ -64,7 +64,7 @@ fn print_hello_world() {
 
 Additionally, functions can be declared as lambda expressions.
 
-```QangLang
+```ql
 var hello = () -> "Hello";
 var world = () -> "World";
 
@@ -81,7 +81,7 @@ var print_hello_world = () -> {
 
 Classes are dynamically declared at runtime and can be declared in any scope.
 
-```QangLang
+```ql
 class MyClass { }
 
 var my_class = MyClass()
@@ -89,7 +89,7 @@ var my_class = MyClass()
 
 Fields and methods are accessed using the `.` operator.
 
-```QangLang
+```ql
 
 class MyClass {
 	init(value) {
@@ -107,7 +107,7 @@ var value = my_class.get_value() // true
 
 If there are fields that need to be added to the class, they can either be declared as class fields or in the constructor.
 
-```QangLang
+```ql
 class MyClass {
 	value_one = 1;
 
@@ -120,7 +120,7 @@ class MyClass {
 
 Classes can inherit methods and field declarations from other classes.
 
-```QangLang
+```ql
 class MySuperClass {
 	value;
 
@@ -157,7 +157,7 @@ class MyChildClass : MySuperClass {
 
 Object literals allow for the creation of static objects where each entry consists of a key and value pair.
 
-```QangLang
+```ql
 var obj = {{
  value = nil,
 }};
@@ -165,14 +165,14 @@ var obj = {{
 
 If a variable has the same name as a key, object entry can be condensed.
 
-```QangLang
+```ql
 var value = nil;
 var obj = {{ value }};
 ```
 
 Like classes, fields can be accessed with the `.` operator.
 
-```QangLang
+```ql
 var obj = {{
  value = true,
 }};
@@ -182,13 +182,13 @@ assert(obj.value);
 
 ## Arrays
 
-```QangLang
+```ql
 var arr = [1, 2, 3];
 ```
 
 The value at each index can be accessed using square brackets. Arrays are indexed starting at `0`. Values greater than the highest index will return `nil`.
 
-```QangLang
+```ql
 var arr = [1, 2, 3];
 var first = arr[0]; // 1
 var no_element = arr[3]; // nil
@@ -196,7 +196,7 @@ var no_element = arr[3]; // nil
 
 Arrays can also be negatively indexed to get the items starting at the end.
 
-```QangLang
+```ql
 var arr = [1, 2, 3];
 var last = arr[-1]; // 3
 var no_element = arr[-4]; // nil
@@ -204,7 +204,7 @@ var no_element = arr[-4]; // nil
 
 ## Comments
 
-```QangLang
+```ql
 // This is single line comments
 
 var variable; // I can also place them at the end of a line
@@ -222,7 +222,7 @@ var /* They can even be in the middle of a line. */ variable;
 
 `if` and `else` can be used to control the flow of logic.
 
-```QangLang
+```ql
 if (this_variable_is_true) {
 	do_this_thing();
 } else {
@@ -232,7 +232,7 @@ if (this_variable_is_true) {
 
 While `ternary` expressions can be used to conditionally evaluate parts of an expression.
 
-```QangLang
+```ql
 var absolute_value = (num) -> num >= 0 ? num : num * -1;
 
 ```
@@ -241,31 +241,31 @@ var absolute_value = (num) -> num >= 0 ? num : num * -1;
 
 QangLang uses optional chaining to handle nullable values.
 
-```QangLang
+```ql
 var maybe_length = maybe_array?.length();
 ```
 
 The logical `or` operator can be used to provide a fallback if the value should not be `nil`.
 
-```QangLang
+```ql
 var length = maybe_array?.length() or 0;
 ```
 
 If trying to access the index of an array that might be `nil`, the `get` method can be used with optional chaining.
 
-```QangLang
+```ql
 var maybe_first = maybe_array?.get(0);
 ```
 
 Similarly, functions have a `call` method that can be used to call a function that might be `nil`.
 
-```QangLang
+```ql
 var maybe_value = maybe_function?.call();
 ```
 
 ## `while` Loops
 
-```QangLang
+```ql
 var count = 5;
 while (count > 1) {
 	print(to_string(count) + ", ");
@@ -277,7 +277,7 @@ print(count);
 
 ## `for` Loops
 
-```QangLang
+```ql
 for (var n = 0; n < 5; n += 1) {
 	println(n);
 }
@@ -292,7 +292,7 @@ for (var n = 0; n < 5; n += 1) {
 
 In addition to loops, QangLang has iterators to support additional operations.
 
-```QangLang
+```ql
 var numbers = [1, 2, 3, 4, 5];
 
 var even_numbers_times_two = numbers.iter() // Convert the array to an iterator
@@ -305,7 +305,7 @@ var even_numbers_times_two = numbers.iter() // Convert the array to an iterator
 
 Map expressions and optional map expressions can be used to transform a value in a fluent expression.
 
-```QangLang
+```ql
 var truncated_value = 1.2
 	||v -> v * 2| // Take the current value of the expression and multiply it by 2
 	.trunc(); // 2
@@ -322,24 +322,24 @@ var maybe_truncated_value = num_string
 
 QangLang has no built in keywords for handling errors. Instead, a `Result` class is provided that will exit the program with a runtime error if it is unwrapped while in an error state.
 
-```QangLang
+```ql
 var value = maybe_value
 	|| v -> v == nil // if the value is nil, return an error result. Otherwise, wrap in ok result.
 		? Err("Value cannot be nil")
 		: Ok(v)
 	|
-	.unwrap();
+	.unwrap(); // Now this will throw because the value is an error.
 ```
 
 ## Modules
 
 Code can be split into modules using the `mod` keyword
 
-```QangLang
-// in ./lib.ql
+```ql title="lib.ql"
 fn lib_function() { }
+```
 
-// in ./main.ql
+```ql title="main.ql"
 mod lib = import('./lib.ql');
 
 lib.lib_function();

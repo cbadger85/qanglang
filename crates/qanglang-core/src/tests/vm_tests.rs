@@ -2131,3 +2131,367 @@ fn test_class_instance_inside_function() {
         }
     }
 }
+
+#[test]
+fn test_when_expression_conditional_form() {
+    let source = r#"
+        var x = 10;
+        var result = when {
+            x < 0 => "negative",
+            x == 0 => "zero",
+            x > 0 => "positive",
+        };
+        assert_eq(result, "positive");
+
+        x = -5;
+        result = when {
+            x < 0 => "negative",
+            x == 0 => "zero",
+            x > 0 => "positive",
+        };
+        assert_eq(result, "negative");
+
+        x = 0;
+        result = when {
+            x < 0 => "negative",
+            x == 0 => "zero",
+            x > 0 => "positive",
+        };
+        assert_eq(result, "zero");
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_conditional_form_with_else() {
+    let source = r#"
+        var x = 100;
+        var result = when {
+            x < 0 => "negative",
+            x == 0 => "zero",
+            x > 0 and x < 50 => "positive small",
+            else => "positive large",
+        };
+        assert_eq(result, "positive large");
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_match_form() {
+    let source = r#"
+        var x = 2;
+        var result = when (x) {
+            1 => "one",
+            2 => "two",
+            3 => "three",
+            else => "other",
+        };
+        assert_eq(result, "two");
+
+        x = 5;
+        result = when (x) {
+            1 => "one",
+            2 => "two",
+            3 => "three",
+            else => "other",
+        };
+        assert_eq(result, "other");
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_match_form_with_strings() {
+    let source = r#"
+        var day = "Monday";
+        var result = when (day) {
+            "Monday" => "Start of week",
+            "Friday" => "End of week",
+            "Saturday" => "Weekend",
+            "Sunday" => "Weekend",
+            else => "Midweek",
+        };
+        assert_eq(result, "Start of week");
+
+        day = "Wednesday";
+        result = when (day) {
+            "Monday" => "Start of week",
+            "Friday" => "End of week",
+            "Saturday" => "Weekend",
+            "Sunday" => "Weekend",
+            else => "Midweek",
+        };
+        assert_eq(result, "Midweek");
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_no_else() {
+    let source = r#"
+        var x = 5;
+        var result = when (x) {
+            1 => "one",
+            2 => "two",
+            3 => "three",
+        };
+        assert_eq(result, nil);
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_nested() {
+    let source = r#"
+        var x = 10;
+        var y = 5;
+        var result = when {
+            x < 0 => "x negative",
+            x == 0 => "x zero",
+            x > 0 => when {
+                y < 0 => "x positive, y negative",
+                y == 0 => "x positive, y zero",
+                y > 0 => "x positive, y positive",
+            },
+        };
+        assert_eq(result, "x positive, y positive");
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_as_function_argument() {
+    let source = r#"
+        fn describe(value) {
+            return when (value) {
+                1 => "one",
+                2 => "two",
+                3 => "three",
+                else => "many",
+            };
+        }
+
+        assert_eq(describe(1), "one");
+        assert_eq(describe(2), "two");
+        assert_eq(describe(10), "many");
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_match_form_match_type() {
+    let source = r#"
+        var x = 2;
+        var result = when (x) {
+            is NUMBER => true,
+            else => false,
+        };
+        assert_eq(typeof(result), BOOLEAN);
+        assert(result);
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_when_expression_match_form_no_match_type() {
+    let source = r#"
+        var x = "2";
+        var result = when (x) {
+            is NUMBER => true,
+            else => false,
+        };
+        assert_eq(typeof(result), BOOLEAN);
+        assert(!result);
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

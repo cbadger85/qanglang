@@ -2084,4 +2084,74 @@ impl<'a> NodeVisitor for Assembler<'a> {
         self.visit_expression(value, ctx)?;
         Ok(())
     }
+
+    fn visit_when_expression(
+        &mut self,
+        when_expr: TypedNodeRef<WhenExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let match_value_expr = when_expr.node.value;
+
+        let mut end_jumps = Vec::new();
+
+        let branch_count = ctx.nodes.array.size(when_expr.node.branches);
+        for i in 0..branch_count {
+            if let Some(branch_id) = ctx.nodes.array.get_node_id_at(when_expr.node.branches, i) {
+                let branch = ctx.nodes.get_when_branch_node(branch_id);
+
+                if let Some(value_id) = match_value_expr {
+                    let value = ctx.nodes.get_expr_node(value_id);
+                    self.visit_expression(value, ctx)?;
+
+                    let condition = ctx.nodes.get_expr_node(branch.node.condition);
+                    self.visit_expression(condition, ctx)?;
+
+                    if branch.node.is_type_check {
+                        self.emit_opcode(OpCode::Is, branch.node.span);
+                    } else {
+                        self.emit_opcode(OpCode::Equal, branch.node.span);
+                    }
+                } else {
+                    let condition = ctx.nodes.get_expr_node(branch.node.condition);
+                    self.visit_expression(condition, ctx)?;
+                }
+
+                let false_jump = self.emit_jump(OpCode::JumpIfFalse, branch.node.span);
+                self.emit_opcode(OpCode::Pop, branch.node.span); // Pop the condition result
+
+                let body = ctx.nodes.get_expr_node(branch.node.body);
+                self.visit_expression(body, ctx)?;
+
+                let end_jump = self.emit_jump(OpCode::Jump, branch.node.span);
+                end_jumps.push(end_jump);
+
+                self.patch_jump(false_jump, branch.node.span)?;
+                self.emit_opcode(OpCode::Pop, branch.node.span); // Pop the condition result
+            }
+        }
+
+        if let Some(else_branch_id) = when_expr.node.else_branch {
+            let else_branch = ctx.nodes.get_expr_node(else_branch_id);
+            self.visit_expression(else_branch, ctx)?;
+        } else {
+            self.emit_opcode(OpCode::Nil, when_expr.node.span);
+        }
+
+        for jump in end_jumps {
+            self.patch_jump(jump, when_expr.node.span)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_when_branch(
+        &mut self,
+        branch: TypedNodeRef<WhenBranchNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // This is handled inline in visit_when_expression for better control
+        // over jump patching and stack management
+        self.visit_expression(ctx.nodes.get_expr_node(branch.node.condition), ctx)?;
+        self.visit_expression(ctx.nodes.get_expr_node(branch.node.body), ctx)
+    }
 }

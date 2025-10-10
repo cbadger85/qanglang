@@ -2,3 +2,299 @@
 title: Global Functions Reference
 description: A reference for the global functions available in QangLang.
 ---
+
+import { Badge } from "@astrojs/starlight/components";
+
+## Functions
+
+### `array_of`
+
+Creates an array of the provided length and initializing each element to its index.
+
+```QangLang
+var arr1 = array_of(3); // [0, 1, 2]
+var arr2 = array_of(3, (i) -> i + 1); // [1, 2, 3]
+```
+
+### Parameters
+
+length: `Number` - The length of the array.
+
+initializer: `(Number) -> dyn!` <Badge text="optional" /> - An optional function that takes the index as a parameter and sets the element in the array to its return.
+
+#### Returns
+
+`[dyn!]` - An array of the specified length where each element is either its index or the result of the initializer function.
+
+### `array_of_length`
+
+Creates an array of the provided length.
+
+```QangLang
+var arr = array_of_length(3); // [nil, nil, nil]
+```
+
+### Parameters
+
+length: `Number` - The length of the array.
+
+#### Returns
+
+`[dyn?]` - An array of the specified length filled with `nil` values.
+
+### `assert`
+
+Asserts the value is truthy. Ends the program if not.
+
+```QangLang
+assert(true); // Assertion is true, so nothing happens.
+assert(false, "This is going to error."); // Assertion is false, the program exits, giving an error using the message if provided.
+
+```
+
+### Parameters
+
+value: `dyn!` - Any value. Falsy values (0 and `nil`) cause the program to exit.
+
+message: `String?` <Badge text="optional" /> - An optional message if the assertion fails.
+
+#### Returns
+
+`nil`
+
+#### Throws
+
+Throws an error if the value is `false` or `nil`.
+
+### `assert_eq`
+
+Asserts two values are equal. Ends the program if not.
+
+```QangLang
+assert_eq(1, 1); // Assertion is true, so nothing happens.
+assert_eq(1, 0, "This is going to error."); // Assertion is false, the program exits, giving an error using the message if provided.
+
+```
+
+#### Parameters
+
+value1: `dyn!` - The first value to check for equality.
+
+value2: `dyn!` - The second value to check for equality.
+
+message: `String?` <Badge text="optional" /> - An optional message if the assertion fails.
+
+#### Returns
+
+`nil`
+
+#### Throws
+
+Throws an error if the values are not equal.
+
+### `assert_throws`
+
+Asserts a function will throw an error. If no error is thrown, the program exits with an error.
+
+```QangLang
+assert_throws(() -> 1 / 0); // Nothing happens as 1 / 0 throws an error.
+assert_throws(println("Hello World", "This is going to error.")); // Assertion is false because this does not error. The program exits, giving an error using the message if provided.
+
+```
+
+#### Parameters
+
+function: `() -> dyn!` - The function to call to check for an error.
+
+message: `String?` <Badge text="optional" /> - An optional message if the assertion fails.
+
+#### Returns
+
+`nil`
+
+#### Throws
+
+Throws an error if the provided function does not throw an error.
+
+### `identity`
+
+An identity function.
+
+```QangLang
+var value = identity(1); // 1
+
+```
+
+#### Parameters
+
+value: `dyn!` - Any value.
+
+#### Returns
+
+`dyn!` - The value provided in the argument.
+
+### `print`
+
+Prints a value to the console. All values are implicitly converted to strings.
+
+```QangLang
+print("Hello World!"); // prints Hello World!
+
+```
+
+#### Parameters
+
+value: `dyn!` - Any value.
+
+#### Returns
+
+`nil`
+
+### `println`
+
+Prints a value to the console followed by a newline. All values are implicitly converted to strings.
+
+```QangLang
+println("Hello World!"); // prints Hello World!\n
+
+```
+
+#### Parameters
+
+value: `dyn!` - Any value.
+
+#### Returns
+
+`nil`
+
+### `to_string`
+
+Returns the value as a string.
+
+```QangLang
+var one_string = to_string(1); // "1"
+
+```
+
+#### Parameters
+
+value: `dyn!` - Any value.
+
+#### Returns
+
+`String` - The value as a string.
+
+### `typeof`
+
+Returns the type as a string.
+
+```QangLang
+println(typeof("Hello World!")); // string
+
+```
+
+#### Parameters
+
+value: `dyn!` - Any value.
+
+#### Returns
+
+`String` - a value of `"nil"`, `"boolean"`, `"number"`, `"string"`, `"function"`, `"class"`, `"object"`, `"array"` or `"module"` depending on the type of the value.
+
+### `system_time`
+
+Returns the time in milliseconds since the start of the Unix epoch.
+
+```QangLang
+var start = system_time();
+complex_operation();
+var end = system_time();
+var duration = start - end; // The time in milliseconds between start and end.
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - The time in milliseconds since the start of the Unix epoch.
+
+## Constants
+
+### `ARRAY`
+
+a constant containing the string `"array"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+assert([] is ARRAY);
+```
+
+### `BOOLEAN`
+
+a constant containing the string `"boolean"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+assert(true is BOOLEAN);
+```
+
+### `Class`
+
+a constant containing the string `"class"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+class MyClass { }
+assert(MyClass is CLASS);
+```
+
+### `FUNCTION`
+
+a constant containing the string `"function"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+assert(() -> nil is FUNCTION);
+```
+
+### `MODULE`
+
+a constant containing the string `"module"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+mod utils = import("./utils.ql");
+assert(utils is MODULE);
+```
+
+### `NIL`
+
+a constant containing the string `"nil"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+assert(nil is NIL);
+```
+
+### `NUMBER`
+
+a constant containing the string `"number"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+assert(0 is NUMBER);
+```
+
+### `OBJECT`
+
+a constant containing the string `"object"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+assert({{ }} is OBJECT);
+class MyClass { }
+assert(MyClass() is OBJECT);
+```
+
+### `STRING`
+
+a constant containing the string `"string"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```QangLang
+assert("" is STRING);
+```

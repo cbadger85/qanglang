@@ -1,0 +1,61 @@
+---
+title: Pair Reference
+description: A reference for the Pair object.
+---
+
+A `Pair` allows two values to be stored and accessed together.
+
+```QangLang
+var pair = Pair(1, 2);
+var left = pair.left; // 1
+var right = pair.right; // 2
+```
+
+## Fields
+
+### `left`
+
+Can be used to access to first element of the pair to set/get it.
+
+```QangLang
+var pair = Pair(nil, 2);
+pair.left = 1;
+var left = pair.left; // 1
+```
+
+#### Type
+
+`dyn!`
+
+### `right`
+
+Can be used to access to second element of the pair to set/get it.
+
+```QangLang
+var pair = Pair(1, nil);
+pair.right = 2;
+var right = pair.right; // 2
+```
+
+#### Type
+
+`dyn!`
+
+## Methods
+
+### `to_array`
+
+Returns an array of the `Pair` values.
+
+```QangLang
+var pair = Pair(1, 2);
+var arr = pair.to_array(); // [1, 2]
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`[dyn!]` - An containing the `left` and `right` values of the `Pair`, in that order.

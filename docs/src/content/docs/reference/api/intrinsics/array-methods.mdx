@@ -1,0 +1,226 @@
+---
+title: Array Method Reference
+description: A reference for the intrinsic methods on arrays.
+---
+
+import { Badge } from "@astrojs/starlight/components";
+
+### `concat`
+
+Returns a new array consisting of the elements of the two provided arrays.
+
+```QangLang
+var arr1 = [1, 2, 3];
+var arr2 = [4, 5, 6];
+var combined_arr = arr1.concat(arr2); // [1, 2, 3, 4, 5, 6]
+```
+
+#### Parameters
+
+other: `[dyn!]` - The other array to combine with.
+
+#### Returns
+
+`[dyn!]` - A new array containing the elements of both arrays.
+
+### `contains`
+
+Returns the first index of a specified value.
+
+```QangLang
+var arr = [1, 2, 3];
+var first = arr.contains(2); // true
+var first = arr.index_of(4); // false
+```
+
+#### Parameters
+
+index: `dyn!` - The value to check the array for.
+
+#### Returns
+
+`Boolean` - `true` if the item is in the array, otherwise `false`.
+
+### `get`
+
+Returns a value at the specified index.
+
+```QangLang
+var arr = [1, 2, 3];
+var first = arr.get(0); // 1
+var last = arr.get(-1); // 3
+var out_of_bounds = arr.get(3); // nil
+
+var maybe_array = nil;
+var maybe_first = maybe_array?.get(0); // nil
+```
+
+#### Parameters
+
+index: `Number` - The specified index of the item to get. If negative, counts from the end of the array.
+
+#### Returns
+
+`dyn!` - The item at the index specified index, `nil` if the index is out-of-bounds.
+
+### `index_of`
+
+Returns the first index of a specified value.
+
+```QangLang
+var arr = [1, 2, 3];
+var first = arr.index_of(2); // 1
+var first = arr.index_of(4); // -1
+```
+
+#### Parameters
+
+index: `dyn!` - The value to find the index of.
+
+#### Returns
+
+`Number` - The index of the value, or -1 if not found.
+
+### `iter`
+
+Creates an `Iterator` for the array.
+
+```QangLang
+var arr = [1, 2, 3];
+var count = arr.iter().count(); // 3
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`ArrayIterator` - An iterator representing the array.
+
+### `join`
+
+Returns a value at the specified index.
+
+```QangLang
+var chars = ["H", "e", "l", "l", "o", " ", "W", "o", "r", "l", "d", "!"];
+var string = chars.join(); // "Hello World!"
+
+var list = [1, 2, 3];
+var list_as_string = list.join(","); // "1,2,3"
+```
+
+#### Parameters
+
+delimter: `String?` <Badge text="optional" /> - The delimeter to use when joining the strings together. If none is provided, `""` is used.
+
+#### Returns
+
+`String` - Each item converted to a string and joined together, separated by the delimiter if provided.
+
+### `length`
+
+Returns the length of the array.
+
+```QangLang
+var length = [].length(); // 0
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - Length of the array.
+
+### `pop`
+
+Removes the last item of the array, mutating it and returns it.
+
+```QangLang
+var last = [1].pop(); // 1
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`dyn!` - The last element of the array. `nil` if the array is empty.
+
+### `push`
+
+Adds a new item to the end of the array, mutating it.
+
+```QangLang
+var arr = [];
+arr.push(1); // [1]
+```
+
+#### Parameters
+
+item: `dyn!` - The item to add to the array.
+
+#### Returns
+
+`dyn!` - The last element of the array.
+
+### `remove_at`
+
+Removes the item at the specified index and returns it.
+
+```QangLang
+var arr = [1, 2, 3];
+var two = arr.remove_at(1); // 2
+println(arr); // [1, 3]
+```
+
+#### Parameters
+
+index: `Number` - The specified index of the item to remove. If negative, counts from the end of the array.
+
+#### Returns
+
+`dyn!` - The item at the index specified index, `nil` if the index is out-of-bounds.
+
+### `reverse`
+
+Reverses the array in place.
+
+```QangLang
+var arr = [1, 2, 3];
+arr.reverse(); // [3, 2, 1]
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`nil`
+
+### `slice`
+
+Returns a shallow copy of a portion of the array.
+
+```QangLang
+var arr = [1, 2, 3, 4, 5];
+var slice1 = arr.slice(1);      // [2, 3, 4, 5]
+var slice2 = arr.slice(-2);     // [4, 5]
+var slice3 = arr.slice(1, 3);   // [2, 3]
+var slice4 = arr.slice(1, -1);  // [2, 3, 4]
+```
+
+#### Parameters
+
+start: `Number?` <Badge text="optional" /> - The beginning index (inclusive). Negative indices count from the end. If omitted, defaults to 0. Values beyond array bounds are clamped.
+
+end: `Number?` <Badge text="optional" /> - The ending index (exclusive). Negative indices count from the end. If omitted, slices to the end of the array. Values beyond array bounds are clamped.
+
+#### Returns
+
+`[dyn!]` - A shallow copy of the array between start (inclusive) and end (exclusive). Returns an empty array if start >= end.

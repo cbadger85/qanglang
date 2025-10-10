@@ -260,24 +260,32 @@ var maybe_first = maybe_array?.get(0);
 Similarly, functions have a `call` method that can be used to call a function that might be `nil`.
 
 ```QangLang
-// Same as `maybe_function()` provided `maybe_function` is not `nil`.
 var maybe_value = maybe_function?.call();
 ```
 
 ## `while` Loops
 
 ```QangLang
-while (true) {
-	do_the_thing();
+var count = 5;
+while (count > 1) {
+	print(to_string(count) + ", ");
+	count -= 1;
 }
+print(count);
+// 5, 4, 3, 2, 1
 ```
 
 ## `for` Loops
 
 ```QangLang
-for (var n = 0; n <= 10; n += 1) {
-	do_the_thing_n_times(n);
+for (var n = 0; n < 5; n += 1) {
+	println(n);
 }
+// 0
+// 1
+// 2
+// 3
+// 4
 ```
 
 ## Iterators
@@ -305,8 +313,8 @@ var truncated_value = 1.2
 var num_string = "This is not a number.";
 var maybe_truncated_value = num_string
 	.to_number() // Convert the string to a number
-	.ok() // If the result is ok, return the value. Otherwise `nil`
-	?|v -> v * 2| // If the value is not `nil`, multiply it by 2
+	.ok() // If the result is ok, return the value. Otherwise nil
+	?|v -> v * 2| // If the value is not nil, multiply it by 2
 	?.trunc(); // nil
 ```
 
@@ -316,7 +324,7 @@ QangLang has no built in keywords for handling errors. Instead, a `Result` class
 
 ```QangLang
 var value = maybe_value
-	|| v -> v == nil // if the value is `nil`, return an error result. Otherwise, wrap in ok result.
+	|| v -> v == nil // if the value is nil, return an error result. Otherwise, wrap in ok result.
 		? Err("Value cannot be nil")
 		: Ok(v)
 	|

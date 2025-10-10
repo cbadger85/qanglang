@@ -1,0 +1,87 @@
+---
+title: Number Method Reference
+description: A reference for the intrinsic methods on numbers.
+---
+
+### `ceil`
+
+Rounds a number up to the smallest integer greater than or equal to itself.
+
+```QangLang
+var ceil = 0.5.ceil(); // 1
+var ceil = -0.5.ceil(); // 0
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - For numbers above zero, rounds to the next whole number. For numbers below zero, rounds up towards zero.
+
+### `floor`
+
+Rounds a number down to the largest integer less than or equal to itself.
+
+```QangLang
+var floor = 0.5.floor(); // 0
+var floor = -0.5.floor(); // -1
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - For numbers above zero, rounds down to the nearest whole number. For numbers below zero, rounds down away from zero.
+
+### `min`
+
+Returns the smallest of the two numbers.
+
+```QangLang
+var min = 10.min(1); // 1
+```
+
+#### Parameters
+
+other: `Number` - The other number to compare to.
+
+#### Returns
+
+`Number` - The smallest of the two numbers.
+
+### `max`
+
+Returns the largest of the two numbers.
+
+```QangLang
+var max = 10.max(1); // 10
+```
+
+#### Parameters
+
+other: `Number` - The other number to compare to.
+
+#### Returns
+
+`Number` - The largest of the two numbers.
+
+### `trunc`
+
+Returns only the integer part of a number.
+
+```QangLang
+var floor = 0.5.trunc(); // 0
+var floor = -0.5.trunc(); // 0
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - The integer part of the number, discarding the rest.

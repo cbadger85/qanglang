@@ -1,0 +1,76 @@
+---
+title: String Method Reference
+description: A reference for the intrinsic methods on strings.
+---
+
+import { Badge } from "@astrojs/starlight/components";
+
+### `concat`
+
+Returns a string of both values concatenated together.
+
+```QangLang
+var string1 = "Hello ";
+var string2 = "World!";
+var combined_string = string1.concat(string2) // "Hello World!"
+```
+
+#### Parameters
+
+other: `String` - The other string to combine with.
+
+### Returns
+
+`String` - The combined string.
+
+### `split`
+
+Returns an array of strings split at the provided delimeter.
+
+```QangLang
+var string = "Hello World!";
+var arr1 = string.split(); // ["H", "e", "l", "l", o", " ", "W", "o", "r", "l", "d", "!"]
+var arr2 = string.split(" "); // ["Hello", "World!"];
+```
+
+#### Parameters
+
+delimter: `String?` <Badge text="optional" /> - The delimeter to use when splitting the arrays into strings. If none is provided, `""` is used.
+
+#### Returns
+
+`String` - An array of strings split by the delimeter.
+
+### `to_lowercase`
+
+Returns a string with all characters lowercased.
+
+```QangLang
+var string = "Hello World!";
+var lowercase_string = string.to_lowercase(); // "hello world!"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`String` - The lowercased string.
+
+### `to_uppercase`
+
+Returns a string with all characters uppercased.
+
+```QangLang
+var string = "Hello World!";
+var uppercase_string = string.to_uppercase(); // "HELLO WORLD!"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`String` - The uppercased string.

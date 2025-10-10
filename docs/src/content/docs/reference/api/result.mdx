@@ -1,4 +1,289 @@
 ---
 title: Result Reference
-description: A reference for the Result implementation
+description: A reference for the Result object.
 ---
+
+A `Result` represents either success (`Ok`) or failure (`Err`), commonly used for error handling without exceptions.
+
+```QangLang
+var success = Ok(42);
+var failure = Err("Something went wrong");
+```
+
+## Constructor Functions
+
+### `Ok`
+
+Creates a `Result` representing a successful value.
+
+```QangLang
+var result = Ok(100);
+```
+
+#### Parameters
+
+- `value` (`dyn!`) - The success value to wrap
+
+#### Returns
+
+`Result` - A Result in the success state
+
+### `Err`
+
+Creates a `Result` representing an error.
+
+```QangLang
+var result = Err("File not found");
+```
+
+#### Parameters
+
+- `error` (`dyn!`) - The error value to wrap
+
+#### Returns
+
+`Result` - A Result in the error state
+
+## Methods
+
+### `is_ok`
+
+Returns `true` if the result is `Ok`.
+
+```QangLang
+var result = Ok(42);
+println(result.is_ok()); // true
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`boolean` - `true` if the result is `Ok`, `false` otherwise
+
+### `is_err`
+
+Returns `true` if the result is `Err`.
+
+```QangLang
+var result = Err("error");
+println(result.is_err()); // true
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`boolean` - `true` if the result is `Err`, `false` otherwise
+
+### `ok`
+
+Returns the success value if `Ok`, otherwise returns `nil`.
+
+```QangLang
+var result = Ok(42);
+println(result.ok()); // 42
+
+var error = Err("error");
+println(error.ok()); // nil
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`dyn!` - The success value or `nil`
+
+### `err`
+
+Returns the error value if `Err`, otherwise returns `nil`.
+
+```QangLang
+var result = Err("Something went wrong");
+println(result.err()); // "Something went wrong"
+
+var success = Ok(42);
+println(success.err()); // nil
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`dyn!` - The error value or `nil`
+
+### `unwrap`
+
+Returns the success value if `Ok`, otherwise throws an error.
+
+```QangLang
+var result = Ok(42);
+var value = result.unwrap(); // 42
+
+var error = Err("error");
+// var value = error.unwrap(); // Throws error!
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`dyn!` - The success value
+
+#### Throws
+
+Throws an error if the result is `Err`
+
+### `expect`
+
+Returns the success value if `Ok`, otherwise throws an error with a custom message.
+
+```QangLang
+var result = Ok(42);
+var value = result.expect("Expected a valid number"); // 42
+
+var error = Err("original error");
+// var value = error.expect("Custom error message"); // Throws "Custom error message"
+```
+
+#### Parameters
+
+- `message` (`string`) - The error message to throw if the result is `Err`
+
+#### Returns
+
+`dyn!` - The success value
+
+#### Throws
+
+Throws an error with the provided message if the result is `Err`
+
+### `unwrap_or`
+
+Returns the success value if `Ok`, otherwise returns the provided default value.
+
+```QangLang
+var result = Ok(42);
+var value = result.unwrap_or(0); // 42
+
+var error = Err("error");
+var value = error.unwrap_or(0); // 0
+```
+
+#### Parameters
+
+- `default_value` (`dyn!`) - The value to return if the result is `Err`
+
+#### Returns
+
+`dyn!` - The success value or the default value
+
+### `unwrap_or_else`
+
+Returns the success value if `Ok`, otherwise calls the provided function and returns its result.
+
+```QangLang
+var result = Ok(42);
+var value = result.unwrap_or_else(() -> 0); // 42
+
+var error = Err("error");
+var value = error.unwrap_or_else(() -> 0); // 0
+```
+
+#### Parameters
+
+- `callback` (`function`) - A function that returns a default value
+
+#### Returns
+
+`dyn!` - The success value or the result of calling the callback
+
+### `or_else`
+
+Returns the current result if `Ok`, otherwise calls the provided function and returns its result.
+
+```QangLang
+var result = Ok(42);
+var new_result = result.or_else(() -> Ok(0)); // Ok(42)
+
+var error = Err("error");
+var new_result = error.or_else(() -> Ok(0)); // Ok(0)
+```
+
+#### Parameters
+
+- `callback` (`function`) - A function that returns a new `Result`
+
+#### Returns
+
+`Result` - The current result if `Ok`, or the result from the callback
+
+### `map`
+
+Transforms the success value if `Ok`, otherwise returns the error unchanged.
+
+```QangLang
+var result = Ok(5);
+var doubled = result.map((x) -> x * 2); // Ok(10)
+
+var error = Err("error");
+var still_error = error.map((x) -> x * 2); // Err("error")
+```
+
+#### Parameters
+
+- `transform` (`function`) - A function that transforms the success value
+
+#### Returns
+
+`Result` - A new `Result` with the transformed value, or the original error
+
+### `flat_map`
+
+Transforms the success value with a function that returns a `Result`, otherwise returns the error unchanged.
+
+```QangLang
+var result = Ok(5);
+var new_result = result.flat_map((x) -> Ok(x * 2)); // Ok(10)
+
+var error = Err("error");
+var still_error = error.flat_map((x) -> Ok(x * 2)); // Err("error")
+```
+
+#### Parameters
+
+- `transform` (`function`) - A function that takes the success value and returns a new `Result`
+
+#### Returns
+
+`Result` - The result from the transform function, or the original error
+
+### `map_err`
+
+Transforms the error value if `Err`, otherwise returns the success unchanged.
+
+```QangLang
+var result = Ok(42);
+var still_ok = result.map_err((err) -> "New " + err); // Ok(42)
+
+var error = Err("error");
+var new_error = error.map_err((err) -> "New " + err); // Err("New error")
+```
+
+#### Parameters
+
+- `transform` (`function`) - A function that transforms the error value
+
+#### Returns
+
+`Result` - The original success, or a new `Result` with the transformed error

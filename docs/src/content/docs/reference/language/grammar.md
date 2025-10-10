@@ -1,5 +1,5 @@
 ---
-title: QangLang Grammar Reference
+title: Grammar Reference
 description: A reference the grammar rules for QangLang using a modified EBNF
 ---
 

@@ -1,0 +1,46 @@
+---
+title: Function Method Reference
+description: A reference for the intrinsic methods on functions.
+---
+
+### `apply`
+
+Calls the function with the provided args as an array. Useful when arguments need to be dynamically generated.
+
+```QangLang
+fn function(arg1, arg2) {
+  return [arg1, arg2];
+ }
+
+var arr = function.apply([1, 2]); // [1, 2]
+
+```
+
+#### Parameters
+
+args: `[dyn!]` - The arguments of the original function in an array.
+
+#### Returns
+
+`dyn!` - The value of the original function.
+
+### `call`
+
+Calls the function with the provided args. Useful when calling a nullish value.
+
+```QangLang
+fn function(arg1, arg2) {
+  return [arg1, arg2];
+ }
+
+var arr = function.call(1, 2); // [1, 2]
+
+```
+
+#### Parameters
+
+`call` is called with the same arguments as the original function.
+
+#### Returns
+
+`dyn!` - The value of the original function.

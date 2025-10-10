@@ -2,6 +2,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import fs from "node:fs";
+import starlightThemeNext from "starlight-theme-next";
 
 const langSyntax = fs.readFileSync(
   "../crates/qanglang-ls/syntaxes/qanglang.tmGrammar.json",
@@ -15,6 +16,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "QangLang Docs",
+      plugins: [starlightThemeNext()],
       social: [
         {
           icon: "github",
@@ -79,40 +81,94 @@ export default defineConfig({
           label: "API Reference",
           items: [
             {
-              label: "Global Functions",
+              label: "Entry",
+              slug: "reference/api/entry",
+            },
+            {
+              label: "Globals",
               slug: "reference/api/global-functions",
             },
             {
-              label: "Number",
-              slug: "reference/api/number-methods",
-            },
-            {
-              label: "String",
-              slug: "reference/api/string-methods",
-            },
-            {
-              label: "Array",
-              slug: "reference/api/array-methods",
-            },
-            {
-              label: "Function",
-              slug: "reference/api/function-methods",
-            },
-            {
-              label: "Iterator",
-              slug: "reference/api/number-methods",
-            },
-            {
-              label: "Result",
-              slug: "reference/api/number-methods",
-            },
-            {
               label: "HashMap",
-              slug: "reference/api/number-methods",
+              slug: "reference/api/hashmap",
             },
             {
               label: "HashSet",
-              slug: "reference/api/number-methods",
+              slug: "reference/api/hashset",
+            },
+            {
+              label: "Intrinsics",
+              items: [
+                {
+                  label: "Array",
+                  slug: "reference/api/intrinsics/array-methods",
+                },
+                {
+                  label: "Function",
+                  slug: "reference/api/intrinsics/function-methods",
+                },
+                {
+                  label: "Number",
+                  slug: "reference/api/intrinsics/number-methods",
+                },
+                {
+                  label: "String",
+                  slug: "reference/api/intrinsics/string-methods",
+                },
+              ],
+            },
+            {
+              label: "Iterators",
+              items: [
+                {
+                  label: "Chain Iterator",
+                  slug: "reference/api/iterators/chain-iterator",
+                },
+                {
+                  label: "Enumerate Iterator",
+                  slug: "reference/api/iterators/enumerate-iterator",
+                },
+                {
+                  label: "Filter Indexed Iterator",
+                  slug: "reference/api/iterators/filter-indexed-iterator",
+                },
+                {
+                  label: "Filter Iterator",
+                  slug: "reference/api/iterators/filter-iterator",
+                },
+                {
+                  label: "FlatMap Iterator",
+                  slug: "reference/api/iterators/flatmap-iterator",
+                },
+                {
+                  label: "Iterator",
+                  slug: "reference/api/iterators/iterator",
+                },
+                {
+                  label: "Map Indexed Iterator",
+                  slug: "reference/api/iterators/map-indexed-iterator",
+                },
+                {
+                  label: "Map Iterator",
+                  slug: "reference/api/iterators/map-iterator",
+                },
+                {
+                  label: "Take Iterator",
+                  slug: "reference/api/iterators/take-iterator",
+                },
+                {
+                  label: "Zip Iterator",
+                  slug: "reference/api/iterators/zip-iterator",
+                },
+              ],
+            },
+            {
+              label: "Pair",
+              slug: "reference/api/pair",
+            },
+            {
+              label: "Result",
+              slug: "reference/api/result",
             },
           ],
         },

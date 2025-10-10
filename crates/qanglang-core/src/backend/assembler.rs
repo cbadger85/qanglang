@@ -808,6 +808,46 @@ impl<'a> Assembler<'a> {
 impl<'a> NodeVisitor for Assembler<'a> {
     type Error = QangCompilerError;
 
+    fn visit_module(
+        &mut self,
+        program: TypedNodeRef<Module>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        let length = ctx.nodes.array.size(program.node.decls);
+
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(program.node.decls, i) {
+                let decl_node = ctx.nodes.get_decl_node(node_id);
+
+                match decl_node.node {
+                    DeclNode::Function(func_decl) => self.visit_function_declaration(
+                        TypedNodeRef::new(decl_node.id, func_decl),
+                        ctx,
+                    )?,
+                    DeclNode::Class(class_decl) => {
+                        self.visit_class_declaration(
+                            TypedNodeRef::new(decl_node.id, class_decl),
+                            ctx,
+                        )?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(program.node.decls, i) {
+                let decl_node = ctx.nodes.get_decl_node(node_id);
+
+                if !matches!(decl_node.node, DeclNode::Function(_) | DeclNode::Class(_)) {
+                    self.visit_declaration(decl_node, ctx)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn visit_return_statement(
         &mut self,
         return_stmt: TypedNodeRef<ReturnStmtNode>,

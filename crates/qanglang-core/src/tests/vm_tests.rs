@@ -2495,3 +2495,65 @@ fn test_when_expression_match_form_no_match_type() {
         }
     }
 }
+
+#[test]
+fn test_global_functions_are_hoisted() {
+    let source = r#"
+        main();
+
+        fn main() { }
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}
+
+#[test]
+fn test_global_classes_are_hoisted() {
+    let source = r#"
+        var my_class = MyClass();
+
+        class MyClass { }
+    "#;
+
+    let mut allocator = HeapAllocator::new();
+    match GlobalCompilerPipeline::compile_source(source.to_string(), &mut allocator) {
+        Ok(program) => {
+            match Vm::new(allocator)
+                .set_gc_status(false)
+                .set_debug(false)
+                .interpret(program)
+            {
+                Ok(_) => (),
+                Err(error) => {
+                    panic!("{}", error);
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors.all() {
+                println!("{}", error.message);
+            }
+            panic!("Failed with compiler errors.")
+        }
+    }
+}

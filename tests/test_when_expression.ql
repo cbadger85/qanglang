@@ -103,3 +103,15 @@ fn test_when_expression_match_form_no_match_type() {
   assert_eq(typeof(result), BOOLEAN);
   assert(!result);
 }
+
+fn test_when_using_lambda_for_block() {
+  var x = "2";
+  var result = when (x) {
+      is NUMBER => () -> {
+        return true;
+      }(),
+      else => false,
+  };
+  assert_eq(typeof(result), BOOLEAN);
+  assert(!result);
+}

@@ -237,6 +237,39 @@ var absolute_value = (num) -> num >= 0 ? num : num * -1;
 
 ```
 
+For more complex conditional logic, `when` expressions can be used.
+
+```ql
+var x = 2;
+var result = when (x) {
+		1 => "one",
+		2 => "two",
+		3 => "three",
+		else => "other",
+}; // "two"
+```
+
+When expressions can also be used to match against types.
+
+```ql
+var x = 2;
+var result = when (x) {
+		is NUMBER => true,
+		else => false,
+}; // true
+```
+
+For more complex matching, the value can be left off the when expression, allowing full expressions on the left side.
+
+```ql
+var x = 4;
+var result = when {
+	x < 0 => "negative",
+	x == 0 => "zero",
+	x > 0 => "positive"
+}; // "positive"
+```
+
 ## `nil` Handling
 
 QangLang uses optional chaining to handle nullable values.

@@ -181,6 +181,10 @@ export default defineConfig({
             },
           ],
         },
+        {
+          label: "CLI",
+          autogenerate: { directory: "cli/" },
+        },
       ],
       expressiveCode: {
         shiki: {

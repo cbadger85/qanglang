@@ -142,6 +142,12 @@ class Iterator {
   enumerate(start) {
     return EnumerateIterator(this, start);
   }
+
+  reverse() {
+    var arr = this.collect();
+    arr.reverse();
+    return arr.iter();
+  }
 }
 
 class ArrayIterator : Iterator {
@@ -472,6 +478,10 @@ class Pair {
   init(left, right) {
     this.left = left;
     this.right = right;
+  }
+
+  to_array() {
+    return [this.left, this.right];
   }
 }
 

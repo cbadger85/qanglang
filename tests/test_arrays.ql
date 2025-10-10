@@ -165,8 +165,7 @@ fn test_array_of_with_init() {
 
 fn test_array_remove_at() {
   var arr = [1, 2, 3,];
-  arr.remove_at(1);
-
+  assert_eq(arr.remove_at(1), 2);
   assert_eq(arr.length(), 2);
   assert_eq(arr[0], 1);
   assert_eq(arr[1], 3);
@@ -174,8 +173,7 @@ fn test_array_remove_at() {
 
 fn test_array_remove_at_negative_index() {
   var arr = [1, 2, 3,];
-  arr.remove_at(-1);
-
+  assert_eq(arr.remove_at(-1), 3);
   assert_eq(arr.length(), 2);
   assert_eq(arr[0], 1);
   assert_eq(arr[1], 2);

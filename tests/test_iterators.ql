@@ -209,3 +209,14 @@ fn test_array_iter_method() {
 
   assert(arr.iter() is ArrayIterator);
 }
+
+fn test_reverse_iterator() {
+  var arr = [1, 2, 3];
+
+  var reversed_arr = arr.iter().reverse().collect();
+
+  assert_eq(reversed_arr.length(), 3);
+  assert_eq(reversed_arr[0], 3);
+  assert_eq(reversed_arr[1], 2);
+  assert_eq(reversed_arr[2], 1);
+}

@@ -14,7 +14,7 @@ use crate::{
         module_resolver::ModuleResolver,
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
-            qang_array_construct, qang_assert, qang_assert_eq, qang_assert_throws, qang_hash,
+            qang_array_create, qang_assert, qang_assert_eq, qang_assert_throws, qang_hash,
             qang_print, qang_println, qang_system_time, qang_to_string, qang_typeof,
         },
         value::{
@@ -430,7 +430,7 @@ impl Vm {
             .add_native_function("typeof", 1, qang_typeof)
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("hash", 1, qang_hash)
-            .add_native_function("array_of_length", 1, qang_array_construct)
+            .add_native_function("array_of_length", 1, qang_array_create)
             .with_stdlib()
     }
 

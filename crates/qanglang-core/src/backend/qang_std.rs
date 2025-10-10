@@ -418,9 +418,9 @@ pub fn qang_array_remove_at(
     let args = vm.get_function_args(arg_count);
     match (receiver.kind(), args.first().map(|a| a.kind())) {
         (ValueKind::Array(handle), Some(ValueKind::Number(index))) => {
-            vm.alloc.arrays.remove_at(handle, index.trunc() as isize);
+            let value = vm.alloc.arrays.remove_at(handle, index.trunc() as isize);
 
-            Ok(None)
+            Ok(value)
         }
         (ValueKind::Array(_), _) => Err(NativeFunctionError::new(
             "An array can only be indexed by a number.",
@@ -529,7 +529,7 @@ pub fn qang_array_join(
     }
 }
 
-pub fn qang_array_construct(
+pub fn qang_array_create(
     arg_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {

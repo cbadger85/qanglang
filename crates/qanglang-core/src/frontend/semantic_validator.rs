@@ -231,6 +231,20 @@ impl<'a> SemanticValidator<'a> {
         self.in_loop
     }
 
+    fn is_constant_expression(&self, expr_node_id: NodeId, nodes: &AstNodeArena) -> bool {
+        let expr = nodes.get_expr_node(expr_node_id);
+        match expr.node {
+            crate::frontend::nodes::ExprNode::Primary(primary) => match primary {
+                crate::frontend::nodes::PrimaryNode::Number(_)
+                | crate::frontend::nodes::PrimaryNode::String(_)
+                | crate::frontend::nodes::PrimaryNode::Boolean(_)
+                | crate::frontend::nodes::PrimaryNode::Nil(_) => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     fn begin_function(
         &mut self,
         arity: usize,
@@ -564,6 +578,14 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                     }
                     super::nodes::ClassMemberNode::Field(field) => {
                         if let Some(init_id) = field.initializer {
+                            // Validate that field initializers only contain constant values
+                            if !self.is_constant_expression(init_id, ctx.nodes) {
+                                ctx.errors.report_error(QangCompilerError::new_analysis_error(
+                                    "Class field initializers can only contain constant values (numbers, strings, booleans, or nil).".to_string(),
+                                    field.span,
+                                    self.source_map.clone(),
+                                ));
+                            }
                             let initializer = ctx.nodes.get_expr_node(init_id);
                             self.visit_expression(initializer, ctx)?;
                         }

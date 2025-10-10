@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::{assert_no_parse_errors, parse_source};
-use crate::{SourceMap, AstNodeArena, memory::StringInterner};
+use crate::{AstNodeArena, SourceMap, memory::StringInterner};
 
 #[test]
 fn test_object_literals() {
@@ -506,6 +506,161 @@ fn test_optional_map_expressions() {
             var optional_precedence = vals?|v -> v + 2 * 4|;
             var optional_logical = flags?|f -> f or false|;
         "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_conditional_form() {
+    let source_code = r#"
+        var value1 = 10;
+        var value = when {
+            value1 > 0 => value1,
+            else => 1,
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_match_form() {
+    let source_code = r#"
+        var x = 2;
+        var result = when (x) {
+            1 => "one",
+            2 => "two",
+            3 => "three",
+            else => "other",
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_type_check() {
+    let source_code = r#"
+        var value = "test";
+        var result = when (value) {
+            is String => "string type",
+            is Number => "number type",
+            else => "unknown type",
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_no_else() {
+    let source_code = r#"
+        var x = 1;
+        var result = when (x) {
+            1 => "one",
+            2 => "two"
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_complex() {
+    let source_code = r#"
+        var x = 5;
+        var y = 10;
+        var result = when {
+            x > 0 and y < 10 => calculate(x, y),
+            x == 0 => nil,
+            x < 0 or y > 20 => fallback(),
+            else => default_value,
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_nested() {
+    let source_code = r#"
+        var outer = 1;
+        var inner = 2;
+        var result = when (outer) {
+            1 => when (inner) {
+                1 => "1-1",
+                2 => "1-2",
+                else => "1-other",
+            },
+            2 => "two",
+            else => "other",
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_with_trailing_comma() {
+    let source_code = r#"
+        var x = 1;
+        var result = when (x) {
+            1 => "one",
+            2 => "two",
+        };
+    "#;
+    let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
+    let nodes = AstNodeArena::new();
+    let strings = StringInterner::new();
+
+    let (_program, errors) = parse_source(source_map, nodes, strings);
+
+    assert_no_parse_errors(&errors);
+}
+
+#[test]
+fn test_when_expression_in_function_call() {
+    let source_code = r#"
+        var result = process(when (x) {
+            1 => "one",
+            else => "other"
+        });
+    "#;
     let source_map = Arc::new(SourceMap::from_source(source_code.to_string()));
     let nodes = AstNodeArena::new();
     let strings = StringInterner::new();

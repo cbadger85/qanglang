@@ -1503,6 +1503,97 @@ mod expression_parser {
         Ok(node_id)
     }
 
+    fn when_expression(parser: &mut Parser) -> ParseResult<NodeId> {
+        let start_span = parser.get_previous_span();
+
+        // Check for optional value in parentheses: when (value)
+        let value = if parser.match_token(TokenType::LeftParen) {
+            let val = parser.expression()?;
+            parser.consume(TokenType::RightParen, "Expected ')' after when value.")?;
+            Some(val)
+        } else {
+            None
+        };
+
+        parser.consume(TokenType::LeftBrace, "Expected '{' after 'when'.")?;
+
+        let branches = parser.nodes.array.create();
+        let mut else_branch = None;
+
+        // Parse branches until we hit '}'
+        loop {
+            // Check for end of branches
+            if parser.check(TokenType::RightBrace) || parser.is_at_end() {
+                break;
+            }
+
+            // Check for else branch
+            if parser.check(TokenType::Else) {
+                parser.advance(); // Consume 'else'
+                parser.consume(TokenType::FatArrow, "Expected '=>' after 'else'.")?;
+                else_branch = Some(parse(parser, Precedence::Ternary)?);
+                // Optional trailing comma after else
+                let _ = parser.match_token(TokenType::Comma);
+                break;
+            }
+
+            // Parse condition expression
+            let condition_start_span = parser.get_current_span();
+
+            // Special handling for 'is Type' pattern in match form
+            let (condition, is_type_check) = if parser.check(TokenType::Is) {
+                parser.advance(); // Consume 'is'
+                // This is a type check pattern: is Type
+                parser.consume(TokenType::Identifier, "Expected type name after 'is'.")?;
+                let type_name = parser.get_identifier()?;
+                (type_name, true)
+            } else {
+                // Regular condition expression
+                let cond = parse(parser, Precedence::Ternary)?;
+
+                // Check if the parsed expression itself contains 'is' operator
+                let is_check = if let AstNode::EqualityExpr(eq_expr) = parser.nodes.get_node(cond) {
+                    matches!(eq_expr.operator, EqualityOperator::Is)
+                } else {
+                    false
+                };
+
+                (cond, is_check)
+            };
+
+            parser.consume(TokenType::FatArrow, "Expected '=>' after when condition.")?;
+
+            let body = parse(parser, Precedence::Ternary)?;
+            let body_span = parser.nodes.get_node(body).span();
+            let branch_span = SourceSpan::combine(condition_start_span, body_span);
+
+            let branch = parser.nodes.create_node(AstNode::WhenBranch(WhenBranchNode {
+                condition,
+                is_type_check,
+                body,
+                span: branch_span,
+            }));
+
+            parser.nodes.array.push(branches, branch);
+
+            // Optional comma between branches
+            let _ = parser.match_token(TokenType::Comma);
+        }
+
+        parser.consume(TokenType::RightBrace, "Expected '}' after when branches.")?;
+        let end_span = parser.get_previous_span();
+        let span = SourceSpan::combine(start_span, end_span);
+
+        let node_id = parser.nodes.create_node(AstNode::WhenExpr(WhenExprNode {
+            value,
+            branches,
+            else_branch,
+            span,
+        }));
+
+        Ok(node_id)
+    }
+
     fn binary(parser: &mut Parser, left: NodeId) -> ParseResult<NodeId> {
         let token = get_previous_token(parser);
         let span_start = parser.nodes.get_node(left).span().start;
@@ -2014,6 +2105,11 @@ mod expression_parser {
                 prefix: None,
                 infix: Some(optional_map_expression),
                 precedence: Precedence::Call,
+            },
+            tokenizer::TokenType::When => ParseRule {
+                prefix: Some(when_expression),
+                infix: None,
+                precedence: Precedence::None,
             },
             _ => ParseRule {
                 prefix: None,

@@ -112,6 +112,8 @@ pub enum AstNode {
     ObjectEntry(ObjectEntryNode),
     MapExpr(MapExprNode),
     OptionalMapExpr(OptionalMapExprNode),
+    WhenExpr(WhenExprNode),
+    WhenBranch(WhenBranchNode),
     ExprStmt(ExprStmtNode),
     GroupingExpr(GroupingExprNode),
     LambdaDecl(LambdaDeclNode),
@@ -165,6 +167,8 @@ impl AstNode {
             AstNode::ObjectEntry(node) => node.span,
             AstNode::MapExpr(node) => node.span,
             AstNode::OptionalMapExpr(node) => node.span,
+            AstNode::WhenExpr(node) => node.span,
+            AstNode::WhenBranch(node) => node.span,
             AstNode::ExprStmt(node) => node.span,
             AstNode::GroupingExpr(node) => node.span,
             AstNode::LambdaDecl(node) => node.span,
@@ -446,6 +450,24 @@ pub struct MapExprNode {
 pub struct OptionalMapExprNode {
     pub parameter: NodeId, // IdentifierNode
     pub body: NodeId,      //ExprNode
+    pub span: SourceSpan,
+}
+
+/// When expression: when ( value )? { branch* ( else => expression )? }
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct WhenExprNode {
+    pub value: Option<NodeId>,    // Optional value being matched
+    pub branches: NodeArrayId,    // [WhenBranchNode]
+    pub else_branch: Option<NodeId>, // Optional else expression
+    pub span: SourceSpan,
+}
+
+/// When branch: condition => expression
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct WhenBranchNode {
+    pub condition: NodeId,   // ExprNode - the left side (expression or pattern)
+    pub is_type_check: bool, // whether this uses the `is` operator
+    pub body: NodeId,        // ExprNode - the right side expression
     pub span: SourceSpan,
 }
 
@@ -772,6 +794,7 @@ pub enum PrimaryNode {
     Lambda(LambdaExprNode),
     Array(ArrayLiteralExprNode),
     Object(ObjectLiteralExprNode),
+    When(WhenExprNode),
 }
 
 impl PrimaryNode {
@@ -788,6 +811,7 @@ impl PrimaryNode {
             Self::String(string_literal) => string_literal.span,
             Self::Super(super_expr) => super_expr.span,
             Self::This(this_expr) => this_expr.span,
+            Self::When(when_expr) => when_expr.span,
         }
     }
 }
@@ -810,6 +834,7 @@ impl TryFrom<AstNode> for PrimaryNode {
             AstNode::LambdaExpr(lambda_expr) => Ok(PrimaryNode::Lambda(lambda_expr)),
             AstNode::ArrayLiteralExpr(array_expr) => Ok(PrimaryNode::Array(array_expr)),
             AstNode::ObjectLiteralExpr(object_expr) => Ok(PrimaryNode::Object(object_expr)),
+            AstNode::WhenExpr(when_expr) => Ok(PrimaryNode::When(when_expr)),
             _ => Err(NodeConversionError(format!(
                 "Cannot convert {:?} to PrimaryNode",
                 value

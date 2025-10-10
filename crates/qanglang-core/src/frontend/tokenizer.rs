@@ -64,9 +64,11 @@ pub enum TokenType {
     MinusAssign,        // -=
     StarAssign,         // *=
     SlashAssign,        // /=
-    ModuloAssign,       // /%
+    ModuloAssign,       // %=
     Mod,                // mod
     Import,             // import,
+    When,               // when
+    FatArrow,           // =>
     Error,              // use when an error occurs during tokenization
     Eof,                // EoF
 }
@@ -98,6 +100,7 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "is" => TokenType::Is,
     "mod" => TokenType::Mod,
     "import" => TokenType::Import,
+    "when" => TokenType::When,
 };
 
 #[derive(PartialEq, Clone, Debug)]
@@ -188,6 +191,7 @@ impl Tokenizer {
             '>' if self.match_char('=') => self.make_token(TokenType::GreaterEquals, start),
             '>' => self.make_token(TokenType::Greater, start),
             '=' if self.match_char('=') => self.make_token(TokenType::EqualsEquals, start),
+            '=' if self.match_char('>') => self.make_token(TokenType::FatArrow, start),
             '=' => self.make_token(TokenType::Equals, start),
             '-' if self.match_char('>') => self.make_token(TokenType::Arrow, start),
             '-' if self.match_char('=') => self.make_token(TokenType::MinusAssign, start),

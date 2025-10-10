@@ -617,6 +617,9 @@ pub trait NodeVisitor {
             PrimaryNode::Object(object) => {
                 self.visit_object_literal(TypedNodeRef::new(primary.id, object), ctx)
             }
+            PrimaryNode::When(when_expr) => {
+                self.visit_when_expression(TypedNodeRef::new(primary.id, when_expr), ctx)
+            }
         }
     }
 
@@ -743,6 +746,42 @@ pub trait NodeVisitor {
     ) -> Result<(), Self::Error> {
         self.visit_identifier(ctx.nodes.get_identifier_node(map.node.parameter), ctx)?;
         self.visit_expression(ctx.nodes.get_expr_node(map.node.body), ctx)
+    }
+
+    fn visit_when_expression(
+        &mut self,
+        when_expr: TypedNodeRef<WhenExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Visit the optional value being matched
+        if let Some(value_id) = when_expr.node.value {
+            self.visit_expression(ctx.nodes.get_expr_node(value_id), ctx)?;
+        }
+
+        // Visit all branches
+        let length = ctx.nodes.array.size(when_expr.node.branches);
+        for i in 0..length {
+            if let Some(node_id) = ctx.nodes.array.get_node_id_at(when_expr.node.branches, i) {
+                let branch = ctx.nodes.get_when_branch_node(node_id);
+                self.visit_when_branch(branch, ctx)?;
+            }
+        }
+
+        // Visit the optional else branch
+        if let Some(else_branch_id) = when_expr.node.else_branch {
+            self.visit_expression(ctx.nodes.get_expr_node(else_branch_id), ctx)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_when_branch(
+        &mut self,
+        branch: TypedNodeRef<WhenBranchNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        self.visit_expression(ctx.nodes.get_expr_node(branch.node.condition), ctx)?;
+        self.visit_expression(ctx.nodes.get_expr_node(branch.node.body), ctx)
     }
 }
 

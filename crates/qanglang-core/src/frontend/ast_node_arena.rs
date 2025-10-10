@@ -159,4 +159,22 @@ impl AstNodeArena {
         let node = self.nodes[node_id.get()];
         TypedNodeRef::new(node_id, node.try_into().unwrap())
     }
+
+    pub fn get_when_expr_node(&self, node_id: NodeId) -> TypedNodeRef<WhenExprNode> {
+        let node = self.nodes[node_id.get()];
+
+        match node {
+            AstNode::WhenExpr(when_expr) => TypedNodeRef::new(node_id, when_expr),
+            _ => panic!("Expected WhenExprNode"),
+        }
+    }
+
+    pub fn get_when_branch_node(&self, node_id: NodeId) -> TypedNodeRef<WhenBranchNode> {
+        let node = self.nodes[node_id.get()];
+
+        match node {
+            AstNode::WhenBranch(when_branch) => TypedNodeRef::new(node_id, when_branch),
+            _ => panic!("Expected WhenBranchNode"),
+        }
+    }
 }

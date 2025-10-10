@@ -10,6 +10,12 @@ cargo build --release
 
 ## Usage
 
+REPL:
+
+```bash
+qang
+```
+
 Run a script:
 
 ```bash
@@ -19,7 +25,7 @@ qang run script.ql
 Run tests:
 
 ```bash
-qang test tests
+qang test test_script.ql
 ```
 
 Check syntax:

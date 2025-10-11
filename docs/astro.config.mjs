@@ -125,19 +125,19 @@ export default defineConfig({
               label: "Iterators",
               items: [
                 {
-                  label: "Chain Iterator",
+                  label: "ChainIterator",
                   slug: "reference/api/iterators/chain-iterator",
                 },
                 {
-                  label: "Enumerate Iterator",
+                  label: "EnumerateIterator",
                   slug: "reference/api/iterators/enumerate-iterator",
                 },
                 {
-                  label: "Filter Indexed Iterator",
+                  label: "FilterIndexedIterator",
                   slug: "reference/api/iterators/filter-indexed-iterator",
                 },
                 {
-                  label: "Filter Iterator",
+                  label: "FilterIterator",
                   slug: "reference/api/iterators/filter-iterator",
                 },
                 {
@@ -149,19 +149,27 @@ export default defineConfig({
                   slug: "reference/api/iterators/iterator",
                 },
                 {
-                  label: "Map Indexed Iterator",
+                  label: "MapIndexedIterator",
                   slug: "reference/api/iterators/map-indexed-iterator",
                 },
                 {
-                  label: "Map Iterator",
+                  label: "MapIterator",
                   slug: "reference/api/iterators/map-iterator",
                 },
                 {
-                  label: "Take Iterator",
+                  label: "Range",
+                  slug: "reference/api/iterators/range",
+                },
+                {
+                  label: "Sequence",
+                  slug: "reference/api/iterators/sequence",
+                },
+                {
+                  label: "TakeIterator",
                   slug: "reference/api/iterators/take-iterator",
                 },
                 {
-                  label: "Zip Iterator",
+                  label: "ZipIterator",
                   slug: "reference/api/iterators/zip-iterator",
                 },
               ],

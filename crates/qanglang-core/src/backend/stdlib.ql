@@ -422,9 +422,9 @@ class Sequence : Iterator {
 }
 
 class Range : Sequence {
-  init(start, end) {
+  init(start, end, options) {
     super.init(start, 1);
-    this._end = end;
+    this._end = options?.inclusive ? end + 1 : end;
   }
 
   has_next() {

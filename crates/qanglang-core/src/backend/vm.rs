@@ -68,7 +68,8 @@ pub enum Keyword {
     Apply,
     Module,
     ArrayIterator,
-    Result,
+    OkResult,
+    ErrResult,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -411,8 +412,10 @@ impl Vm {
         );
         let array_iterator_handle = alloc.strings.intern("ArrayIterator");
         keywords.insert(Keyword::ArrayIterator, array_iterator_handle);
-        let result_handle = alloc.strings.intern("Result");
-        keywords.insert(Keyword::Result, result_handle);
+        let ok_result_handle = alloc.strings.intern("Ok");
+        keywords.insert(Keyword::OkResult, ok_result_handle);
+        let err_result_handle = alloc.strings.intern("Err");
+        keywords.insert(Keyword::ErrResult, err_result_handle);
 
         let vm = Self {
             is_debug: false,

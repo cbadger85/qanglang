@@ -1,0 +1,41 @@
+---
+title: Ok Reference
+description: A reference for the Ok class.
+---
+
+`Ok` is a class that represents a successful result value. It is one of the two possible states of a [`Result`](/reference/api/result/).
+
+## Constructor
+
+### `Ok`
+
+Creates a `Result` representing a successful value.
+
+```ql
+var result = Ok(100);
+```
+
+#### Parameters
+
+- `value` (`dyn!`) - The success value to wrap
+
+#### Returns
+
+`Ok` - A Result in the success state
+
+## Methods
+
+All methods are inherited from the `Result` class. See the [Result reference](/reference/api/result/) for documentation.
+
+## Example
+
+```ql
+var success = Ok(42);
+
+println(success.is_ok());           // true
+println(success.unwrap());          // 42
+println(success.unwrap_or(0));      // 42
+
+var doubled = success.map((x) -> x * 2);
+println(doubled.unwrap());          // 84
+```

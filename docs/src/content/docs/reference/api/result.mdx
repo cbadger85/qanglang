@@ -3,46 +3,17 @@ title: Result Reference
 description: A reference for the Result object.
 ---
 
-A `Result` represents either success (`Ok`) or failure (`Err`), commonly used for error handling without exceptions.
+A `Result` represents either success ([`Ok`](/reference/api/ok/)) or failure ([`Err`](/reference/api/err/)), used for error handling without exceptions.
+
+`Result` is an abstract base class with two concrete subclasses:
+
+- `Ok` - represents a successful value
+- `Err`- represents an error value
 
 ```ql
 var success = Ok(42);
 var failure = Err("Something went wrong");
 ```
-
-## Constructor Functions
-
-### `Ok`
-
-Creates a `Result` representing a successful value.
-
-```ql
-var result = Ok(100);
-```
-
-#### Parameters
-
-- `value` (`dyn!`) - The success value to wrap
-
-#### Returns
-
-`Result` - A Result in the success state
-
-### `Err`
-
-Creates a `Result` representing an error.
-
-```ql
-var result = Err("File not found");
-```
-
-#### Parameters
-
-- `error` (`dyn!`) - The error value to wrap
-
-#### Returns
-
-`Result` - A Result in the error state
 
 ## Methods
 
@@ -122,14 +93,14 @@ None
 
 ### `unwrap`
 
-Returns the success value if `Ok`, otherwise throws an error.
+Returns the success value if `Ok`, otherwise panics with the error value.
 
 ```ql
 var result = Ok(42);
 var value = result.unwrap(); // 42
 
 var error = Err("error");
-// var value = error.unwrap(); // Throws error!
+// var value = error.unwrap(); // Panics with "error"!
 ```
 
 #### Parameters
@@ -140,33 +111,33 @@ None
 
 `dyn!` - The success value
 
-#### Throws
+#### Panics
 
-Throws an error if the result is `Err`
+Panics if the result is `Err`, displaying the error value
 
 ### `expect`
 
-Returns the success value if `Ok`, otherwise throws an error with a custom message.
+Returns the success value if `Ok`, otherwise panics with a custom message.
 
 ```ql
 var result = Ok(42);
 var value = result.expect("Expected a valid number"); // 42
 
 var error = Err("original error");
-// var value = error.expect("Custom error message"); // Throws "Custom error message"
+// var value = error.expect("Custom error message"); // Panics with "Custom error message"
 ```
 
 #### Parameters
 
-- `message` (`string`) - The error message to throw if the result is `Err`
+- `message` (`string`) - The error message to display if the result is `Err`
 
 #### Returns
 
 `dyn!` - The success value
 
-#### Throws
+#### Panics
 
-Throws an error with the provided message if the result is `Err`
+Panics with the provided message if the result is `Err`
 
 ### `unwrap_or`
 

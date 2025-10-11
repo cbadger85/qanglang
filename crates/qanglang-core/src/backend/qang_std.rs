@@ -983,19 +983,7 @@ impl Vm {
         receiver: Value,
         _arg_count: usize,
     ) -> RuntimeResult<()> {
-        let result = *self
-            .globals()
-            .get(
-                self.state
-                    .keywords
-                    .get(&super::vm::Keyword::Result)
-                    .expect("Expected Result to be interned."),
-            )
-            .expect("Expected Result to be loaded from stdlib.");
-
         pop_value!(self);
-
-        push_value!(self, result)?;
 
         let value = receiver.as_string().ok_or_else(|| {
             QangRuntimeError::new(
@@ -1004,24 +992,44 @@ impl Vm {
             )
         })?;
         let value = self.alloc.strings.get_string(value);
-
-        match value.parse::<f64>() {
+        let result = match value.parse::<f64>() {
             Ok(number) => {
-                push_value!(self, Value::boolean(true))?;
+                let ok = *self
+                    .globals()
+                    .get(
+                        self.state
+                            .keywords
+                            .get(&super::vm::Keyword::OkResult)
+                            .expect("Expected Ok to be interned."),
+                    )
+                    .expect("Expected Ok to be loaded from stdlib.");
+
+                push_value!(self, ok)?;
                 push_value!(self, Value::number(number))?;
-                push_value!(self, Value::nil())?;
+                ok
             }
             Err(_) => {
-                push_value!(self, Value::boolean(false))?;
-                push_value!(self, Value::nil())?;
+                let err = *self
+                    .globals()
+                    .get(
+                        self.state
+                            .keywords
+                            .get(&super::vm::Keyword::ErrResult)
+                            .expect("Expected Err to be interned."),
+                    )
+                    .expect("Expected Err to be loaded from stdlib.");
+
+                push_value!(self, err)?;
+
                 let err_msg = self
                     .alloc
                     .strings
                     .intern(format!("Unable to parse value '{:?}' as number.", value).as_str());
                 push_value!(self, Value::string(err_msg))?;
+                err
             }
-        }
+        };
 
-        self.call_value(result, 3)
+        self.call_value(result, 1)
     }
 }

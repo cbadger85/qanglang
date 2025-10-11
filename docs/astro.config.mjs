@@ -85,6 +85,10 @@ export default defineConfig({
               slug: "reference/api/entry",
             },
             {
+              label: "Err",
+              slug: "reference/api/err",
+            },
+            {
               label: "Globals",
               slug: "reference/api/global-functions",
             },
@@ -161,6 +165,10 @@ export default defineConfig({
                   slug: "reference/api/iterators/zip-iterator",
                 },
               ],
+            },
+            {
+              label: "Ok",
+              slug: "reference/api/ok",
             },
             {
               label: "Pair",

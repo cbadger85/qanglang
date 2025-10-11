@@ -1,0 +1,44 @@
+---
+title: Err Reference
+description: A reference for the Err class.
+---
+
+`Err` is a class that represents an error or failure value. It is one of the two possible states of a [`Result`](/reference/api/result/).
+
+## Constructor
+
+### `Err`
+
+Creates a `Result` representing an error.
+
+```ql
+var result = Err("File not found");
+```
+
+#### Parameters
+
+- `error` (`dyn!`) - The error value to wrap
+
+#### Returns
+
+`Err` - A Result in the error state
+
+## Methods
+
+All methods are inherited from the `Result` class. See the [Result reference](/reference/api/result/) for documentation.
+
+## Example
+
+```ql
+var failure = Err("Something went wrong");
+
+println(failure.is_err());          // true
+println(failure.err());             // "Something went wrong"
+println(failure.unwrap_or(0));      // 0
+
+var mapped = failure.map((x) -> x * 2);
+println(mapped.is_err());           // true (error is unchanged)
+
+var recovered = failure.or_else(() -> Ok(42));
+println(recovered.unwrap());        // 42
+```

@@ -486,69 +486,175 @@ class Pair {
 }
 
 class Result {
-  init(is_ok, value, err) {
-    this._is_ok = is_ok or false;
+  unwrap() {
+    // Override in subclasses
+    assert(false, "unwrap() must be implemented in subclass");
+  }
+
+  expect(message) {
+    // Override in subclasses
+    assert(false, "expect() must be implemented in subclass");
+  }
+
+  unwrap_or(value) {
+    // Override in subclasses
+    assert(false, "unwrap_or() must be implemented in subclass");
+  }
+
+  unwrap_or_else(cb) {
+    // Override in subclasses
+    assert(false, "unwrap_or_else() must be implemented in subclass");
+  }
+
+  or_else(cb) {
+    // Override in subclasses
+    assert(false, "or_else() must be implemented in subclass");
+  }
+
+  map(transform) {
+    // Override in subclasses
+    assert(false, "map() must be implemented in subclass");
+  }
+
+  flat_map(transform) {
+    // Override in subclasses
+    assert(false, "flat_map() must be implemented in subclass");
+  }
+
+  map_err(transform) {
+    // Override in subclasses
+    assert(false, "map_err() must be implemented in subclass");
+  }
+
+  is_ok() {
+    // Override in subclasses
+    assert(false, "is_ok() must be implemented in subclass");
+  }
+
+  is_err() {
+    // Override in subclasses
+    assert(false, "is_err() must be implemented in subclass");
+  }
+
+  ok() {
+    // Override in subclasses
+    assert(false, "ok() must be implemented in subclass");
+  }
+
+  err() {
+    // Override in subclasses
+    assert(false, "err() must be implemented in subclass");
+  }
+}
+
+class Ok : Result {
+  init(value) {
+    super.init();
     this._value = value;
-    this._error = err;
   }
 
   unwrap() {
-    assert(this._is_ok, to_string(this._error));
     return this._value;
   }
 
   expect(message) {
-    assert(this._is_ok, message);
     return this._value;
   }
 
   unwrap_or(value) {
-    return this._is_ok ? this._value : value;
+    return this._value;
   }
 
   unwrap_or_else(cb) {
-    return this._is_ok ? this._value : cb();
+    return this._value;
   }
 
   or_else(cb) {
-    return this._is_ok ? this : cb();
+    return this;
   }
 
   map(transform) {
-    return this._is_ok ? Result(true, transform(this._value)) : this;
+    return Ok(transform(this._value));
   }
 
   flat_map(transform) {
-    return this._is_ok ? transform(this._value) : this;
+    return transform(this._value);
   }
 
   map_err(transform) {
-    return this._is_ok ? this : Result(false, nil, transform(this._error));
+    return this;
   }
 
   is_ok() {
-    return this._is_ok;
+    return true;
   }
 
   is_err() {
-    return !this._is_ok;
+    return false;
   }
 
   ok() {
-    return this._is_ok ? this._value : nil;
+    return this._value;
   }
 
   err() {
-    return this._is_ok ? nil : this._error;
+    return nil;
   }
 }
 
-fn Ok(value) {
-  return Result(true, value);
-}
+class Err : Result {
+  init(error) {
+    super.init();
+    this._error = error;
+  }
 
-fn Err(err) {
-  return Result(false, nil, err);
+  unwrap() {
+    assert(false, to_string(this._error));
+  }
+
+  expect(message) {
+    assert(false, message);
+  }
+
+  unwrap_or(value) {
+    return value;
+  }
+
+  unwrap_or_else(cb) {
+    return cb();
+  }
+
+  or_else(cb) {
+    return cb();
+  }
+
+  map(transform) {
+    return this;
+  }
+
+  flat_map(transform) {
+    return this;
+  }
+
+  map_err(transform) {
+    return Err(transform(this._error));
+  }
+
+  is_ok() {
+    return false;
+  }
+
+  is_err() {
+    return true;
+  }
+
+  ok() {
+    return nil;
+  }
+
+  err() {
+    return this._error;
+  }
 }
 
 class HashMap {

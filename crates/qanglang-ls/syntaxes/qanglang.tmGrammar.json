@@ -32,6 +32,9 @@
       "include": "#objects"
     },
     {
+      "include": "#when-expressions"
+    },
+    {
       "include": "#map-expressions"
     },
     {
@@ -70,7 +73,7 @@
       "patterns": [
         {
           "name": "keyword.control",
-          "match": "\\b(if|else|while|for|break|continue|return|throw|try|catch|finally)\\b"
+          "match": "\\b(if|else|while|for|break|continue|return|throw|try|catch|finally|when)\\b"
         },
         {
           "name": "storage.type",
@@ -461,6 +464,134 @@
               "name": "string.quoted.double.module.path.qanglang"
             }
           }
+        }
+      ]
+    },
+    "when-expressions": {
+      "patterns": [
+        {
+          "name": "meta.when-expression.match.qanglang",
+          "begin": "\\b(when)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.when.qanglang"
+            },
+            "2": {
+              "name": "punctuation.section.when.begin.qanglang"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.when.end.qanglang"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#when-match-subject"
+            },
+            {
+              "include": "#when-body"
+            }
+          ]
+        },
+        {
+          "name": "meta.when-expression.conditional.qanglang",
+          "begin": "\\b(when)\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.when.qanglang"
+            },
+            "2": {
+              "name": "punctuation.section.when.begin.qanglang"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.when.end.qanglang"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#when-body"
+            }
+          ]
+        }
+      ]
+    },
+    "when-match-subject": {
+      "patterns": [
+        {
+          "begin": "\\(",
+          "end": "\\)\\s*(\\{)",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.section.when-body.begin.qanglang"
+            }
+          },
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        }
+      ]
+    },
+    "when-body": {
+      "patterns": [
+        {
+          "name": "meta.when-arm.qanglang",
+          "begin": "\\b(else)\\s*(=>)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.else.qanglang"
+            },
+            "2": {
+              "name": "keyword.operator.arrow.when.qanglang"
+            }
+          },
+          "end": "(?=[,}])",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.when-arm.type-match.qanglang",
+          "begin": "\\b(is)\\s+([A-Z_][A-Z0-9_]*)\\s*(=>)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.operator.identity.qanglang"
+            },
+            "2": {
+              "name": "support.type.qanglang"
+            },
+            "3": {
+              "name": "keyword.operator.arrow.when.qanglang"
+            }
+          },
+          "end": "(?=[,}])",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.when-arm.qanglang",
+          "begin": "(?<=\\{|,)\\s*",
+          "end": "(?=[,}])",
+          "patterns": [
+            {
+              "name": "keyword.operator.arrow.when.qanglang",
+              "match": "=>"
+            },
+            {
+              "include": "$self"
+            }
+          ]
         }
       ]
     }

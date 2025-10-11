@@ -161,6 +161,10 @@ export default defineConfig({
                   slug: "reference/api/iterators/range",
                 },
                 {
+                  label: "RangeInclusive",
+                  slug: "reference/api/iterators/range-inclusive",
+                },
+                {
                   label: "Sequence",
                   slug: "reference/api/iterators/sequence",
                 },

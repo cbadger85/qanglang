@@ -422,9 +422,9 @@ class Sequence : Iterator {
 }
 
 class Range : Sequence {
-  init(start, end, options) {
+  init(start, end) {
     super.init(start, 1);
-    this._end = options?.inclusive ? end + 1 : end;
+    this._end = end;
   }
 
   has_next() {
@@ -439,6 +439,12 @@ class Range : Sequence {
     }
 
     return nil;
+  }
+}
+
+class RangeInclusive : Range {
+  init(start, end) {
+    super.init(start, end + 1);
   }
 }
 

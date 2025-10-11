@@ -16,9 +16,7 @@ fn test_range_iterator() {
 }
 
 fn test_range_iterator_inclusive() {
-  var range_arr = Range(0, 10, {{ 
-    inclusive = true 
-  }}).collect();
+  var range_arr = RangeInclusive(0, 10).collect();
 
   assert_eq(range_arr[0], 0);
   assert_eq(range_arr[-1], 10);

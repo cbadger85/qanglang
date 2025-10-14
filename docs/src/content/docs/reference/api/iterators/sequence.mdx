@@ -2,3 +2,39 @@
 title: Sequence Reference
 description: A reference for the Sequence iterator implementation
 ---
+
+import { Badge } from "@astrojs/starlight/components";
+
+A `Sequence` is an infinite stream of numbers. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates a `Sequence` of numbers.
+
+```ql
+var seq = Sequence();
+```
+
+#### Parameters
+
+start: `Number?` <Badge text="optional" /> - The number to start the sequence with. Defaults to `0`.
+
+step: `Number?` <Badge text="optional" /> - The number to increment by. Defaults to `1`.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var seq = Sequence().for_each(print_ln);
+// 0
+// 1
+// 2
+// 3
+// 4
+// etc.
+```

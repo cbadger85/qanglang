@@ -17,6 +17,13 @@ fn test_hashmap_has() {
   assert(map.has("key"));
 }
 
+fn test_hashmap_has_nil_value() {
+  var map = HashMap();
+  map.set("key", nil);
+
+  assert(map.has("key"));
+}
+
 fn test_hashmap_size() {
   var map = HashMap();
 
@@ -90,4 +97,20 @@ fn test_hashmap_resize() {
     assert(map.has(i));
     assert_eq(map.get(i), i * 2);
   }
+}
+
+fn test_hashmap_get_or_default() {
+  var map = HashMap();
+  map.set("key", "value");
+
+  assert_eq(map.get_or_default("key", "default"), "value");
+  assert_eq(map.get_or_default("other key", "default"), "default");
+}
+
+fn test_hashmap_get_or_insert() {
+  var map = HashMap();
+  map.set("key", "value");
+
+  assert_eq(map.get_or_insert("key", () -> "default"), "value");
+  assert_eq(map.get_or_insert("other key", () -> "default"), "default");
 }

@@ -2,3 +2,37 @@
 title: RangeInclusive Reference
 description: A reference for the RangeInclusive iterator implementation
 ---
+
+A `RangeInclusive` is a finite stream of numbers that start at the specified number and increment by one until the sepcified end. It inherits from [`Range`](/reference/api/iterators/range/).
+
+## Constructor
+
+Creates a `RangeInclusive` between two numbers, inclusive.
+
+```ql
+var range = RangeInclusive(0, 10);
+```
+
+#### Parameters
+
+start: `Number` - The number to start the range with (inclusive).
+
+end: `Number` - The number to end the range with (inclusive).
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Range` class. See the [Range reference](/reference/api/iterators/range#methods) for documentation.
+
+## Example
+
+```ql
+var seq = RangeInclusive(0, 5).for_each(print_ln);
+// 0
+// 1
+// 2
+// 3
+// 4
+// 5
+```

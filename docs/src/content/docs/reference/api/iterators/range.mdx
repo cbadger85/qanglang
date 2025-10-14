@@ -2,3 +2,36 @@
 title: Range Reference
 description: A reference for the Range iterator implementation
 ---
+
+A `Range` is a finite stream of numbers that start at the specified number and increment by one until the sepcified end. It inherits from [`Sequence`](/reference/api/iterators/sequence/).
+
+## Constructor
+
+Creates a `Range` between two numbers.
+
+```ql
+var range = Range(0, 10);
+```
+
+#### Parameters
+
+start: `Number` - The number to start the range with (inclusive).
+
+end: `Number` - The number to end the range with (exclusive).
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Sequence` class. See the [Sequence reference](/reference/api/iterators/sequence#methods) for documentation.
+
+## Example
+
+```ql
+var seq = Range(0, 5).for_each(print_ln);
+// 0
+// 1
+// 2
+// 3
+// 4
+```

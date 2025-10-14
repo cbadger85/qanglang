@@ -406,8 +406,8 @@ class ZipIterator : Iterator {
 
 class Sequence : Iterator {
   init(start, step) {
-    this._current = start;
-    this._step = step;
+    this._current = start or 0;
+    this._step = step or 1;
   }
 
   has_next() {
@@ -708,6 +708,21 @@ class HashMap {
     }
 
     return nil;
+  }
+
+  get_or_default(key, default) {
+    return this.has(key) ? this.get(key) : default;
+  }
+
+  get_or_insert(key, cb) {
+    if (this.has(key)) {
+      return this.get(key);
+    }
+
+    var value = cb();
+    this.set(key, value);
+
+    return value;
   }
 
   has(key) {

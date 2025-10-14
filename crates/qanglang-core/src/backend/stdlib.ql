@@ -615,7 +615,7 @@ class Err : Result {
   }
 
   unwrap() {
-    assert(false, to_string(this._error));
+    assert(false, this.to_string());
   }
 
   expect(message) {
@@ -660,6 +660,10 @@ class Err : Result {
 
   err() {
     return this._error;
+  }
+
+  to_string() {
+    return to_string(this._error) or "Unexpected Err Result.";
   }
 }
 

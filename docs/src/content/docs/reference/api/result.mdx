@@ -17,13 +17,16 @@ var failure = Err("Something went wrong");
 
 ## Methods
 
-### `is_ok`
+### `err`
 
-Returns `true` if the result is `Ok`.
+Returns the error value if `Err`, otherwise returns `nil`.
 
 ```ql
-var result = Ok(42);
-println(result.is_ok()); // true
+var result = Err("Something went wrong");
+println(result.err()); // "Something went wrong"
+
+var success = Ok(42);
+println(success.err()); // nil
 ```
 
 #### Parameters
@@ -32,7 +35,51 @@ None
 
 #### Returns
 
-`boolean` - `true` if the result is `Ok`, `false` otherwise
+`dyn!` - The error value or `nil`
+
+### `expect`
+
+Returns the success value if `Ok`, otherwise panics with a custom message.
+
+```ql
+var result = Ok(42);
+var value = result.expect("Expected a valid number"); // 42
+
+var error = Err("original error");
+// var value = error.expect("Custom error message"); // Panics with "Custom error message"
+```
+
+#### Parameters
+
+- message: `String` - The error message to display if the result is `Err`
+
+#### Returns
+
+`dyn!` - The success value
+
+#### Throws
+
+Throws with the provided message if the result is `Err`
+
+### `flat_map`
+
+Transforms the success value with a function that returns a `Result`, otherwise returns the error unchanged.
+
+```ql
+var result = Ok(5);
+var new_result = result.flat_map((x) -> Ok(x * 2)); // Ok(10)
+
+var error = Err("error");
+var still_error = error.flat_map((x) -> Ok(x * 2)); // Err("error")
+```
+
+#### Parameters
+
+- transform: `(dyn!) -> Result` - A function that takes the success value and returns a new `Result`
+
+#### Returns
+
+`Result` - The result from the transform function, or the original error
 
 ### `is_err`
 
@@ -49,7 +96,64 @@ None
 
 #### Returns
 
-`boolean` - `true` if the result is `Err`, `false` otherwise
+`Boolean` - `true` if the result is `Err`, `false` otherwise
+
+### `is_ok`
+
+Returns `true` if the result is `Ok`.
+
+```ql
+var result = Ok(42);
+println(result.is_ok()); // true
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Boolean` - `true` if the result is `Ok`, `false` otherwise
+
+### `map`
+
+Transforms the success value if `Ok`, otherwise returns the error unchanged.
+
+```ql
+var result = Ok(5);
+var doubled = result.map((x) -> x * 2); // Ok(10)
+
+var error = Err("error");
+var still_error = error.map((x) -> x * 2); // Err("error")
+```
+
+#### Parameters
+
+- transform: `(dyn!) -> dyn!` - A function that transforms the success value
+
+#### Returns
+
+`Result` - A new `Result` with the transformed value, or the original error
+
+### `map_err`
+
+Transforms the error value if `Err`, otherwise returns the success unchanged.
+
+```ql
+var result = Ok(42);
+var still_ok = result.map_err((err) -> "New " + err); // Ok(42)
+
+var error = Err("error");
+var new_error = error.map_err((err) -> "New " + err); // Err("New error")
+```
+
+#### Parameters
+
+- transform: `(dyn!) -> Err` - A function that transforms the error value
+
+#### Returns
+
+`Result` - The original success, or a new `Result` with the transformed error
 
 ### `ok`
 
@@ -71,25 +175,25 @@ None
 
 `dyn!` - The success value or `nil`
 
-### `err`
+### `or_else`
 
-Returns the error value if `Err`, otherwise returns `nil`.
+Returns the current result if `Ok`, otherwise calls the provided function and returns its result.
 
 ```ql
-var result = Err("Something went wrong");
-println(result.err()); // "Something went wrong"
+var result = Ok(42);
+var new_result = result.or_else(() -> Ok(0)); // Ok(42)
 
-var success = Ok(42);
-println(success.err()); // nil
+var error = Err("error");
+var new_result = error.or_else(() -> Ok(0)); // Ok(0)
 ```
 
 #### Parameters
 
-None
+- callback: `() -> Result` - A function that returns a new `Result`
 
 #### Returns
 
-`dyn!` - The error value or `nil`
+`Result` - The current result if `Ok`, or the result from the callback
 
 ### `unwrap`
 
@@ -111,33 +215,9 @@ None
 
 `dyn!` - The success value
 
-#### Panics
+#### Throws
 
-Panics if the result is `Err`, displaying the error value
-
-### `expect`
-
-Returns the success value if `Ok`, otherwise panics with a custom message.
-
-```ql
-var result = Ok(42);
-var value = result.expect("Expected a valid number"); // 42
-
-var error = Err("original error");
-// var value = error.expect("Custom error message"); // Panics with "Custom error message"
-```
-
-#### Parameters
-
-- `message` (`string`) - The error message to display if the result is `Err`
-
-#### Returns
-
-`dyn!` - The success value
-
-#### Panics
-
-Panics with the provided message if the result is `Err`
+Throws if the result is `Err`, displaying the error value
 
 ### `unwrap_or`
 
@@ -153,7 +233,7 @@ var value = error.unwrap_or(0); // 0
 
 #### Parameters
 
-- `default_value` (`dyn!`) - The value to return if the result is `Err`
+- default_value: `dyn!` - The value to return if the result is `Err`
 
 #### Returns
 
@@ -173,88 +253,8 @@ var value = error.unwrap_or_else(() -> 0); // 0
 
 #### Parameters
 
-- `callback` (`function`) - A function that returns a default value
+- callback: `() -> dyn!` - A function that returns a default value
 
 #### Returns
 
 `dyn!` - The success value or the result of calling the callback
-
-### `or_else`
-
-Returns the current result if `Ok`, otherwise calls the provided function and returns its result.
-
-```ql
-var result = Ok(42);
-var new_result = result.or_else(() -> Ok(0)); // Ok(42)
-
-var error = Err("error");
-var new_result = error.or_else(() -> Ok(0)); // Ok(0)
-```
-
-#### Parameters
-
-- `callback` (`function`) - A function that returns a new `Result`
-
-#### Returns
-
-`Result` - The current result if `Ok`, or the result from the callback
-
-### `map`
-
-Transforms the success value if `Ok`, otherwise returns the error unchanged.
-
-```ql
-var result = Ok(5);
-var doubled = result.map((x) -> x * 2); // Ok(10)
-
-var error = Err("error");
-var still_error = error.map((x) -> x * 2); // Err("error")
-```
-
-#### Parameters
-
-- `transform` (`function`) - A function that transforms the success value
-
-#### Returns
-
-`Result` - A new `Result` with the transformed value, or the original error
-
-### `flat_map`
-
-Transforms the success value with a function that returns a `Result`, otherwise returns the error unchanged.
-
-```ql
-var result = Ok(5);
-var new_result = result.flat_map((x) -> Ok(x * 2)); // Ok(10)
-
-var error = Err("error");
-var still_error = error.flat_map((x) -> Ok(x * 2)); // Err("error")
-```
-
-#### Parameters
-
-- `transform` (`function`) - A function that takes the success value and returns a new `Result`
-
-#### Returns
-
-`Result` - The result from the transform function, or the original error
-
-### `map_err`
-
-Transforms the error value if `Err`, otherwise returns the success unchanged.
-
-```ql
-var result = Ok(42);
-var still_ok = result.map_err((err) -> "New " + err); // Ok(42)
-
-var error = Err("error");
-var new_error = error.map_err((err) -> "New " + err); // Err("New error")
-```
-
-#### Parameters
-
-- `transform` (`function`) - A function that transforms the error value
-
-#### Returns
-
-`Result` - The original success, or a new `Result` with the transformed error

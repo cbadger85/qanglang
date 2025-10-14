@@ -3,6 +3,8 @@ title: Err Reference
 description: A reference for the Err class.
 ---
 
+import { Badge } from "@astrojs/starlight/components";
+
 `Err` is a class that represents an error or failure value. It is one of the two possible states of a [`Result`](/reference/api/result/).
 
 ## Constructor
@@ -17,7 +19,7 @@ var result = Err("File not found");
 
 #### Parameters
 
-- `error` (`dyn!`) - The error value to wrap
+- error: `dyn?` <Badge text="optional" /> - The error value to wrap
 
 #### Returns
 
@@ -25,7 +27,26 @@ var result = Err("File not found");
 
 ## Methods
 
-All methods are inherited from the `Result` class. See the [Result reference](/reference/api/result/) for documentation.
+### `to_string`
+
+Returns athe message of the error.
+
+```ql
+var err_result = Err("Error message.");
+println(err_result.to_string());
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`String` - The error message as a string.
+
+### Inherited
+
+All other methods are inherited from the `Result` class. See the [Result reference](/reference/api/result#methods) for documentation.
 
 ## Example
 

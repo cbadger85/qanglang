@@ -58,6 +58,26 @@ None
 
 `String` - The lowercased string.
 
+### `to_number`
+
+Returns a [`Result`](/reference/api/result) with either the converted value wrapped in `Ok`, or an `Err`.
+
+```ql
+var number_as_string = "1234";
+var number = number_as_string.to_number().unwrap(); // 1234
+
+var not_a_number = "x";
+assert_throws(() -> not_a_number.to_number().unwrap()); // true
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Result` - The result of the conversion. If successful, the number will be wrapped in `Ok`, otherwise an `Err` will be returned.
+
 ### `to_uppercase`
 
 Returns a string with all characters uppercased.

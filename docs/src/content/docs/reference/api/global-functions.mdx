@@ -16,7 +16,7 @@ var arr1 = array_of(3); // [0, 1, 2]
 var arr2 = array_of(3, (i) -> i + 1); // [1, 2, 3]
 ```
 
-### Parameters
+#### Parameters
 
 length: `Number` - The length of the array.
 
@@ -34,7 +34,7 @@ Creates an array of the provided length.
 var arr = array_of_length(3); // [nil, nil, nil]
 ```
 
-### Parameters
+#### Parameters
 
 length: `Number` - The length of the array.
 
@@ -52,7 +52,7 @@ assert(false, "This is going to error."); // Assertion is false, the program exi
 
 ```
 
-### Parameters
+#### Parameters
 
 value: `dyn!` - Any value. Falsy values (0 and `nil`) cause the program to exit.
 
@@ -239,7 +239,7 @@ a constant containing the string `"boolean"`, used with the [`typeof`](#typeof) 
 assert(true is BOOLEAN);
 ```
 
-### `Class`
+### `CLASS`
 
 a constant containing the string `"class"`, used with the [`typeof`](#typeof) function can return the runtime type.
 

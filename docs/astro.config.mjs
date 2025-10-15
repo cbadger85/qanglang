@@ -38,10 +38,9 @@ export default defineConfig({
                 { label: "Numbers", slug: "concepts/types/numbers" },
                 { label: "Booleans", slug: "concepts/types/booleans" },
                 { label: "Strings", slug: "concepts/types/strings" },
-                { label: "Nil Values", slug: "concepts/types/nil" },
                 { label: "Arrays", slug: "concepts/types/arrays" },
                 {
-                  label: "Object literals",
+                  label: "Object Literals",
                   slug: "concepts/types/object-literals",
                 },
               ],

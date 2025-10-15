@@ -2,3 +2,31 @@
 title: Object Literals
 description: Object Literals in QangLang
 ---
+
+Object literals are data structures that allow key and value pairs to be stored in a static object.
+
+```ql
+var obj = {{
+  key = "value",
+}};
+println(obj.key); // "value"
+```
+
+## Object Shorthand Notation
+
+A key can be assigned the value of the variable using a shorthand notation if the key and variable share the same name.
+
+```ql
+var key = "value";
+var obj = {{ key }};
+println(obj.key); // "value"
+```
+
+## Optional Chaining
+
+If the value of the object might be `nil`, then optional chaining can be used to safely access the value.
+
+```ql
+var maybe_obj = nil;
+println(maybe_obj?.key); // nil
+```

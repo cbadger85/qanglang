@@ -2,3 +2,21 @@
 title: Booleans
 description: Booleans in QangLang
 ---
+
+Booleans in QangLang are represented by `true` and `false` values.
+
+```ql
+var is_true = true;
+var is_false = false;
+```
+
+## Falsy values
+
+In addition to `false`, `nil` is also treated as `false` for boolean operations, while every other value is treated as `true`.
+
+```ql
+var is_falsy = nil;
+var is_truthy = "This should be truthy.";
+
+var condition = is_falsy or is_truthy; // true
+```

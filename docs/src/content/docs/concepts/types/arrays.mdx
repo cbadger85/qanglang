@@ -2,3 +2,51 @@
 title: Arrays
 description: Arrays in QangLang
 ---
+
+An array is a data structure that holds a number of values allowing them to be accessed by their index.
+
+```ql
+var arr = [1, 2, 3];
+```
+
+## Index Access
+
+A value in an array can be accessed using square bracket notation.
+
+```ql
+var arr = [1, 2, 3];
+var first = arr[0]; // 1
+```
+
+Additionally, negative indices can be used to access elements starting at the end.
+
+```ql
+var arr = [1, 2, 3];
+var last = arr[-1]; // 3
+```
+
+With either positive or negative indicies, out-of-bound numbers will return `nil`.
+
+```ql
+var arr = [1, 2, 3];
+var out_of_bounds1 = arr[3]; // nil
+var out_of_bounds2 = arr[-4]; // nil
+```
+
+### `nil` Safe Index Access
+
+If an array is possibly `nil`, the `get` method can be combined with optional chaining.
+
+```ql
+var maybe_arr = nil;
+var maybe_first = maybe_arr?.get(0); // nil
+```
+
+## Programatically Creating Arrays
+
+It may not always be possible to declare an array as a literal. In those cases, the `array_of` function can be used to create an array of a specified length. When no factory function is specified, each element of the array will be equal to it's index.
+
+```ql
+var big_array = array_of(1000);
+var big_array_doubled = array_of(1000, (value) -> value * 2);
+```

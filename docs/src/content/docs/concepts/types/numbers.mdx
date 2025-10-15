@@ -2,3 +2,21 @@
 title: Numbers
 description: Numbers in QangLang
 ---
+
+All numbers in QangLang are represented as 64 bit floats and are always represented as decimal values. Other representations (such as binary or hexadecimal) are not recognized.
+
+## Operations on Numbers
+
+QangLang supports basic arithmetic operations of `+`, `-`, `*`, `/` and `%`.
+
+```ql
+println(-1 + 1); // 0
+println(1.5 - 1); // 0.5
+println(10 / 2); // 5
+println(4 * 3); // 12
+println(6 % 4); // 2
+```
+
+### Division by Zero
+
+Because QangLang has no representation of infinity, division by zero will result in an error and the program stopping.

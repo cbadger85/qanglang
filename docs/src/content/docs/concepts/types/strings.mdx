@@ -2,3 +2,27 @@
 title: Strings
 description: Strings in QangLang
 ---
+
+import { Aside } from "@astrojs/starlight/components";
+
+All strings in QangLang are represented by `UTF-8`. All strings are interned, making them immutable and immortal for the life of the program.
+
+<Aside type="caution">
+  Because of how QangLang handles strings, strings should not be used for
+  sensative information such as passwords.
+</Aside>
+
+## Converting a Value to a String
+
+There is no implicit conversion of strings in QangLang. When using the `+` operator to concatenate, ensure both values are strings by using the [`to_string` function](/reference/api/global-functions#to_string).
+
+```ql
+var hello = "Hello";
+var space = " ";
+var world = "World!";
+println(hello + space + world); // "Hello World!"
+
+var name = "Jane Doe";
+var age = 25;
+println("Name: " + name + ", Age: " + to_string(age)); // "Name: Jane Doe, Age: 25"
+```

@@ -2,3 +2,35 @@
 title: TakeIterator Reference
 description: A reference for the TakeIterator implementation
 ---
+
+A `TakeIterator` takes the number of values specified. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator to take items from another iterator.
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var take_iterator = TakeIterator(iterator, 2);
+```
+
+#### Parameters
+
+iterator: `Iterator` - The iterator to take items from.
+
+limit: `Number` - How many items to take.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+TakeIterator(iterator, 2).for_each(print_ln);
+// 0
+// 1
+```

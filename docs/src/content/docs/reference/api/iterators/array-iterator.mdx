@@ -1,0 +1,33 @@
+---
+title: ArrayIterator Reference
+description: A reference for the ArrayIterator implementation
+---
+
+An `ArrayIterator` created from an array. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator from the provided array.
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+```
+
+#### Parameters
+
+array: `[dyn!]` - An array of values.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var seq = ArrayIterator([0, 1, 2]).for_each(print_ln);
+// 0
+// 1
+// 2
+```

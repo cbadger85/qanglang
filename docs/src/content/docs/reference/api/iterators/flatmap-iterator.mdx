@@ -2,3 +2,38 @@
 title: FlatMapIterator Reference
 description: A reference for the FlatMapIterator implementation
 ---
+
+A `FlatMapIterator` transforms each element of the iterator, returning another `Iterator`. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator to transform another iterator.
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var new_iterator = FlatMapIterator(iterator, (value) -> Range(0, value));
+```
+
+#### Parameters
+
+iterator: `Iterator` - The iterator to transform.
+
+transform: `(dyn!) -> Iterator` - The transform function.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+FlatMapIterator(iterator, (value) -> Range(0, value)).for_each((value) -> {
+  println(value.collect());
+});
+// [0,]
+// [0]
+// [0, 1]
+```

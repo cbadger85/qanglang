@@ -2,3 +2,36 @@
 title: MapIterator Reference
 description: A reference for the MapIterator implementation
 ---
+
+A `MapIterator` transforms each element of the iterator. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator to transform another iterator.
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var map_iterator = MapIterator(iterator, (value) -> value * 2);
+```
+
+#### Parameters
+
+iterator: `Iterator` - The iterator to transform.
+
+transform: `(dyn!) -> dyn!` - The transform function.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+MapIterator(iterator, (value) -> value * 2).for_each(print_ln);
+// 0
+// 2
+// 4
+```

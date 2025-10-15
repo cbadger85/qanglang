@@ -2,3 +2,35 @@
 title: FilterIterator Reference
 description: A reference for the FilterIterator implementation
 ---
+
+A `FilterIterator` removes items from the iterator. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator to remove items from an iterator.
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var filter_iterator = FilterIterator(iterator, (value) -> value % 2 == 0);
+```
+
+#### Parameters
+
+iterator: `Iterator` - The iterator to filter.
+
+transform: `(dyn!) -> Boolean` - The predicate function.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+FilterIterator(iterator, (value) -> value % 2 == 0).for_each(print_ln);
+// 0
+// 1
+```

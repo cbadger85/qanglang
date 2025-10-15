@@ -2,3 +2,386 @@
 title: Iterator Reference
 description: A reference for the Iterator implementation
 ---
+
+import { Badge } from "@astrojs/starlight/components";
+
+`Iterator` is an abstract base class that all other iterator classes inherit from.
+
+```ql
+var iterator = [0, 1, 2].iter();
+```
+
+## Methods
+
+### `all`
+
+Returns `true` if all values match the predicate, otherwise `false`.
+
+```ql
+var is_even = [2, 4, 6].iter().all((value) -> value % 2 == 0); // true
+```
+
+#### Parameters
+
+predicate: `(dyn!) -> Boolean` - The predicate that each value must be true for.
+
+#### Returns
+
+`Boolean` - `true` if every value matches the predicate, otherwise `false`.
+
+### `any`
+
+Returns `true` if any of the values match the predicate, otherwise `false`.
+
+```ql
+var is_at_least_one_even = [1, 4, 6].iter().any((value) -> value % 2 == 0); // true
+```
+
+#### Parameters
+
+predicate: `(dyn!) -> Boolean` - The predicate that each value could be true for.
+
+#### Returns
+
+`Boolean` - `true` if any value matches the predicate, otherwise `false`.
+
+### `chain`
+
+Combines two iterators.
+
+```ql
+var iter = Range(0, 3).chain([3, 4].iter());
+
+```
+
+#### Parameters
+
+other: `Iterator` - The other iterator to add.
+
+#### Returns
+
+`ChainIterator` - A [`ChainIterator`](/reference/api/iterators/chain-iterator/) combining the two iterators.
+
+### `collect`
+
+Collects an iterator to an array.
+
+```ql
+var arr = Range(0, 3).collect(); // [0, 1, 2]
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`[dyn!]` - An array of each item in the iterator.
+
+### `count`
+
+Counts the items in an iterator.
+
+```ql
+var count = Range(0, 3).count(); // 3
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - The number of items in the iterator.
+
+### `enumerate`
+
+Enumerates the iterator, zipping it with incrementing numbers.
+
+```ql
+var iter = ["first", "second", "third"].iter().enumerate();
+
+```
+
+#### Parameters
+
+start: `Number?` <Badge text="optional" /> - The number to start enumerating with. Defaults to `0`.
+
+#### Returns
+
+`EnumerateIterator` - An [`EnumerateIterator`](/reference/api/iterators/enumerate-iterator/) enumerating the iterator.
+
+### `has_next`
+
+var iter = ["first", "second", "third".iter().has_next(); // true
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Boolean` - Returns `true` if the iterator has more items, otherwise `false`.
+
+### `filter`
+
+Filters an iterator by a predicate.
+
+```ql
+var iter = ["first", "second", "third"].iter().filter((word) -> word.length() > 5);
+
+```
+
+#### Parameters
+
+predicate: `(dyn!) -> Boolean` - The predicate to filter the iterator by.
+
+#### Returns
+
+`FilterIterator` - A [`FilterIterator`](/reference/api/iterators/filter-iterator/) for filtering the iterator.
+
+### `filter_indexed`
+
+Filters an iterator by a predicate and provides an index.
+
+```ql
+var iter = ["first", "second", "third"].iter().filter_indexed((i, word) -> word.length() > 5 or i == 0);
+
+```
+
+#### Parameters
+
+predicate: `(Number, dyn!) -> Boolean` - The transform function where the first parameter is the index, and the second parameter is the element of the array.
+
+#### Returns
+
+`FilterIndexedIterator` - A [`FilterIndexedIterator`](/reference/api/iterators/filter-indexed-iterator/) for filtering the iterator.
+
+### `find`
+
+Finds an item in an iterator by a predicate.
+
+```ql
+var iter = ["first", "second", "third"].iter().find((word) -> word.length() == 6);
+
+```
+
+#### Parameters
+
+predicate: `(dyn!) -> Boolean` - The predicate to filter the iterator by.
+
+#### Returns
+
+`dyn?` - The value if found, otherwise `nil`.
+
+### `flat_map`
+
+Transforms each item of the iterator, returning a new iterator.
+
+```ql
+var iter = [0, 1, 2].iter().flat_map((value) -> Range(0, value));
+```
+
+#### Parameters
+
+transform: `(dyn!) -> Iterator` - The transform function.
+
+#### Returns
+
+`FlatMapIterator` - A [`FlatMapIterator`](/reference/api/iterators/flat-map-iterator/) for wrapping items in an iterator with an iterator.
+
+### `fold`
+
+Iterates over an iterator, updates an accumlator, then returns it.
+
+```ql
+var iter = [1, 2, 3].iter().fold(0, (acc, value) -> acc + value); // 6
+
+```
+
+#### Parameters
+
+initial: `dyn!` - The initial accumulator value for the fold.
+
+reduce_function: `(dyn!, dyn!) -> dyn!` - A function that takes in the current accumlator and current value, and returns the next accumulator.
+
+#### Returns
+
+`dyn?` - The final accumulated value.
+
+### `for_each`
+
+Iterates over each element in the iterator.
+
+```ql
+Range(0, 3).for_each(println);
+// 0
+// 1
+// 2
+```
+
+#### Parameters
+
+consumer: `(dyn!) -> nil` - A function to call on each item in the iterator.
+
+#### Returns
+
+`nil`
+
+### `for_each_indexed`
+
+Iterates over each element in the iterator.
+
+```ql
+Range(0, 3).for_each_indexed((i, value) -> {
+  println("Number " + (i + 1) + ": " + to_string(value));
+});
+// "Number 1: 0"
+// "Number 2: 1"
+// "Number 3: 2"
+```
+
+#### Parameters
+
+consumer: `(Number, dyn!) -> nil` - A function to call on each item in the iterator. The first paramter is the index of the item, and the second is the item in the iterator.
+
+#### Returns
+
+`nil`
+
+### `map`
+
+Iterates over each element and transforms them.
+
+```ql
+Range(0, 3).map((value) -> value + 1);
+```
+
+#### Parameters
+
+transform: `(dyn!) -> dyn!` - A function to call on each item in the iterator to transform it.
+
+#### Returns
+
+`MapIterator` - A [`MapIterator`](/reference/api/iterators/map-iterator/) for transforming items in an iterator.
+
+### `map_indexed`
+
+Iterates over each element and transforms them.
+
+```ql
+Range(0, 3).map_indexed((i, value) -> i + value);
+```
+
+#### Parameters
+
+transform: `(Number, dyn!) -> dyn!` - A function to call on each item in the iterator to transform it. The first parameter is an index, and the second parameter is the item at that index.
+
+#### Returns
+
+`MapIndexedIterator` - A [`MapIndexedIterator`](/reference/api/iterators/map-indexed-iterator/) for transforming items in an iterator.
+
+### `next`
+
+var iter = ["first", "second", "third"].iter().next(); // "first"
+
+#### Parameters
+
+None
+
+#### Returns
+
+`dyn!` - The next item in the iterator.
+
+### `reduce`
+
+Iterates over an iterator, updates an accumlator, then returns it.
+
+```ql
+var iter = [1, 2, 3].iter().reduce((acc, value) -> acc + value); // 6
+
+```
+
+#### Parameters
+
+reduce_function: `(dyn!, dyn!) -> dyn!` - A function that takes in the current accumlator and current value, and returns the next accumulator. The first accumulator value is the first element of the iterator.
+
+#### Returns
+
+`dyn?` - The final accumulated value.
+
+### `reverse`
+
+Collects and reverses the items in an iterator.
+
+```ql
+var iter = [1, 2, 3].iter().reduce((acc, value) -> acc + value); // 6
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`ArrayIterator` - The iterator with its items reversed.
+
+### `skip`
+
+Skips a number of items in the iterator.
+
+```ql
+var iter = Range(0, 10).skip(5);
+```
+
+#### Parameters
+
+limit: `Number` - How many items to skip.
+
+#### Returns
+
+An Iterator with first provided number of items skipped.
+
+### `take`
+
+Takes a number of items from the beginning of the iterator.
+
+```ql
+var iter = Range(0, 10).take(5);
+```
+
+#### Parameters
+
+limit: `Number` - How many items to take.
+
+#### Returns
+
+`TakeIterator` - A [`TakeIterator`](/reference/api/iterators/take-iterator/) for taking the provided number of items.
+
+### `zip`
+
+Zips two iterators together into an iterator of `Pair`s.
+
+```ql
+var iter = Range(0, 5).zip(Range(5, 10));
+```
+
+#### Parameters
+
+other: `Iterator` - The other iterator to zip with.
+
+#### Returns
+
+`ZipIterator` - A [`ZipIterator`](/reference/api/iterators/zip-iterator/) for zipping two iterators together into an iterator of `Pair`s.
+
+## Example
+
+```ql
+var even_numbers = Range(0, 10).iter()
+  .filter((value) -> value % 2 == 0)
+  .map((value) -> to_string(value))
+  .collect(); // ["0", "2", "4", "6", "8"]
+```

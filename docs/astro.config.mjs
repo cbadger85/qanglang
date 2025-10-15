@@ -125,6 +125,10 @@ export default defineConfig({
               label: "Iterators",
               items: [
                 {
+                  label: "ArrayIterator",
+                  slug: "reference/api/iterators/array-iterator",
+                },
+                {
                   label: "ChainIterator",
                   slug: "reference/api/iterators/chain-iterator",
                 },

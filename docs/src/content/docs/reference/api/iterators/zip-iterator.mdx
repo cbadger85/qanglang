@@ -2,3 +2,40 @@
 title: ZipIterator Reference
 description: A reference for the ZipIterator implementation
 ---
+
+A `ZipIterator` zips two iterators together into a `Pair`. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator to zip with another iterator.
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var other_iterator = ArrayIterator([3, 4, 5]);
+var combined_iterators = ZipIterator(iterator, other_iterator);
+```
+
+#### Parameters
+
+first: `Iterator` - The first iterator in the pair.
+
+second: `Iterator` - The second iterator in the pair.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var other_iterator = ArrayIterator([3, 4, 5]);
+ZipIterator(iterator, other_iterator).for_each((pair) -> {
+  println("Left: " + to_string(pair.left) + " Right: " + to_string(pair.right));
+});
+// "Left: 0, Right: 3"
+// "Left: 1, Right: 4"
+// "Left: 2, Right: 5"
+```

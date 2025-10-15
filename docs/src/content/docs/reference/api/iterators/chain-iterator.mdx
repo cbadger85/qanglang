@@ -2,3 +2,41 @@
 title: ChainIterator Reference
 description: A reference for the ChainIterator implementation
 ---
+
+A `ChainIterator` chains two iterators together. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator to combine with another iterator.
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var other_iterator = ArrayIterator([3, 4, 5]);
+var combined_iterators = ChainIterator(iterator, other_iterator);
+```
+
+#### Parameters
+
+first: `Iterator` - The first iterator in the chain.
+
+second: `Iterator` - The second iterator in the chain.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var iterator = ArrayIterator([0, 1, 2]);
+var other_iterator = ArrayIterator([3, 4, 5]);
+var combined_iterators = ChainIterator(iterator, other_iterator).for_each(println);
+// 0
+// 1
+// 2
+// 3
+// 4
+// 5
+```

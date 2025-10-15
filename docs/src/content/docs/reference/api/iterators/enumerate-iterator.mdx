@@ -2,3 +2,40 @@
 title: EnumerateIterator Reference
 description: A reference for the EnumerateIterator implementation
 ---
+
+import { Badge } from "@astrojs/starlight/components";
+
+An `EnumerateIterator` enumerates the provided iterator starting at 0. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator to transform another iterator.
+
+```ql
+var iterator = ArrayIterator([1, 2, 3]);
+var enumerated_iterator = EnumerateIterator(iterator);
+```
+
+#### Parameters
+
+iterator: `Iterator` - The iterator to enumerate.
+
+start: `Number?` <Badge text="optional" /> - The number to start enumeration with. Defaults to `0`.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var iterator = ArrayIterator([1, 2, 3]);
+var combined_iterators = EnumerateIterator(iterator).for_each((pair) -> {
+  println("Left: " + to_string(pair.left) + " Right: " + to_string(pair.right));
+});
+// "Left: 0, Right: 1"
+// "Left: 1, Right: 2"
+// "Left: 2, Right: 3"
+```

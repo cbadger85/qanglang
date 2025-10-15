@@ -2,3 +2,168 @@
 title: HashSet Reference
 description: A reference for the HashSet object.
 ---
+
+A `HashSet` is a collection of values that does not allow duplicate entries.
+
+## Constructor
+
+Constructs the `HashSet`.
+
+```ql
+var set1 = HashSet();
+var set2 = HashSet([0, 1, 2]);
+```
+
+#### Parameters
+
+initial_values: `[dyn!]?` - The initial values to populate the hash set with.
+
+## Methods
+
+### `add`
+
+Adds a value to the has set.
+
+```ql
+var set = HashSet();
+set.add("value"); // true
+```
+
+#### Parameters
+
+value: `dyn!` - The value to add to the hash set.
+
+#### Returns
+
+`Boolean` - Returns `true` if the value was added, `false` if already present.
+
+### `delete`
+
+Renives a value to the has set.
+
+```ql
+var set = HashSet();
+set.add("value");
+set.remove("value") // true
+
+```
+
+#### Parameters
+
+value: `dyn!` - The value to remove from the hash set.
+
+#### Returns
+
+`Boolean` - Returns `true` if the value was removed, `false` if it was not present.
+
+### `difference`
+
+Removes the values of the provided set.
+
+```ql
+var set1 = HashSet([1, 2]);
+var set2 = HashSet([1]);
+var difference = set1.difference(set2).values().collect(); // [2]
+```
+
+#### Parameters
+
+value: `HashSet` - The set of values to remove.
+
+#### Returns
+
+`HashSet` - The difference of the two hash sets.
+
+### `clear`
+
+Removes the values from the hash set.
+
+```ql
+var set = HashSet([0, 1, 2]);
+set.clear();
+var size = map.size(); // 0
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`nil`
+
+### `has`
+
+Returns `true` if the value is in the hash set, otherwise `false`.
+
+```ql
+var set = HashSet([0, 1, 2]);
+set.clear();
+set.has(0); // true
+```
+
+#### Parameters
+
+value: `dyn?'` - The value to search for.
+
+#### Returns
+
+`Boolean` - `true` if the key is in the hash set, otherwise `false`.
+
+### `intersection`
+
+Returns a hash set of values that exist in both sets.
+
+```ql
+var set1 = HashSet([1, 2]);
+var set2 = HashSet([1]);
+var intersection = set1.intersection(set2).values().collect(); // [1]
+```
+
+#### Parameters
+
+value: `HashSet` - The set to check against.
+
+#### Returns
+
+`HashSet` - A hash set of values that exist in both hash sets.
+
+### `values`
+
+Returns an iterator of the values in the hash set.
+
+```ql
+var set = HashSet([0, 1, 2]);
+set.values().for_each((value) -> {
+  println(value);
+});
+// 0
+// 1
+// 2
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Iterator` - An iterator of values.
+
+### `union`
+
+Returns a hash set of all values that exist in both sets.
+
+```ql
+var set1 = HashSet([1, 2]);
+var set2 = HashSet([1, 3]);
+var union = set1.union(set2).values().collect(); // [1, 2, 3]
+```
+
+#### Parameters
+
+value: `HashSet` - The set to add to the current set.
+
+#### Returns
+
+`HashSet` - A hash set of all values in each hash set.

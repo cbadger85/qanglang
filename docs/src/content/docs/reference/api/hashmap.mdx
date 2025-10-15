@@ -2,3 +2,216 @@
 title: HashMap Reference
 description: A reference for the HashMap object.
 ---
+
+A `HashMap` allows you to associate arbitrary data as key/value pairs.
+
+## Constructor
+
+Constructs the `HashMap`.
+
+```ql
+var map = HashMap();
+```
+
+#### Parameters
+
+None
+
+## Methods
+
+### `clear`
+
+Clears all entries from the hash map.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.clear();
+var size = map.size(); // 0
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`nil`
+
+### `delete`
+
+Deletes an entry from the hash map.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+var exists = map.delete("key"); // true
+var does_not_exist = map.delete("other_key"); // false
+```
+
+#### Parameters
+
+key: `dyn?` - The key of the entry to remove.
+
+#### Returns
+
+`Boolean` - `true` if the was in the hash map, `false` otherwise.
+
+### `entries`
+
+Returns an iterator of the entries in the hash map.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.entries().for_each((entry) -> {
+  println("key: " + entry.key ", value: " + entry.value);
+});
+// "key: key, value: value"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Iterator` - An iterator of [Entries](/reference/api/entry)
+
+### `get`
+
+Get's the value associated with the key.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.get("key"); // "value"
+```
+
+#### Parameters
+
+key: `dyn?' - The key associated with the value.
+
+#### Returns
+
+`dyn?` - The associated value.
+
+### `get_or_default`
+
+Gets the value associated with the key or a provided default.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.get_or_default("key", "default"); // "value"
+map.get_or_default("other_key", "default"); // "default"
+```
+
+#### Parameters
+
+key: `dyn?'` - The key associated with the value.
+
+default: `dyn?` - The default to use if the key is not present.
+
+#### Returns
+
+`dyn?` - The associated value or the default if the key is not in the hash map.
+
+### `get_or_insert`
+
+Gets the value associated with the key, or if the key is not found, calls the factory function and inserts its return value.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.get_or_insert("key", "default"); // "value"
+map.get_or_insert("other_key", () -> "default"); // "default"
+```
+
+#### Parameters
+
+key: `dyn?'` - The key associated with the value.
+
+factory: `() -> dyn?` - If the key is not present, the factory function will be called and the return will be inserted into the hash map.
+
+#### Returns
+
+`dyn?` - The associated value or the return of the factory function if the key is not in the hash map.
+
+### `has`
+
+Returns `true` if the value is in the hash map, otherwise `false`.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.has("key"); // true
+```
+
+#### Parameters
+
+key: `dyn?'` - The key to search for.
+
+#### Returns
+
+`Boolean` - `true` if the key is in the hash map, otherwise `false`.
+
+### `keys`
+
+Returns an iterator of the keys in the hash map.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.keys().for_each((key) -> {
+  println(key);
+});
+// "key"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Iterator` - An iterator of keys.
+
+### `size`
+
+Returns the number of entries in the hash map.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+var size = map.size() // 1
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - The number of entries in the hash map.
+
+### `values`
+
+Returns an iterator of the values in the hash map.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+map.values().for_each((value) -> {
+  println(value);
+});
+// "value"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Iterator` - An iterator of values.

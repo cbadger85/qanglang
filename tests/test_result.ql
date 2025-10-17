@@ -130,3 +130,51 @@ fn test_map_err_not_called_when_ok() {
   assert(!has_ran);
   assert_eq(value, true);
 }
+
+fn test_if_ok_when_ok() {
+  var result = Ok(true);
+
+  var has_ran = false;
+
+  result.if_ok((value) -> {
+    has_ran = value;
+  });
+
+  assert(has_ran);
+}
+
+fn test_if_ok_when_err() {
+  var result = Err("Bad error.");
+
+  var has_ran = false;
+
+  result.if_ok((value) -> {
+    has_ran = value;
+  });
+
+  assert(!has_ran);
+}
+
+fn test_if_err_when_ok() {
+  var result = Ok(true);
+
+  var has_ran = false;
+
+  result.if_err((value) -> {
+    has_ran = value;
+  });
+
+  assert(!has_ran);
+}
+
+fn test_if_err_when_err() {
+  var result = Err("Bad error.");
+
+  var has_ran = false;
+
+  result.if_err((value) -> {
+    has_ran = value;
+  });
+
+  assert(has_ran);
+}

@@ -81,6 +81,40 @@ var still_error = error.flat_map((x) -> Ok(x * 2)); // Err("error")
 
 `Result` - The result from the transform function, or the original error
 
+### `if_err`
+
+Calls the provided function if the `Result` is `Err`.
+
+```ql
+var result = Err("error");
+var maybe_value = result.if_err((err) -> println(err));
+```
+
+#### Parameters
+
+callback: `(dyn!) -> nil` - A callback that will be called if the `Result` is `Err`.
+
+#### Returns
+
+`Result` - The instance of the `Result` object.
+
+### `if_ok`
+
+Calls the provided function if the `Result` is `Ok`.
+
+```ql
+var result = Ok("Message");
+var maybe_value = result.if_ok((message) -> println(message));
+```
+
+#### Parameters
+
+callback: `(dyn!) -> nil` - A callback that will be called if the `Result` is `Ok`.
+
+#### Returns
+
+`Result` - The instance of the `Result` object.
+
 ### `is_err`
 
 Returns `true` if the result is `Err`.

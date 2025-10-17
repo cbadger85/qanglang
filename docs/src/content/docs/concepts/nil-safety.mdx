@@ -3,9 +3,62 @@ title: Nil Safety
 description: Operating on optional values in QangLang
 ---
 
+## Optional Chaining
+
 Most operations on `nil` are not permitted, so values that can be `nil` often require special handling.
 
 ```ql
-var maybe_value = nil;
+var maybe_obj = nil;
+var value = maybe_obj.value; // Error!
+```
 
+Instead, the `?.` operator can be used to only access the value if it is not `nil`.
+
+```ql
+var maybe_obj = nil;
+var value = maybe_obj?.value; // nil
+```
+
+### For Array Access
+
+When accessing an array that could be `nil`, optional chaining can be combined with the `get` method to safely access the value.
+
+```ql
+var maybe_arr = nil;
+var first = maybe_arr?.get(0); // nil
+```
+
+### For Function Calling
+
+Similarly to arrays, when calling functions or methods that might be `nil`, you can use the `call` method to safely call the function with its arguments.
+
+```
+var maybe_function = nil;
+maybe_function?.call();
+```
+
+## Map Expressions
+
+Map expressions can be used to safely handle `nil` values in fluent expression.
+
+```ql
+fn modify_message(message) {
+  return message.to_uppercase();
+}
+
+var obj = {{
+  message = nil,
+}};
+
+var maybe_modified_message = obj
+  ||o -> o.message ? Ok(o) : Err("Object missing message")|
+  .map((o) -> o.message |> modified_message)
+  .ok();
+```
+
+Similarly, optional map expressions can be used to safely operate on a `nil` value in a fluent expression.
+
+```ql
+var maybe_number = nil;
+var number_times_two_or_zero = maybe_number?|num -> num * 2| or 0;
 ```

@@ -4,6 +4,10 @@ fn identity(x) {
   return x;
 }
 
+fn assert_not_nil(value, message) {
+  assert(value != nil, message or "Expected value was nil.");
+}
+
 class Iterator {
   has_next() {
     return false;
@@ -599,6 +603,15 @@ class Ok : Result {
     return false;
   }
 
+  if_ok(cb) {
+    cb(this._value);
+    return this;
+  }
+  
+  if_err(cb) {
+    return this;
+  }
+
   ok() {
     return this._value;
   }
@@ -652,6 +665,15 @@ class Err : Result {
 
   is_err() {
     return true;
+  }
+
+  if_ok(cb) {
+    return this;
+  }
+
+  if_err(cb) {
+    cb(this._error);
+    return this;
   }
 
   ok() {

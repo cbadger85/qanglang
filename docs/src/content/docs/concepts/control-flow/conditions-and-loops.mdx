@@ -3,14 +3,97 @@ title: Conditions and Loops
 description: Logical operators, conditions, while loops and for loops in QangLang
 ---
 
-## If-Else Statements
+There are several ways to handle conditional control flow in QangLang.
 
-## Ternary Expressions
+## `if` and `else` Statements
 
-## When Expressions
+`if` statements can be used to run code only when the condition is `true`.
 
-## For Loops
+```ql
+if (true) {
+  // Do something
+}
+```
 
-## While Loops
+`if` can be combined with `else` to run code when the condition is `false`.
+
+```ql
+if (false) {
+  // This won't run
+} else {
+  // This will run.
+}
+```
+
+`if` and `else` can be chained together to handle multiple conditions.
+
+```ql
+if (first_condition) {
+  // Do the thing for the first condition
+} else if (second_condition) {
+  // Do the thing for the second condition
+}
+```
+
+## Ternary and `when` Expressions
+
+For expressions, the ternary expression can be used to handle simple if else logic.
+
+```ql
+var absolute_value = value >= 0 ? value : value * -1;
+```
+
+For more complicated conditional logic in an expression, a `when` expression can be used. For the conditional `when` expression, the left side is an expression that if evaluated as truthy, will evaluate the expression on the right.
+
+```ql
+var sign = when {
+  value > 0 => "positive",
+  value == 0 => "zero",
+  value < 0 => "negative",
+}
+```
+
+`when` expressions can also supply a value to match against. The match `when` expression checks the left side for equality with the value. If equal, then the expresson on the right will be evaluated.
+
+```ql
+fn get_hex_color(color) {
+  return when (color) {
+    "red" => "#FF0000",
+    "green" => "#00FF00",
+    "blue" => "#0000FF",
+    "black" => "#000000",
+    else => "#FFFFFF"
+  }
+}
+```
+
+The `is` operator can also be used to match against the type. If the value matches the type on the left, the expression on the right will be evaluated.
+
+```ql
+var value = when (result) {
+  is Ok => result.unwrap()
+  is Err => "default"
+}
+```
+
+Sometimes a simple expression may not be enough. In those instances, an Immediately executed lambda can be used to wrap the statements.
+
+```ql
+var value = when (result) {
+  is Ok => result.unwrap()
+  is Err => () -> {
+    // Do something on this line
+    // Then do something on this line
+  }()
+}
+```
+
+## `for` Loops
+
+## `while` Loops
+
+## `break` and `continue` in Loops
+
+[See Return and Jumps for more information on `break` and `continue`](/concepts/control-flow/returns-and-jumps/#break-and-continue)
 
 ## Iterators

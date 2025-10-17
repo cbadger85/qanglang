@@ -46,6 +46,10 @@ export default defineConfig({
               ],
             },
             {
+              label: "Variables and Assignment",
+              slug: "concepts/variables-and-assignment",
+            },
+            {
               label: "Control Flow",
               items: [
                 {
@@ -59,12 +63,12 @@ export default defineConfig({
               ],
             },
             {
-              label: "Class and Instances",
-              slug: "concepts/classes",
-            },
-            {
               label: "Functions and Lambdas",
               slug: "concepts/functions",
+            },
+            {
+              label: "Class and Instances",
+              slug: "concepts/classes",
             },
             {
               label: "Nil Safety",

@@ -303,8 +303,8 @@ pub trait NodeVisitor {
             self.visit_expression(ctx.nodes.get_expr_node(condition_id), ctx)?;
         }
 
-        if let Some(increment_id) = for_stmt.node.increment {
-            self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
+        if let Some(afterthought_id) = for_stmt.node.afterthought {
+            self.visit_expression(ctx.nodes.get_expr_node(afterthought_id), ctx)?;
         }
 
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)

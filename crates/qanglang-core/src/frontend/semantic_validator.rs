@@ -29,7 +29,12 @@ struct FunctionContext {
 }
 
 impl FunctionContext {
-    fn new(kind: FunctionKind, blank_handle: crate::StringHandle, this_handle: crate::StringHandle, scope_depth: usize) -> Self {
+    fn new(
+        kind: FunctionKind,
+        blank_handle: crate::StringHandle,
+        this_handle: crate::StringHandle,
+        scope_depth: usize,
+    ) -> Self {
         let mut locals = Vec::with_capacity(256);
         let is_method = matches!(kind, FunctionKind::Method | FunctionKind::Initializer);
 
@@ -108,7 +113,12 @@ impl<'a> SemanticValidator<'a> {
 
         Self {
             scope_depth: 0,
-            functions: vec![FunctionContext::new(FunctionKind::Script, blank_handle, this_handle, 0)],
+            functions: vec![FunctionContext::new(
+                FunctionKind::Script,
+                blank_handle,
+                this_handle,
+                0,
+            )],
             in_loop: false,
             source_map,
             strings,
@@ -682,8 +692,8 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
             self.visit_expression(ctx.nodes.get_expr_node(condition_id), ctx)?;
         }
 
-        if let Some(increment_id) = for_stmt.node.increment {
-            self.visit_expression(ctx.nodes.get_expr_node(increment_id), ctx)?;
+        if let Some(afterthought_id) = for_stmt.node.afterthought {
+            self.visit_expression(ctx.nodes.get_expr_node(afterthought_id), ctx)?;
         }
 
         self.visit_statement(ctx.nodes.get_stmt_node(for_stmt.node.body), ctx)?;
@@ -816,11 +826,13 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
                     if let Some(local) = function.locals.get(i) {
                         if local.name == identifier.node.name {
                             if local.depth.is_none() {
-                                ctx.errors.report_error(QangCompilerError::new_analysis_error(
-                                    "Cannot read local variable during its initialization.".to_string(),
-                                    identifier.node.span,
-                                    self.source_map.clone(),
-                                ));
+                                ctx.errors
+                                    .report_error(QangCompilerError::new_analysis_error(
+                                        "Cannot read local variable during its initialization."
+                                            .to_string(),
+                                        identifier.node.span,
+                                        self.source_map.clone(),
+                                    ));
                             }
                             break;
                         }

@@ -88,12 +88,52 @@ var value = when (result) {
 }
 ```
 
+## `while` Loops
+
+A `while` loop runs its body continuously until the provided condition is false. If the condition is never true, then the body will never run.
+
+```ql
+var run_loop = true;
+while (run_loop) {
+  run_loop = false;
+}
+```
+
 ## `for` Loops
 
-## `while` Loops
+Like `while` loops, `for` loops run their body until the provided condtion is false.
+
+```ql
+var arr = array_of(3);
+for (
+  var i = 0; // initializer
+  i < arr.length(); // condition
+  i += 1 // afterthought
+  ) {
+  println(arr[i]); // body
+}
+// 0
+// 1
+// 2
+```
+
+#### `for` Loop Execution Order
+
+1. The initializer, if provided, is initialized. The initializer can be either a variable declaration, or any expression of arbitrary complexity.
+2. The condition is checked, if evaluated to `true`, the loop terminates.
+3. The body is evaluated.
+4. If provided, the afterthought is evaluated.
 
 ## `break` and `continue` in Loops
 
 [See Return and Jumps for more information on `break` and `continue`](/concepts/control-flow/returns-and-jumps/#break-and-continue)
 
 ## Iterators
+
+If the value can be converted to an [`Iterator`](/reference/api/iterators/iterator), the `for_each` method can be used to iterate through the value.
+
+```ql
+Range(0, 3).for_each((num) -> {
+  println(num);
+});
+```

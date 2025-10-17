@@ -792,7 +792,7 @@ impl<'a> Parser<'a> {
         };
         self.consume(TokenType::Semicolon, "Expect ';' after for loop condition.")?;
 
-        let increment = if self.check(TokenType::RightParen) {
+        let afterthought = if self.check(TokenType::RightParen) {
             None
         } else {
             Some(self.expression()?)
@@ -805,7 +805,7 @@ impl<'a> Parser<'a> {
         let node_id = self.nodes.create_node(AstNode::ForStmt(ForStmtNode {
             initializer,
             condition,
-            increment,
+            afterthought,
             body,
             span,
         }));
@@ -1567,12 +1567,14 @@ mod expression_parser {
             let body_span = parser.nodes.get_node(body).span();
             let branch_span = SourceSpan::combine(condition_start_span, body_span);
 
-            let branch = parser.nodes.create_node(AstNode::WhenBranch(WhenBranchNode {
-                condition,
-                is_type_check,
-                body,
-                span: branch_span,
-            }));
+            let branch = parser
+                .nodes
+                .create_node(AstNode::WhenBranch(WhenBranchNode {
+                    condition,
+                    is_type_check,
+                    body,
+                    span: branch_span,
+                }));
 
             parser.nodes.array.push(branches, branch);
 

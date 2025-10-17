@@ -456,8 +456,8 @@ pub struct OptionalMapExprNode {
 /// When expression: when ( value )? { branch* ( else => expression )? }
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct WhenExprNode {
-    pub value: Option<NodeId>,    // Optional value being matched
-    pub branches: NodeArrayId,    // [WhenBranchNode]
+    pub value: Option<NodeId>,       // Optional value being matched
+    pub branches: NodeArrayId,       // [WhenBranchNode]
     pub else_branch: Option<NodeId>, // Optional else expression
     pub span: SourceSpan,
 }
@@ -529,10 +529,10 @@ pub struct WhileStmtNode {
 /// For statement: for ( ( varDecl | exprStmt | ; ) expression? ; expression? ) statement
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ForStmtNode {
-    pub initializer: Option<NodeId>, // VariableDeclNode | ExprNode
-    pub condition: Option<NodeId>,   // ExprNode
-    pub increment: Option<NodeId>,   // ExprNode
-    pub body: NodeId,                // StmtNode
+    pub initializer: Option<NodeId>,  // VariableDeclNode | ExprNode
+    pub condition: Option<NodeId>,    // ExprNode
+    pub afterthought: Option<NodeId>, // ExprNode
+    pub body: NodeId,                 // StmtNode
     pub span: SourceSpan,
 }
 

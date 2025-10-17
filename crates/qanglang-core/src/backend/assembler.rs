@@ -1409,10 +1409,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
             increment_start = Some(self.current_chunk_mut().code.len());
 
-            if let Some(increment_id) = for_stmt.node.increment {
-                let increment = ctx.nodes.get_expr_node(increment_id);
-                self.visit_expression(increment, ctx)?;
-                self.emit_opcode(OpCode::Pop, increment.node.span());
+            if let Some(afterthought_id) = for_stmt.node.afterthought {
+                let afterthought = ctx.nodes.get_expr_node(afterthought_id);
+                self.visit_expression(afterthought, ctx)?;
+                self.emit_opcode(OpCode::Pop, afterthought.node.span());
             }
 
             self.patch_jump(condition_jump, condition.node.span())?;
@@ -1426,10 +1426,10 @@ impl<'a> NodeVisitor for Assembler<'a> {
 
             increment_start = Some(self.current_chunk_mut().code.len());
 
-            if let Some(increment_id) = for_stmt.node.increment {
-                let increment = ctx.nodes.get_expr_node(increment_id);
-                self.visit_expression(increment, ctx)?;
-                self.emit_opcode(OpCode::Pop, increment.node.span());
+            if let Some(afterthought_id) = for_stmt.node.afterthought {
+                let afterthought = ctx.nodes.get_expr_node(afterthought_id);
+                self.visit_expression(afterthought, ctx)?;
+                self.emit_opcode(OpCode::Pop, afterthought.node.span());
             }
 
             self.emit_loop(loop_start, body.node.span())?;

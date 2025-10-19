@@ -3,6 +3,24 @@ title: Modules and Imports
 description: Using modules in QangLang
 ---
 
-## Module Resolution
+All files in QangLang are moduls. Modules are declared using the `mod` keyword and path to the module is provided with the `import` keyword.
 
-## Importing a Module
+```ql
+mod lib = import('./lib.ql');
+```
+
+When a module is imported the first time, it is executed and cached.
+
+```ql title="lib.ql"
+println("Library imported!");
+```
+
+```ql title="main.ql"
+mod lib = import('./lib.ql'); // "Library imported!"
+
+fn main() {
+  mod lib = import('./lib.ql');
+}
+
+main(); // Nothing prints because the lib.ql has already executed.
+```

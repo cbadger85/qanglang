@@ -3,8 +3,64 @@ title: Returns and Jumps
 description: Return, break, and continue statements in QangLang
 ---
 
-## `return`
+## `return` Statement
+
+The return statement returns the provided evaluated expression to the caller and stop execution of the function. If no expression is provided to `return`, then `nil` will be returned implicitly.
+
+```ql
+fn is_non_nil(value) {
+  if (value == nil) {
+    return false;
+  }
+
+  return true;
+}
+
+println(is_non_nil("Hello World!")); // true
+println(is_non_nil(false)); // false
+```
 
 ## `break` and `continue`
 
+`break` and `continue` statemtents can be used to control execution of the loop. They must be used in the same function scope that the loop is declared in.
+
+`break` statements can be used to stop execution of the loop.
+
+```ql
+var arr = [0, 1, 2, 3];
+var first_non_zero_number;
+for (var i = 0; i < arr.length(); i +=1) {
+  var item = arr[i];
+  if (item != 0) {
+    first_non_zero_number = item;
+    break;
+  }
+}
+println(first_non_zero_number); // 1
+```
+
+`continue` statements can be used to stop execution of just that iteration, allowing the loop to continue.
+
+```ql
+var arr = [0, 1, 2, 3];
+for (var i = 0; i < arr.length(); i += 1) {
+  var item == arr[i];
+  if (item % 2 != 0) {
+    continue;
+  }
+
+  println(item);
+}
+// 0
+// 2
+```
+
 ## Logical Short-Circuit Operations
+
+The `and` and `or` operators can be used to short-circuit logic.
+
+```ql
+false and assert(false) // This assertion is never called.
+
+true or assert(false) // This assertion is never called.
+```

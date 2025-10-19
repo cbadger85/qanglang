@@ -355,8 +355,19 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
 
         let identifier = ctx.nodes.get_identifier_node(func_expr.node.name);
 
-        if let Err(error) = self.declare_variable(identifier) {
-            ctx.errors.report_error(error);
+        // Remember if this is a local function (scope_depth > 0)
+        let is_local = self.current_scope_depth() > 0;
+
+        // For local functions, declare as uninitialized to prevent self-reference during initialization
+        if is_local {
+            if let Err(error) = self.declare_variable_with_init(identifier, false) {
+                ctx.errors.report_error(error);
+            }
+        } else {
+            // Global functions can reference themselves
+            if let Err(error) = self.declare_variable(identifier) {
+                ctx.errors.report_error(error);
+            }
         }
 
         if arity > u8::MAX as usize {
@@ -388,6 +399,11 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
         self.visit_block_statement(body, ctx)?;
 
         self.end_function(func_expr.id)?;
+
+        // Mark the function as initialized after visiting the body (for local functions only)
+        if is_local {
+            self.mark_initialized();
+        }
 
         Ok(())
     }
@@ -820,22 +836,23 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         // Check if we're trying to read a variable during its own initialization
-        if self.current_scope_depth() > 0 {
-            if let Some(function) = self.functions.last() {
-                for i in (0..function.local_count).rev() {
-                    if let Some(local) = function.locals.get(i) {
-                        if local.name == identifier.node.name {
-                            if local.depth.is_none() {
-                                ctx.errors
-                                    .report_error(QangCompilerError::new_analysis_error(
-                                        "Cannot read local variable during its initialization."
-                                            .to_string(),
-                                        identifier.node.span,
-                                        self.source_map.clone(),
-                                    ));
-                            }
-                            break;
+        // We need to check all function contexts, not just the current one,
+        // to catch cases like local functions referencing themselves
+        for function in self.functions.iter().rev() {
+            for i in (0..function.local_count).rev() {
+                if let Some(local) = function.locals.get(i) {
+                    if local.name == identifier.node.name {
+                        if local.depth.is_none() {
+                            ctx.errors
+                                .report_error(QangCompilerError::new_analysis_error(
+                                    "Cannot read local variable during its initialization."
+                                        .to_string(),
+                                    identifier.node.span,
+                                    self.source_map.clone(),
+                                ));
                         }
+                        // Found the variable, stop searching
+                        return Ok(());
                     }
                 }
             }

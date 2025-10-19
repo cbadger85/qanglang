@@ -1,0 +1,85 @@
+---
+title: Declarations and Assignment
+description: Declaring and Assigning Values to Variables
+---
+
+## Module Scoped Declarations
+
+Module scoped declarations have a few special properties.
+
+1. All module scoped declarations are exported from the module.
+2. All module scoped declarations can re-delcared (useful running code in the REPL).
+3. All module scoped declarations can refer to themselves during their initialization, useful for recursion.
+4. Module scoped class and function declarations are hoisted to the top of the scope to make module organization easier.
+
+```ql
+fn fib(n) {
+  if (n < 2) return n;
+  return fib(n - 2) + fib(n - 1);
+}
+```
+
+## Local Scoped Declarations
+
+Unlike the module scope, the local scope is always read in the order it is declared. The local scope also does not allow variables to be read while they are defined, prohibiting a function from recursively calling itself.
+
+```ql
+fn main() {
+  fn inner(num) {
+    return num * 2;
+  }
+
+  inner(4);
+}
+```
+
+## Variable Declaration and Assignment
+
+Variables are declared using the `var` keyword, and assigned a value using `=` operator.
+
+```ql
+var variable = true;
+```
+
+Variables can be reassigned using the `=` operator.
+
+```ql
+variable = false;
+```
+
+Additionally, the `+=` operator can be used as short-hand for adding a value to the expression and reassigning the variable.
+
+```ql
+var num = 0;
+num += 1;
+println(num); // 1
+```
+
+There are assignment operators for other operations as well.
+
+- `-=`
+- `*=`
+- `\=`
+- `%=`
+
+## Type-Checking a Variable
+
+The `typeof` function can be used to get the type of a variable printed as a string. That string can be combined with the `is` operator to check the type of a variable.
+
+For convenience, there are global constants that have the types as strings.
+
+- `ARRAY`
+- `BOOLEAN`
+- `CLASS`
+- `FUNCTION`
+- `MODULE`
+- `NIL`
+- `NUMBER`
+- `OBJECT`
+- `STRING`
+
+```ql
+var message = "Hello World!";
+println(typeof(message)); // "string"
+assert(message is STRING);
+```

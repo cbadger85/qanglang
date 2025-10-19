@@ -35,13 +35,24 @@ if (first_condition) {
 }
 ```
 
+### `and` and `or`
+
+The logical operators `and` and `or` can be used to apply multiple conditions.
+
+````ql
+if (first_condition and second_condition) { // Is true if both first_condition and second_condition are true
+  // Do something
+} else if (first_condition or second_condition) { // Is true if first_condition or second_condition is true
+  // Do something else
+}
+
 ## Ternary and `when` Expressions
 
 For expressions, the ternary expression can be used to handle simple if else logic.
 
 ```ql
 var absolute_value = value >= 0 ? value : value * -1;
-```
+````
 
 For more complicated conditional logic in an expression, a `when` expression can be used. For the conditional `when` expression, the left side is an expression that if evaluated as truthy, will evaluate the expression on the right.
 

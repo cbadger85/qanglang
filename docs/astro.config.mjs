@@ -46,8 +46,12 @@ export default defineConfig({
               ],
             },
             {
-              label: "Variables and Assignment",
-              slug: "concepts/variables-and-assignment",
+              label: "Functions and Lambdas",
+              slug: "concepts/functions",
+            },
+            {
+              label: "Declarations and Assignment",
+              slug: "concepts/declarations-and-assignment",
             },
             {
               label: "Control Flow",
@@ -61,10 +65,6 @@ export default defineConfig({
                   slug: "concepts/control-flow/returns-and-jumps",
                 },
               ],
-            },
-            {
-              label: "Functions and Lambdas",
-              slug: "concepts/functions",
             },
             {
               label: "Class and Instances",
@@ -93,7 +93,7 @@ export default defineConfig({
             },
             {
               label: "Globals",
-              slug: "reference/api/global-functions",
+              slug: "reference/api/globals",
             },
             {
               label: "HashMap",

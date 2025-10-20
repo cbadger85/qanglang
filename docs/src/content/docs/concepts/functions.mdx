@@ -3,12 +3,93 @@ title: Functions and Lambdas
 description: Types of functions in QangLang
 ---
 
+import { Aside } from "@astrojs/starlight/components";
+
 ## Functions
+
+Functions are declared using the `fn` keyword. Functions are first-class in QangLang, and can be treated as a value.
+
+```ql
+fn function(callback) {
+  callback();
+}
+
+fn callback() {
+  println("Hello World!");
+}
+
+function(callback); // "Hello World!"
+```
+
+<Aside>
+  Remember, module scoped function declarations are hoisted to the top of the
+  module and can be referenced recursively.
+</Aside>
 
 ## Lambdas
 
+Lambdas are functions written as an expression instead of a declaration. This allows them to be declared anonymously, which is useful for callbacks. Lambdas have to forms of expression.The first form allows the body to be written as an expression and its evaluated value to be implicitly returned. The second form allows the body to be written as a block statement surrounded by `{` and `}`.
+
+```ql
+var lambda = (callback) -> {
+  callback();
+}
+
+lambda(() -> println("Hello World!")); // "Hello World!"
+```
+
 ### Immediately Executed Functional Expressions (IEFEs)
+
+Because lambdas are both expressions and functions, instead of storing the expression in a variable, it can be immediately executed. This can be useful in situations where only an expression is allowed, but more complex declarations are required (such as the body of a `when` expression condition).
+
+```ql
+var value = when (result) {
+  is Ok => result.unwrap()
+  is Err => () -> {
+    println(result.to_string()); // print the error
+    return DEFAULT_VALUE; // return the fallback value.
+  }()
+}
+```
 
 ## Map Expressions
 
+Map expressions are functions expressions that are immediately executed, and the only parameter is the reciever value. Optional map expressions are the same, except they don't execute if their reciever value is `nil`.
+
+```ql
+var value;
+
+var result = value
+  ||v -> v is NIL ? Err("Value cannot be nil") : Ok(v)|
+  .map((v) -> v * 2);
+
+var maybe_number;
+
+var maybe_number_times_two = maybe_number?|n -> n * 2|;
+```
+
 ## Pipe Operator
+
+To help enable more fluent syntax, QangLang has a `|>` operator which takes the value on the left, and applies it as the first argument to the function on the right.
+
+```ql
+fn add(a, b) {
+  return a + b;
+}
+
+println(10 |> add(5)); // 15
+
+```
+
+If the function on the right only has one argument, then the parentheses may be omitted.
+
+```ql
+var num_to_string = (num) -> num is NUMBER
+  ? num |> to_string
+  : nil;
+
+// This is semantically identical to the above declaration.
+var num_to_string = (num) -> num is NUMBER
+  ? num |> to_string()
+  : nil;
+```

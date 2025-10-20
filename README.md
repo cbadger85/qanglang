@@ -51,3 +51,27 @@ println(message);
 - `qanglang-cli` - Command-line interface
 - `qanglang-ls` - Language server
 - `qanglang-test` - Test runner
+
+## Development
+
+### Running Tests
+
+The project tests can be ran by running the following command:
+
+```sh
+cargo test
+```
+
+### Running Language Tests
+
+While developing, it's often good to check against the language tests to make sure nothing is broken. Run the following command to run the language tests.
+
+```sh
+cargo run -- test tests
+```
+
+When checking against release, the following command can be used:
+
+```sh
+qang tests test
+```

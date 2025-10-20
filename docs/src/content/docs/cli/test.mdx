@@ -3,7 +3,7 @@ title: Qang Test
 description: Running tests in QangLang
 ---
 
-The `qang test` command discovers and runs tests in QangLang projects.
+The `qang test` command discovers and runs test functions in QangLang projects.
 
 ## Usage
 
@@ -14,7 +14,7 @@ qang test <path> [options]
 ### Arguments
 
 - `<path>` - Path to a test file or directory containing tests (required)
-  - If a directory is provided, all test files will be discovered and run recursively
+  - If a directory is provided, all `.ql` files will be discovered and run recursively
 
 ### Options
 
@@ -25,12 +25,51 @@ qang test <path> [options]
   - `compact` - Shows compact error messages
   - `verbose` - Shows detailed error messages with full context
 
+## Writing Tests
+
+QangLang tests are regular `.ql` files that contain:
+
+1. **Test Description** (optional): A top-level variable named `test_description`
+2. **Test Functions**: Functions with names starting with `test_`
+
+### Example Test File
+
+```ql
+var test_description = "Testing math expressions and their precedence.";
+
+fn test_addition() {
+  assert_eq(1 + 1, 2, "Expected 1 + 1 to equal 2.");
+  assert_eq(1 + -1, 0, "Expected 1 + -1 to equal 0.");
+}
+
+fn test_subtraction() {
+  assert_eq(5 - 3, 2, "Expected 5 - 3 to equal 2.");
+}
+```
+
+### Assertion Functions
+
+QangLang provides built-in assertion functions for testing:
+
+- `assert(condition, message)` - Assert that a condition is truthy
+- `assert_eq(actual, expected, message)` - Assert that two values are equal
+- `assert_not_nil(value)` - Assert that a value is not nil
+- `assert_throws(fn)` - Assert that a function throws an error when called
+
+### Test Discovery
+
+The test runner automatically:
+
+- Finds all functions whose names start with `test_`
+- Executes each test function independently
+- Reports results for each test
+
 ## Examples
 
 ### Run a Single Test File
 
 ```bash
-qang test tests/my_test.ql
+qang test tests/test_math.ql
 ```
 
 ### Run All Tests in a Directory
@@ -50,7 +89,7 @@ qang test tests/ --debug
 Useful for debugging test failures:
 
 ```bash
-qang test tests/failing_test.ql --heap
+qang test tests/test_failing.ql --heap
 ```
 
 ### Use Compact Error Format
@@ -59,21 +98,14 @@ qang test tests/failing_test.ql --heap
 qang test tests/ --eformat compact
 ```
 
-## Test File Conventions
-
-By default, the test runner looks for files that:
-
-- Have the `.ql` extension
-- Are located in test directories or match test naming patterns
-
 ## Test Output
 
 The test runner provides:
 
-- Individual test results (pass/fail)
-- Error messages for failed tests
+- Individual test results (pass/fail) for each test function
+- Error messages for failed assertions
 - Summary statistics (total tests, passed, failed)
-- Execution time information
+- The `test_description` message if defined
 
 ## Exit Codes
 
@@ -87,7 +119,7 @@ The test runner provides:
 Quickly verify your changes:
 
 ```bash
-qang test tests/unit/
+qang test tests/
 ```
 
 ### CI/CD Integration
@@ -103,5 +135,5 @@ qang test tests/ --eformat compact
 Get detailed information about test failures:
 
 ```bash
-qang test tests/failing_test.ql --debug --heap --eformat verbose
+qang test tests/test_failing.ql --debug --heap --eformat verbose
 ```

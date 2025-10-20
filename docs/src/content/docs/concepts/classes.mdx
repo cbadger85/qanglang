@@ -5,14 +5,151 @@ description: Classes and instances in QangLang
 
 ## Declaring a Classes
 
+A class is declared using the `class` keyword. Like functions, classes are first-class in QangLang and can be passed as values and declared in the local scope.
+
+```ql
+class MyClass { }
+
+fn class_factory(clazz) {
+  return when (clazz) {
+    MyClass => MyClass()
+    else => nil
+  };
+}
+
+var my_instance = class_factory(MyClass);
+```
+
 ### Constructor
+
+If a class requires initialization logic, it can be put inside its constructor, which is defined as a method called `init`. Fields can be declared in the constructor by assigning them to `this`.
+
+```ql
+class MyClass {
+  init() {
+  // Sets the value of the message field to "Hello World"
+  this.message = "Hello World!";
+  }
+}
+```
 
 ### Methods
 
+Methods can be added to classes to define behavior for them. Methods have a reference to other methods or fields on the class by accessing them through `this`.
+
+```ql
+class MyClass {
+  init() {
+    this.message = "Hello World!";
+  }
+
+  // Calling `speak` returns the message
+  speak() {
+    return this.message;
+  }
+}
+```
+
 ### Fields
+
+Fields can also be declared on a class body. They can be provided initial values, but the value must be a simple string, number, boolean or `nil`. If no initial value is provided, the assigned value will be `nil`.
+
+```ql
+class MyClass {
+  message = "Hello World!"; // Can be initialized here instead of the constructor
+  count; // Initialized to `nil`
+
+  speak() {
+    this.count = count?|c -> c + 1| or 1;
+    return this.message;
+  }
+
+  is_talkative() {
+    return (count or 0) > 10;
+  }
+}
+```
 
 ## Creating a Class Instance
 
+Classes can be instantiated by calling them. The arguments the class is called with is passed down to the constructor.
+
+```ql
+class MyClass {
+  init(value) {
+    this.value = value;
+  }
+}
+
+var instance = MyClass(10);
+```
+
+To validate a value is an instance of a specific class, the `is` operator can be used.
+
+```ql
+println(instance is MyClass); // true
+```
+
 ## Inheritance
 
+A class can inherit its method's and initialized fields from another class.
+
+```ql
+class ParentClass {
+  value = true;
+
+  method() {
+    return this.value;
+  }
+}
+
+class ChildClass : ParentClass {
+  other_value = false;
+
+  other_method() {
+    return this.other_value;
+  }
+}
+
+var instance = ChildClass();
+
+println(instance.method()); // true
+println(instance.other_method()); // false
+```
+
+The `is` operator can also be used to deterime what classes the instance might inherit from.
+
+```ql
+println(instance is ParentClass); // true
+println(instance is ChildClass); // true
+```
+
 ### `super`
+
+If values need to be passed to a parent constructor, or value or method on the parent needs to be accessed within the class, the `super` keyword can be used.
+
+```ql
+class ParentClass {
+  init(value) {
+    this.value = value;
+  }
+
+  method() {
+    return this.value;
+  }
+}
+
+class ChildClass : ParentClass {
+  init() {
+    super.init("Hello World!");
+  }
+
+  other_method() {
+    return super.method();
+  }
+}
+
+var instance = ChildClass();
+
+println(instance.other_method()); // "Hello World!"
+```

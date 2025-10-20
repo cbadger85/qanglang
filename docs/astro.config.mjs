@@ -67,7 +67,7 @@ export default defineConfig({
               ],
             },
             {
-              label: "Class and Instances",
+              label: "Classes and Instances",
               slug: "concepts/classes",
             },
             {

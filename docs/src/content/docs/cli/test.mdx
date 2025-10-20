@@ -2,3 +2,106 @@
 title: Qang Test
 description: Running tests in QangLang
 ---
+
+The `qang test` command discovers and runs tests in QangLang projects.
+
+## Usage
+
+```bash
+qang test <path> [options]
+```
+
+### Arguments
+
+- `<path>` - Path to a test file or directory containing tests (required)
+  - If a directory is provided, all test files will be discovered and run recursively
+
+### Options
+
+- `--debug` / `-d` - Enable debug output during test execution
+- `--heap` / `-m` - Dump compiled bytecode and heap contents before test execution
+- `--eformat` / `-e` - Error message format (default: `verbose`)
+  - `minimal` - Shows minimal error information
+  - `compact` - Shows compact error messages
+  - `verbose` - Shows detailed error messages with full context
+
+## Examples
+
+### Run a Single Test File
+
+```bash
+qang test tests/my_test.ql
+```
+
+### Run All Tests in a Directory
+
+```bash
+qang test tests/
+```
+
+### Run Tests with Debug Output
+
+```bash
+qang test tests/ --debug
+```
+
+### Show Bytecode During Tests
+
+Useful for debugging test failures:
+
+```bash
+qang test tests/failing_test.ql --heap
+```
+
+### Use Compact Error Format
+
+```bash
+qang test tests/ --eformat compact
+```
+
+## Test File Conventions
+
+By default, the test runner looks for files that:
+
+- Have the `.ql` extension
+- Are located in test directories or match test naming patterns
+
+## Test Output
+
+The test runner provides:
+
+- Individual test results (pass/fail)
+- Error messages for failed tests
+- Summary statistics (total tests, passed, failed)
+- Execution time information
+
+## Exit Codes
+
+- `0` - All tests passed successfully
+- `1` - One or more tests failed or encountered errors
+
+## Use Cases
+
+### Running Tests During Development
+
+Quickly verify your changes:
+
+```bash
+qang test tests/unit/
+```
+
+### CI/CD Integration
+
+Run all tests in your continuous integration pipeline:
+
+```bash
+qang test tests/ --eformat compact
+```
+
+### Debugging Failing Tests
+
+Get detailed information about test failures:
+
+```bash
+qang test tests/failing_test.ql --debug --heap --eformat verbose
+```

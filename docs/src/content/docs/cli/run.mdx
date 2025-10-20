@@ -2,3 +2,71 @@
 title: Qang Run
 description: Running QangLang scripts
 ---
+
+The `qang run` command executes QangLang scripts.
+
+## Usage
+
+```bash
+qang run <path> [options]
+```
+
+### Arguments
+
+- `<path>` - Path to the QangLang script file to execute (required)
+
+### Options
+
+- `--debug` / `-d` - Enable debug output during script execution
+- `--heap` / `-m` - Dump compiled bytecode and heap contents before execution
+- `--eformat` / `-e` - Error message format (default: `verbose`)
+  - `minimal` - Shows minimal error information
+  - `compact` - Shows compact error messages
+  - `verbose` - Shows detailed error messages with full context
+
+## Examples
+
+### Basic Script Execution
+
+```bash
+qang run script.ql
+```
+
+### Run with Debug Output
+
+```bash
+qang run script.ql --debug
+```
+
+### Show Bytecode and Heap
+
+Useful for understanding how your code is compiled:
+
+```bash
+qang run script.ql --heap
+```
+
+### Use Compact Error Messages
+
+```bash
+qang run script.ql --eformat compact
+```
+
+## Error Formats
+
+### Minimal
+
+Shows just the error message without additional context.
+
+### Compact
+
+Shows the error message with basic location information.
+
+### Verbose (Default)
+
+Shows detailed error messages including:
+
+- Full source code context
+- Line and column numbers
+- Highlighted error location
+- Detailed error description

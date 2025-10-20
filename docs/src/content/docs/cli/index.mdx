@@ -2,3 +2,40 @@
 title: Qang CLI
 description: Qang CLI commands
 ---
+
+The Qang CLI provides tools for running, testing, and analyzing QangLang code.
+
+## Available Commands
+
+The Qang CLI supports the following commands:
+
+- **[run](./run)** - Execute QangLang scripts
+- **[check](./check)** - Run the static analyzer on your code
+- **[test](./test)** - Run tests in QangLang projects
+- **ls** - Start the language server
+
+## REPL Mode
+
+Running `qang` without any command starts the interactive REPL (Read-Eval-Print Loop):
+
+```bash
+qang
+```
+
+### REPL Options
+
+- `--debug` / `-d` - Enable debug mode for REPL
+
+## Getting Help
+
+To see all available commands and options:
+
+```bash
+qang --help
+```
+
+For help with a specific command:
+
+```bash
+qang <command> --help
+```

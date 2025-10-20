@@ -2,7 +2,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import fs from "node:fs";
-import starlightThemeNext from "starlight-theme-next";
+import starlightThemeFlexoki from "starlight-theme-flexoki";
 
 const langSyntax = fs.readFileSync(
   "../crates/qanglang-ls/syntaxes/qanglang.tmGrammar.json",
@@ -16,7 +16,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "QangLang Docs",
-      plugins: [starlightThemeNext()],
+      plugins: [starlightThemeFlexoki({ accentColor: "blue" })],
       social: [
         {
           icon: "github",

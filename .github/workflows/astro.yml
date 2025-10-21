@@ -36,6 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Detect package manager
+        working-directory: ${{ env.BUILD_PATH }}
         id: detect-package-manager
         run: |
           if [ -f "${{ github.workspace }}/yarn.lock" ]; then
@@ -55,6 +56,7 @@ jobs:
             exit 1
           fi
       - name: Setup Node
+        working-directory: ${{ env.BUILD_PATH }}
         uses: actions/setup-node@v4
         with:
           node-version: "20"

@@ -46,7 +46,7 @@ jobs:
         uses: actions/configure-pages@v3
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         # If your build output is the docs folder itself (static), set path: ./docs
         # If your build outputs to docs/dist or docs/build, change path accordingly
         with:

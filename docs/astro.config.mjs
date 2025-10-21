@@ -214,6 +214,7 @@ export default defineConfig({
         },
       ],
       expressiveCode: {
+        themes: ["plastic", "one-light"],
         shiki: {
           langs: [
             {

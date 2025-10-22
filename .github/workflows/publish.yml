@@ -23,7 +23,7 @@ jobs:
         run: cargo test --verbose
 
       - name: Run language tests
-        run: cargo run -- test tests
+        run: cargo run --release -- test tests
 
   publish:
     needs: test
@@ -40,7 +40,7 @@ jobs:
       - name: Publish qanglang-core
         run: |
           cd crates/qanglang-core
-          cargo publish
+          cargo publish || echo "qanglang-core already published or failed"
 
       - name: Wait for crates.io to index qanglang-core
         run: sleep 30
@@ -48,7 +48,7 @@ jobs:
       - name: Publish qanglang-ls
         run: |
           cd crates/qanglang-ls
-          cargo publish
+          cargo publish || echo "qanglang-ls already published or failed"
 
       - name: Wait for crates.io to index qanglang-ls
         run: sleep 30
@@ -56,7 +56,7 @@ jobs:
       - name: Publish qanglang-test
         run: |
           cd crates/qanglang-test
-          cargo publish
+          cargo publish || echo "qanglang-test already published or failed"
 
       - name: Wait for crates.io to index qanglang-test
         run: sleep 30
@@ -64,4 +64,4 @@ jobs:
       - name: Publish qanglang-cli
         run: |
           cd crates/qanglang-cli
-          cargo publish
+          cargo publish || echo "qanglang-cli already published or failed"

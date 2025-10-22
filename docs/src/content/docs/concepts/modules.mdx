@@ -3,10 +3,10 @@ title: Modules and Imports
 description: Using modules in QangLang
 ---
 
-All files in QangLang are moduls. Modules are declared using the `mod` keyword and path to the module is provided with the `import` keyword.
+All files in QangLang are modules. Modules are declared using the `mod` keyword and path to the module is provided with the `import` keyword.
 
 ```ql
-mod lib = import('./lib.ql');
+mod lib = import("./lib.ql");
 ```
 
 When a module is imported the first time, it is executed and cached.
@@ -16,11 +16,19 @@ println("Library imported!");
 ```
 
 ```ql title="main.ql"
-mod lib = import('./lib.ql'); // "Library imported!"
+mod lib = import("./lib.ql"); // "Library imported!"
 
 fn main() {
-  mod lib = import('./lib.ql');
+  mod lib = import("./lib.ql");
 }
 
 main(); // Nothing prints because the lib.ql has already executed.
+```
+
+Modules are also readonly, so a field on a module cannot be reassigned.
+
+```ql
+mod math = import("./math.ql");
+
+math.sqrt = identity; // This is an error because math.sqrt cannot be reassigned.
 ```

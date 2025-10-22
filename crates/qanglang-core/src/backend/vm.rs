@@ -2215,17 +2215,6 @@ impl Vm {
                 push_value!(self, value)?;
             }
 
-            ValueKind::Module(module_handle) => {
-                let constant = Value::string(identifier);
-                let value = peek_value!(self, 0);
-
-                self.with_gc_check(|alloc| alloc.tables.insert(module_handle, constant, value));
-
-                let value = pop_value!(self);
-                pop_value!(self);
-                push_value!(self, value)?;
-            }
-
             _ => {
                 return Err(QangRuntimeError::new(
                     format!("Cannot set property on {}.", instance.to_type_string()),

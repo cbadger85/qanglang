@@ -71,6 +71,10 @@ export default defineConfig({
               slug: "concepts/classes",
             },
             {
+              label: "Error Handling",
+              slug: "concepts/error-handling",
+            },
+            {
               label: "Nil Safety",
               slug: "concepts/nil-safety",
             },

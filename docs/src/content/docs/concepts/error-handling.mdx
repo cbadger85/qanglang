@@ -1,0 +1,59 @@
+---
+title: Error Handling
+description: Handling Errors with Result in QangLang
+---
+
+## Using `Result`
+
+`Result` is a base abstract class with two concrete implementations
+
+- `Ok` - Used to wrap the value
+- `Err` - Used to instead return an error if the result value is no longer valid.
+
+```ql
+fn validate_value_is_greater_than_zero(value) {
+  return when (value) {
+    is NUMBER => value > 0
+      ? Ok(value)
+      : Err("Value must be greater than 0.");
+    else => Err("Value must be a number.")
+  };
+}
+```
+
+Once a value is wrapped in the `Result`, there are a number of methods that can be used to manipulate the value.
+
+```ql
+var maybe_double = validate_value_is_greater_than_zero(10)
+  .map((num) -> num * 2)
+  .ok(); // 20
+
+var maybe_squared = validate_value_is_greater_than_zero(-5)
+  .map((num) -> num * num)
+  .ok(); // nil
+```
+
+For information other methods on `Result`, see the [`Result` reference](/reference/api/result).
+
+## Custom Errors
+
+Sometimes it might be required to store more than an error message inside an `Err`, but also require a clear error message. A new class ineheriting from `Err` can be used to handle that, with the `to_string` method overriden for the custom message.
+
+```ql
+class MyErr : Err {
+  init(message, kind) {
+    super.init({{
+      message = message or "Unknown.",
+      kind = kind or "UNKNOWN"
+    }});
+  }
+
+  to_string() {
+    return this._error.kind + " Error: " + this._error.message;
+  }
+}
+
+var error = MyErr("Oops.", "REALLY_BAD");
+
+println(error.to_string()); // "REALLY_BAD Error: Oops."
+```

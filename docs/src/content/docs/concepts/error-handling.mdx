@@ -3,6 +3,34 @@ title: Error Handling
 description: Handling Errors with Result in QangLang
 ---
 
+Though QangLang does not have the throw/try/catch/finally seen in other languages, it does have a couple of ways to surface errors.
+
+## Using Assertions
+
+### `assert`
+
+`assert` can be used to test if a given condition is truthy. It takes in an optional message. If the condition is falsy, the program exits with the message.
+
+```ql
+assert(true == false, "This will result in an error.");
+```
+
+### `assert_eq`
+
+`assert_eq` is a more specific case of `assert` that checks for equality, and exits if not equal.
+
+```ql
+assert_eq(true, false, "This will also result in an error");
+```
+
+### `assert_not_nil`
+
+`assert_not_nil` is another specific case of `assert` where the program exits if the provided value is equal to `nil`.
+
+```ql
+assert_not_nil(nil, "This is also an error because nil is not not nil.");
+```
+
 ## Using `Result`
 
 `Result` is a base abstract class with two concrete implementations

@@ -52,6 +52,12 @@ println(message);
 - `qanglang-ls` - Language server
 - `qanglang-test` - Test runner
 
+## VSCode Extension
+
+There is a published VSCode extension that provides syntax and error highlighting.
+
+- [QangLang in the marketplace](https://marketplace.visualstudio.com/items?itemName=cbadger85.qanglang)
+
 ## Development
 
 ### Running Tests

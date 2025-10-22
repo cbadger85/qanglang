@@ -2,7 +2,10 @@
 name = "qanglang-test"
 version = "0.1.0"
 edition = "2024"
+license = "MPL-2.0"
+description = "Test runner for Qanglang"
+repository = "https://github.com/yourusername/qanglang"
 
 [dependencies]
-qanglang-core = { path = "../qanglang-core" }
+qanglang-core = { version = "0.1.0", path = "../qanglang-core" }
 rustc-hash = { workspace = true }

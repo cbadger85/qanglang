@@ -1,0 +1,67 @@
+name: Publish Crates
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Run language tests
+        run: cargo run -- test tests
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Login to crates.io
+        run: cargo login ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish qanglang-core
+        run: |
+          cd crates/qanglang-core
+          cargo publish
+
+      - name: Wait for crates.io to index qanglang-core
+        run: sleep 30
+
+      - name: Publish qanglang-ls
+        run: |
+          cd crates/qanglang-ls
+          cargo publish
+
+      - name: Wait for crates.io to index qanglang-ls
+        run: sleep 30
+
+      - name: Publish qanglang-test
+        run: |
+          cd crates/qanglang-test
+          cargo publish
+
+      - name: Wait for crates.io to index qanglang-test
+        run: sleep 30
+
+      - name: Publish qanglang-cli
+        run: |
+          cd crates/qanglang-cli
+          cargo publish

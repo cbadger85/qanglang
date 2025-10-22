@@ -1,6 +1,6 @@
 {
   "recommendations": [
-    "qanglang.qls-language-server",
+    "qanglang.ql-language-server",
     "astro-build.astro-vscode"
   ],
   "unwantedRecommendations": []

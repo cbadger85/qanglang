@@ -5,7 +5,7 @@ A scripting language written in Rust 🦀
 ## Installation
 
 ```bash
-cargo build --release
+cargo install qanglang-cli
 ```
 
 ## Usage

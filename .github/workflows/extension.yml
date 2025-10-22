@@ -1,0 +1,35 @@
+name: Publish Extension
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          cd extension
+          npm install
+          cd client
+          npm ci
+
+      - name: Compile extension
+        run: |
+          cd extension
+          npm run compile
+
+      - name: Publish to Visual Studio Marketplace
+        run: |
+          cd extension
+          npx vsce publish -p ${{ secrets.MARKETPLACE_PAT }}

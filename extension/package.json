@@ -2,6 +2,7 @@
   "name": "qanglang",
   "displayName": "QangLang VSCode Extension",
   "description": "VSCode extension for QangLang that provides syntax and error highlighting.",
+  "publisher": "cbadger85",
   "homepage": "https://github.com/cbadger85/qanglang",
   "repository": {
     "url": "https://github.com/cbadger85/qanglang"

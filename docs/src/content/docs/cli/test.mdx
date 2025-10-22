@@ -8,22 +8,13 @@ The `qang test` command discovers and runs test functions in QangLang projects.
 ## Usage
 
 ```bash
-qang test <path> [options]
+qang test <path>
 ```
 
 ### Arguments
 
 - `<path>` - Path to a test file or directory containing tests (required)
   - If a directory is provided, all `.ql` files will be discovered and run recursively
-
-### Options
-
-- `--debug` / `-d` - Enable debug output during test execution
-- `--heap` / `-m` - Dump compiled bytecode and heap contents before test execution
-- `--eformat` / `-e` - Error message format (default: `verbose`)
-  - `minimal` - Shows minimal error information
-  - `compact` - Shows compact error messages
-  - `verbose` - Shows detailed error messages with full context
 
 ## Writing Tests
 
@@ -78,26 +69,6 @@ qang test tests/test_math.ql
 qang test tests/
 ```
 
-### Run Tests with Debug Output
-
-```bash
-qang test tests/ --debug
-```
-
-### Show Bytecode During Tests
-
-Useful for debugging test failures:
-
-```bash
-qang test tests/test_failing.ql --heap
-```
-
-### Use Compact Error Format
-
-```bash
-qang test tests/ --eformat compact
-```
-
 ## Test Output
 
 The test runner provides:
@@ -111,29 +82,3 @@ The test runner provides:
 
 - `0` - All tests passed successfully
 - `1` - One or more tests failed or encountered errors
-
-## Use Cases
-
-### Running Tests During Development
-
-Quickly verify your changes:
-
-```bash
-qang test tests/
-```
-
-### CI/CD Integration
-
-Run all tests in your continuous integration pipeline:
-
-```bash
-qang test tests/ --eformat compact
-```
-
-### Debugging Failing Tests
-
-Get detailed information about test failures:
-
-```bash
-qang test tests/test_failing.ql --debug --heap --eformat verbose
-```

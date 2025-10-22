@@ -22,7 +22,6 @@ qang check <path> [options]
   - `minimal` - Shows minimal error information
   - `compact` - Shows compact error messages
   - `verbose` - Shows detailed error messages with full context
-- `--silent` / `-s` - Silences console output (default: `false`)
 
 ## Examples
 
@@ -52,41 +51,7 @@ qang check src/ --ignore "test_*.ql" --ignore "examples/"
 qang check src/ --eformat minimal
 ```
 
-### Silent Mode
-
-Run checks without console output (useful for CI/CD):
-
-```bash
-qang check src/ --silent
-```
-
 ## Exit Codes
 
 - `0` - All checks passed successfully
 - `1` - One or more checks failed
-
-## Use Cases
-
-### Pre-commit Validation
-
-Run checks before committing code:
-
-```bash
-qang check src/ && git commit
-```
-
-### CI/CD Integration
-
-Integrate into your continuous integration pipeline:
-
-```bash
-qang check . --eformat compact
-```
-
-### Development Workflow
-
-Quickly validate changes during development:
-
-```bash
-qang check src/feature.ql
-```

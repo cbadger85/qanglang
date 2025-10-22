@@ -11,8 +11,7 @@ use clap::{ArgAction, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "Qang")]
-#[command(version = "0.0.1")]
-#[command(version, about = "CLI tooling for QangLang", long_about = None)]
+#[command(version, about = "CLI tooling for QangLang", long_about = Some("CLI tooling for QangLang. For more information, see the documentation at https://cbadger85.github.io/qanglang/cli/"))]
 struct QangCli {
     #[command(subcommand)]
     command: Option<QangCommand>,
@@ -46,8 +45,7 @@ enum QangCommand {
             long,
             help = "Patterns to ignore when recursively checking directories"
         )]
-        ignore: Vec<String>,
-
+        // ignore: Vec<String>,
         #[arg(
             short = 'e',
             long,
@@ -55,33 +53,32 @@ enum QangCommand {
             help = "Error message format [possible values: minimal, compact, verbose]"
         )]
         eformat: String,
-
-        #[arg(short, long, action = ArgAction::SetFalse, help = "Silences console output.")]
-        silent: bool,
+        // #[arg(short, long, action = ArgAction::SetFalse, help = "Silences console output.")]
+        // silent: bool,
     },
     Ls,
     Test {
         path: String,
-        #[arg(short, long, action = ArgAction::SetTrue, help = "Enable debug output during script execution")]
-        debug: bool,
+        // #[arg(short, long, action = ArgAction::SetTrue, help = "Enable debug output during script execution")]
+        // debug: bool,
 
-        #[arg(short = 'm', long, action = ArgAction::SetTrue, help = "Dump compiled bytecode and heap contents before execution")]
-        heap: bool,
+        // #[arg(short = 'm', long, action = ArgAction::SetTrue, help = "Dump compiled bytecode and heap contents before execution")]
+        // heap: bool,
 
-        #[arg(
-            short,
-            long,
-            help = "Patterns to ignore when recursively checking directories"
-        )]
-        ignore: Vec<String>,
+        // #[arg(
+        //     short,
+        //     long,
+        //     help = "Patterns to ignore when recursively checking directories"
+        // )]
+        // ignore: Vec<String>,
 
-        #[arg(
-            short = 'e',
-            long,
-            default_value = "verbose",
-            help = "Error message format [possible values: minimal, compact, verbose]"
-        )]
-        eformat: String,
+        // #[arg(
+        //     short = 'e',
+        //     long,
+        //     default_value = "verbose",
+        //     help = "Error message format [possible values: minimal, compact, verbose]"
+        // )]
+        // eformat: String,
     },
 }
 
@@ -97,8 +94,8 @@ fn main() {
         }) => run_script(&path, debug, heap, &eformat),
         Some(QangCommand::Check {
             path,
-            ignore: _ignore,
-            silent: _silent,
+            // ignore: _ignore,
+            // silent: _silent,
             eformat,
         }) => {
             let resolver = match qanglang_test::SourceFileResolver::new() {
@@ -134,10 +131,10 @@ fn main() {
         Some(QangCommand::Ls) => run_language_server(),
         Some(QangCommand::Test {
             path,
-            ignore: _ignore,
-            debug: _,
-            heap: _,
-            eformat: _,
+            // ignore: _ignore,
+            // debug: _,
+            // heap: _,
+            // eformat: _,
         }) => {
             let resolver = match qanglang_test::SourceFileResolver::new() {
                 Ok(resolver) => resolver,

@@ -1,11 +1,11 @@
 {
-  "name": "qls-language-server",
-  "description": "QangLang language server",
+  "name": "qanglang",
+  "description": "VSCode extension for QangLang",
   "repository": {
     "url": "https://github.com/cbadger85/qanglang/tree/lsp/crates/qanglang-ls"
   },
   "license": "MPL-2.0",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.66.0"
   },
@@ -45,14 +45,14 @@
     ],
     "configuration": {
       "type": "object",
-      "title": "qls-language-server",
+      "title": "ql-language-server",
       "properties": {
-        "qls-language-server.serverPath": {
+        "ql-language-server.serverPath": {
           "type": "string",
           "default": "qang ls",
           "description": "Path to the QangLang language server command"
         },
-        "qls-language-server.trace.server": {
+        "ql-language-server.trace.server": {
           "type": "string",
           "scope": "window",
           "enum": [

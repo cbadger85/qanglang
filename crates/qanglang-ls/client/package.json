@@ -1,6 +1,6 @@
 {
   "name": "qang-language-client",
-  "description": "VSCode part of a the Qang language server",
+  "description": "VSCode QangLang language server client.",
   "license": "MPL-2.0",
   "version": "0.0.1",
   "engines": {

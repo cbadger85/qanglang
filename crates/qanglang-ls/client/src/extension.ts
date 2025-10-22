@@ -26,7 +26,7 @@ export async function activate(context: ExtensionContext) {
   console.log("QangLang extension activating...");
 
   // Get the server path from settings INSIDE activate function
-  const config = workspace.getConfiguration("qls-language-server");
+  const config = workspace.getConfiguration("ql-language-server");
   const serverPath = config.get<string>("serverPath") || "qang ls";
 
   console.log("Server path:", serverPath);
@@ -86,7 +86,7 @@ export async function activate(context: ExtensionContext) {
 
   // Create the language client and start the client.
   client = new LanguageClient(
-    "qls-language-server",
+    "ql-language-server",
     "QangLang Language Server",
     serverOptions,
     clientOptions

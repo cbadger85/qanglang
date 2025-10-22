@@ -4,6 +4,8 @@ A scripting language written in Rust 🦀
 
 ## Installation
 
+First, ensure [Rust is installed.](https://doc.rust-lang.org/book/ch01-01-installation.html). Then run the following command to install the binary into your path.
+
 ```bash
 cargo install qanglang-cli
 ```

@@ -2,6 +2,9 @@
 name = "qanglang-core"
 version = "0.1.0"
 edition = "2024"
+license = "MPL-2.0"
+description = "Core library for QangLang"
+repository = "https://github.com/yourusername/qanglang"
 
 [features]
 profiler = ["coz"]

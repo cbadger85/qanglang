@@ -5,7 +5,7 @@ import fs from "node:fs";
 import starlightThemeFlexoki from "starlight-theme-flexoki";
 
 const langSyntax = fs.readFileSync(
-  "../crates/qanglang-ls/syntaxes/qanglang.tmGrammar.json",
+  "../extension/syntaxes/qanglang.tmGrammar.json",
   {
     encoding: "utf-8",
   }

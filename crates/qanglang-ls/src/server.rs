@@ -1,30 +1,37 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use log::debug;
 use qanglang_core::SourceMap;
 use serde_json::Value;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
-// use tower_lsp::lsp_types::SemanticTokenType;
-use log::info;
+use tower_lsp::lsp_types::SemanticTokenType;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::analyzer::{analyze, AnalysisResult};
+use crate::analyzer::{AnalysisResult, analyze};
 use crate::hover_utils::{find_node_at_offset, format_hover_info};
 
-// pub const LEGEND_TYPE: &[SemanticTokenType] = &[
-//     SemanticTokenType::FUNCTION,
-//     SemanticTokenType::CLASS,
-//     SemanticTokenType::STRUCT,
-//     SemanticTokenType::METHOD,
-//     SemanticTokenType::VARIABLE,
-//     SemanticTokenType::STRING,
-//     SemanticTokenType::NUMBER,
-//     SemanticTokenType::KEYWORD,
-//     SemanticTokenType::OPERATOR,
-//     SemanticTokenType::PARAMETER,
-// ];
+pub const LEGEND_TYPE: &[SemanticTokenType] = &[
+    SemanticTokenType::CLASS,     // 0: class names
+    SemanticTokenType::TYPE,      // 1: type names
+    SemanticTokenType::PARAMETER, // 2: function/method parameters
+    SemanticTokenType::VARIABLE,  // 3: local variables
+    SemanticTokenType::PROPERTY,  // 4: object properties / class fields
+    SemanticTokenType::FUNCTION,  // 5: function names
+    SemanticTokenType::METHOD,    // 6: method names
+    SemanticTokenType::KEYWORD,   // 7: keywords (class, func, let, etc.)
+    SemanticTokenType::STRING,    // 8: string literals
+    SemanticTokenType::NUMBER,    // 9: number literals
+    SemanticTokenType::OPERATOR,  // 10: operators (+, -, *, etc.)
+    SemanticTokenType::COMMENT,   // 11: comments (future)
+];
+
+/// Helper to get token type index from SemanticTokenType
+pub(crate) fn token_type_index(token_type: SemanticTokenType) -> u32 {
+    LEGEND_TYPE.iter().position(|t| t == &token_type).unwrap() as u32
+}
 
 #[derive(Debug)]
 pub struct Backend {
@@ -70,31 +77,31 @@ impl LanguageServer for Backend {
                     }),
                     file_operations: None,
                 }),
-                // semantic_tokens_provider: Some(
-                //     SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
-                //         SemanticTokensRegistrationOptions {
-                //             text_document_registration_options: {
-                //                 TextDocumentRegistrationOptions {
-                //                     document_selector: Some(vec![DocumentFilter {
-                //                         language: Some("qanglang".to_string()),
-                //                         scheme: Some("file".to_string()),
-                //                         pattern: None,
-                //                     }]),
-                //                 }
-                //             },
-                //             semantic_tokens_options: SemanticTokensOptions {
-                //                 work_done_progress_options: WorkDoneProgressOptions::default(),
-                //                 legend: SemanticTokensLegend {
-                //                     token_types: LEGEND_TYPE.into(),
-                //                     token_modifiers: vec![],
-                //                 },
-                //                 range: Some(true),
-                //                 full: Some(SemanticTokensFullOptions::Bool(true)),
-                //             },
-                //             static_registration_options: StaticRegistrationOptions::default(),
-                //         },
-                //     ),
-                // ),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
+                        SemanticTokensRegistrationOptions {
+                            text_document_registration_options: {
+                                TextDocumentRegistrationOptions {
+                                    document_selector: Some(vec![DocumentFilter {
+                                        language: Some("qanglang".to_string()),
+                                        scheme: Some("file".to_string()),
+                                        pattern: None,
+                                    }]),
+                                }
+                            },
+                            semantic_tokens_options: SemanticTokensOptions {
+                                work_done_progress_options: WorkDoneProgressOptions::default(),
+                                legend: SemanticTokensLegend {
+                                    token_types: LEGEND_TYPE.to_vec(),
+                                    token_modifiers: vec![],
+                                },
+                                range: Some(true),
+                                full: Some(SemanticTokensFullOptions::Bool(true)),
+                            },
+                            static_registration_options: StaticRegistrationOptions::default(),
+                        },
+                    ),
+                ),
                 // definition: Some(GotoCapability::default()),
                 // definition_provider: Some(OneOf::Left(true)),
                 // references_provider: Some(OneOf::Left(true)),
@@ -162,14 +169,14 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
 
-        info!("Hover request at {}:{}", position.line, position.character);
+        debug!("Hover request at {}:{}", position.line, position.character);
 
         // Get cached analysis
         let cache = self.analysis_cache.read().await;
         let analysis = match cache.get(&uri) {
             Some(analysis) => analysis.clone(),
             None => {
-                info!("No analysis available for hover");
+                debug!("No analysis available for hover");
                 return Ok(None);
             }
         };
@@ -182,18 +189,18 @@ impl LanguageServer for Backend {
         {
             Some(offset) => offset,
             None => {
-                info!("Invalid position for hover");
+                debug!("Invalid position for hover");
                 return Ok(None);
             }
         };
 
-        info!("Looking for node at offset {}", offset);
+        debug!("Looking for node at offset {}", offset);
 
         // Find node at position
         let node_info = find_node_at_offset(&analysis, offset);
 
         if let Some(info) = node_info {
-            info!("Found node: {:?}", info.kind);
+            debug!("Found node: {:?}", info.kind);
             let hover_text = format_hover_info(&analysis, &info);
 
             return Ok(Some(Hover {
@@ -202,7 +209,7 @@ impl LanguageServer for Backend {
             }));
         }
 
-        info!("No node found at position");
+        debug!("No node found at position");
         Ok(None)
     }
 
@@ -212,14 +219,14 @@ impl LanguageServer for Backend {
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
 
-        info!("Document symbol request for: {}", uri);
+        debug!("Document symbol request for: {}", uri);
 
         // Get cached analysis (reuse cache from hover implementation)
         let cache = self.analysis_cache.read().await;
         let analysis = match cache.get(&uri) {
             Some(analysis) => analysis.clone(),
             None => {
-                info!("No analysis available for document symbols");
+                debug!("No analysis available for document symbols");
                 return Ok(None);
             }
         };
@@ -229,13 +236,65 @@ impl LanguageServer for Backend {
         let symbols = crate::symbol_collector::collect_document_symbols(&analysis);
 
         if symbols.is_empty() {
-            info!("No symbols collected");
+            debug!("No symbols collected");
             return Ok(None);
         }
 
-        info!("Returning {} symbols", symbols.len());
+        debug!("Returning {} symbols", symbols.len());
         // Return hierarchical document symbols
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+
+        debug!("Semantic tokens full request for: {}", uri);
+
+        // Get cached analysis
+        let cache = self.analysis_cache.read().await;
+        let analysis = match cache.get(&uri) {
+            Some(analysis) => analysis.clone(),
+            None => {
+                debug!("No analysis available for semantic tokens");
+                return Ok(None);
+            }
+        };
+        drop(cache);
+
+        // Collect semantic tokens from AST
+        let tokens = crate::semantic_tokens::collect_semantic_tokens(&analysis);
+
+        debug!("Collected {} semantic tokens", tokens.len());
+
+        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: tokens,
+        })))
+    }
+
+    async fn semantic_tokens_range(
+        &self,
+        params: SemanticTokensRangeParams,
+    ) -> Result<Option<SemanticTokensRangeResult>> {
+        debug!("Semantic tokens range request");
+
+        // For now, just delegate to full document
+        // Can optimize later to only process the requested range
+        let full_params = SemanticTokensParams {
+            text_document: params.text_document,
+            work_done_progress_params: params.work_done_progress_params,
+            partial_result_params: params.partial_result_params,
+        };
+
+        match self.semantic_tokens_full(full_params).await? {
+            Some(SemanticTokensResult::Tokens(tokens)) => {
+                Ok(Some(SemanticTokensRangeResult::Tokens(tokens)))
+            }
+            _ => Ok(None),
+        }
     }
 }
 
@@ -247,7 +306,7 @@ impl Backend {
                 return;
             }
         };
-        info!("=== Starting analysis for: {} ===", document.uri);
+        debug!("=== Starting analysis for: {} ===", document.uri);
 
         let source_map = SourceMap::new(document.text, document_filepath);
         let source_map = Arc::new(source_map);
@@ -255,7 +314,7 @@ impl Backend {
 
         let errors = match analyze(source_map.clone()) {
             Ok(result) => {
-                info!("✅ Analysis succeeded - no errors found");
+                debug!("✅ Analysis succeeded - no errors found");
 
                 // Cache the successful analysis
                 let result = Arc::new(result);
@@ -267,8 +326,8 @@ impl Backend {
                 Vec::new() // no diagnostics
             }
             Err(error) => {
-                info!("❌ Analysis failed");
-                info!("Error count: {}", error.all().len());
+                debug!("❌ Analysis failed");
+                debug!("Error count: {}", error.all().len());
 
                 // Remove cached analysis on error
                 self.analysis_cache.write().await.remove(&document.uri);
@@ -308,7 +367,7 @@ impl Backend {
         self.client
             .publish_diagnostics(document.uri, diagnostics, Some(document.version))
             .await;
-        info!("=== Analysis complete ===");
+        debug!("=== Analysis complete ===");
     }
 }
 
@@ -316,7 +375,7 @@ pub fn run_language_server() {
     env_logger::Builder::from_default_env()
         .target(env_logger::Target::Stderr)
         .init();
-    info!("Starting QangLang Language Server...");
+    debug!("Starting QangLang Language Server...");
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -330,8 +389,8 @@ pub fn run_language_server() {
         })
         .finish();
 
-        info!("Starting server...");
+        debug!("Starting server...");
         Server::new(stdin, stdout, socket).serve(service).await;
-        info!("Server stopped");
+        debug!("Server stopped");
     });
 }

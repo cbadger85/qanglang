@@ -6,7 +6,8 @@ use crate::analyzer::AnalysisResult;
 
 #[derive(Debug, Clone)]
 pub struct NodeInfo {
-    pub node_id: NodeId,
+    #[allow(dead_code)]
+    node_id: NodeId, // Might be useful later when doc comments are added
     pub range: Range,
     pub kind: NodeKind,
 }
@@ -221,8 +222,8 @@ impl<'a> NodeFinder<'a> {
 pub fn format_hover_info(_analysis: &AnalysisResult, info: &NodeInfo) -> String {
     match &info.kind {
         NodeKind::Class(name) => format!("```qanglang\nclass {}\n```", name),
-        NodeKind::Function(name) => format!("```qanglang\nfunction {}\n```", name),
-        NodeKind::Variable(name) => format!("```qanglang\nvariable {}\n```", name),
+        NodeKind::Function(name) => format!("```qanglang\nfn {}\n```", name),
+        NodeKind::Variable(name) => format!("```qanglang\nvar {}\n```", name),
         NodeKind::Field(name) => format!("```qanglang\nfield {}\n```", name),
         NodeKind::Parameter(name) => format!("```qanglang\nparam {}\n```", name),
     }

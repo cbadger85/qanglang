@@ -5,7 +5,7 @@ use tower_lsp::lsp_types::{DocumentSymbol, Position, Range, SymbolKind};
 
 /// Collect all document symbols from the analysis result
 pub fn collect_document_symbols(analysis: &AnalysisResult) -> Vec<DocumentSymbol> {
-    use log::info;
+    use log::debug;
 
     let module = analysis.nodes.get_program_node(analysis.root_module_id);
 
@@ -18,7 +18,7 @@ pub fn collect_document_symbols(analysis: &AnalysisResult) -> Vec<DocumentSymbol
 
     collector.collect_from_module(module);
 
-    info!("Collected {} document symbols", collector.symbols.len());
+    debug!("Collected {} document symbols", collector.symbols.len());
 
     collector.symbols
 }
@@ -45,31 +45,31 @@ impl<'a> SymbolCollector<'a> {
     }
 
     fn process_decl(&self, decl: TypedNodeRef<DeclNode>) -> Option<DocumentSymbol> {
-        use log::info;
+        use log::debug;
 
         match decl.node {
             DeclNode::Class(class) => {
-                info!("Processing class symbol");
+                debug!("Processing class symbol");
                 Some(self.process_class(TypedNodeRef::new(decl.id, class)))
             }
             DeclNode::Function(func) => {
-                info!("Processing function symbol");
+                debug!("Processing function symbol");
                 Some(self.process_function_decl(TypedNodeRef::new(decl.id, func)))
             }
             DeclNode::Variable(var) => {
-                info!("Processing variable symbol");
+                debug!("Processing variable symbol");
                 Some(self.process_variable(TypedNodeRef::new(decl.id, var)))
             }
             DeclNode::Lambda(lambda) => {
-                info!("Processing lambda symbol");
+                debug!("Processing lambda symbol");
                 Some(self.process_lambda_decl(TypedNodeRef::new(decl.id, lambda)))
             }
             DeclNode::Module(import) => {
-                info!("Processing import symbol");
+                debug!("Processing import symbol");
                 Some(self.process_import(TypedNodeRef::new(decl.id, import)))
             }
             DeclNode::Stmt(_) => {
-                info!("Skipping statement (not a symbol)");
+                debug!("Skipping statement (not a symbol)");
                 None
             }
         }

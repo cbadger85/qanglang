@@ -100,6 +100,7 @@ impl LanguageServer for Backend {
                 // references_provider: Some(OneOf::Left(true)),
                 // rename_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
         })
@@ -203,6 +204,38 @@ impl LanguageServer for Backend {
 
         info!("No node found at position");
         Ok(None)
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri;
+
+        info!("Document symbol request for: {}", uri);
+
+        // Get cached analysis (reuse cache from hover implementation)
+        let cache = self.analysis_cache.read().await;
+        let analysis = match cache.get(&uri) {
+            Some(analysis) => analysis.clone(),
+            None => {
+                info!("No analysis available for document symbols");
+                return Ok(None);
+            }
+        };
+        drop(cache);
+
+        // Collect symbols from AST
+        let symbols = crate::symbol_collector::collect_document_symbols(&analysis);
+
+        if symbols.is_empty() {
+            info!("No symbols collected");
+            return Ok(None);
+        }
+
+        info!("Returning {} symbols", symbols.len());
+        // Return hierarchical document symbols
+        Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 }
 

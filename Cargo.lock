@@ -710,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "qanglang-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "coz",
  "phf",
@@ -732,7 +732,7 @@ dependencies = [
 
 [[package]]
 name = "qanglang-test"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "qanglang-core",
  "rustc-hash",

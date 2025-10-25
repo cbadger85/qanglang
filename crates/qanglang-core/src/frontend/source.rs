@@ -143,4 +143,34 @@ impl SourceMap {
         };
         (position - line_start + 1) as u32
     }
+
+    /// Convert LSP position (0-based line/column) to byte offset in source
+    pub fn position_to_offset(&self, line: u32, column: u32) -> Option<usize> {
+        // LSP uses 0-based indexing
+        let target_line = line as usize;
+        let target_col = column as usize;
+
+        // Calculate the start of the target line
+        let line_start = if target_line == 0 {
+            0
+        } else {
+            // Get the position after the newline of the previous line
+            if let Some(&newline_pos) = self.line_indices.get(target_line - 1) {
+                newline_pos + 1
+            } else {
+                // Line doesn't exist
+                return None;
+            }
+        };
+
+        // Calculate the offset by adding the column to the line start
+        let offset = line_start + target_col;
+
+        // Ensure offset is within bounds
+        if offset <= self.source.len() {
+            Some(offset)
+        } else {
+            None
+        }
+    }
 }

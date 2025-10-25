@@ -25,7 +25,7 @@ pub use frontend::source::SourceMap;
 pub use frontend::tokenizer::{Token, TokenType, Tokenizer};
 pub use frontend::{
     analyzer::{AnalysisPipeline, AnalysisPipelineConfig},
-    ast_node_arena::{AstNodeArena, NodeId},
+    ast_node_arena::{AstNodeArena, NodeId, TypedNodeRef},
     node_array_arena::NodeArrayId,
     nodes,
     parser::{Parser, ParserConfig},

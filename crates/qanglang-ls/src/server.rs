@@ -1,14 +1,17 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use qanglang_core::SourceMap;
 use serde_json::Value;
+use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 // use tower_lsp::lsp_types::SemanticTokenType;
 use log::info;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::analyzer::analyze;
+use crate::analyzer::{analyze, AnalysisResult};
+use crate::hover_utils::{find_node_at_offset, format_hover_info};
 
 // pub const LEGEND_TYPE: &[SemanticTokenType] = &[
 //     SemanticTokenType::FUNCTION,
@@ -26,6 +29,8 @@ use crate::analyzer::analyze;
 #[derive(Debug)]
 pub struct Backend {
     client: Client,
+    /// Cache of analysis results, keyed by document URI
+    analysis_cache: Arc<RwLock<HashMap<Url, Arc<AnalysisResult>>>>,
 }
 
 #[tower_lsp::async_trait]
@@ -94,6 +99,7 @@ impl LanguageServer for Backend {
                 // definition_provider: Some(OneOf::Left(true)),
                 // references_provider: Some(OneOf::Left(true)),
                 // rename_provider: Some(OneOf::Left(true)),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 ..ServerCapabilities::default()
             },
         })
@@ -150,6 +156,54 @@ impl LanguageServer for Backend {
 
         Ok(None)
     }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        info!("Hover request at {}:{}", position.line, position.character);
+
+        // Get cached analysis
+        let cache = self.analysis_cache.read().await;
+        let analysis = match cache.get(&uri) {
+            Some(analysis) => analysis.clone(),
+            None => {
+                info!("No analysis available for hover");
+                return Ok(None);
+            }
+        };
+        drop(cache); // Release lock
+
+        // Convert LSP position to byte offset
+        let offset = match analysis
+            .source_map
+            .position_to_offset(position.line, position.character)
+        {
+            Some(offset) => offset,
+            None => {
+                info!("Invalid position for hover");
+                return Ok(None);
+            }
+        };
+
+        info!("Looking for node at offset {}", offset);
+
+        // Find node at position
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        if let Some(info) = node_info {
+            info!("Found node: {:?}", info.kind);
+            let hover_text = format_hover_info(&analysis, &info);
+
+            return Ok(Some(Hover {
+                contents: HoverContents::Scalar(MarkedString::String(hover_text)),
+                range: Some(info.range),
+            }));
+        }
+
+        info!("No node found at position");
+        Ok(None)
+    }
 }
 
 impl Backend {
@@ -167,13 +221,25 @@ impl Backend {
         let mut diagnostics = Vec::new();
 
         let errors = match analyze(source_map.clone()) {
-            Ok(_) => {
+            Ok(result) => {
                 info!("✅ Analysis succeeded - no errors found");
-                Vec::new()
+
+                // Cache the successful analysis
+                let result = Arc::new(result);
+                self.analysis_cache
+                    .write()
+                    .await
+                    .insert(document.uri.clone(), result.clone());
+
+                Vec::new() // no diagnostics
             }
             Err(error) => {
                 info!("❌ Analysis failed");
                 info!("Error count: {}", error.all().len());
+
+                // Remove cached analysis on error
+                self.analysis_cache.write().await.remove(&document.uri);
+
                 error.into_errors()
             }
         };
@@ -225,7 +291,11 @@ pub fn run_language_server() {
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
 
-        let (service, socket) = LspService::build(|client| Backend { client }).finish();
+        let (service, socket) = LspService::build(|client| Backend {
+            client,
+            analysis_cache: Arc::new(RwLock::new(HashMap::new())),
+        })
+        .finish();
 
         info!("Starting server...");
         Server::new(stdin, stdout, socket).serve(service).await;

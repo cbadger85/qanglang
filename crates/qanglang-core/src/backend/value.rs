@@ -480,14 +480,19 @@ impl From<bool> for Value {
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        // For regular numbers (not NaN), use direct comparison
         if !self.0.is_nan() && !other.0.is_nan() {
             return self.0 == other.0;
         }
 
-        // For NaN patterns, compare the bit representation directly
-        // This ensures different NaN values (nil, booleans, strings, etc.) compare correctly
         self.0.to_bits() == other.0.to_bits()
+    }
+}
+
+impl Eq for Value {}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
     }
 }
 

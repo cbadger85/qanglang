@@ -20,7 +20,7 @@ pub struct ArrayHeader {
 pub struct ArrayChunk {
     data: [Option<Value>; CHUNK_SIZE],
     next_chunk: Option<ChunkHandle>,
-    used_slots: usize, // how many slots are actually used
+    used_slots: usize,
     is_marked: bool,
 }
 

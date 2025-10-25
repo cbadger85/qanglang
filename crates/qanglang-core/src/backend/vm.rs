@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 #[cfg(debug_assertions)]
 use crate::debug::disassemble_instruction;
@@ -210,6 +210,7 @@ pub(crate) struct VmState {
     method_cache: [MethodCache; Self::METHOD_CACHE_SIZE],
     cache_generation: u32,
     pub(crate) arg_buffer: [Value; 256],
+    external_roots: FxHashSet<Value>,
 }
 
 impl VmState {
@@ -237,6 +238,7 @@ impl VmState {
             method_cache: [MethodCache::default(); Self::METHOD_CACHE_SIZE],
             cache_generation: 0,
             arg_buffer: [Value::default(); 256],
+            external_roots: FxHashSet::with_capacity_and_hasher(64, FxBuildHasher),
         }
     }
 
@@ -461,6 +463,18 @@ impl Vm {
             .insert(identifier_handle, Value::native_function(handle));
 
         self
+    }
+
+    pub fn add_external_root(&mut self, value: Value) {
+        self.state.external_roots.insert(value);
+    }
+
+    pub fn remove_external_root(&mut self, value: Value) {
+        self.state.external_roots.remove(&value);
+    }
+
+    pub fn clear_external_roots(&mut self) {
+        self.state.external_roots.clear();
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
@@ -2400,6 +2414,8 @@ impl Vm {
         roots.extend(&self.state.arg_buffer);
 
         self.state.modules.gather_roots(&mut roots);
+
+        roots.extend(self.state.external_roots.iter());
 
         roots
     }

@@ -20,7 +20,7 @@ pub struct ArrayHeader {
 pub struct ArrayChunk {
     data: [Option<Value>; CHUNK_SIZE],
     next_chunk: Option<ChunkHandle>,
-    used: usize, // how many slots are actually used
+    used_slots: usize, // how many slots are actually used
     is_marked: bool,
 }
 
@@ -57,7 +57,7 @@ impl ArrayArena {
             let chunk = ArrayChunk {
                 data: [None; CHUNK_SIZE],
                 next_chunk: None,
-                used: 0,
+                used_slots: 0,
                 is_marked: false,
             };
             let chunk_handle = self.chunks.insert(chunk);
@@ -110,7 +110,7 @@ impl ArrayArena {
 
             // Update used count if this slot was previously empty
             if old_value.is_none() {
-                chunk.used += 1;
+                chunk.used_slots += 1;
             }
 
             true
@@ -183,8 +183,8 @@ impl ArrayArena {
                 .take()
                 .unwrap_or_default();
 
-            if self.chunks[chunk_handle].used > 0 {
-                self.chunks[chunk_handle].used -= 1;
+            if self.chunks[chunk_handle].used_slots > 0 {
+                self.chunks[chunk_handle].used_slots -= 1;
             }
 
             value
@@ -213,10 +213,10 @@ impl ArrayArena {
 
                 // Adjust used count
                 if old_value.is_none() && !value.is_nil() {
-                    self.chunks[chunk_handle].used += 1;
+                    self.chunks[chunk_handle].used_slots += 1;
                 } else if old_value.is_some() && value.is_nil() {
-                    if self.chunks[chunk_handle].used > 0 {
-                        self.chunks[chunk_handle].used -= 1;
+                    if self.chunks[chunk_handle].used_slots > 0 {
+                        self.chunks[chunk_handle].used_slots -= 1;
                     }
                 }
             }
@@ -237,8 +237,8 @@ impl ArrayArena {
         if let Some(chunk_handle) = last_chunk {
             if self.chunks[chunk_handle].data[last_slot_idx].is_some() {
                 self.chunks[chunk_handle].data[last_slot_idx] = None;
-                if self.chunks[chunk_handle].used > 0 {
-                    self.chunks[chunk_handle].used -= 1;
+                if self.chunks[chunk_handle].used_slots > 0 {
+                    self.chunks[chunk_handle].used_slots -= 1;
                 }
             }
         }
@@ -274,8 +274,8 @@ impl ArrayArena {
                 .take()
                 .unwrap_or_default();
 
-            if self.chunks[chunk_handle].used > 0 {
-                self.chunks[chunk_handle].used -= 1;
+            if self.chunks[chunk_handle].used_slots > 0 {
+                self.chunks[chunk_handle].used_slots -= 1;
             }
 
             // Keep empty chunks attached for reuse - no longer freeing them
@@ -302,7 +302,7 @@ impl ArrayArena {
             let new_chunk = ArrayChunk {
                 data: [None; CHUNK_SIZE],
                 next_chunk: None,
-                used: 0,
+                used_slots: 0,
                 is_marked: false,
             };
             let new_chunk_handle = self.chunks.insert(new_chunk);
@@ -334,7 +334,7 @@ impl ArrayArena {
 
         if let Some(chunk_handle) = current_chunk {
             self.chunks[chunk_handle].data[slot_index] = Some(value);
-            self.chunks[chunk_handle].used += 1;
+            self.chunks[chunk_handle].used_slots += 1;
         }
 
         header.length += 1;

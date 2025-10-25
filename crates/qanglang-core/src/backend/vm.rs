@@ -11,6 +11,7 @@ use crate::{
     backend::{
         assembler::{FRAME_MAX, STACK_MAX},
         chunk::{OpCode, SourceLocation},
+        external_context::ExternalContext,
         module_resolver::ModuleResolver,
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
@@ -193,7 +194,7 @@ pub(crate) struct CallFrame {
     pub module_export_target: Option<HashMapHandle>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct VmState {
     pub stack_top: usize,
     pub frame_count: usize,
@@ -334,12 +335,13 @@ impl VmState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
 pub struct Vm {
     pub is_debug: bool,
     pub is_gc_enabled: bool,
     pub(crate) state: VmState,
     pub alloc: HeapAllocator,
+    pub external_context: ExternalContext,
 }
 
 impl Vm {
@@ -424,6 +426,7 @@ impl Vm {
             is_gc_enabled: true,
             state: VmState::new(globals, Self::load_intrinsics(&mut alloc), keywords),
             alloc,
+            external_context: ExternalContext::new(),
         };
 
         vm.add_native_function("assert", 2, qang_assert)

@@ -33,6 +33,7 @@ pub fn find_node_at_offset(analysis: &AnalysisResult, offset: usize) -> Option<N
         strings: &analysis.strings,
         source_map: &analysis.source_map,
         symbol_table: &analysis.symbol_table,
+        current_class: None,
     };
 
     finder.find_in_module(module);
@@ -47,6 +48,8 @@ struct NodeFinder<'a> {
     strings: &'a StringInterner,
     source_map: &'a SourceMap,
     symbol_table: &'a qanglang_core::symbol_resolver::SymbolTable,
+    /// Current class context (None if not inside a class, Some(class_decl_node_id) if inside)
+    current_class: Option<NodeId>,
 }
 
 impl<'a> NodeFinder<'a> {
@@ -121,6 +124,16 @@ impl<'a> NodeFinder<'a> {
             }
         }
 
+        // Check superclass identifier if present (e.g., TestClass in "class Foo : TestClass")
+        if let Some(superclass_id) = class.node.superclass {
+            let superclass_ident = self.nodes.get_identifier_node(superclass_id);
+            self.check_identifier_reference(superclass_ident);
+        }
+
+        // Set current class context before checking members
+        let previous_class = self.current_class;
+        self.current_class = Some(class.id);
+
         // Check class members
         let members_length = self.nodes.array.size(class.node.members);
         for i in 0..members_length {
@@ -136,6 +149,9 @@ impl<'a> NodeFinder<'a> {
                 }
             }
         }
+
+        // Restore previous class context
+        self.current_class = previous_class;
     }
 
     fn check_function(&mut self, func: TypedNodeRef<FunctionDeclNode>) {
@@ -268,20 +284,29 @@ impl<'a> NodeFinder<'a> {
                     }
                     CallOperationNode::Property(prop) => {
                         let name_node = self.nodes.get_identifier_node(prop.identifier);
+                        let name = self.strings.get_string(name_node.node.name).to_string();
+
                         if self.span_contains(name_node.node.span) {
                             if self.is_better_match(name_node.node.span) {
-                                let name = self.strings.get_string(name_node.node.name).to_string();
 
-                                // Try to determine if this is a method or field
-                                // Look up the callee to find its type/class, then check the member
-                                let kind = self.find_property_kind(callee, &name);
+                                // Check if callee is 'super' - if so, look up in superclass
+                                let kind = if matches!(callee.node, ExprNode::Primary(PrimaryNode::Super(_))) {
+                                    let kind = self.find_super_property_kind(&name);
+                                    kind
+                                } else {
+                                    // Try to determine if this is a method or field
+                                    // Look up the callee to find its type/class, then check the member
+                                    self.find_property_kind(callee, &name)
+                                };
 
                                 self.best_match = Some(NodeInfo {
                                     node_id: name_node.id,
                                     range: self.span_to_range(name_node.node.span),
                                     kind,
                                 });
+                            } else {
                             }
+                        } else {
                         }
                     }
                     CallOperationNode::Index(index) => {
@@ -471,6 +496,22 @@ impl<'a> NodeFinder<'a> {
                     self.check_expression(else_expr);
                 }
             }
+            PrimaryNode::Super(super_expr) => {
+                // super.field or super.method() - check the method/field identifier
+                let method_ident = self.nodes.get_identifier_node(super_expr.method);
+                if self.span_contains(method_ident.node.span) {
+                    if self.is_better_match(method_ident.node.span) {
+                        let name = self.strings.get_string(method_ident.node.name).to_string();
+                        let kind = self.find_super_property_kind(&name);
+
+                        self.best_match = Some(NodeInfo {
+                            node_id: method_ident.id,
+                            range: self.span_to_range(method_ident.node.span),
+                            kind,
+                        });
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -602,6 +643,65 @@ impl<'a> NodeFinder<'a> {
             }
             _ => None,
         }
+    }
+
+    /// Find a property in the superclass of the current class (for super.property)
+    fn find_super_property_kind(&self, property_name: &str) -> NodeKind {
+
+        // Get the current class we're in
+        if let Some(current_class_id) = self.current_class {
+            let decl = self.nodes.get_decl_node(current_class_id);
+
+            if let DeclNode::Class(class_decl) = decl.node {
+                // Get the superclass if it exists
+                if let Some(superclass_id) = class_decl.superclass {
+                    let superclass_ident = self.nodes.get_identifier_node(superclass_id);
+
+                    // Resolve the superclass identifier to its declaration
+                    if let Some(symbol_info) = self.symbol_table.resolve(superclass_ident.id) {
+                        if matches!(symbol_info.kind, SymbolKind::Class) {
+                            let superclass_decl = self.nodes.get_decl_node(symbol_info.decl_node_id);
+
+                            if let DeclNode::Class(superclass) = superclass_decl.node {
+                                // Search for the property in the superclass members
+                                let members_length = self.nodes.array.size(superclass.members);
+                                for i in 0..members_length {
+                                    if let Some(member_id) = self.nodes.array.get_node_id_at(superclass.members, i) {
+                                        let member = self.nodes.get_class_member_node(member_id);
+
+                                        match member.node {
+                                            ClassMemberNode::Method(method) => {
+                                                let name_node = self.nodes.get_identifier_node(method.name);
+                                                let member_name = self.strings.get_string(name_node.node.name);
+                                                if member_name == property_name {
+                                                    return NodeKind::Function(property_name.to_string());
+                                                }
+                                            }
+                                            ClassMemberNode::Field(field) => {
+                                                let name_node = self.nodes.get_identifier_node(field.name);
+                                                let member_name = self.strings.get_string(name_node.node.name);
+                                                if member_name == property_name {
+                                                    return NodeKind::Field(property_name.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                            }
+                        } else {
+                        }
+                    } else {
+                    }
+                } else {
+                }
+            } else {
+            }
+        } else {
+        }
+
+        // Default to Field if we can't determine
+        NodeKind::Field(property_name.to_string())
     }
 
     fn check_variable(&mut self, var: TypedNodeRef<VariableDeclNode>) {

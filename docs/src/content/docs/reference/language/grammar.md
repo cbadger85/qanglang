@@ -216,7 +216,7 @@ description: A reference the grammar rules for QangLang using a modified EBNF
     <tr>
       <td>primary</td>
       <td>=</td>
-      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral | objectLiteral</td>
+      <td>NUMBER | STRING | "true" | "false" | "nil" | "this" | "(" expression ")" | IDENTIFIER | "super" | "super" "." IDENTIFIER | lambda | arrayLiteral | objectLiteral | whenExpr</td>
       <td>;</td>
     </tr>
     <tr>
@@ -235,6 +235,18 @@ description: A reference the grammar rules for QangLang using a modified EBNF
       <td>objectField</td>
       <td>=</td>
       <td>IDENTIFIER ( "=" expression )?</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>whenExpr</td>
+      <td>=</td>
+      <td>"when" ( "(" expression ")" )? "{" whenBranch* ( "else" "=>" expression ","? )? "}"</td>
+      <td>;</td>
+    </tr>
+    <tr>
+      <td>whenBranch</td>
+      <td>=</td>
+      <td>( "is" ( IDENTIFIER | "STRING" | "NUMBER" | "BOOLEAN" | "ARRAY" | "OBJECT" | "FUNCTION" | "CLASS" | "MODULE" | "NIL" ) | expression ) "=>" expression ","?</td>
       <td>;</td>
     </tr>
   </tbody>

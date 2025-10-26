@@ -29,6 +29,7 @@ pub use frontend::{
     node_array_arena::NodeArrayId,
     nodes,
     parser::{Parser, ParserConfig},
+    symbol_resolver,
 };
 pub use memory::{
     BoundIntrinsicHandle, BoundMethodHandle, ClassHandle, ClosureHandle, FunctionHandle,

@@ -1,4 +1,5 @@
 use qanglang_core::nodes::*;
+use qanglang_core::symbol_resolver::SymbolKind;
 use qanglang_core::{AstNodeArena, NodeId, SourceMap, StringInterner, TypedNodeRef};
 use tower_lsp::lsp_types::{Position, Range};
 
@@ -31,6 +32,7 @@ pub fn find_node_at_offset(analysis: &AnalysisResult, offset: usize) -> Option<N
         nodes: &analysis.nodes,
         strings: &analysis.strings,
         source_map: &analysis.source_map,
+        symbol_table: &analysis.symbol_table,
     };
 
     finder.find_in_module(module);
@@ -44,6 +46,7 @@ struct NodeFinder<'a> {
     nodes: &'a AstNodeArena,
     strings: &'a StringInterner,
     source_map: &'a SourceMap,
+    symbol_table: &'a qanglang_core::symbol_resolver::SymbolTable,
 }
 
 impl<'a> NodeFinder<'a> {
@@ -63,7 +66,43 @@ impl<'a> NodeFinder<'a> {
             DeclNode::Class(class) => self.check_class(TypedNodeRef::new(decl.id, class)),
             DeclNode::Function(func) => self.check_function(TypedNodeRef::new(decl.id, func)),
             DeclNode::Variable(var) => self.check_variable(TypedNodeRef::new(decl.id, var)),
-            _ => {}
+            DeclNode::Lambda(lambda) => {
+                // Check lambda name
+                let name_node = self.nodes.get_identifier_node(lambda.name);
+                if self.span_contains(name_node.node.span) {
+                    if self.is_better_match(name_node.node.span) {
+                        let name = self.strings.get_string(name_node.node.name).to_string();
+                        self.best_match = Some(NodeInfo {
+                            node_id: decl.id,
+                            range: self.span_to_range(name_node.node.span),
+                            kind: NodeKind::Function(name),
+                        });
+                    }
+                }
+
+                // Check lambda body
+                let lambda_expr = self.nodes.get_lambda_expr_node(lambda.lambda);
+                let params_length = self.nodes.array.size(lambda_expr.node.parameters);
+                for i in 0..params_length {
+                    if let Some(param_id) = self.nodes.array.get_node_id_at(lambda_expr.node.parameters, i) {
+                        let param = self.nodes.get_identifier_node(param_id);
+                        self.check_parameter(param);
+                    }
+                }
+
+                let node = self.nodes.get_node(lambda_expr.node.body);
+                if matches!(node, AstNode::BlockStmt(_)) {
+                    let block = self.nodes.get_block_stmt_node(lambda_expr.node.body);
+                    self.check_block(block);
+                } else {
+                    let expr = self.nodes.get_expr_node(lambda_expr.node.body);
+                    self.check_expression(expr);
+                }
+            }
+            DeclNode::Stmt(stmt) => {
+                self.check_statement(TypedNodeRef::new(decl.id, stmt));
+            }
+            DeclNode::Module(_) => {}
         }
     }
 
@@ -141,6 +180,303 @@ impl<'a> NodeFinder<'a> {
                 let decl = self.nodes.get_decl_node(decl_id);
                 self.check_decl(decl);
             }
+        }
+    }
+
+    fn check_statement(&mut self, stmt: TypedNodeRef<StmtNode>) {
+        match stmt.node {
+            StmtNode::Expr(expr_stmt) => {
+                let expr = self.nodes.get_expr_node(expr_stmt.expr);
+                self.check_expression(expr);
+            }
+            StmtNode::Block(block) => {
+                self.check_block(TypedNodeRef::new(stmt.id, block));
+            }
+            StmtNode::If(if_stmt) => {
+                let cond = self.nodes.get_expr_node(if_stmt.condition);
+                self.check_expression(cond);
+
+                let then_branch = self.nodes.get_stmt_node(if_stmt.then_branch);
+                self.check_statement(then_branch);
+
+                if let Some(else_id) = if_stmt.else_branch {
+                    let else_branch = self.nodes.get_stmt_node(else_id);
+                    self.check_statement(else_branch);
+                }
+            }
+            StmtNode::While(while_stmt) => {
+                let cond = self.nodes.get_expr_node(while_stmt.condition);
+                self.check_expression(cond);
+
+                let body = self.nodes.get_stmt_node(while_stmt.body);
+                self.check_statement(body);
+            }
+            StmtNode::For(for_stmt) => {
+                if let Some(init_id) = for_stmt.initializer {
+                    let node = self.nodes.get_node(init_id);
+                    if matches!(node, AstNode::VariableDecl(_)) {
+                        let var_decl = self.nodes.get_var_decl_node(init_id);
+                        self.check_variable(var_decl);
+                    } else {
+                        let expr = self.nodes.get_expr_node(init_id);
+                        self.check_expression(expr);
+                    }
+                }
+
+                if let Some(cond_id) = for_stmt.condition {
+                    let cond = self.nodes.get_expr_node(cond_id);
+                    self.check_expression(cond);
+                }
+
+                if let Some(after_id) = for_stmt.afterthought {
+                    let after = self.nodes.get_expr_node(after_id);
+                    self.check_expression(after);
+                }
+
+                let body = self.nodes.get_stmt_node(for_stmt.body);
+                self.check_statement(body);
+            }
+            StmtNode::Return(ret_stmt) => {
+                if let Some(value_id) = ret_stmt.value {
+                    let value = self.nodes.get_expr_node(value_id);
+                    self.check_expression(value);
+                }
+            }
+            StmtNode::Break(_) | StmtNode::Continue(_) => {}
+        }
+    }
+
+    fn check_expression(&mut self, expr: TypedNodeRef<ExprNode>) {
+        match expr.node {
+            ExprNode::Primary(primary) => {
+                self.check_primary(TypedNodeRef::new(expr.id, primary));
+            }
+            ExprNode::Call(call) => {
+                let callee = self.nodes.get_expr_node(call.callee);
+                self.check_expression(callee);
+
+                let op = self.nodes.get_call_operation_node(call.operation);
+                match op.node {
+                    CallOperationNode::Call(call_node) => {
+                        let length = self.nodes.array.size(call_node.args);
+                        for i in 0..length {
+                            if let Some(arg_id) = self.nodes.array.get_node_id_at(call_node.args, i) {
+                                let arg = self.nodes.get_expr_node(arg_id);
+                                self.check_expression(arg);
+                            }
+                        }
+                    }
+                    CallOperationNode::Property(prop) => {
+                        let name_node = self.nodes.get_identifier_node(prop.identifier);
+                        if self.span_contains(name_node.node.span) {
+                            if self.is_better_match(name_node.node.span) {
+                                let name = self.strings.get_string(name_node.node.name).to_string();
+                                self.best_match = Some(NodeInfo {
+                                    node_id: name_node.id,
+                                    range: self.span_to_range(name_node.node.span),
+                                    kind: NodeKind::Field(name),
+                                });
+                            }
+                        }
+                    }
+                    CallOperationNode::Index(index) => {
+                        let index_expr = self.nodes.get_expr_node(index.index);
+                        self.check_expression(index_expr);
+                    }
+                    _ => {}
+                }
+            }
+            ExprNode::Assignment(assign) => {
+                let target = self.nodes.get_assignment_target_node(assign.target);
+                self.check_assignment_target(target);
+
+                let value = self.nodes.get_expr_node(assign.value);
+                self.check_expression(value);
+            }
+            ExprNode::Unary(unary) => {
+                let operand = self.nodes.get_expr_node(unary.operand);
+                self.check_expression(operand);
+            }
+            ExprNode::Equality(equality) => {
+                let left = self.nodes.get_expr_node(equality.left);
+                self.check_expression(left);
+
+                let right = self.nodes.get_expr_node(equality.right);
+                self.check_expression(right);
+            }
+            ExprNode::Comparison(comparison) => {
+                let left = self.nodes.get_expr_node(comparison.left);
+                self.check_expression(left);
+
+                let right = self.nodes.get_expr_node(comparison.right);
+                self.check_expression(right);
+            }
+            ExprNode::Term(term) => {
+                let left = self.nodes.get_expr_node(term.left);
+                self.check_expression(left);
+
+                let right = self.nodes.get_expr_node(term.right);
+                self.check_expression(right);
+            }
+            ExprNode::Factor(factor) => {
+                let left = self.nodes.get_expr_node(factor.left);
+                self.check_expression(left);
+
+                let right = self.nodes.get_expr_node(factor.right);
+                self.check_expression(right);
+            }
+            ExprNode::Pipe(pipe) => {
+                let left = self.nodes.get_expr_node(pipe.left);
+                self.check_expression(left);
+
+                let right = self.nodes.get_expr_node(pipe.right);
+                self.check_expression(right);
+            }
+            ExprNode::LogicalOr(logical) => {
+                let left = self.nodes.get_expr_node(logical.left);
+                self.check_expression(left);
+
+                let right = self.nodes.get_expr_node(logical.right);
+                self.check_expression(right);
+            }
+            ExprNode::LogicalAnd(logical) => {
+                let left = self.nodes.get_expr_node(logical.left);
+                self.check_expression(left);
+
+                let right = self.nodes.get_expr_node(logical.right);
+                self.check_expression(right);
+            }
+            ExprNode::Ternary(ternary) => {
+                let condition = self.nodes.get_expr_node(ternary.condition);
+                self.check_expression(condition);
+
+                let then_expr = self.nodes.get_expr_node(ternary.then_expr);
+                self.check_expression(then_expr);
+
+                let else_expr = self.nodes.get_expr_node(ternary.else_expr);
+                self.check_expression(else_expr);
+            }
+        }
+    }
+
+    fn check_assignment_target(&mut self, target: TypedNodeRef<AssignmentTargetNode>) {
+        match target.node {
+            AssignmentTargetNode::Identifier(ident) => {
+                self.check_identifier_reference(TypedNodeRef::new(target.id, ident));
+            }
+            AssignmentTargetNode::Property(prop) => {
+                let object = self.nodes.get_expr_node(prop.object);
+                self.check_expression(object);
+            }
+            AssignmentTargetNode::Index(index) => {
+                let object = self.nodes.get_expr_node(index.object);
+                self.check_expression(object);
+
+                let index_expr = self.nodes.get_expr_node(index.index);
+                self.check_expression(index_expr);
+            }
+        }
+    }
+
+    fn check_primary(&mut self, primary: TypedNodeRef<PrimaryNode>) {
+        match primary.node {
+            PrimaryNode::Identifier(ident) => {
+                self.check_identifier_reference(TypedNodeRef::new(primary.id, ident));
+            }
+            PrimaryNode::Array(arr) => {
+                let length = self.nodes.array.size(arr.elements);
+                for i in 0..length {
+                    if let Some(elem_id) = self.nodes.array.get_node_id_at(arr.elements, i) {
+                        let elem = self.nodes.get_expr_node(elem_id);
+                        self.check_expression(elem);
+                    }
+                }
+            }
+            PrimaryNode::Object(obj) => {
+                let length = self.nodes.array.size(obj.entries);
+                for i in 0..length {
+                    if let Some(entry_id) = self.nodes.array.get_node_id_at(obj.entries, i) {
+                        let entry = self.nodes.get_obj_entry_node(entry_id);
+                        let value = self.nodes.get_expr_node(entry.node.value);
+                        self.check_expression(value);
+                    }
+                }
+            }
+            PrimaryNode::Grouping(group) => {
+                let inner = self.nodes.get_expr_node(group.expr);
+                self.check_expression(inner);
+            }
+            PrimaryNode::Lambda(lambda) => {
+                let params_length = self.nodes.array.size(lambda.parameters);
+                for i in 0..params_length {
+                    if let Some(param_id) = self.nodes.array.get_node_id_at(lambda.parameters, i) {
+                        let param = self.nodes.get_identifier_node(param_id);
+                        self.check_parameter(param);
+                    }
+                }
+
+                let node = self.nodes.get_node(lambda.body);
+                if matches!(node, AstNode::BlockStmt(_)) {
+                    let block = self.nodes.get_block_stmt_node(lambda.body);
+                    self.check_block(block);
+                } else {
+                    let expr = self.nodes.get_expr_node(lambda.body);
+                    self.check_expression(expr);
+                }
+            }
+            PrimaryNode::When(when) => {
+                if let Some(value_id) = when.value {
+                    let subject = self.nodes.get_expr_node(value_id);
+                    self.check_expression(subject);
+                }
+
+                let branch_length = self.nodes.array.size(when.branches);
+                for i in 0..branch_length {
+                    if let Some(branch_id) = self.nodes.array.get_node_id_at(when.branches, i) {
+                        let branch = self.nodes.get_when_branch_node(branch_id);
+                        let cond = self.nodes.get_expr_node(branch.node.condition);
+                        self.check_expression(cond);
+
+                        let body = self.nodes.get_expr_node(branch.node.body);
+                        self.check_expression(body);
+                    }
+                }
+
+                if let Some(else_id) = when.else_branch {
+                    let else_expr = self.nodes.get_expr_node(else_id);
+                    self.check_expression(else_expr);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn check_identifier_reference(&mut self, identifier: TypedNodeRef<IdentifierNode>) {
+        if !self.span_contains(identifier.node.span) {
+            return;
+        }
+
+        if !self.is_better_match(identifier.node.span) {
+            return;
+        }
+
+        // Try to resolve this identifier using the symbol table
+        if let Some(symbol_info) = self.symbol_table.resolve(identifier.id) {
+            let name = self.strings.get_string(identifier.node.name).to_string();
+
+            let kind = match symbol_info.kind {
+                SymbolKind::Variable => NodeKind::Variable(name),
+                SymbolKind::Parameter => NodeKind::Parameter(name),
+                SymbolKind::Function => NodeKind::Function(name),
+                SymbolKind::Class => NodeKind::Class(name),
+                SymbolKind::Field => NodeKind::Field(name),
+            };
+
+            self.best_match = Some(NodeInfo {
+                node_id: symbol_info.decl_node_id,
+                range: self.span_to_range(identifier.node.span),
+                kind,
+            });
         }
     }
 

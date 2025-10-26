@@ -7,4 +7,5 @@ pub mod nodes;
 pub mod parser;
 pub mod semantic_validator;
 pub mod source;
+pub mod symbol_resolver;
 pub mod tokenizer;

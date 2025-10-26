@@ -79,8 +79,54 @@ impl<'a> SymbolResolver<'a> {
 
     /// Resolve all symbols in a module and return the symbol table
     pub fn resolve_module(mut self, module: TypedNodeRef<Module>) -> SymbolTable {
+        // First pass: Declare all hoisted symbols (classes, functions, lambdas)
+        self.declare_hoisted_symbols(module);
+
+        // Second pass: Resolve identifier references and process bodies
         self.visit_module(module);
+
         self.symbol_table
+    }
+
+    /// First pass: Declare all hoisted symbols at module scope
+    fn declare_hoisted_symbols(&mut self, module: TypedNodeRef<Module>) {
+        let length = self.nodes.array.size(module.node.decls);
+
+        for i in 0..length {
+            if let Some(node_id) = self.nodes.array.get_node_id_at(module.node.decls, i) {
+                let decl = self.nodes.get_decl_node(node_id);
+
+                match decl.node {
+                    DeclNode::Class(class) => {
+                        let name_node = self.nodes.get_identifier_node(class.name);
+                        self.declare_symbol(
+                            name_node.node.name,
+                            SymbolInfo {
+                                decl_node_id: decl.id,
+                                kind: SymbolKind::Class,
+                                scope_depth: self.scope_depth,
+                            },
+                        );
+                    }
+                    DeclNode::Function(func) => {
+                        let func_expr = self.nodes.get_func_expr_node(func.function);
+                        let name_node = self.nodes.get_identifier_node(func_expr.node.name);
+                        self.declare_symbol(
+                            name_node.node.name,
+                            SymbolInfo {
+                                decl_node_id: decl.id,
+                                kind: SymbolKind::Function,
+                                scope_depth: self.scope_depth,
+                            },
+                        );
+                    }
+                    _ => {
+                        // Variables, lambdas, and statements are not hoisted
+                        // Lambdas are variable declarations (lambda name = ...)
+                    }
+                }
+            }
+        }
     }
 
     fn begin_scope(&mut self) {
@@ -142,17 +188,7 @@ impl<'a> SymbolResolver<'a> {
     }
 
     fn visit_class(&mut self, class: TypedNodeRef<ClassDeclNode>) {
-        let name_node = self.nodes.get_identifier_node(class.node.name);
-
-        // Declare the class name in current scope
-        self.declare_symbol(
-            name_node.node.name,
-            SymbolInfo {
-                decl_node_id: class.id,
-                kind: SymbolKind::Class,
-                scope_depth: self.scope_depth,
-            },
-        );
+        // Note: Class name already declared in hoisting pass, don't redeclare
 
         // Resolve superclass reference if present
         if let Some(superclass_id) = class.node.superclass {
@@ -221,17 +257,8 @@ impl<'a> SymbolResolver<'a> {
 
     fn visit_function(&mut self, func: TypedNodeRef<FunctionDeclNode>) {
         let func_expr = self.nodes.get_func_expr_node(func.node.function);
-        let name_node = self.nodes.get_identifier_node(func_expr.node.name);
 
-        // Declare function name in current scope
-        self.declare_symbol(
-            name_node.node.name,
-            SymbolInfo {
-                decl_node_id: func.id,
-                kind: SymbolKind::Function,
-                scope_depth: self.scope_depth,
-            },
-        );
+        // Note: Function name already declared in hoisting pass, don't redeclare
 
         // Begin new scope for function
         self.begin_scope();
@@ -262,6 +289,7 @@ impl<'a> SymbolResolver<'a> {
     fn visit_lambda_decl(&mut self, lambda: TypedNodeRef<LambdaDeclNode>) {
         let name_node = self.nodes.get_identifier_node(lambda.node.name);
 
+        // Lambdas are NOT hoisted - they're variable declarations
         // Declare lambda name in current scope
         self.declare_symbol(
             name_node.node.name,
@@ -623,4 +651,52 @@ impl<'a> SymbolResolver<'a> {
         let body = self.nodes.get_expr_node(branch.node.body);
         self.visit_expression(body);
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{AnalysisPipeline, Parser, ParserConfig, SourceMap};
+    use std::sync::Arc;
+
+    #[test]
+    fn test_basic_symbol_resolution() {
+        let source = r#"
+var x = 10;
+print(x);
+        "#;
+
+        let source_map = Arc::new(SourceMap::from_source(source.to_string()));
+        let mut strings = StringInterner::new();
+        let mut nodes = AstNodeArena::new();
+        let mut parser = Parser::new(source_map.clone(), &mut nodes, &mut strings)
+            .with_config(ParserConfig { skip_modules: true });
+        let modules = parser.parse();
+
+        let mut errors = parser.into_errors();
+        AnalysisPipeline::new(&mut strings)
+            .analyze(&modules, &mut nodes, &mut errors)
+            .unwrap();
+
+        let root_module_id = modules.get_main().unwrap().node;
+        let module_node = nodes.get_program_node(root_module_id);
+
+        let resolver = SymbolResolver::new(&nodes, &strings);
+        let symbol_table = resolver.resolve_module(module_node);
+
+        // Check that we have at least one resolution (the `x` in `print(x)`)
+        let resolutions = symbol_table.all_resolutions();
+        println!("Number of resolutions: {}", resolutions.len());
+
+        for (node_id, symbol_info) in resolutions {
+            println!("NodeId {:?} resolves to {:?}", node_id, symbol_info);
+        }
+
+        assert!(
+            resolutions.len() > 0,
+            "Symbol table should have at least one resolution for the identifier 'x' in print(x)"
+        );
+    }
+
+    // TODO: Add hoisting test once parser syntax issues are resolved
 }

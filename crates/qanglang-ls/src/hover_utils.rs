@@ -271,10 +271,15 @@ impl<'a> NodeFinder<'a> {
                         if self.span_contains(name_node.node.span) {
                             if self.is_better_match(name_node.node.span) {
                                 let name = self.strings.get_string(name_node.node.name).to_string();
+
+                                // Try to determine if this is a method or field
+                                // Look up the callee to find its type/class, then check the member
+                                let kind = self.find_property_kind(callee, &name);
+
                                 self.best_match = Some(NodeInfo {
                                     node_id: name_node.id,
                                     range: self.span_to_range(name_node.node.span),
-                                    kind: NodeKind::Field(name),
+                                    kind,
                                 });
                             }
                         }
@@ -365,8 +370,27 @@ impl<'a> NodeFinder<'a> {
                 self.check_identifier_reference(TypedNodeRef::new(target.id, ident));
             }
             AssignmentTargetNode::Property(prop) => {
+                // Check the object part (e.g., "this" in "this.name")
                 let object = self.nodes.get_expr_node(prop.object);
                 self.check_expression(object);
+
+                // Check the property name itself (e.g., "name" in "this.name")
+                let property_node = self.nodes.get_identifier_node(prop.property);
+                if self.span_contains(property_node.node.span) {
+                    if self.is_better_match(property_node.node.span) {
+                        let name = self.strings.get_string(property_node.node.name).to_string();
+
+                        // Try to determine if this is a method or field
+                        // by looking up the class definition
+                        let kind = self.find_property_kind(object, &name);
+
+                        self.best_match = Some(NodeInfo {
+                            node_id: property_node.id,
+                            range: self.span_to_range(property_node.node.span),
+                            kind,
+                        });
+                    }
+                }
             }
             AssignmentTargetNode::Index(index) => {
                 let object = self.nodes.get_expr_node(index.object);
@@ -480,7 +504,108 @@ impl<'a> NodeFinder<'a> {
         }
     }
 
+    /// Determine if a property access is a method or field by finding the class definition
+    fn find_property_kind(
+        &self,
+        callee: TypedNodeRef<ExprNode>,
+        property_name: &str,
+    ) -> NodeKind {
+        // Try to find the class definition by resolving the callee
+        if let Some(class_node_id) = self.find_class_of_expression(callee) {
+            let decl = self.nodes.get_decl_node(class_node_id);
+
+            // Check if it's actually a class declaration
+            if let DeclNode::Class(class_decl) = decl.node {
+                // Search through class members for this property
+                let members_length = self.nodes.array.size(class_decl.members);
+                for i in 0..members_length {
+                    if let Some(member_id) =
+                        self.nodes.array.get_node_id_at(class_decl.members, i)
+                    {
+                        let member = self.nodes.get_class_member_node(member_id);
+
+                        match member.node {
+                            ClassMemberNode::Method(method) => {
+                                let name_node = self.nodes.get_identifier_node(method.name);
+                                let member_name =
+                                    self.strings.get_string(name_node.node.name);
+                                if member_name == property_name {
+                                    return NodeKind::Function(property_name.to_string());
+                                }
+                            }
+                            ClassMemberNode::Field(field) => {
+                                let name_node = self.nodes.get_identifier_node(field.name);
+                                let member_name =
+                                    self.strings.get_string(name_node.node.name);
+                                if member_name == property_name {
+                                    return NodeKind::Field(property_name.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Default to Field if we can't determine
+        NodeKind::Field(property_name.to_string())
+    }
+
+    /// Find the class definition for an expression (if it's a class instance)
+    fn find_class_of_expression(&self, expr: TypedNodeRef<ExprNode>) -> Option<NodeId> {
+        match expr.node {
+            ExprNode::Primary(PrimaryNode::Identifier(_ident)) => {
+                // Resolve the identifier to its declaration
+                if let Some(symbol_info) = self.symbol_table.resolve(expr.id) {
+                    // If it's a variable, we need to find its initializer to get the type
+                    // For now, we'll check if the declaration is a class
+                    if matches!(symbol_info.kind, SymbolKind::Class) {
+                        return Some(symbol_info.decl_node_id);
+                    }
+
+                    // Try to find the variable's type by looking at its initializer
+                    let decl_node = self.nodes.get_node(symbol_info.decl_node_id);
+                    if let AstNode::VariableDecl(var_decl) = decl_node {
+                        if let Some(init_id) = var_decl.initializer {
+                            return self.find_class_from_initializer(init_id);
+                        }
+                    }
+                }
+                None
+            }
+            ExprNode::Call(_) => {
+                // If it's a call expression, the result type depends on what's being called
+                // For now, we don't track return types, so we can't determine this
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Find the class from a variable initializer (e.g., `var user = Person()`)
+    fn find_class_from_initializer(&self, init_id: NodeId) -> Option<NodeId> {
+        let init_expr = self.nodes.get_expr_node(init_id);
+
+        match init_expr.node {
+            ExprNode::Call(call) => {
+                // Check if the callee is a class constructor call
+                let callee = self.nodes.get_expr_node(call.callee);
+                if let ExprNode::Primary(PrimaryNode::Identifier(_)) = callee.node {
+                    // Resolve the identifier
+                    if let Some(symbol_info) = self.symbol_table.resolve(callee.id) {
+                        if matches!(symbol_info.kind, SymbolKind::Class) {
+                            return Some(symbol_info.decl_node_id);
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     fn check_variable(&mut self, var: TypedNodeRef<VariableDeclNode>) {
+        // Check the variable name itself
         let name_node = self.nodes.get_identifier_node(var.node.target);
         if self.span_contains(name_node.node.span) {
             if self.is_better_match(name_node.node.span) {
@@ -492,6 +617,12 @@ impl<'a> NodeFinder<'a> {
                     kind: NodeKind::Variable(name),
                 });
             }
+        }
+
+        // Also check the variable's initializer expression (e.g., Person(...) in var user = Person(...))
+        if let Some(init_id) = var.node.initializer {
+            let init_expr = self.nodes.get_expr_node(init_id);
+            self.check_expression(init_expr);
         }
     }
 

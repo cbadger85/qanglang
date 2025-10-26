@@ -3,8 +3,6 @@ title: Grammar Reference
 description: A reference the grammar rules for QangLang using a modified EBNF
 ---
 
-## Grammar Definition
-
 <table>
   <thead>
   <thead/>

@@ -459,10 +459,31 @@ impl<'a> SemanticTokenCollector<'a> {
                 );
             }
             PrimaryNode::Super(sup) => {
+                // super.method or super.field
+                // The span covers the whole expression, but we need to tokenize:
+                // 1. "super" keyword
+                // 2. method/field identifier
+
+                // Get the method/field identifier
+                let method_ident = self.nodes.get_identifier_node(sup.method);
+
+                // Calculate the length of "super" keyword
+                // The identifier starts after "super.", so we can determine where "super" ends
+                let super_keyword_length = method_ident.node.span.start - sup.span.start - 1; // -1 for the '.'
+
+                // Add token for "super" keyword
                 self.add_token(
                     sup.span.start,
-                    sup.span.end - sup.span.start,
+                    super_keyword_length,
                     SemanticTokenType::KEYWORD,
+                );
+
+                // Add token for the method/field identifier as PROPERTY
+                // (we can't distinguish method vs field without type information)
+                self.add_token(
+                    method_ident.node.span.start,
+                    method_ident.node.span.end - method_ident.node.span.start,
+                    SemanticTokenType::PROPERTY,
                 );
             }
             PrimaryNode::Array(arr) => {

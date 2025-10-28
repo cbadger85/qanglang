@@ -362,7 +362,44 @@ impl<'a> SymbolResolver<'a> {
     fn visit_block(&mut self, block: TypedNodeRef<BlockStmtNode>) {
         self.begin_scope();
 
+        // First pass: hoist function and class declarations in this block
         let length = self.nodes.array.size(block.node.decls);
+        for i in 0..length {
+            if let Some(decl_id) = self.nodes.array.get_node_id_at(block.node.decls, i) {
+                let decl = self.nodes.get_decl_node(decl_id);
+
+                match decl.node {
+                    DeclNode::Class(class) => {
+                        let name_node = self.nodes.get_identifier_node(class.name);
+                        self.declare_symbol(
+                            name_node.node.name,
+                            SymbolInfo {
+                                decl_node_id: decl.id,
+                                kind: SymbolKind::Class,
+                                scope_depth: self.scope_depth,
+                            },
+                        );
+                    }
+                    DeclNode::Function(func) => {
+                        let func_expr = self.nodes.get_func_expr_node(func.function);
+                        let name_node = self.nodes.get_identifier_node(func_expr.node.name);
+                        self.declare_symbol(
+                            name_node.node.name,
+                            SymbolInfo {
+                                decl_node_id: decl.id,
+                                kind: SymbolKind::Function,
+                                scope_depth: self.scope_depth,
+                            },
+                        );
+                    }
+                    _ => {
+                        // Variables, lambdas, and statements are not hoisted
+                    }
+                }
+            }
+        }
+
+        // Second pass: visit all declarations to resolve their contents
         for i in 0..length {
             if let Some(decl_id) = self.nodes.array.get_node_id_at(block.node.decls, i) {
                 let decl = self.nodes.get_decl_node(decl_id);

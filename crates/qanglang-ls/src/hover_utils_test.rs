@@ -4,7 +4,7 @@ mod tests {
     use std::path::PathBuf;
     use qanglang_core::SourceMap;
     use crate::analyzer::analyze;
-    use crate::hover_utils::{find_node_at_offset, NodeKind};
+    use crate::hover_utils::{find_node_at_offset, format_hover_info, NodeKind};
 
     #[test]
     fn test_hover_on_class_name() {
@@ -435,6 +435,157 @@ class ChildClass : BaseClass {
                 assert_eq!(name, "baseMethod", "Should find method named baseMethod");
             }
             _ => panic!("Expected Function node for super method, got {:?}", info.kind),
+        }
+    }
+
+    #[test]
+    fn test_hover_on_superclass_name() {
+        let source = r#"
+class Parent { }
+
+class Child : Parent { }
+"#;
+        let source_map = Arc::new(SourceMap::new(source.to_string(), PathBuf::from("test.ql")));
+
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        // Position of "Parent" in "class Child : Parent" (line 3)
+        let lines: Vec<&str> = source.lines().collect();
+        eprintln!("Source lines:");
+        for (i, line) in lines.iter().enumerate() {
+            eprintln!("  Line {}: '{}'", i, line);
+        }
+
+        let line_3 = lines[3];
+        eprintln!("Line 3: '{}'", line_3);
+        let parent_pos = line_3.find("Parent").expect("Should find Parent");
+        eprintln!("Parent starts at column {}", parent_pos);
+
+        let offset = source_map.position_to_offset(3, parent_pos as u32).expect("Valid position");
+        eprintln!("Offset for Parent: {}", offset);
+
+        // Debug: Check nodes at different offsets
+        eprintln!("Checking offsets:");
+        for test_offset in (offset.saturating_sub(5))..=(offset+10) {
+            let node = find_node_at_offset(&analysis, test_offset);
+            if node.is_some() {
+                eprintln!("  Offset {}: {:?}", test_offset, node);
+            }
+        }
+
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        assert!(node_info.is_some(), "Should find a node at superclass name position");
+        let info = node_info.unwrap();
+
+        eprintln!("Found node_info: {:?}", info);
+
+        // Test the hover text output
+        let hover_text = format_hover_info(&analysis, &info);
+        eprintln!("Hover text: {}", hover_text);
+
+        match info.kind {
+            NodeKind::Class(name) => {
+                assert_eq!(name, "Parent", "Should find class named Parent");
+            }
+            _ => panic!("Expected Class node for superclass reference, got {:?}", info.kind),
+        }
+
+        // Verify the hover text is what we expect
+        assert_eq!(hover_text, "```qanglang\nclass Parent\n```", "Hover text should show class Parent");
+    }
+
+    #[test]
+    fn test_hover_on_class_call() {
+        let source = r#"
+class TestClass { }
+
+var x = TestClass();
+"#;
+        let source_map = Arc::new(SourceMap::new(source.to_string(), PathBuf::from("test.ql")));
+
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        // Position of "TestClass" in "TestClass()" (line 3)
+        let lines: Vec<&str> = source.lines().collect();
+        let line_3 = lines[3];
+        let testclass_pos = line_3.find("TestClass").expect("Should find TestClass");
+
+        let offset = source_map.position_to_offset(3, testclass_pos as u32).expect("Valid position");
+
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        assert!(node_info.is_some(), "Should find a node at TestClass() position");
+        let info = node_info.unwrap();
+
+        let hover_text = format_hover_info(&analysis, &info);
+        eprintln!("Hover text for TestClass(): {}", hover_text);
+
+        match info.kind {
+            NodeKind::Class(name) => {
+                assert_eq!(name, "TestClass", "Should find class named TestClass");
+            }
+            _ => panic!("Expected Class node for class call, got {:?}", info.kind),
+        }
+
+        assert_eq!(hover_text, "```qanglang\nclass TestClass\n```", "Hover text should show class TestClass");
+    }
+
+    #[test]
+    fn test_hover_on_class_in_real_file() {
+        // This mimics the actual file structure from test_class_declarations.ql
+        let source = r#"
+fn test_class_inheritance() {
+  class TestClass {
+    test_field = 42;
+
+    test_method() {
+      return 42;
+    }
+  }
+
+  class OtherClass : TestClass {}
+  assert_eq(
+    OtherClass().test_field,
+    42,
+    "Expected 42 but received " + (OtherClass().test_field |> to_string)
+  );
+}
+"#;
+        let source_map = Arc::new(SourceMap::new(source.to_string(), PathBuf::from("test.ql")));
+
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        let lines: Vec<&str> = source.lines().collect();
+
+        // Test 1: Hover on "TestClass" in "class OtherClass : TestClass"
+        let line_10 = lines[10];
+        let testclass_pos = line_10.rfind("TestClass").expect("Should find TestClass in superclass position");
+
+        let offset = source_map.position_to_offset(10, testclass_pos as u32).expect("Valid position");
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        assert!(node_info.is_some(), "Should find TestClass in superclass position");
+        let info = node_info.unwrap();
+
+        match &info.kind {
+            NodeKind::Class(name) => assert_eq!(name, "TestClass"),
+            _ => panic!("Expected Class, got {:?}", info.kind),
+        }
+
+        // Test 2: Hover on "OtherClass" in "OtherClass().test_field"
+        let line_12 = lines[12];
+        let otherclass_pos = line_12.find("OtherClass").expect("Should find OtherClass");
+
+        let offset = source_map.position_to_offset(12, otherclass_pos as u32).expect("Valid position");
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        assert!(node_info.is_some(), "Should find OtherClass in call position");
+        let info = node_info.unwrap();
+
+        match &info.kind {
+            NodeKind::Class(name) => assert_eq!(name, "OtherClass"),
+            _ => panic!("Expected Class, got {:?}", info.kind),
         }
     }
 }

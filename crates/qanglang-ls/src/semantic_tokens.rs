@@ -376,6 +376,7 @@ impl<'a> SemanticTokenCollector<'a> {
                         SymbolKind::Function => SemanticTokenType::FUNCTION,
                         SymbolKind::Class => SemanticTokenType::CLASS,
                         SymbolKind::Field => SemanticTokenType::PROPERTY,
+                        SymbolKind::Module => SemanticTokenType::VARIABLE, // Modules are like variables
                     };
 
                     self.add_token(
@@ -441,6 +442,7 @@ impl<'a> SemanticTokenCollector<'a> {
                         SymbolKind::Function => SemanticTokenType::FUNCTION,
                         SymbolKind::Class => SemanticTokenType::CLASS,
                         SymbolKind::Field => SemanticTokenType::PROPERTY,
+                        SymbolKind::Module => SemanticTokenType::VARIABLE, // Modules are like variables
                     };
 
                     self.add_token(

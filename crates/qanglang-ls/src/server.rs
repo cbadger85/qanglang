@@ -11,7 +11,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::analyzer::{AnalysisResult, analyze};
-use crate::hover_utils::{find_node_at_offset, format_hover_info};
+use crate::hover_utils::{find_node_at_offset, format_hover_info, get_declaration_range};
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::CLASS,     // 0: class names
@@ -102,10 +102,9 @@ impl LanguageServer for Backend {
                         },
                     ),
                 ),
-                // definition: Some(GotoCapability::default()),
-                // definition_provider: Some(OneOf::Left(true)),
-                // references_provider: Some(OneOf::Left(true)),
-                // rename_provider: Some(OneOf::Left(true)),
+                definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
@@ -162,6 +161,289 @@ impl LanguageServer for Backend {
             Err(err) => self.client.log_message(MessageType::ERROR, err).await,
         }
 
+        Ok(None)
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        debug!(
+            "Go to definition request at {}:{}",
+            position.line, position.character
+        );
+
+        // Get cached analysis
+        let cache = self.analysis_cache.read().await;
+        let analysis = match cache.get(&uri) {
+            Some(analysis) => analysis.clone(),
+            None => {
+                debug!("No analysis available for goto definition");
+                return Ok(None);
+            }
+        };
+        drop(cache);
+
+        // Convert LSP position to byte offset
+        let offset = match analysis
+            .source_map
+            .position_to_offset(position.line, position.character)
+        {
+            Some(offset) => offset,
+            None => {
+                debug!("Invalid position for goto definition");
+                return Ok(None);
+            }
+        };
+
+        debug!("Looking for definition at offset {}", offset);
+
+        // Find node at position - this already resolves to the declaration via symbol table
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        if let Some(info) = node_info {
+            debug!(
+                "Found definition node: {:?}, node_id: {:?}",
+                info.kind, info.node_id
+            );
+
+            // Get the actual declaration's range (not the reference's range from info.range)
+            let decl_range = match get_declaration_range(&analysis, info.node_id) {
+                Some(range) => range,
+                None => {
+                    debug!("Could not get declaration range for node_id: {:?}", info.node_id);
+                    // Fall back to using the range from info (which might be a reference)
+                    info.range
+                }
+            };
+
+            let location = Location {
+                uri: uri.clone(),
+                range: decl_range,
+            };
+
+            debug!("Returning location: {:?}", location);
+            return Ok(Some(GotoDefinitionResponse::Scalar(location)));
+        }
+
+        debug!("No definition found at position");
+        Ok(None)
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        debug!(
+            "References request at {}:{}",
+            position.line, position.character
+        );
+
+        // Get cached analysis
+        let cache = self.analysis_cache.read().await;
+        let analysis = match cache.get(&uri) {
+            Some(analysis) => analysis.clone(),
+            None => {
+                debug!("No analysis available for references");
+                return Ok(None);
+            }
+        };
+        drop(cache);
+
+        // Convert LSP position to byte offset
+        let offset = match analysis
+            .source_map
+            .position_to_offset(position.line, position.character)
+        {
+            Some(offset) => offset,
+            None => {
+                debug!("Invalid position for references");
+                return Ok(None);
+            }
+        };
+
+        debug!("Looking for references at offset {}", offset);
+
+        // Find the declaration node at the cursor position
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        if let Some(info) = node_info {
+            debug!(
+                "Found declaration node: {:?}, node_id: {:?}",
+                info.kind, info.node_id
+            );
+
+            let decl_node_id = info.node_id;
+            let mut locations = Vec::new();
+            let mut seen_ranges: std::collections::HashSet<(u32, u32, u32, u32)> = std::collections::HashSet::new();
+
+            // Optionally include the declaration itself
+            if params.context.include_declaration {
+                let range_key = (info.range.start.line, info.range.start.character,
+                                 info.range.end.line, info.range.end.character);
+                seen_ranges.insert(range_key);
+
+                locations.push(Location {
+                    uri: uri.clone(),
+                    range: info.range,
+                });
+                debug!("Added declaration location: {:?}", info.range);
+            }
+
+            // Find all references to this declaration by iterating through the symbol table
+            let mut ref_count = 0;
+            for (ref_id, symbol_info) in analysis.symbol_table.all_resolutions() {
+                if symbol_info.decl_node_id == decl_node_id {
+                    // This is a reference to our declaration
+                    // Get the span of the reference node
+                    let ref_node = analysis.nodes.get_identifier_node(*ref_id);
+                    let ref_span = ref_node.node.span;
+
+                    let range = Range {
+                        start: Position {
+                            line: analysis.source_map.get_line_number(ref_span.start) - 1,
+                            character: analysis.source_map.get_column_number(ref_span.start) - 1,
+                        },
+                        end: Position {
+                            line: analysis.source_map.get_line_number(ref_span.end) - 1,
+                            character: analysis.source_map.get_column_number(ref_span.end) - 1,
+                        },
+                    };
+
+                    // Skip if we've already seen this range (deduplication)
+                    let range_key = (range.start.line, range.start.character,
+                                     range.end.line, range.end.character);
+                    if seen_ranges.contains(&range_key) {
+                        debug!("Skipping duplicate range: {:?}", range);
+                        continue;
+                    }
+                    seen_ranges.insert(range_key);
+
+                    debug!("Found reference at {:?}", range);
+                    locations.push(Location {
+                        uri: uri.clone(),
+                        range,
+                    });
+                    ref_count += 1;
+                }
+            }
+
+            debug!("Found {} reference(s) total", ref_count);
+            debug!("Total locations (including decl if requested): {}", locations.len());
+            return Ok(Some(locations));
+        }
+
+        debug!("No references found at position");
+        Ok(None)
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        debug!(
+            "Rename request at {}:{} to '{}'",
+            position.line, position.character, new_name
+        );
+
+        // Get cached analysis
+        let cache = self.analysis_cache.read().await;
+        let analysis = match cache.get(&uri) {
+            Some(analysis) => analysis.clone(),
+            None => {
+                debug!("No analysis available for rename");
+                return Ok(None);
+            }
+        };
+        drop(cache);
+
+        // Convert LSP position to byte offset
+        let offset = match analysis
+            .source_map
+            .position_to_offset(position.line, position.character)
+        {
+            Some(offset) => offset,
+            None => {
+                debug!("Invalid position for rename");
+                return Ok(None);
+            }
+        };
+
+        debug!("Looking for symbol to rename at offset {}", offset);
+
+        // Find the declaration node at the cursor position
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        if let Some(info) = node_info {
+            debug!("Found symbol to rename: {:?}", info.kind);
+
+            let decl_node_id = info.node_id;
+            let mut text_edits = Vec::new();
+            let mut seen_ranges: std::collections::HashSet<(u32, u32, u32, u32)> = std::collections::HashSet::new();
+
+            // Include the declaration itself
+            let decl_range_key = (info.range.start.line, info.range.start.character,
+                                  info.range.end.line, info.range.end.character);
+            seen_ranges.insert(decl_range_key);
+
+            text_edits.push(TextEdit {
+                range: info.range,
+                new_text: new_name.clone(),
+            });
+
+            // Find all references to this declaration
+            for (ref_id, symbol_info) in analysis.symbol_table.all_resolutions() {
+                if symbol_info.decl_node_id == decl_node_id {
+                    // This is a reference to our declaration
+                    // Get the span of the reference node
+                    let ref_node = analysis.nodes.get_identifier_node(*ref_id);
+                    let ref_span = ref_node.node.span;
+
+                    let range = Range {
+                        start: Position {
+                            line: analysis.source_map.get_line_number(ref_span.start) - 1,
+                            character: analysis.source_map.get_column_number(ref_span.start) - 1,
+                        },
+                        end: Position {
+                            line: analysis.source_map.get_line_number(ref_span.end) - 1,
+                            character: analysis.source_map.get_column_number(ref_span.end) - 1,
+                        },
+                    };
+
+                    // Skip if we've already seen this range (deduplication)
+                    let range_key = (range.start.line, range.start.character,
+                                     range.end.line, range.end.character);
+                    if seen_ranges.contains(&range_key) {
+                        debug!("Skipping duplicate range for rename: {:?}", range);
+                        continue;
+                    }
+                    seen_ranges.insert(range_key);
+
+                    text_edits.push(TextEdit {
+                        range,
+                        new_text: new_name.clone(),
+                    });
+                }
+            }
+
+            debug!("Created {} text edit(s) for rename", text_edits.len());
+
+            // Create workspace edit
+            let mut changes = HashMap::new();
+            changes.insert(uri, text_edits);
+
+            return Ok(Some(WorkspaceEdit {
+                changes: Some(changes),
+                document_changes: None,
+                change_annotations: None,
+            }));
+        }
+
+        debug!("No symbol found to rename at position");
         Ok(None)
     }
 

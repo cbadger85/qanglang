@@ -20,6 +20,7 @@ pub enum NodeKind {
     Field(String),
     Parameter(String),
     Module(String),
+    ImportPath(String), // Absolute path to the imported module file
 }
 
 /// Find the AST node at the given byte offset
@@ -112,6 +113,18 @@ impl<'a> NodeFinder<'a> {
     }
 
     fn check_module(&mut self, module: TypedNodeRef<ImportModuleDeclNode>) {
+        // Check if the import path string literal contains the offset
+        if self.span_contains(module.node.path_literal_span) {
+            if self.is_better_match(module.node.path_literal_span) {
+                let path = self.strings.get_string(module.node.path).to_string();
+                self.best_match = Some(NodeInfo {
+                    node_id: module.id,
+                    range: self.span_to_range(module.node.path_literal_span),
+                    kind: NodeKind::ImportPath(path),
+                });
+            }
+        }
+
         // Check if the module name identifier contains the offset
         let name_node = self.nodes.get_identifier_node(module.node.name);
         if self.span_contains(name_node.node.span) {
@@ -853,5 +866,6 @@ pub fn format_hover_info(_analysis: &AnalysisResult, info: &NodeInfo) -> String 
         NodeKind::Field(name) => format!("```qanglang\nfield {}\n```", name),
         NodeKind::Parameter(name) => format!("```qanglang\nparam {}\n```", name),
         NodeKind::Module(name) => format!("```qanglang\nmod {}\n```", name),
+        NodeKind::ImportPath(path) => format!("```qanglang\nimport(\"{}\")\n```", path),
     }
 }

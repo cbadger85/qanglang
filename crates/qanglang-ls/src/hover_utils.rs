@@ -7,8 +7,7 @@ use crate::analyzer::AnalysisResult;
 
 #[derive(Debug, Clone)]
 pub struct NodeInfo {
-    #[allow(dead_code)]
-    node_id: NodeId, // Might be useful later when doc comments are added
+    pub node_id: NodeId,
     pub range: Range,
     pub kind: NodeKind,
 }
@@ -802,6 +801,47 @@ impl<'a> NodeFinder<'a> {
             },
         }
     }
+}
+
+/// Get the identifier span (range) for a declaration node
+/// This is used by "Go to Definition" to get the declaration's actual location
+pub fn get_declaration_range(
+    analysis: &AnalysisResult,
+    decl_node_id: NodeId,
+) -> Option<Range> {
+    let node = analysis.nodes.get_node(decl_node_id);
+
+    let identifier_id = match node {
+        AstNode::VariableDecl(var_decl) => var_decl.target,
+        AstNode::FunctionDecl(func_decl) => {
+            let func_expr = analysis.nodes.get_func_expr_node(func_decl.function);
+            func_expr.node.name
+        }
+        AstNode::Class(class_decl) => class_decl.name,
+        AstNode::FieldDecl(field_decl) => field_decl.name,
+        AstNode::LambdaDecl(lambda_decl) => lambda_decl.name,
+        AstNode::ImportModuleDecl(module_decl) => module_decl.name,
+        AstNode::Identifier(_) => {
+            // If it's already an identifier (e.g., parameter), use it directly
+            decl_node_id
+        }
+        _ => return None,
+    };
+
+    // Get the identifier node and convert its span to a Range
+    let identifier = analysis.nodes.get_identifier_node(identifier_id);
+    let span = identifier.node.span;
+
+    Some(Range {
+        start: Position {
+            line: analysis.source_map.get_line_number(span.start) - 1,
+            character: analysis.source_map.get_column_number(span.start) - 1,
+        },
+        end: Position {
+            line: analysis.source_map.get_line_number(span.end) - 1,
+            character: analysis.source_map.get_column_number(span.end) - 1,
+        },
+    })
 }
 
 /// Format hover information for display

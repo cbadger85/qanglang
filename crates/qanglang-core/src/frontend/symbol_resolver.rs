@@ -22,6 +22,7 @@ pub enum SymbolKind {
     Function,
     Class,
     Field,
+    Module,
 }
 
 /// Maps identifier references to their declarations
@@ -120,6 +121,17 @@ impl<'a> SymbolResolver<'a> {
                             },
                         );
                     }
+                    DeclNode::Module(module_decl) => {
+                        let name_node = self.nodes.get_identifier_node(module_decl.name);
+                        self.declare_symbol(
+                            name_node.node.name,
+                            SymbolInfo {
+                                decl_node_id: decl.id,
+                                kind: SymbolKind::Module,
+                                scope_depth: self.scope_depth,
+                            },
+                        );
+                    }
                     _ => {
                         // Variables, lambdas, and statements are not hoisted
                         // Lambdas are variable declarations (lambda name = ...)
@@ -181,8 +193,9 @@ impl<'a> SymbolResolver<'a> {
             DeclNode::Variable(var) => self.visit_variable(TypedNodeRef::new(decl.id, var)),
             DeclNode::Lambda(lambda) => self.visit_lambda_decl(TypedNodeRef::new(decl.id, lambda)),
             DeclNode::Stmt(stmt) => self.visit_statement(TypedNodeRef::new(decl.id, stmt)),
-            DeclNode::Module(_) => {
-                // Import declarations - nothing to resolve yet
+            DeclNode::Module(_module_decl) => {
+                // Module declarations are already handled in hoisting pass
+                // The module name identifier is declared, and references to it will be resolved
             }
         }
     }
@@ -388,6 +401,17 @@ impl<'a> SymbolResolver<'a> {
                             SymbolInfo {
                                 decl_node_id: decl.id,
                                 kind: SymbolKind::Function,
+                                scope_depth: self.scope_depth,
+                            },
+                        );
+                    }
+                    DeclNode::Module(module_decl) => {
+                        let name_node = self.nodes.get_identifier_node(module_decl.name);
+                        self.declare_symbol(
+                            name_node.node.name,
+                            SymbolInfo {
+                                decl_node_id: decl.id,
+                                kind: SymbolKind::Module,
                                 scope_depth: self.scope_depth,
                             },
                         );

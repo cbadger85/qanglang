@@ -20,6 +20,7 @@ pub enum NodeKind {
     Variable(String),
     Field(String),
     Parameter(String),
+    Module(String),
 }
 
 /// Find the AST node at the given byte offset
@@ -105,7 +106,24 @@ impl<'a> NodeFinder<'a> {
             DeclNode::Stmt(stmt) => {
                 self.check_statement(TypedNodeRef::new(decl.id, stmt));
             }
-            DeclNode::Module(_) => {}
+            DeclNode::Module(module_decl) => {
+                self.check_module(TypedNodeRef::new(decl.id, module_decl));
+            }
+        }
+    }
+
+    fn check_module(&mut self, module: TypedNodeRef<ImportModuleDeclNode>) {
+        // Check if the module name identifier contains the offset
+        let name_node = self.nodes.get_identifier_node(module.node.name);
+        if self.span_contains(name_node.node.span) {
+            if self.is_better_match(name_node.node.span) {
+                let name = self.strings.get_string(name_node.node.name).to_string();
+                self.best_match = Some(NodeInfo {
+                    node_id: module.id,
+                    range: self.span_to_range(name_node.node.span),
+                    kind: NodeKind::Module(name),
+                });
+            }
         }
     }
 
@@ -535,6 +553,7 @@ impl<'a> NodeFinder<'a> {
                 SymbolKind::Function => NodeKind::Function(name),
                 SymbolKind::Class => NodeKind::Class(name),
                 SymbolKind::Field => NodeKind::Field(name),
+                SymbolKind::Module => NodeKind::Module(name),
             };
 
             self.best_match = Some(NodeInfo {
@@ -793,5 +812,6 @@ pub fn format_hover_info(_analysis: &AnalysisResult, info: &NodeInfo) -> String 
         NodeKind::Variable(name) => format!("```qanglang\nvar {}\n```", name),
         NodeKind::Field(name) => format!("```qanglang\nfield {}\n```", name),
         NodeKind::Parameter(name) => format!("```qanglang\nparam {}\n```", name),
+        NodeKind::Module(name) => format!("```qanglang\nmod {}\n```", name),
     }
 }

@@ -532,6 +532,244 @@ var x = TestClass();
     }
 
     #[test]
+    fn test_hover_on_module_declaration() {
+        use std::fs;
+
+        // Create a temporary directory and files for the test
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_module_hover.ql");
+        fs::write(&temp_file, "// temp module for testing").expect("Failed to create temp file");
+
+        // Create a main file that imports the module
+        let main_file = temp_dir.join("main_hover_test.ql");
+        let relative_path = "test_module_hover.ql";
+        let source = format!(
+            r#"mod myModule = import("{}");
+
+fn test() {{
+    var result = myModule.something();
+}}
+"#,
+            relative_path
+        );
+        fs::write(&main_file, &source).expect("Failed to create main file");
+
+        let source_map = Arc::new(SourceMap::new(source.clone(), main_file.clone()));
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        // Position of "myModule" in the module declaration (line 0)
+        let lines: Vec<&str> = source.lines().collect();
+        let line_0 = lines[0];
+        let mymodule_pos = line_0.find("myModule").expect("Should find myModule");
+
+        let offset = source_map
+            .position_to_offset(0, mymodule_pos as u32)
+            .expect("Valid position");
+
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        // Clean up
+        let _ = fs::remove_file(&temp_file);
+        let _ = fs::remove_file(&main_file);
+
+        assert!(
+            node_info.is_some(),
+            "Should find a node at module declaration position"
+        );
+        let info = node_info.unwrap();
+
+        match &info.kind {
+            NodeKind::Module(name) => {
+                assert_eq!(name, "myModule", "Should find module named myModule");
+            }
+            _ => panic!("Expected Module node, got {:?}", info.kind),
+        }
+
+        // Test the hover text output
+        let hover_text = format_hover_info(&analysis, &info);
+        assert_eq!(
+            hover_text, "```qanglang\nmod myModule\n```",
+            "Hover text should show mod myModule"
+        );
+    }
+
+    #[test]
+    fn test_hover_on_module_usage() {
+        use std::fs;
+
+        // Create a temporary directory and files for the test
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_module_usage_hover.ql");
+        fs::write(&temp_file, "// temp module for testing").expect("Failed to create temp file");
+
+        // Create a main file that imports and uses the module
+        let main_file = temp_dir.join("main_usage_hover_test.ql");
+        let relative_path = "test_module_usage_hover.ql";
+        let source = format!(
+            r#"mod testMod = import("{}");
+
+fn test() {{
+    var result = testMod.doSomething();
+}}
+"#,
+            relative_path
+        );
+        fs::write(&main_file, &source).expect("Failed to create main file");
+
+        let source_map = Arc::new(SourceMap::new(source.clone(), main_file.clone()));
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        // Position of "testMod" in the function call (line 3)
+        let lines: Vec<&str> = source.lines().collect();
+        let line_3 = lines[3];
+        let testmod_pos = line_3.find("testMod").expect("Should find testMod");
+
+        let offset = source_map
+            .position_to_offset(3, testmod_pos as u32)
+            .expect("Valid position");
+
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        // Clean up
+        let _ = fs::remove_file(&temp_file);
+        let _ = fs::remove_file(&main_file);
+
+        assert!(
+            node_info.is_some(),
+            "Should find a node at module usage position"
+        );
+        let info = node_info.unwrap();
+
+        match &info.kind {
+            NodeKind::Module(name) => {
+                assert_eq!(name, "testMod", "Should find module named testMod");
+            }
+            _ => panic!("Expected Module node, got {:?}", info.kind),
+        }
+
+        // Test the hover text output
+        let hover_text = format_hover_info(&analysis, &info);
+        assert_eq!(
+            hover_text, "```qanglang\nmod testMod\n```",
+            "Hover text should show mod testMod"
+        );
+    }
+
+    #[test]
+    fn test_hover_on_module_in_property_access() {
+        use std::fs;
+
+        // Create a temporary directory and files for the test
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_module_prop_hover.ql");
+        fs::write(&temp_file, "fn sum(a, b) { return a + b; }").expect("Failed to create temp file");
+
+        // Create a main file that imports and uses the module in property access
+        let main_file = temp_dir.join("main_prop_hover_test.ql");
+        let relative_path = "test_module_prop_hover.ql";
+        let source = format!(
+            r#"fn test() {{
+  mod simple = import("{}");
+  var result = simple.sum(5, 3);
+}}
+"#,
+            relative_path
+        );
+        fs::write(&main_file, &source).expect("Failed to create main file");
+
+        let source_map = Arc::new(SourceMap::new(source.clone(), main_file.clone()));
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        // Position of "simple" in the property access (line 2)
+        let lines: Vec<&str> = source.lines().collect();
+        let line_2 = lines[2];
+        let simple_pos = line_2.find("simple").expect("Should find simple");
+
+        let offset = source_map
+            .position_to_offset(2, simple_pos as u32)
+            .expect("Valid position");
+
+        let node_info = find_node_at_offset(&analysis, offset);
+
+        // Clean up
+        let _ = fs::remove_file(&temp_file);
+        let _ = fs::remove_file(&main_file);
+
+        assert!(
+            node_info.is_some(),
+            "Should find a node at module usage in property access position"
+        );
+        let info = node_info.unwrap();
+
+        match &info.kind {
+            NodeKind::Module(name) => {
+                assert_eq!(name, "simple", "Should find module named simple");
+            }
+            _ => panic!("Expected Module node, got {:?}", info.kind),
+        }
+
+        // Test the hover text output
+        let hover_text = format_hover_info(&analysis, &info);
+        assert_eq!(
+            hover_text, "```qanglang\nmod simple\n```",
+            "Hover text should show mod simple"
+        );
+    }
+
+    #[test]
+    fn test_hover_on_module_with_real_files() {
+        use std::path::PathBuf;
+
+        // Use the actual test file
+        let test_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("tests")
+            .join("test_modules.ql");
+
+        eprintln!("Test file path: {:?}", test_file_path);
+
+        let source = std::fs::read_to_string(&test_file_path).expect("Should read test file");
+        let source_map = Arc::new(SourceMap::new(source.clone(), test_file_path));
+
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        // Find "simple" on line 5: "  var result = simple.sum(5, 3);"
+        let lines: Vec<&str> = source.lines().collect();
+        let line_5 = lines[5];
+        eprintln!("Line 5: '{}'", line_5);
+
+        let simple_pos = line_5.find("simple").expect("Should find simple");
+        eprintln!("simple starts at column {}", simple_pos);
+
+        let offset = source_map
+            .position_to_offset(5, simple_pos as u32)
+            .expect("Valid position");
+        eprintln!("Offset for simple: {}", offset);
+
+        let node_info = find_node_at_offset(&analysis, offset);
+        eprintln!("Found node_info: {:?}", node_info);
+
+        if let Some(info) = node_info {
+            eprintln!("Node kind: {:?}", info.kind);
+            match &info.kind {
+                NodeKind::Module(name) => {
+                    eprintln!("SUCCESS: Found module {}", name);
+                    assert_eq!(name, "simple");
+                }
+                other => {
+                    eprintln!("FAILURE: Expected Module but got {:?}", other);
+                    panic!("Expected Module node, got {:?}", other);
+                }
+            }
+        } else {
+            panic!("No node found at offset {}", offset);
+        }
+    }
+
+    #[test]
     fn test_hover_on_class_in_real_file() {
         // This mimics the actual file structure from test_class_declarations.ql
         let source = r#"

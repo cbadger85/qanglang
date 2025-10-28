@@ -514,6 +514,7 @@ impl<'a> Parser<'a> {
             .create_node(AstNode::ImportModuleDecl(ImportModuleDeclNode {
                 path,
                 name,
+                path_literal_span: path_span,
                 span: SourceSpan::combine(span_start, span_end),
             })))
     }

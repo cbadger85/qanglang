@@ -11,7 +11,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::analyzer::{AnalysisResult, analyze};
-use crate::hover_utils::{find_node_at_offset, format_hover_info, get_declaration_range};
+use crate::hover_utils::{find_node_at_offset, format_hover_info, get_declaration_range, NodeKind};
 
 pub const LEGEND_TYPE: &[SemanticTokenType] = &[
     SemanticTokenType::CLASS,     // 0: class names
@@ -209,6 +209,37 @@ impl LanguageServer for Backend {
                 "Found definition node: {:?}, node_id: {:?}",
                 info.kind, info.node_id
             );
+
+            // Special case: ImportPath - navigate to the imported file
+            if let NodeKind::ImportPath(path) = &info.kind {
+                debug!("ImportPath detected, opening file: {}", path);
+
+                // Convert the absolute path to a file URI
+                let path_uri = match tower_lsp::lsp_types::Url::from_file_path(path) {
+                    Ok(uri) => uri,
+                    Err(_) => {
+                        debug!("Failed to convert path to URI: {}", path);
+                        return Ok(None);
+                    }
+                };
+
+                let location = Location {
+                    uri: path_uri,
+                    range: tower_lsp::lsp_types::Range {
+                        start: tower_lsp::lsp_types::Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: tower_lsp::lsp_types::Position {
+                            line: 0,
+                            character: 0,
+                        },
+                    },
+                };
+
+                debug!("Returning import path location: {:?}", location);
+                return Ok(Some(GotoDefinitionResponse::Scalar(location)));
+            }
 
             // Get the actual declaration's range (not the reference's range from info.range)
             let decl_range = match get_declaration_range(&analysis, info.node_id) {

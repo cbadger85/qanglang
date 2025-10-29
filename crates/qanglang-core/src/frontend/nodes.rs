@@ -269,7 +269,8 @@ pub struct ObjectEntryNode {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ImportModuleDeclNode {
     pub path: StringHandle,
-    pub name: NodeId, // IdentifierNode
+    pub name: NodeId,                  // IdentifierNode
+    pub path_literal_span: SourceSpan, // Span of the string literal of the path
     pub span: SourceSpan,
 }
 

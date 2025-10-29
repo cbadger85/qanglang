@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use qanglang_core::{
+    symbol_resolver::{SymbolResolver, SymbolTable},
     AnalysisPipeline, AstNodeArena, NodeId, Parser, ParserConfig, QangPipelineError, SourceMap,
     StringInterner,
 };
@@ -12,6 +13,7 @@ pub struct AnalysisResult {
     pub strings: StringInterner,
     pub root_module_id: NodeId,
     pub source_map: Arc<SourceMap>,
+    pub symbol_table: SymbolTable,
 }
 
 pub fn analyze(source_map: Arc<SourceMap>) -> Result<AnalysisResult, QangPipelineError> {
@@ -32,10 +34,16 @@ pub fn analyze(source_map: Arc<SourceMap>) -> Result<AnalysisResult, QangPipelin
             QangPipelineError::new(vec![])
         })?;
 
+    // Run symbol resolution to map identifier references to declarations
+    let module_node = nodes.get_program_node(root_module_id);
+    let resolver = SymbolResolver::new(&nodes, &strings);
+    let symbol_table = resolver.resolve_module(module_node);
+
     Ok(AnalysisResult {
         nodes,
         strings,
         root_module_id,
         source_map,
+        symbol_table,
     })
 }

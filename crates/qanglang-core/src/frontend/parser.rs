@@ -514,6 +514,7 @@ impl<'a> Parser<'a> {
             .create_node(AstNode::ImportModuleDecl(ImportModuleDeclNode {
                 path,
                 name,
+                path_literal_span: path_span,
                 span: SourceSpan::combine(span_start, span_end),
             })))
     }
@@ -681,7 +682,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.consume(TokenType::RightBrace, "Expected '}'.")?;
-        let end_span = self.get_current_span();
+        let end_span = self.get_previous_span(); // Use previous_span to get the '}' token we just consumed
 
         let node_id = self.nodes.create_node(AstNode::BlockStmt(BlockStmtNode {
             decls,

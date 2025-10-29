@@ -1,5 +1,6 @@
 use crate::analyzer::AnalysisResult;
 use qanglang_core::nodes::*;
+use qanglang_core::symbol_resolver::{SymbolKind, SymbolTable};
 use qanglang_core::{AstNodeArena, NodeArrayId, SourceMap, TypedNodeRef};
 use tower_lsp::lsp_types::{SemanticToken, SemanticTokenType};
 
@@ -10,6 +11,7 @@ pub fn collect_semantic_tokens(analysis: &AnalysisResult) -> Vec<SemanticToken> 
     let mut collector = SemanticTokenCollector {
         tokens: Vec::new(),
         nodes: &analysis.nodes,
+        symbol_table: &analysis.symbol_table,
     };
 
     collector.collect_from_module(module);
@@ -33,6 +35,7 @@ struct RawToken {
 struct SemanticTokenCollector<'a> {
     tokens: Vec<RawToken>,
     nodes: &'a AstNodeArena,
+    symbol_table: &'a SymbolTable,
 }
 
 impl<'a> SemanticTokenCollector<'a> {
@@ -362,9 +365,42 @@ impl<'a> SemanticTokenCollector<'a> {
         }
     }
 
-    fn process_assignment_target(&mut self, _target: TypedNodeRef<AssignmentTargetNode>) {
-        // Skip assignment target processing for now
-        // This would require more complex handling of member access and indexing
+    fn process_assignment_target(&mut self, target: TypedNodeRef<AssignmentTargetNode>) {
+        match target.node {
+            AssignmentTargetNode::Identifier(ident) => {
+                // Resolve identifier using symbol table
+                if let Some(symbol_info) = self.symbol_table.resolve(target.id) {
+                    let token_type = match symbol_info.kind {
+                        SymbolKind::Variable => SemanticTokenType::VARIABLE,
+                        SymbolKind::Parameter => SemanticTokenType::PARAMETER,
+                        SymbolKind::Function => SemanticTokenType::FUNCTION,
+                        SymbolKind::Class => SemanticTokenType::CLASS,
+                        SymbolKind::Field => SemanticTokenType::PROPERTY,
+                        SymbolKind::Module => SemanticTokenType::VARIABLE, // Modules are like variables
+                    };
+
+                    self.add_token(
+                        ident.span.start,
+                        ident.span.end - ident.span.start,
+                        token_type,
+                    );
+                }
+            }
+            AssignmentTargetNode::Property(prop) => {
+                // Process the object part
+                let object = self.nodes.get_expr_node(prop.object);
+                self.process_expression(object);
+                // Property name is already handled as PROPERTY in earlier code
+            }
+            AssignmentTargetNode::Index(index) => {
+                // Process object and index expressions
+                let object = self.nodes.get_expr_node(index.object);
+                self.process_expression(object);
+
+                let index_expr = self.nodes.get_expr_node(index.index);
+                self.process_expression(index_expr);
+            }
+        }
     }
 
     fn process_primary(&mut self, primary: TypedNodeRef<PrimaryNode>) {
@@ -397,9 +433,25 @@ impl<'a> SemanticTokenCollector<'a> {
                     SemanticTokenType::KEYWORD,
                 );
             }
-            PrimaryNode::Identifier(_ident) => {
-                // Identifiers are tricky - need semantic analysis to know what they refer to
-                // For now, skip to avoid incorrect highlighting
+            PrimaryNode::Identifier(ident) => {
+                // Resolve identifier using symbol table to determine correct token type
+                if let Some(symbol_info) = self.symbol_table.resolve(primary.id) {
+                    let token_type = match symbol_info.kind {
+                        SymbolKind::Variable => SemanticTokenType::VARIABLE,
+                        SymbolKind::Parameter => SemanticTokenType::PARAMETER,
+                        SymbolKind::Function => SemanticTokenType::FUNCTION,
+                        SymbolKind::Class => SemanticTokenType::CLASS,
+                        SymbolKind::Field => SemanticTokenType::PROPERTY,
+                        SymbolKind::Module => SemanticTokenType::VARIABLE, // Modules are like variables
+                    };
+
+                    self.add_token(
+                        ident.span.start,
+                        ident.span.end - ident.span.start,
+                        token_type,
+                    );
+                }
+                // If unresolved, skip (could be builtin or error)
             }
             PrimaryNode::This(this) => {
                 self.add_token(
@@ -409,10 +461,31 @@ impl<'a> SemanticTokenCollector<'a> {
                 );
             }
             PrimaryNode::Super(sup) => {
+                // super.method or super.field
+                // The span covers the whole expression, but we need to tokenize:
+                // 1. "super" keyword
+                // 2. method/field identifier
+
+                // Get the method/field identifier
+                let method_ident = self.nodes.get_identifier_node(sup.method);
+
+                // Calculate the length of "super" keyword
+                // The identifier starts after "super.", so we can determine where "super" ends
+                let super_keyword_length = method_ident.node.span.start - sup.span.start - 1; // -1 for the '.'
+
+                // Add token for "super" keyword
                 self.add_token(
                     sup.span.start,
-                    sup.span.end - sup.span.start,
+                    super_keyword_length,
                     SemanticTokenType::KEYWORD,
+                );
+
+                // Add token for the method/field identifier as PROPERTY
+                // (we can't distinguish method vs field without type information)
+                self.add_token(
+                    method_ident.node.span.start,
+                    method_ident.node.span.end - method_ident.node.span.start,
+                    SemanticTokenType::PROPERTY,
                 );
             }
             PrimaryNode::Array(arr) => {

@@ -682,7 +682,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.consume(TokenType::RightBrace, "Expected '}'.")?;
-        let end_span = self.get_current_span();
+        let end_span = self.get_previous_span(); // Use previous_span to get the '}' token we just consumed
 
         let node_id = self.nodes.create_node(AstNode::BlockStmt(BlockStmtNode {
             decls,

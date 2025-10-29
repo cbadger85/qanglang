@@ -43,7 +43,7 @@ pub fn provide_completions(
         .source_map
         .position_to_offset(position.line, position.character)?;
 
-    debug!("Providing completions at offset {}", offset);
+    debug!("Providing completions at line={}, char={}, offset={}", position.line, position.character, offset);
 
     // Find the scope context at the cursor position
     let scope_context = find_scope_at_offset(analysis, offset);
@@ -55,7 +55,9 @@ pub fn provide_completions(
 
     // Determine the completion context
     let context = find_completion_context(analysis, offset);
-    debug!("Completion context: {:?}", context);
+    debug!("Completion context returned: {:?}", context);
+
+    let context = context?;
 
     let completions = match context {
         CompletionContext::MemberAccess => {
@@ -90,9 +92,16 @@ pub fn provide_completions(
 }
 
 /// Determines what kind of completion context we're in based on the cursor position
-fn find_completion_context(analysis: &AnalysisResult, offset: usize) -> CompletionContext {
+/// Returns None if we're in a context where completion should not be provided (e.g., inside strings)
+fn find_completion_context(analysis: &AnalysisResult, offset: usize) -> Option<CompletionContext> {
     // Look backwards from the cursor to find if we're after a dot
     let source = analysis.source_map.get_source();
+
+    // First check if we're inside a string literal by scanning back to find an unmatched quote
+    if is_inside_string(source, offset) {
+        debug!("Cursor is inside a string literal, suppressing all completions");
+        return None;
+    }
 
     // Get the character just before the cursor
     if offset > 0 {
@@ -116,11 +125,65 @@ fn find_completion_context(analysis: &AnalysisResult, offset: usize) -> Completi
         // Check if we're right after a dot (on the same line)
         if check_offset < source.len() && source[check_offset] == '.' {
             debug!("Found dot at offset {}", check_offset);
-            return CompletionContext::MemberAccess;
+            return Some(CompletionContext::MemberAccess);
         }
     }
 
-    CompletionContext::Identifier
+    Some(CompletionContext::Identifier)
+}
+
+/// Checks if the given offset is inside a string literal
+/// This is a simplified check that scans backwards to find if we're between quotes
+fn is_inside_string(source: &[char], offset: usize) -> bool {
+    if offset == 0 {
+        return false;
+    }
+
+    // Scan backwards from offset to the start of the line (or file)
+    // Count unescaped quotes to determine if we're inside a string
+    let mut scan_pos = offset.saturating_sub(1);
+    let mut in_string = false;
+    let mut quote_char = None;
+
+    // Find the start of the current line
+    while scan_pos > 0 {
+        let ch = source[scan_pos];
+        if ch == '\n' || ch == '\r' {
+            scan_pos += 1; // Move back to first char of current line
+            break;
+        }
+        scan_pos = scan_pos.saturating_sub(1);
+    }
+
+    // Now scan forward from the line start to the cursor position
+    while scan_pos < offset && scan_pos < source.len() {
+        let ch = source[scan_pos];
+
+        if !in_string {
+            // Not currently in a string, check if we're starting one
+            if ch == '"' || ch == '\'' {
+                in_string = true;
+                quote_char = Some(ch);
+            }
+        } else {
+            // Currently in a string, check for closing quote
+            // Handle escaped quotes by checking if the previous char is a backslash
+            let is_escaped = scan_pos > 0 && source[scan_pos - 1] == '\\';
+
+            if !is_escaped && Some(ch) == quote_char {
+                in_string = false;
+                quote_char = None;
+            }
+        }
+
+        scan_pos += 1;
+    }
+
+    debug!(
+        "is_inside_string(offset={}) = {} (checked from line start to offset)",
+        offset, in_string
+    );
+    in_string
 }
 
 /// Finds the scope context at the given offset by traversing the AST

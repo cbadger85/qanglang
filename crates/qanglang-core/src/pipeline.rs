@@ -200,7 +200,7 @@ impl GlobalCompilerPipeline {
 
         let analyzer = AnalysisPipeline::new(&mut allocator.strings).with_config(analysis_config);
         let mut errors = ErrorReporter::new();
-        analyzer.analyze(&self.modules, &mut self.nodes, &mut errors)?;
+        analyzer.analyze(&mut self.modules, &mut self.nodes, &mut errors)?;
 
         Ok(())
     }
@@ -221,7 +221,7 @@ impl GlobalCompilerPipeline {
             )])
         })?;
 
-        let assembler = Assembler::new(module_source.source_map.clone(), alloc);
+        let assembler = Assembler::new(module_source.source_map.clone(), alloc, &module_source.symbol_table);
         let mut errors = ErrorReporter::new();
         let mut main_function =
             assembler.assemble(module_source.node, &mut self.nodes, &mut errors)?;
@@ -235,7 +235,7 @@ impl GlobalCompilerPipeline {
         for (path, module) in self.modules.iter() {
             let path_str = path.to_string_lossy();
             let path_handle = alloc.strings.intern(&path_str);
-            let assembler = Assembler::new(module.source_map.clone(), alloc);
+            let assembler = Assembler::new(module.source_map.clone(), alloc, &module.symbol_table);
             let mut compiled_module =
                 assembler.assemble(module.node, &mut self.nodes, &mut errors)?;
             compiled_module.name = path_handle;

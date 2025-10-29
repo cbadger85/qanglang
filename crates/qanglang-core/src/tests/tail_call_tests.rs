@@ -8,7 +8,7 @@ fn compile_test_source(source: &str) -> (crate::QangProgram, HeapAllocator) {
     (program, allocator)
 }
 
-// #[test]
+#[test]
 fn test_simple_tail_recursion() {
     let source = r#"
         fn factorial(n, acc) {
@@ -37,7 +37,7 @@ fn test_simple_tail_recursion() {
     }
 }
 
-// #[test]
+#[test]
 fn test_tail_call_different_function() {
     let source = r#"
         fn even(n) {
@@ -73,7 +73,7 @@ fn test_tail_call_different_function() {
     }
 }
 
-// #[test]
+#[test]
 fn test_non_tail_call_still_works() {
     let source = r#"
         fn factorial(n) {
@@ -101,7 +101,7 @@ fn test_non_tail_call_still_works() {
     }
 }
 
-// #[test]
+#[test]
 fn test_tail_call_with_different_arity() {
     let source = r#"
         fn helper(a, b, c) {
@@ -129,7 +129,7 @@ fn test_tail_call_with_different_arity() {
     }
 }
 
-// #[test]
+#[test]
 fn test_deep_tail_recursion() {
     // This test would stack overflow without tail call optimization
     let source = r#"
@@ -143,6 +143,67 @@ fn test_deep_tail_recursion() {
 
         var result = countdown(1000);
         assert_eq(result, "done");
+    "#;
+
+    let (program, allocator) = compile_test_source(source);
+    match Vm::new(allocator)
+        .set_gc_status(false)
+        .set_debug(false)
+        .interpret(program)
+    {
+        Ok(_) => (),
+        Err(error) => {
+            panic!("{}", error);
+        }
+    }
+}
+
+#[test]
+fn test_class_instantiation_not_tail_optimized() {
+    // Classes should NOT be tail-call optimized since they create instances
+    let source = r#"
+        class Counter {
+            init(value) {
+                this.value = value;
+            }
+        }
+
+        fn makeCounter(n) {
+            return Counter(n);
+        }
+
+        var c = makeCounter(42);
+        assert_eq(c.value, 42);
+    "#;
+
+    let (program, allocator) = compile_test_source(source);
+    match Vm::new(allocator)
+        .set_gc_status(false)
+        .set_debug(false)
+        .interpret(program)
+    {
+        Ok(_) => (),
+        Err(error) => {
+            panic!("{}", error);
+        }
+    }
+}
+
+#[test]
+fn test_indirect_call_not_tail_optimized() {
+    // Indirect calls through variables should NOT be tail-call optimized
+    // since we can't statically determine if they're functions or classes
+    let source = r#"
+        fn add(a, b) {
+            return a + b;
+        }
+
+        fn indirectCall(f, x, y) {
+            return f(x, y);
+        }
+
+        var result = indirectCall(add, 10, 20);
+        assert_eq(result, 30);
     "#;
 
     let (program, allocator) = compile_test_source(source);

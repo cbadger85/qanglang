@@ -26,7 +26,7 @@ pub enum SymbolKind {
 }
 
 /// Maps identifier references to their declarations
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
     /// Map from identifier NodeId (usage site) to declaration info
     resolutions: HashMap<NodeId, SymbolInfo>,
@@ -166,7 +166,8 @@ impl<'a> SymbolResolver<'a> {
         for scope in self.scopes.iter().rev() {
             if let Some(info) = scope.get(&name) {
                 // Found the declaration - record the resolution
-                self.symbol_table.record_resolution(identifier.id, info.clone());
+                self.symbol_table
+                    .record_resolution(identifier.id, info.clone());
                 return;
             }
         }
@@ -279,7 +280,11 @@ impl<'a> SymbolResolver<'a> {
         // Declare parameters
         let params_length = self.nodes.array.size(func_expr.node.parameters);
         for i in 0..params_length {
-            if let Some(param_id) = self.nodes.array.get_node_id_at(func_expr.node.parameters, i) {
+            if let Some(param_id) = self
+                .nodes
+                .array
+                .get_node_id_at(func_expr.node.parameters, i)
+            {
                 let param = self.nodes.get_identifier_node(param_id);
                 self.declare_symbol(
                     param.node.name,
@@ -613,7 +618,9 @@ impl<'a> SymbolResolver<'a> {
                 let index_expr = self.nodes.get_expr_node(index.index);
                 self.visit_expression(index_expr);
             }
-            CallOperationNode::OptionalProperty(_) | CallOperationNode::Map(_) | CallOperationNode::OptionalMap(_) => {
+            CallOperationNode::OptionalProperty(_)
+            | CallOperationNode::Map(_)
+            | CallOperationNode::OptionalMap(_) => {
                 // Optional chaining and map operations - nothing extra to resolve
             }
         }
@@ -735,8 +742,9 @@ print(x);
         let modules = parser.parse();
 
         let mut errors = parser.into_errors();
+        let mut modules = modules;
         AnalysisPipeline::new(&mut strings)
-            .analyze(&modules, &mut nodes, &mut errors)
+            .analyze(&mut modules, &mut nodes, &mut errors)
             .unwrap();
 
         let root_module_id = modules.get_main().unwrap().node;

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use qanglang_core::{
-    symbol_resolver::{SymbolResolver, SymbolTable},
     AnalysisPipeline, AstNodeArena, NodeId, Parser, ParserConfig, QangPipelineError, SourceMap,
     StringInterner,
+    symbol_resolver::{SymbolResolver, SymbolTable},
 };
 
 /// Holds the results of successful analysis for use in LSP features
@@ -21,18 +21,17 @@ pub fn analyze(source_map: Arc<SourceMap>) -> Result<AnalysisResult, QangPipelin
     let mut nodes = AstNodeArena::new();
     let mut parser = Parser::new(source_map.clone(), &mut nodes, &mut strings)
         .with_config(ParserConfig { skip_modules: true });
-    let modules = parser.parse();
+    let mut modules = parser.parse();
 
     let mut errors = parser.into_errors();
 
-    AnalysisPipeline::new(&mut strings).analyze(&modules, &mut nodes, &mut errors)?;
+    AnalysisPipeline::new(&mut strings).analyze(&mut modules, &mut nodes, &mut errors)?;
 
     // Get the root module ID - get main module from ModuleMap
-    let root_module_id = modules.get_main()
+    let root_module_id = modules
+        .get_main()
         .map(|m| m.node)
-        .ok_or_else(|| {
-            QangPipelineError::new(vec![])
-        })?;
+        .ok_or_else(|| QangPipelineError::new(vec![]))?;
 
     // Run symbol resolution to map identifier references to declarations
     let module_node = nodes.get_program_node(root_module_id);

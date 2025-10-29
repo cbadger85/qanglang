@@ -2400,7 +2400,8 @@ impl Vm {
             + self.state.frame_count
             + self.state.open_upvalues.len()
             + self.state.modules.count()
-            + self.state.arg_buffer.len();
+            + self.state.arg_buffer.len()
+            + self.state.external_roots.len();
         let mut roots = VecDeque::with_capacity(capacity);
         roots.extend(&self.state.stack[..self.state.stack_top]);
         roots.extend(self.globals().values());

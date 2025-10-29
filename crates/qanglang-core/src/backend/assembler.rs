@@ -11,6 +11,7 @@ use crate::{
         ast_node_arena::TypedNodeRef,
         node_visitor::{NodeVisitor, VisitorContext},
         semantic_validator::FunctionKind,
+        symbol_resolver::{SymbolKind, SymbolTable},
     },
     nodes::*,
 };
@@ -229,10 +230,15 @@ pub struct Assembler<'a> {
     current_function: FunctionObject,
     loop_contexts: Vec<LoopContext>,
     compiler_state: State,
+    symbol_table: &'a SymbolTable,
 }
 
 impl<'a> Assembler<'a> {
-    pub fn new(source_map: Arc<SourceMap>, allocator: &'a mut HeapAllocator) -> Self {
+    pub fn new(
+        source_map: Arc<SourceMap>,
+        allocator: &'a mut HeapAllocator,
+        symbol_table: &'a SymbolTable,
+    ) -> Self {
         let handle = allocator.strings.intern("");
         let blank_handle = allocator.strings.intern("");
         let this_handle = allocator.strings.intern("this");
@@ -243,6 +249,7 @@ impl<'a> Assembler<'a> {
             current_function_id: None,
             loop_contexts: Vec::new(),
             compiler_state: State::new(blank_handle, this_handle, source_map),
+            symbol_table,
         }
     }
 
@@ -803,6 +810,21 @@ impl<'a> Assembler<'a> {
 
         Ok(())
     }
+
+    fn is_safe_for_tail_call(&self, call_expr: &CallExprNode, ctx: &VisitorContext) -> bool {
+        let callee = ctx.nodes.get_expr_node(call_expr.callee);
+        if let ExprNode::Primary(PrimaryNode::Identifier(_ident_node)) = callee.node {
+            if let Some(symbol_info) = self.symbol_table.resolve(call_expr.callee) {
+                return matches!(symbol_info.kind, SymbolKind::Function);
+            }
+        }
+
+        false
+    }
+
+    fn emit_tail_call(&mut self, arg_count: u8, span: SourceSpan) {
+        self.emit_opcode_and_byte(OpCode::TailCall, arg_count, span);
+    }
 }
 
 impl<'a> NodeVisitor for Assembler<'a> {
@@ -854,25 +876,46 @@ impl<'a> NodeVisitor for Assembler<'a> {
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
         if let Some(expr) = return_stmt.node.value {
-            // TODO: Tail call optimization disabled until static analysis is implemented
-            // to avoid issues with class instantiation
-            // if self.is_tail_call(expr)
-            //     && let ast::Expr::Call(call_expr) = expr
-            // {
-            //     // Handle call operation to get arguments
-            //     if let ast::CallOperation::Call(args) = &*call_expr.operation {
-            //         // Emit callee first (like regular calls)
-            //         self.visit_expression(&call_expr.callee, errors)?;
-            //         // Then emit arguments
-            //         for arg in args {
-            //             self.visit_expression(arg, errors)?;
-            //         }
-            //         // Emit tail call instead of regular call + return
-            //         self.emit_tail_call(args.len() as u8, call_expr.span);
-            //         return Ok(());
-            //     }
-            // }
             let expr_node = ctx.nodes.get_expr_node(expr);
+
+            // Check if this is a call expression that can be tail-call optimized
+            if let ExprNode::Call(call_expr) = expr_node.node {
+                let call_operation = ctx.nodes.get_call_operation_node(call_expr.operation);
+
+                // Only optimize regular function calls (not property access or method calls)
+                if let CallOperationNode::Call(args) = call_operation.node {
+                    // Safety check: only tail-call if it's definitely a function, not a class
+                    if self.is_safe_for_tail_call(&call_expr, ctx) {
+                        let arg_length = ctx.nodes.array.size(args.args);
+
+                        if arg_length > u8::MAX as usize {
+                            return Err(QangCompilerError::new_assembler_error(
+                                "Functions may only take up to 256 arguments.".to_string(),
+                                call_expr.span,
+                                self.source_map.clone(),
+                            ));
+                        }
+
+                        // Emit callee first
+                        let callee = ctx.nodes.get_expr_node(call_expr.callee);
+                        self.visit_expression(callee, ctx)?;
+
+                        // Then emit arguments
+                        for i in 0..arg_length {
+                            if let Some(arg_id) = ctx.nodes.array.get_node_id_at(args.args, i) {
+                                let arg = ctx.nodes.get_expr_node(arg_id);
+                                self.visit_expression(arg, ctx)?;
+                            }
+                        }
+
+                        // Emit tail call instead of regular call + return
+                        self.emit_tail_call(arg_length as u8, call_expr.span);
+                        return Ok(());
+                    }
+                }
+            }
+
+            // Regular case: emit expression and return
             self.visit_expression(expr_node, ctx)?;
         } else {
             let is_init = matches!(self.compiler_state.kind, FunctionKind::Initializer);

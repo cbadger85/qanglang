@@ -5,7 +5,7 @@ use std::{
 
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use crate::{NodeId, SourceMap};
+use crate::{NodeId, SourceMap, frontend::symbol_resolver::SymbolTable};
 
 #[derive(Debug, Default, Clone)]
 pub struct ModuleMap {
@@ -13,10 +13,21 @@ pub struct ModuleMap {
     main_module: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct ModuleSource {
     pub node: NodeId,
     pub source_map: Arc<SourceMap>,
+    pub symbol_table: SymbolTable,
+}
+
+impl Default for ModuleSource {
+    fn default() -> Self {
+        Self {
+            node: NodeId::default(),
+            source_map: Arc::new(SourceMap::default()),
+            symbol_table: SymbolTable::default(),
+        }
+    }
 }
 
 impl ModuleMap {
@@ -30,7 +41,13 @@ impl ModuleMap {
     pub fn insert(&mut self, path: &Path, node: NodeId, source_map: Arc<SourceMap>) {
         let path_buf = path.to_path_buf();
         self.modules
-            .insert(path_buf, ModuleSource { node, source_map });
+            .insert(path_buf, ModuleSource { node, source_map, symbol_table: SymbolTable::default() });
+    }
+
+    pub fn insert_with_symbols(&mut self, path: &Path, node: NodeId, source_map: Arc<SourceMap>, symbol_table: SymbolTable) {
+        let path_buf = path.to_path_buf();
+        self.modules
+            .insert(path_buf, ModuleSource { node, source_map, symbol_table });
     }
 
     pub fn set_main_module(&mut self, path: PathBuf) {

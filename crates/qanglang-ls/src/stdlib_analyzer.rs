@@ -82,7 +82,7 @@ impl StdlibCache {
 
 /// Parse the stdlib and extract symbol information
 fn parse_stdlib() -> StdlibCache {
-    let stdlib_source = include_str!("../../qanglang-core/src/backend/stdlib.ql");
+    let stdlib_source = qanglang_core::STDLIB_SOURCE;
 
     let mut nodes = AstNodeArena::new();
     let mut strings = StringInterner::new();

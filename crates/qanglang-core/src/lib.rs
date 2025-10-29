@@ -15,6 +15,7 @@ pub use backend::object::{
 };
 pub use backend::value::{Value, ValueKind};
 pub use backend::vm::Vm;
+pub use backend::STDLIB_SOURCE;
 pub use debug::{disassemble_chunk, disassemble_program};
 pub use error::{
     ErrorMessageFormat, ErrorReporter, NativeFunctionError, QangCompilerError, QangPipelineError,

@@ -4,6 +4,8 @@ use qanglang_core::{AstNodeArena, NodeId, SourceMap, StringInterner, TypedNodeRe
 use tower_lsp::lsp_types::{Position, Range};
 
 use crate::analyzer::AnalysisResult;
+use crate::builtins;
+use crate::stdlib_analyzer;
 
 #[derive(Debug, Clone)]
 pub struct NodeInfo {
@@ -21,6 +23,11 @@ pub enum NodeKind {
     Parameter(String),
     Module(String),
     ImportPath(String), // Absolute path to the imported module file
+    NativeFunction(String), // Native function name
+    IntrinsicMethod(String), // Intrinsic method name
+    StdlibClass(String), // Stdlib class name
+    StdlibFunction(String), // Stdlib function name
+    StdlibMethod(String), // Stdlib method name
 }
 
 /// Find the AST node at the given byte offset
@@ -319,21 +326,43 @@ impl<'a> NodeFinder<'a> {
                         if self.span_contains(name_node.node.span) {
                             if self.is_better_match(name_node.node.span) {
 
-                                // Check if callee is 'super' - if so, look up in superclass
-                                let kind = if matches!(callee.node, ExprNode::Primary(PrimaryNode::Super(_))) {
-                                    let kind = self.find_super_property_kind(&name);
-                                    kind
+                                // Check if this is an intrinsic method first
+                                if builtins::get_string_method(&name).is_some()
+                                    || builtins::get_array_method(&name).is_some()
+                                    || builtins::get_number_method(&name).is_some()
+                                    || builtins::get_function_method(&name).is_some()
+                                {
+                                    self.best_match = Some(NodeInfo {
+                                        node_id: name_node.id,
+                                        range: self.span_to_range(name_node.node.span),
+                                        kind: NodeKind::IntrinsicMethod(name.clone()),
+                                    });
+                                } else if let Some(stdlib_analyzer::StdlibSymbol::Method { method_name, .. }) =
+                                    stdlib_analyzer::get_stdlib_cache().get(&name)
+                                {
+                                    // Check if this is a stdlib method
+                                    self.best_match = Some(NodeInfo {
+                                        node_id: name_node.id,
+                                        range: self.span_to_range(name_node.node.span),
+                                        kind: NodeKind::StdlibMethod(method_name.clone()),
+                                    });
                                 } else {
-                                    // Try to determine if this is a method or field
-                                    // Look up the callee to find its type/class, then check the member
-                                    self.find_property_kind(callee, &name)
-                                };
+                                    // Check if callee is 'super' - if so, look up in superclass
+                                    let kind = if matches!(callee.node, ExprNode::Primary(PrimaryNode::Super(_))) {
+                                        let kind = self.find_super_property_kind(&name);
+                                        kind
+                                    } else {
+                                        // Try to determine if this is a method or field
+                                        // Look up the callee to find its type/class, then check the member
+                                        self.find_property_kind(callee, &name)
+                                    };
 
-                                self.best_match = Some(NodeInfo {
-                                    node_id: name_node.id,
-                                    range: self.span_to_range(name_node.node.span),
-                                    kind,
-                                });
+                                    self.best_match = Some(NodeInfo {
+                                        node_id: name_node.id,
+                                        range: self.span_to_range(name_node.node.span),
+                                        kind,
+                                    });
+                                }
                             } else {
                             }
                         } else {
@@ -435,15 +464,37 @@ impl<'a> NodeFinder<'a> {
                     if self.is_better_match(property_node.node.span) {
                         let name = self.strings.get_string(property_node.node.name).to_string();
 
-                        // Try to determine if this is a method or field
-                        // by looking up the class definition
-                        let kind = self.find_property_kind(object, &name);
+                        // Check if this is an intrinsic method first
+                        if builtins::get_string_method(&name).is_some()
+                            || builtins::get_array_method(&name).is_some()
+                            || builtins::get_number_method(&name).is_some()
+                            || builtins::get_function_method(&name).is_some()
+                        {
+                            self.best_match = Some(NodeInfo {
+                                node_id: property_node.id,
+                                range: self.span_to_range(property_node.node.span),
+                                kind: NodeKind::IntrinsicMethod(name.clone()),
+                            });
+                        } else if let Some(stdlib_analyzer::StdlibSymbol::Method { method_name, .. }) =
+                            stdlib_analyzer::get_stdlib_cache().get(&name)
+                        {
+                            // Check if this is a stdlib method
+                            self.best_match = Some(NodeInfo {
+                                node_id: property_node.id,
+                                range: self.span_to_range(property_node.node.span),
+                                kind: NodeKind::StdlibMethod(method_name.clone()),
+                            });
+                        } else {
+                            // Try to determine if this is a method or field
+                            // by looking up the class definition
+                            let kind = self.find_property_kind(object, &name);
 
-                        self.best_match = Some(NodeInfo {
-                            node_id: property_node.id,
-                            range: self.span_to_range(property_node.node.span),
-                            kind,
-                        });
+                            self.best_match = Some(NodeInfo {
+                                node_id: property_node.id,
+                                range: self.span_to_range(property_node.node.span),
+                                kind,
+                            });
+                        }
                     }
                 }
             }
@@ -555,17 +606,43 @@ impl<'a> NodeFinder<'a> {
             return;
         }
 
+        let name = self.strings.get_string(identifier.node.name);
+
+        // Check if this is a native function
+        if let Some(_func_info) = builtins::get_native_function(name) {
+            self.best_match = Some(NodeInfo {
+                node_id: identifier.id,
+                range: self.span_to_range(identifier.node.span),
+                kind: NodeKind::NativeFunction(name.to_string()),
+            });
+            return;
+        }
+
+        // Check if this is a stdlib symbol
+        let stdlib = stdlib_analyzer::get_stdlib_cache();
+        if let Some(symbol) = stdlib.get(name) {
+            let kind = match symbol {
+                stdlib_analyzer::StdlibSymbol::Class { name } => NodeKind::StdlibClass(name.clone()),
+                stdlib_analyzer::StdlibSymbol::Function { name, .. } => NodeKind::StdlibFunction(name.clone()),
+                stdlib_analyzer::StdlibSymbol::Method { method_name, .. } => NodeKind::StdlibMethod(method_name.clone()),
+            };
+            self.best_match = Some(NodeInfo {
+                node_id: identifier.id,
+                range: self.span_to_range(identifier.node.span),
+                kind,
+            });
+            return;
+        }
+
         // Try to resolve this identifier using the symbol table
         if let Some(symbol_info) = self.symbol_table.resolve(identifier.id) {
-            let name = self.strings.get_string(identifier.node.name).to_string();
-
             let kind = match symbol_info.kind {
-                SymbolKind::Variable => NodeKind::Variable(name),
-                SymbolKind::Parameter => NodeKind::Parameter(name),
-                SymbolKind::Function => NodeKind::Function(name),
-                SymbolKind::Class => NodeKind::Class(name),
-                SymbolKind::Field => NodeKind::Field(name),
-                SymbolKind::Module => NodeKind::Module(name),
+                SymbolKind::Variable => NodeKind::Variable(name.to_string()),
+                SymbolKind::Parameter => NodeKind::Parameter(name.to_string()),
+                SymbolKind::Function => NodeKind::Function(name.to_string()),
+                SymbolKind::Class => NodeKind::Class(name.to_string()),
+                SymbolKind::Field => NodeKind::Field(name.to_string()),
+                SymbolKind::Module => NodeKind::Module(name.to_string()),
             };
 
             self.best_match = Some(NodeInfo {
@@ -867,5 +944,10 @@ pub fn format_hover_info(_analysis: &AnalysisResult, info: &NodeInfo) -> String 
         NodeKind::Parameter(name) => format!("```qanglang\nparam {}\n```", name),
         NodeKind::Module(name) => format!("```qanglang\nmod {}\n```", name),
         NodeKind::ImportPath(path) => format!("```qanglang\nimport(\"{}\")\n```", path),
+        NodeKind::NativeFunction(name) => format!("```qanglang\nfn {}\n```", name),
+        NodeKind::IntrinsicMethod(name) => format!("```qanglang\nfn {}\n```", name),
+        NodeKind::StdlibClass(name) => format!("```qanglang\nclass {}\n```", name),
+        NodeKind::StdlibFunction(name) => format!("```qanglang\nfn {}\n```", name),
+        NodeKind::StdlibMethod(name) => format!("```qanglang\nfn {}\n```", name),
     }
 }

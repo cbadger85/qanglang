@@ -723,6 +723,7 @@ version = "0.2.0"
 dependencies = [
  "env_logger",
  "log",
+ "once_cell",
  "qanglang-core",
  "serde",
  "serde_json",

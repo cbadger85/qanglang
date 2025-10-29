@@ -59,13 +59,13 @@ impl LanguageServer for Backend {
                         ..Default::default()
                     },
                 )),
-                // completion_provider: Some(CompletionOptions {
-                //     resolve_provider: Some(false),
-                //     trigger_characters: Some(vec![".".to_string()]),
-                //     work_done_progress_options: Default::default(),
-                //     all_commit_characters: None,
-                //     completion_item: None,
-                // }),
+                completion_provider: Some(CompletionOptions {
+                    resolve_provider: Some(false),
+                    trigger_characters: Some(vec![".".to_string()]),
+                    work_done_progress_options: Default::default(),
+                    all_commit_characters: None,
+                    completion_item: None,
+                }),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec!["dummy.do_something".to_string()],
                     work_done_progress_options: Default::default(),
@@ -607,6 +607,41 @@ impl LanguageServer for Backend {
                 Ok(Some(SemanticTokensRangeResult::Tokens(tokens)))
             }
             _ => Ok(None),
+        }
+    }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        debug!(
+            "Completion request at {}:{}",
+            position.line, position.character
+        );
+
+        // Get cached analysis
+        let cache = self.analysis_cache.read().await;
+        let analysis = match cache.get(&uri) {
+            Some(analysis) => analysis.clone(),
+            None => {
+                debug!("No analysis available for completion");
+                return Ok(None);
+            }
+        };
+        drop(cache);
+
+        // Get completions
+        let completions = crate::completion::provide_completions(&analysis, position);
+
+        match completions {
+            Some(items) => {
+                debug!("Returning {} completion items", items.len());
+                Ok(Some(CompletionResponse::Array(items)))
+            }
+            None => {
+                debug!("No completions available");
+                Ok(None)
+            }
         }
     }
 }

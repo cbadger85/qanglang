@@ -1,4 +1,7 @@
 mod analyzer;
+mod completion;
+#[cfg(test)]
+mod completion_test;
 mod hover_utils;
 #[cfg(test)]
 mod hover_utils_test;

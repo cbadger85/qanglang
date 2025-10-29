@@ -328,4 +328,72 @@ fn function() {
             labels_after_second
         );
     }
+
+    #[test]
+    fn test_no_completion_inside_string_literal() {
+        let source = r#"class Path {
+  init(path) {
+    assert(path is STRING, "Expected path to be a string.");
+    this._path = path;
+  }
+}
+"#;
+        // Position inside the string literal at "string." - line 2, after the dot in "string."
+        // The dot is at column 51 (0-indexed: 50)
+        let labels = get_completion_labels(source, 2, 51);
+
+        // Should return identifier completions, not member access completions
+        // Member access completions would include method names like "getName", etc.
+        // We expect general completions (keywords, variables, etc.) but NOT member completions
+
+        // Inside string literals, we should get NO completions at all
+        assert!(
+            labels.is_empty(),
+            "Should not show ANY completions inside string literal. Found: {:?}",
+            labels
+        );
+    }
+
+    #[test]
+    fn test_no_completion_inside_double_quoted_string() {
+        let source = r#"var message = "test. should not trigger";"#;
+        // Position after the dot inside the string - line 0, column 21
+        let labels = get_completion_labels(source, 0, 21);
+
+        // Inside strings, should get NO completions at all
+        assert!(
+            labels.is_empty(),
+            "Should not show ANY completions inside double-quoted string. Found: {:?}",
+            labels
+        );
+    }
+
+    #[test]
+    fn test_exact_user_case_string_dot() {
+        // EXACT reproduction of user's bug: "Expected path to be a string."
+        // Testing position right after the dot in "string."
+        let source = r#"class Path {
+  init(path) {
+    assert(path is STRING, "Expected path to be a string.");
+    this._path = path;
+  }
+}
+"#;
+
+        // Line 2: '    assert(path is STRING, "Expected path to be a string.");'
+        // The string starts at column 27 (the opening quote)
+        // The dot in "string." is at column 56
+        // Column 57 would be the closing quote
+        // Let's test at column 57 - right after the dot, still inside the string
+
+        let labels = get_completion_labels(source, 2, 57);
+
+        // The critical test: should get NO completions at all inside strings
+        assert!(
+            labels.is_empty(),
+            "CRITICAL BUG: Autocomplete is triggering inside string literal! Found: {:?}",
+            labels
+        );
+    }
+
 }

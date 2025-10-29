@@ -6,6 +6,8 @@ use std::collections::HashSet;
 use tower_lsp::lsp_types::*;
 
 use crate::analyzer::AnalysisResult;
+use crate::builtins;
+use crate::stdlib_analyzer;
 
 /// Keywords in the QangLang language
 const KEYWORDS: &[&str] = &[
@@ -71,6 +73,12 @@ pub fn provide_completions(
                 seen_names.insert(item.label.clone());
             }
             collect_nested_declarations(analysis, &scope_context, &mut completions, &mut seen_names, offset);
+
+            // Add native functions
+            add_native_function_completions(&mut completions, &mut seen_names);
+
+            // Add stdlib classes and functions
+            add_stdlib_completions(&mut completions, &mut seen_names);
 
             completions.extend(get_keyword_completions());
             completions
@@ -704,6 +712,12 @@ fn get_all_member_completions(analysis: &AnalysisResult) -> Vec<CompletionItem> 
         }
     }
 
+    // Add intrinsic methods (String, Array, Number, Function methods)
+    add_intrinsic_method_completions(&mut completions, &mut seen_names);
+
+    // Add stdlib methods
+    add_stdlib_method_completions(&mut completions, &mut seen_names);
+
     completions
 }
 
@@ -748,6 +762,130 @@ fn collect_class_members(
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+}
+
+/// Adds native function completions to the completion list
+fn add_native_function_completions(
+    completions: &mut Vec<CompletionItem>,
+    seen_names: &mut HashSet<String>,
+) {
+    for func_info in builtins::get_all_native_functions() {
+        if seen_names.insert(func_info.name.to_string()) {
+            completions.push(CompletionItem {
+                label: func_info.name.to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some("function".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+}
+
+/// Adds intrinsic method completions (String, Array, Number, Function methods)
+fn add_intrinsic_method_completions(
+    completions: &mut Vec<CompletionItem>,
+    seen_names: &mut HashSet<String>,
+) {
+    // String methods
+    for method_info in builtins::get_all_string_methods() {
+        if seen_names.insert(method_info.name.to_string()) {
+            completions.push(CompletionItem {
+                label: method_info.name.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("method".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+
+    // Array methods
+    for method_info in builtins::get_all_array_methods() {
+        if seen_names.insert(method_info.name.to_string()) {
+            completions.push(CompletionItem {
+                label: method_info.name.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("method".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+
+    // Number methods
+    for method_info in builtins::get_all_number_methods() {
+        if seen_names.insert(method_info.name.to_string()) {
+            completions.push(CompletionItem {
+                label: method_info.name.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("method".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+
+    // Function methods
+    for method_info in builtins::get_all_function_methods() {
+        if seen_names.insert(method_info.name.to_string()) {
+            completions.push(CompletionItem {
+                label: method_info.name.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some("method".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+}
+
+/// Adds stdlib class and function completions
+fn add_stdlib_completions(
+    completions: &mut Vec<CompletionItem>,
+    seen_names: &mut HashSet<String>,
+) {
+    let stdlib = stdlib_analyzer::get_stdlib_cache();
+
+    // Add stdlib classes
+    for class_name in stdlib.get_classes() {
+        if seen_names.insert(class_name.clone()) {
+            completions.push(CompletionItem {
+                label: class_name.clone(),
+                kind: Some(CompletionItemKind::CLASS),
+                detail: Some("class".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+
+    // Add stdlib functions
+    for func_name in stdlib.get_functions() {
+        if seen_names.insert(func_name.clone()) {
+            completions.push(CompletionItem {
+                label: func_name.clone(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some("function".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+}
+
+/// Adds stdlib method completions
+fn add_stdlib_method_completions(
+    completions: &mut Vec<CompletionItem>,
+    seen_names: &mut HashSet<String>,
+) {
+    let stdlib = stdlib_analyzer::get_stdlib_cache();
+
+    for method_symbol in stdlib.get_all_methods() {
+        if let stdlib_analyzer::StdlibSymbol::Method { method_name, .. } = method_symbol {
+            if seen_names.insert(method_name.clone()) {
+                completions.push(CompletionItem {
+                    label: method_name.clone(),
+                    kind: Some(CompletionItemKind::METHOD),
+                    detail: Some("method".to_string()),
+                    ..Default::default()
+                });
             }
         }
     }

@@ -167,10 +167,19 @@ class Path {
     // should this also allow strings?
     assert(other is Path, "A valid Path must be provided.");
     // TODO join the paths and return a new Path
+    /*
+      - Concatenate the paths with the OS-appropriate separator (/ or \)
+      - Handle edge cases like empty paths, trailing slashes, absolute paths being joined
+      - You'll need one native function to get the OS path separator
+    */
   }
 
   normalize() {
     // TODO resolve `.` and `..`, fix slashes and return a new Path
+    /*
+    - Check if already absolute (starts with / or drive letter on Windows)st
+      - If not, prepend current_dir() and then call normalize()
+    */
   }
 
   absolute() {

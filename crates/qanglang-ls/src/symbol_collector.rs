@@ -92,6 +92,9 @@ impl<'a> SymbolCollector<'a> {
             }
         }
 
+        let (range, selection_range) =
+            self.create_symbol_with_ranges(class.node.span, name_node.node.span);
+
         #[allow(deprecated)]
         DocumentSymbol {
             name: name.clone(),
@@ -103,8 +106,8 @@ impl<'a> SymbolCollector<'a> {
                 )
             }),
             kind: SymbolKind::CLASS,
-            range: self.span_to_range(class.node.span),
-            selection_range: self.span_to_range(name_node.node.span),
+            range,
+            selection_range,
             children: if children.is_empty() {
                 None
             } else {
@@ -137,13 +140,16 @@ impl<'a> SymbolCollector<'a> {
         let param_count = self.nodes.array.size(method.node.parameters);
         let detail = format!("({} parameters)", param_count);
 
+        let (range, selection_range) =
+            self.create_symbol_with_ranges(method.node.span, name_node.node.span);
+
         #[allow(deprecated)]
         DocumentSymbol {
             name,
             detail: Some(detail),
             kind: SymbolKind::METHOD,
-            range: self.span_to_range(method.node.span),
-            selection_range: self.span_to_range(name_node.node.span),
+            range,
+            selection_range,
             children: None, // Could add parameters as children later
             tags: None,
             deprecated: None,
@@ -154,13 +160,16 @@ impl<'a> SymbolCollector<'a> {
         let name_node = self.nodes.get_identifier_node(field.node.name);
         let name = self.strings.get_string(name_node.node.name).to_string();
 
+        let (range, selection_range) =
+            self.create_symbol_with_ranges(field.node.span, name_node.node.span);
+
         #[allow(deprecated)]
         DocumentSymbol {
             name,
             detail: None,
             kind: SymbolKind::FIELD,
-            range: self.span_to_range(field.node.span),
-            selection_range: self.span_to_range(name_node.node.span),
+            range,
+            selection_range,
             children: None,
             tags: None,
             deprecated: None,
@@ -175,13 +184,16 @@ impl<'a> SymbolCollector<'a> {
         let param_count = self.nodes.array.size(func_expr.node.parameters);
         let detail = format!("({} parameters)", param_count);
 
+        let (range, selection_range) =
+            self.create_symbol_with_ranges(func_expr.node.span, name_node.node.span);
+
         #[allow(deprecated)]
         DocumentSymbol {
             name,
             detail: Some(detail),
             kind: SymbolKind::FUNCTION,
-            range: self.span_to_range(func_expr.node.span),
-            selection_range: self.span_to_range(name_node.node.span),
+            range,
+            selection_range,
             children: None, // Could add parameters as children
             tags: None,
             deprecated: None,
@@ -192,13 +204,16 @@ impl<'a> SymbolCollector<'a> {
         let name_node = self.nodes.get_identifier_node(lambda.node.name);
         let name = self.strings.get_string(name_node.node.name).to_string();
 
+        let (range, selection_range) =
+            self.create_symbol_with_ranges(lambda.node.span, name_node.node.span);
+
         #[allow(deprecated)]
         DocumentSymbol {
             name: format!("λ {}", name),
             detail: Some("lambda".to_string()),
             kind: SymbolKind::FUNCTION,
-            range: self.span_to_range(lambda.node.span),
-            selection_range: self.span_to_range(name_node.node.span),
+            range,
+            selection_range,
             children: None,
             tags: None,
             deprecated: None,
@@ -209,13 +224,16 @@ impl<'a> SymbolCollector<'a> {
         let name_node = self.nodes.get_identifier_node(var.node.target);
         let name = self.strings.get_string(name_node.node.name).to_string();
 
+        let (range, selection_range) =
+            self.create_symbol_with_ranges(var.node.span, name_node.node.span);
+
         #[allow(deprecated)]
         DocumentSymbol {
             name,
             detail: None,
             kind: SymbolKind::VARIABLE,
-            range: self.span_to_range(var.node.span),
-            selection_range: self.span_to_range(name_node.node.span),
+            range,
+            selection_range,
             children: None,
             tags: None,
             deprecated: None,
@@ -226,13 +244,16 @@ impl<'a> SymbolCollector<'a> {
         let name_node = self.nodes.get_identifier_node(import.node.name);
         let name = self.strings.get_string(name_node.node.name).to_string();
 
+        let (range, selection_range) =
+            self.create_symbol_with_ranges(import.node.span, name_node.node.span);
+
         #[allow(deprecated)]
         DocumentSymbol {
             name: format!("import {}", name),
             detail: Some(self.strings.get_string(import.node.path).to_string()),
             kind: SymbolKind::MODULE,
-            range: self.span_to_range(import.node.span),
-            selection_range: self.span_to_range(name_node.node.span),
+            range,
+            selection_range,
             children: None,
             tags: None,
             deprecated: None,
@@ -240,15 +261,55 @@ impl<'a> SymbolCollector<'a> {
     }
 
     fn span_to_range(&self, span: SourceSpan) -> Range {
+        let start_line = self
+            .source_map
+            .get_line_number(span.start)
+            .saturating_sub(1);
+        let start_char = self
+            .source_map
+            .get_column_number(span.start)
+            .saturating_sub(1);
+        let end_line = self.source_map.get_line_number(span.end).saturating_sub(1);
+        let end_char = self
+            .source_map
+            .get_column_number(span.end)
+            .saturating_sub(1);
+
         Range {
             start: Position {
-                line: (self.source_map.get_line_number(span.start) - 1) as u32,
-                character: (self.source_map.get_column_number(span.start) - 1) as u32,
+                line: start_line,
+                character: start_char,
             },
             end: Position {
-                line: (self.source_map.get_line_number(span.end) - 1) as u32,
-                character: (self.source_map.get_column_number(span.end) - 1) as u32,
+                line: end_line,
+                character: end_char,
             },
         }
+    }
+
+    /// Creates a range ensuring that the selection range is properly contained within the full range
+    fn create_symbol_with_ranges(
+        &self,
+        full_span: SourceSpan,
+        selection_span: SourceSpan,
+    ) -> (Range, Range) {
+        let full_range = self.span_to_range(full_span);
+        let mut selection_range = self.span_to_range(selection_span);
+
+        if selection_range.start.line < full_range.start.line
+            || (selection_range.start.line == full_range.start.line
+                && selection_range.start.character < full_range.start.character)
+        {
+            selection_range.start = full_range.start;
+        }
+
+        if selection_range.end.line > full_range.end.line
+            || (selection_range.end.line == full_range.end.line
+                && selection_range.end.character > full_range.end.character)
+        {
+            selection_range.end = full_range.end;
+        }
+
+        (full_range, selection_range)
     }
 }

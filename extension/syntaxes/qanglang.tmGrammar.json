@@ -101,7 +101,7 @@
         },
         {
           "name": "support.function.builtin",
-          "match": "\\.(call|apply|to_uppercase|to_lowercase|length|push|pop|reverse|slice|get|concat|remove_at|split|join|ceil|floor|trunc|min|max|iter|to_number)(?=\\s|\\(|$)"
+          "match": "\\.(call|apply|to_uppercase|to_lowercase|length|push|pop|reverse|slice|get|concat|remove_at|split|join|ceil|floor|trunc|min|max|iter|to_number|starts_with|ends_with|index_of|contains)(?=\\s|\\(|$)"
         }
       ]
     },

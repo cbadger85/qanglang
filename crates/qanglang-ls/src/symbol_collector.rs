@@ -77,7 +77,7 @@ impl<'a> SymbolCollector<'a> {
 
     fn process_class(&self, class: TypedNodeRef<ClassDeclNode>) -> DocumentSymbol {
         let name_node = self.nodes.get_identifier_node(class.node.name);
-        let name = self.strings.get_string(name_node.node.name).to_string();
+        let name = self.strings.get(name_node.node.name).to_string();
 
         // Collect class members (methods and fields)
         let mut children = Vec::new();
@@ -100,10 +100,7 @@ impl<'a> SymbolCollector<'a> {
             name: name.clone(),
             detail: class.node.superclass.map(|superclass_id| {
                 let superclass_node = self.nodes.get_identifier_node(superclass_id);
-                format!(
-                    "extends {}",
-                    self.strings.get_string(superclass_node.node.name)
-                )
+                format!("extends {}", self.strings.get(superclass_node.node.name))
             }),
             kind: SymbolKind::CLASS,
             range,
@@ -134,7 +131,7 @@ impl<'a> SymbolCollector<'a> {
 
     fn process_method(&self, method: TypedNodeRef<FunctionExprNode>) -> DocumentSymbol {
         let name_node = self.nodes.get_identifier_node(method.node.name);
-        let name = self.strings.get_string(name_node.node.name).to_string();
+        let name = self.strings.get(name_node.node.name).to_string();
 
         // Collect parameters for detail
         let param_count = self.nodes.array.size(method.node.parameters);
@@ -158,7 +155,7 @@ impl<'a> SymbolCollector<'a> {
 
     fn process_field(&self, field: TypedNodeRef<FieldDeclNode>) -> DocumentSymbol {
         let name_node = self.nodes.get_identifier_node(field.node.name);
-        let name = self.strings.get_string(name_node.node.name).to_string();
+        let name = self.strings.get(name_node.node.name).to_string();
 
         let (range, selection_range) =
             self.create_symbol_with_ranges(field.node.span, name_node.node.span);
@@ -179,7 +176,7 @@ impl<'a> SymbolCollector<'a> {
     fn process_function_decl(&self, func: TypedNodeRef<FunctionDeclNode>) -> DocumentSymbol {
         let func_expr = self.nodes.get_func_expr_node(func.node.function);
         let name_node = self.nodes.get_identifier_node(func_expr.node.name);
-        let name = self.strings.get_string(name_node.node.name).to_string();
+        let name = self.strings.get(name_node.node.name).to_string();
 
         let param_count = self.nodes.array.size(func_expr.node.parameters);
         let detail = format!("({} parameters)", param_count);
@@ -202,7 +199,7 @@ impl<'a> SymbolCollector<'a> {
 
     fn process_lambda_decl(&self, lambda: TypedNodeRef<LambdaDeclNode>) -> DocumentSymbol {
         let name_node = self.nodes.get_identifier_node(lambda.node.name);
-        let name = self.strings.get_string(name_node.node.name).to_string();
+        let name = self.strings.get(name_node.node.name).to_string();
 
         let (range, selection_range) =
             self.create_symbol_with_ranges(lambda.node.span, name_node.node.span);
@@ -222,7 +219,7 @@ impl<'a> SymbolCollector<'a> {
 
     fn process_variable(&self, var: TypedNodeRef<VariableDeclNode>) -> DocumentSymbol {
         let name_node = self.nodes.get_identifier_node(var.node.target);
-        let name = self.strings.get_string(name_node.node.name).to_string();
+        let name = self.strings.get(name_node.node.name).to_string();
 
         let (range, selection_range) =
             self.create_symbol_with_ranges(var.node.span, name_node.node.span);
@@ -242,7 +239,7 @@ impl<'a> SymbolCollector<'a> {
 
     fn process_import(&self, import: TypedNodeRef<ImportModuleDeclNode>) -> DocumentSymbol {
         let name_node = self.nodes.get_identifier_node(import.node.name);
-        let name = self.strings.get_string(name_node.node.name).to_string();
+        let name = self.strings.get(name_node.node.name).to_string();
 
         let (range, selection_range) =
             self.create_symbol_with_ranges(import.node.span, name_node.node.span);
@@ -250,7 +247,7 @@ impl<'a> SymbolCollector<'a> {
         #[allow(deprecated)]
         DocumentSymbol {
             name: format!("import {}", name),
-            detail: Some(self.strings.get_string(import.node.path).to_string()),
+            detail: Some(self.strings.get(import.node.path).to_string()),
             kind: SymbolKind::MODULE,
             range,
             selection_range,

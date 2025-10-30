@@ -351,34 +351,34 @@ impl Value {
         match self.kind() {
             ValueKind::Nil => "nil".to_string(),
             ValueKind::Number(number) => number.to_string(),
-            ValueKind::String(handle) => allocator.strings.get_string(handle).to_string(),
+            ValueKind::String(handle) => allocator.strings.get(handle).to_string(),
             ValueKind::True => "true".to_string(),
             ValueKind::False => "false".to_string(),
             ValueKind::FunctionDecl(function_handle) => {
                 let function = allocator.get_function(function_handle);
-                let identifier = allocator.strings.get_string(function.name);
+                let identifier = allocator.strings.get(function.name);
                 format!("{}<function>", identifier)
             }
             ValueKind::Closure(handle) => {
                 let closure = allocator.closures.get_closure(handle);
                 let function = allocator.get_function(closure.function);
-                let identifier = allocator.strings.get_string(function.name);
+                let identifier = allocator.strings.get(function.name);
                 format!("{}<function>", identifier)
             }
             ValueKind::NativeFunction(handle) => {
                 let function = allocator.get_native_function(handle);
-                let identifier = allocator.strings.get_string(function.name_handle);
+                let identifier = allocator.strings.get(function.name_handle);
                 format!("{}<function>", identifier)
             }
             ValueKind::Class(handle) => {
                 let clazz = allocator.get_class(handle);
-                let identifier = allocator.strings.get_string(clazz.name);
+                let identifier = allocator.strings.get(clazz.name);
                 format!("{}<class>", identifier)
             }
             ValueKind::Instance(handle) => {
                 let instance = allocator.get_instance(handle);
                 let clazz = allocator.get_class(instance.clazz);
-                let identifier = allocator.strings.get_string(clazz.name);
+                let identifier = allocator.strings.get(clazz.name);
                 format!("instanceof {}", identifier)
             }
             ValueKind::BoundMethod(handle) => {

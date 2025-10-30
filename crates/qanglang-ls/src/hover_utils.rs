@@ -82,7 +82,7 @@ impl<'a> NodeFinder<'a> {
                 let name_node = self.nodes.get_identifier_node(lambda.name);
                 if self.span_contains(name_node.node.span) {
                     if self.is_better_match(name_node.node.span) {
-                        let name = self.strings.get_string(name_node.node.name).to_string();
+                        let name = self.strings.get(name_node.node.name).to_string();
                         self.best_match = Some(NodeInfo {
                             node_id: decl.id,
                             range: self.span_to_range(name_node.node.span),
@@ -123,7 +123,7 @@ impl<'a> NodeFinder<'a> {
         // Check if the import path string literal contains the offset
         if self.span_contains(module.node.path_literal_span) {
             if self.is_better_match(module.node.path_literal_span) {
-                let path = self.strings.get_string(module.node.path).to_string();
+                let path = self.strings.get(module.node.path).to_string();
 
                 // Don't create ImportPath kind for builtin modules (they don't have file paths)
                 if !qanglang_core::builtin_modules::is_builtin_import(&path) {
@@ -147,7 +147,7 @@ impl<'a> NodeFinder<'a> {
         let name_node = self.nodes.get_identifier_node(module.node.name);
         if self.span_contains(name_node.node.span) {
             if self.is_better_match(name_node.node.span) {
-                let name = self.strings.get_string(name_node.node.name).to_string();
+                let name = self.strings.get(name_node.node.name).to_string();
                 self.best_match = Some(NodeInfo {
                     node_id: module.id,
                     range: self.span_to_range(name_node.node.span),
@@ -162,7 +162,7 @@ impl<'a> NodeFinder<'a> {
         let name_node = self.nodes.get_identifier_node(class.node.name);
         if self.span_contains(name_node.node.span) {
             if self.is_better_match(name_node.node.span) {
-                let name = self.strings.get_string(name_node.node.name).to_string();
+                let name = self.strings.get(name_node.node.name).to_string();
 
                 self.best_match = Some(NodeInfo {
                     node_id: class.id,
@@ -213,7 +213,7 @@ impl<'a> NodeFinder<'a> {
         let name_node = self.nodes.get_identifier_node(func.node.name);
         if self.span_contains(name_node.node.span) {
             if self.is_better_match(name_node.node.span) {
-                let name = self.strings.get_string(name_node.node.name).to_string();
+                let name = self.strings.get(name_node.node.name).to_string();
 
                 self.best_match = Some(NodeInfo {
                     node_id: func.id,
@@ -332,7 +332,7 @@ impl<'a> NodeFinder<'a> {
                     }
                     CallOperationNode::Property(prop) => {
                         let name_node = self.nodes.get_identifier_node(prop.identifier);
-                        let name = self.strings.get_string(name_node.node.name).to_string();
+                        let name = self.strings.get(name_node.node.name).to_string();
 
                         if self.span_contains(name_node.node.span) {
                             if self.is_better_match(name_node.node.span) {
@@ -473,7 +473,7 @@ impl<'a> NodeFinder<'a> {
                 let property_node = self.nodes.get_identifier_node(prop.property);
                 if self.span_contains(property_node.node.span) {
                     if self.is_better_match(property_node.node.span) {
-                        let name = self.strings.get_string(property_node.node.name).to_string();
+                        let name = self.strings.get(property_node.node.name).to_string();
 
                         // Check if this is an intrinsic method first
                         if builtins::get_string_method(&name).is_some()
@@ -593,7 +593,7 @@ impl<'a> NodeFinder<'a> {
                 let method_ident = self.nodes.get_identifier_node(super_expr.method);
                 if self.span_contains(method_ident.node.span) {
                     if self.is_better_match(method_ident.node.span) {
-                        let name = self.strings.get_string(method_ident.node.name).to_string();
+                        let name = self.strings.get(method_ident.node.name).to_string();
                         let kind = self.find_super_property_kind(&name);
 
                         self.best_match = Some(NodeInfo {
@@ -617,7 +617,7 @@ impl<'a> NodeFinder<'a> {
             return;
         }
 
-        let name = self.strings.get_string(identifier.node.name);
+        let name = self.strings.get(identifier.node.name);
 
         // Check if this is a native function
         if let Some(_func_info) = builtins::get_native_function(name) {
@@ -688,7 +688,7 @@ impl<'a> NodeFinder<'a> {
                             ClassMemberNode::Method(method) => {
                                 let name_node = self.nodes.get_identifier_node(method.name);
                                 let member_name =
-                                    self.strings.get_string(name_node.node.name);
+                                    self.strings.get(name_node.node.name);
                                 if member_name == property_name {
                                     return NodeKind::Function(property_name.to_string());
                                 }
@@ -696,7 +696,7 @@ impl<'a> NodeFinder<'a> {
                             ClassMemberNode::Field(field) => {
                                 let name_node = self.nodes.get_identifier_node(field.name);
                                 let member_name =
-                                    self.strings.get_string(name_node.node.name);
+                                    self.strings.get(name_node.node.name);
                                 if member_name == property_name {
                                     return NodeKind::Field(property_name.to_string());
                                 }
@@ -791,14 +791,14 @@ impl<'a> NodeFinder<'a> {
                                         match member.node {
                                             ClassMemberNode::Method(method) => {
                                                 let name_node = self.nodes.get_identifier_node(method.name);
-                                                let member_name = self.strings.get_string(name_node.node.name);
+                                                let member_name = self.strings.get(name_node.node.name);
                                                 if member_name == property_name {
                                                     return NodeKind::Function(property_name.to_string());
                                                 }
                                             }
                                             ClassMemberNode::Field(field) => {
                                                 let name_node = self.nodes.get_identifier_node(field.name);
-                                                let member_name = self.strings.get_string(name_node.node.name);
+                                                let member_name = self.strings.get(name_node.node.name);
                                                 if member_name == property_name {
                                                     return NodeKind::Field(property_name.to_string());
                                                 }
@@ -828,7 +828,7 @@ impl<'a> NodeFinder<'a> {
         let name_node = self.nodes.get_identifier_node(var.node.target);
         if self.span_contains(name_node.node.span) {
             if self.is_better_match(name_node.node.span) {
-                let name = self.strings.get_string(name_node.node.name).to_string();
+                let name = self.strings.get(name_node.node.name).to_string();
 
                 self.best_match = Some(NodeInfo {
                     node_id: var.id,
@@ -849,7 +849,7 @@ impl<'a> NodeFinder<'a> {
         let name_node = self.nodes.get_identifier_node(field.node.name);
         if self.span_contains(name_node.node.span) {
             if self.is_better_match(name_node.node.span) {
-                let name = self.strings.get_string(name_node.node.name).to_string();
+                let name = self.strings.get(name_node.node.name).to_string();
 
                 self.best_match = Some(NodeInfo {
                     node_id: field.id,
@@ -863,7 +863,7 @@ impl<'a> NodeFinder<'a> {
     fn check_parameter(&mut self, param: TypedNodeRef<IdentifierNode>) {
         if self.span_contains(param.node.span) {
             if self.is_better_match(param.node.span) {
-                let name = self.strings.get_string(param.node.name).to_string();
+                let name = self.strings.get(param.node.name).to_string();
 
                 self.best_match = Some(NodeInfo {
                     node_id: param.id,

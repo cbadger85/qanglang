@@ -159,8 +159,7 @@ pub fn qang_string_to_uppercase(
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Some(handle) = receiver.as_string() {
-        let uppercase_string = &vm.alloc.strings.get_string(handle).to_uppercase();
-        let uppercase_handle = vm.alloc.strings.intern(uppercase_string);
+        let uppercase_handle = vm.alloc.strings.to_uppercase(handle);
 
         Ok(Some(Value::string(uppercase_handle)))
     } else {
@@ -177,8 +176,7 @@ pub fn qang_string_to_lowercase(
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
     if let Some(handle) = receiver.as_string() {
-        let lowercase_string = &vm.alloc.strings.get_string(handle).to_lowercase();
-        let lowercase_handle = vm.alloc.strings.intern(lowercase_string);
+        let lowercase_handle = vm.alloc.strings.to_lowercase(handle);
 
         Ok(Some(Value::string(lowercase_handle)))
     } else {
@@ -207,8 +205,8 @@ pub fn qang_string_split(
         };
 
         let arr = vm.alloc.arrays.create_array(0);
-        let delimeter = vm.alloc.strings.get_string(delimeter).to_owned();
-        let string_to_split = vm.alloc.strings.get_string(handle).to_owned();
+        let delimeter = vm.alloc.strings.get(delimeter).to_owned();
+        let string_to_split = vm.alloc.strings.get(handle).to_owned();
 
         if delimeter.is_empty() {
             // Split into individual characters when no delimiter
@@ -245,7 +243,7 @@ pub fn qang_string_concat(
     let args = vm.get_function_args(arg_count);
     match (receiver.kind(), args.first().copied().map(|a| a.kind())) {
         (ValueKind::String(handle1), Some(ValueKind::String(handle2))) => Ok(Some(Value::string(
-            vm.alloc.strings.concat_strings(handle1, handle2),
+            vm.alloc.strings.concat(handle1, handle2),
         ))),
         (ValueKind::String(_), _) => Err(NativeFunctionError::new(
             "A string can only be concatenated with another string.",
@@ -254,6 +252,86 @@ pub fn qang_string_concat(
             "Expected string but recieved {}.",
             receiver.to_type_string()
         ))),
+    }
+}
+
+pub fn qang_string_starts_with(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let prefix_string = args.first().copied().unwrap_or(Value::nil());
+
+    match (receiver.kind(), prefix_string.kind()) {
+        (ValueKind::String(string_handle), ValueKind::String(prefix_handle)) => {
+            Ok(vm.alloc.strings.starts_with(string_handle, prefix_handle))
+        }
+        (ValueKind::String(_), _) => Ok(false),
+        _ => Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        ))),
+    }
+    .map(|value| Some(Value::boolean(value)))
+}
+
+pub fn qang_string_ends_with(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let prefix_string = args.first().copied().unwrap_or(Value::nil());
+
+    match (receiver.kind(), prefix_string.kind()) {
+        (ValueKind::String(string_handle), ValueKind::String(prefix_handle)) => {
+            Ok(vm.alloc.strings.ends_with(string_handle, prefix_handle))
+        }
+        (ValueKind::String(_), _) => Ok(false),
+        _ => Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        ))),
+    }
+    .map(|value| Some(Value::boolean(value)))
+}
+
+pub fn qang_string_contains(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let prefix_string = args.first().copied().unwrap_or(Value::nil());
+
+    match (receiver.kind(), prefix_string.kind()) {
+        (ValueKind::String(string_handle), ValueKind::String(prefix_handle)) => {
+            Ok(vm.alloc.strings.contains(string_handle, prefix_handle))
+        }
+        (ValueKind::String(_), _) => Ok(false),
+        _ => Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        ))),
+    }
+    .map(|value| Some(Value::boolean(value)))
+}
+
+pub fn qang_string_length(
+    receiver: Value,
+    _arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(handle) = receiver.as_string() {
+        let length = vm.alloc.strings.length(handle);
+
+        Ok(Some(Value::number(length as f64)))
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
     }
 }
 
@@ -505,7 +583,7 @@ pub fn qang_array_join(
         };
 
         let mut combined_string = String::new();
-        let delimeter_str = vm.alloc.strings.get_string(delimeter);
+        let delimeter_str = vm.alloc.strings.get(delimeter);
 
         let mut first = true;
         for value in vm.alloc.arrays.iter(handle) {
@@ -740,7 +818,38 @@ impl Vm {
                 arity: 1,
             },
         );
+        let contains_handle = alloc.strings.intern("contains");
+        intrinsics.insert(
+            IntrinsicKind::String(contains_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_contains,
+                arity: 1,
+            },
+        );
+        let starts_with_handle = alloc.strings.intern("starts_with");
+        intrinsics.insert(
+            IntrinsicKind::String(starts_with_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_starts_with,
+                arity: 1,
+            },
+        );
+        let ends_with_handle = alloc.strings.intern("ends_with");
+        intrinsics.insert(
+            IntrinsicKind::String(ends_with_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_ends_with,
+                arity: 1,
+            },
+        );
         let length_handle = alloc.strings.intern("length");
+        intrinsics.insert(
+            IntrinsicKind::String(length_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_length,
+                arity: 0,
+            },
+        );
         intrinsics.insert(
             IntrinsicKind::Array(length_handle),
             IntrinsicMethod::Native {
@@ -991,7 +1100,7 @@ impl Vm {
                 self.state.get_previous_loc(),
             )
         })?;
-        let value = self.alloc.strings.get_string(value);
+        let value = self.alloc.strings.get(value);
         let result = match value.parse::<f64>() {
             Ok(number) => {
                 let ok = *self

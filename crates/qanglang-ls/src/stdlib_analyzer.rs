@@ -121,7 +121,7 @@ fn parse_stdlib() -> StdlibCache {
                 DeclNode::Class(class_decl) => {
                     // Extract class name
                     let name_node = nodes.get_identifier_node(class_decl.name);
-                    let class_name = strings.get_string(name_node.node.name).to_string();
+                    let class_name = strings.get(name_node.node.name).to_string();
 
                     symbols.insert(
                         class_name.clone(),
@@ -139,7 +139,7 @@ fn parse_stdlib() -> StdlibCache {
                             if let ClassMemberNode::Method(method) = member.node {
                                 let method_name_node = nodes.get_identifier_node(method.name);
                                 let method_name =
-                                    strings.get_string(method_name_node.node.name).to_string();
+                                    strings.get(method_name_node.node.name).to_string();
                                 let param_count = nodes.array.size(method.parameters);
 
                                 // Store method with a key that includes class name
@@ -160,7 +160,7 @@ fn parse_stdlib() -> StdlibCache {
                     // Extract function name and parameter count
                     let func_expr = nodes.get_func_expr_node(func_decl.function);
                     let name_node = nodes.get_identifier_node(func_expr.node.name);
-                    let func_name = strings.get_string(name_node.node.name).to_string();
+                    let func_name = strings.get(name_node.node.name).to_string();
                     let param_count = nodes.array.size(func_expr.node.parameters);
 
                     symbols.insert(

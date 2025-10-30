@@ -306,7 +306,7 @@ impl GlobalCompilerPipeline {
                 >,
                 _ctx: &mut VisitorContext,
             ) -> Result<(), Self::Error> {
-                let import_path_str = self.allocator.strings.get_string(import_decl.node.path);
+                let import_path_str = self.allocator.strings.get(import_decl.node.path);
 
                 let resolved_path =
                     if crate::backend::builtin_modules::is_builtin_import(import_path_str) {

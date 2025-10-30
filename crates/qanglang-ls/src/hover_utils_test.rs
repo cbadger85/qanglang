@@ -269,7 +269,7 @@ class Child : Base {
 
                                 // Try to get it as an identifier
                                 let method_ident = analysis.nodes.get_identifier_node(super_expr.method);
-                                let method_name = analysis.strings.get_string(method_ident.node.name);
+                                let method_name = analysis.strings.get(method_ident.node.name);
                                 eprintln!("  Method/field name: {}", method_name);
                                 eprintln!("  Method/field identifier span: {:?}", method_ident.node.span);
                             }

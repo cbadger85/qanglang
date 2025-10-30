@@ -212,7 +212,7 @@ fn string_constant_instruction(
     if let Some(value) = chunk.constants.get(constant) {
         match value.as_string() {
             Some(handle) => {
-                let string_value = allocator.strings.get_string(handle);
+                let string_value = allocator.strings.get(handle);
                 print!("{}", string_value);
             }
             _ => {
@@ -280,7 +280,7 @@ fn invoke_instruction(
     if let Some(value) = chunk.constants.get(constant as usize) {
         match value.as_string() {
             Some(handle) => {
-                let string_value = allocator.strings.get_string(handle);
+                let string_value = allocator.strings.get(handle);
                 print!("{}", string_value);
             }
             _ => {
@@ -309,7 +309,7 @@ fn string_constant_16_instruction(
     if let Some(value) = chunk.constants.get(constant) {
         match value.as_string() {
             Some(handle) => {
-                let string_value = allocator.strings.get_string(handle);
+                let string_value = allocator.strings.get(handle);
                 print!("{}", string_value);
             }
             _ => {
@@ -339,7 +339,7 @@ fn invoke_16_instruction(
     if let Some(value) = chunk.constants.get(constant) {
         match value.as_string() {
             Some(handle) => {
-                let string_value = allocator.strings.get_string(handle);
+                let string_value = allocator.strings.get(handle);
                 print!("{}", string_value);
             }
             _ => {
@@ -364,7 +364,7 @@ pub fn disassemble_program(allocator: &HeapAllocator) {
     for (index, function) in allocator.iter_functions() {
         function_count += 1;
 
-        let function_name = allocator.strings.get_string(function.name);
+        let function_name = allocator.strings.get(function.name);
 
         println!(
             "Function #{} (Object #{}) - {}:",

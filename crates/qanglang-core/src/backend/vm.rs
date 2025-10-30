@@ -566,9 +566,7 @@ impl Vm {
                         (ValueKind::String(handle1), ValueKind::String(handle2)) => {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
-                            Ok(Value::string(
-                                alloc.strings.concat_strings(handle1, handle2),
-                            ))
+                            Ok(Value::string(alloc.strings.concat(handle1, handle2)))
                         }
                         (ValueKind::Array(handle1), ValueKind::Array(handle2)) => {
                             Ok(Value::array(alloc.arrays.concat(handle1, handle2)))
@@ -1588,7 +1586,7 @@ impl Vm {
                     Err(QangRuntimeError::new(
                         format!(
                             "Property '{}' does not exist on object.",
-                            self.alloc.strings.get_string(method_handle)
+                            self.alloc.strings.get(method_handle)
                         ),
                         self.state.get_previous_loc(),
                     ))
@@ -1607,7 +1605,7 @@ impl Vm {
                     Err(QangRuntimeError::new(
                         format!(
                             "Property '{}' does not exist on module.",
-                            self.alloc.strings.get_string(method_handle)
+                            self.alloc.strings.get(method_handle)
                         ),
                         self.state.get_previous_loc(),
                     ))
@@ -2128,7 +2126,7 @@ impl Vm {
                             return Err(QangRuntimeError::new(
                                 format!(
                                     "Property '{}' does not exist on module.",
-                                    self.alloc.strings.get_string(identifier)
+                                    self.alloc.strings.get(identifier)
                                 ),
                                 self.state.get_previous_loc(),
                             ));
@@ -2296,7 +2294,7 @@ impl Vm {
             .copied()
             .ok_or_else(|| {
                 let loc = self.state.get_previous_loc();
-                let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                let identifier_name = self.alloc.strings.get(identifier_handle);
                 QangRuntimeError::new(format!("Undefined variable: {}.", identifier_name), loc)
             })
     }
@@ -2347,7 +2345,7 @@ impl Vm {
     }
 
     fn undefined_variable_error(&self, identifier_handle: StringHandle) -> RuntimeResult<()> {
-        let identifier_name = self.alloc.strings.get_string(identifier_handle);
+        let identifier_name = self.alloc.strings.get(identifier_handle);
         let loc = self.state.get_previous_loc();
         Err(QangRuntimeError::new(
             format!("Undefined variable: {}.", identifier_name),

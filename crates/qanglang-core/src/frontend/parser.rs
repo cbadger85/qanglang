@@ -355,16 +355,40 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            let source_map = match SourceMap::from_path(&module_path) {
-                Ok(source_map) => source_map,
-                Err(err) => {
-                    self.errors
-                        .report_error(QangCompilerError::new_analysis_error(
-                            format!("Error loading module '{}': {}", module_path.display(), err),
-                            SourceSpan::default(),
-                            Arc::new(SourceMap::default()),
-                        ));
-                    continue;
+            let path_str = module_path.to_string_lossy();
+            let source_map = if path_str.starts_with("<builtin:") && path_str.ends_with('>') {
+                let builtin_import_path = &path_str[9..path_str.len() - 1]; // Remove "<builtin:" and ">"
+
+                match crate::backend::builtin_modules::resolve_builtin_import(builtin_import_path) {
+                    Some(builtin_source) => {
+                        SourceMap::new(builtin_source.to_string(), module_path.clone())
+                    }
+                    None => {
+                        self.errors
+                            .report_error(QangCompilerError::new_analysis_error(
+                                format!("Built-in module '{}' not found", builtin_import_path),
+                                SourceSpan::default(),
+                                Arc::new(SourceMap::default()),
+                            ));
+                        continue;
+                    }
+                }
+            } else {
+                match SourceMap::from_path(&module_path) {
+                    Ok(source_map) => source_map,
+                    Err(err) => {
+                        self.errors
+                            .report_error(QangCompilerError::new_analysis_error(
+                                format!(
+                                    "Error loading module '{}': {}",
+                                    module_path.display(),
+                                    err
+                                ),
+                                SourceSpan::default(),
+                                Arc::new(SourceMap::default()),
+                            ));
+                        continue;
+                    }
                 }
             };
 
@@ -458,51 +482,71 @@ impl<'a> Parser<'a> {
         let value = token.lexeme(&self.source_map);
         let path_as_string = value[1..value.len() - 1].iter().collect::<String>();
 
-        let current_dir = self
-            .source_map
-            .get_path()
-            .parent()
-            .expect("Expected path to be file and to be within a dir");
-        let combined_path = match current_dir.join(Path::new(&path_as_string)).canonicalize() {
-            Ok(combined_path) => combined_path,
-            Err(_) => {
-                return Err(QangCompilerError::new_syntax_error(
-                    "Unable to get module path.".to_string(),
-                    path_span,
-                    self.source_map.clone(),
-                ));
-            }
-        };
-
-        match std::fs::exists(combined_path.as_path()) {
-            Ok(exists) => {
-                if !exists {
-                    self.errors
-                        .report_error(QangCompilerError::new_syntax_error(
-                            format!(
-                                "module at path '{}' does not exist.",
-                                combined_path.as_path().display(),
-                            ),
-                            path_span,
-                            self.source_map.clone(),
-                        ));
-                }
-            }
-            Err(_) => {
-                self.errors
-                    .report_error(QangCompilerError::new_syntax_error(
-                        format!(
-                            "Unable to load module from path '{}'",
-                            combined_path.as_path().display(),
-                        ),
+        let (path, combined_path) =
+            if crate::backend::builtin_modules::is_builtin_import(&path_as_string) {
+                if crate::backend::builtin_modules::resolve_builtin_import(&path_as_string)
+                    .is_none()
+                {
+                    return Err(QangCompilerError::new_syntax_error(
+                        format!("Built-in module '{}' does not exist.", path_as_string),
                         path_span,
                         self.source_map.clone(),
                     ));
-            }
-        }
+                }
 
-        let combined_path_str = combined_path.to_string_lossy();
-        let path = self.strings.intern(&combined_path_str);
+                let path = self.strings.intern(&path_as_string);
+                let virtual_path = PathBuf::from(format!("<builtin:{}>", path_as_string));
+                (path, virtual_path)
+            } else {
+                let current_dir = self
+                    .source_map
+                    .get_path()
+                    .parent()
+                    .expect("Expected path to be file and to be within a dir");
+                let combined_path =
+                    match current_dir.join(Path::new(&path_as_string)).canonicalize() {
+                        Ok(combined_path) => combined_path,
+                        Err(_) => {
+                            return Err(QangCompilerError::new_syntax_error(
+                                "Unable to get module path.".to_string(),
+                                path_span,
+                                self.source_map.clone(),
+                            ));
+                        }
+                    };
+
+                match std::fs::exists(combined_path.as_path()) {
+                    Ok(exists) => {
+                        if !exists {
+                            self.errors
+                                .report_error(QangCompilerError::new_syntax_error(
+                                    format!(
+                                        "module at path '{}' does not exist.",
+                                        combined_path.as_path().display(),
+                                    ),
+                                    path_span,
+                                    self.source_map.clone(),
+                                ));
+                        }
+                    }
+                    Err(_) => {
+                        self.errors
+                            .report_error(QangCompilerError::new_syntax_error(
+                                format!(
+                                    "Unable to load module from path '{}'",
+                                    combined_path.as_path().display(),
+                                ),
+                                path_span,
+                                self.source_map.clone(),
+                            ));
+                    }
+                }
+
+                let combined_path_str = combined_path.to_string_lossy();
+                let path = self.strings.intern(&combined_path_str);
+                (path, combined_path)
+            };
+
         self.module_queue.push_back(combined_path);
 
         self.consume(TokenType::RightParen, "Expected closing parentheses.")?;

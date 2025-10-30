@@ -124,11 +124,22 @@ impl<'a> NodeFinder<'a> {
         if self.span_contains(module.node.path_literal_span) {
             if self.is_better_match(module.node.path_literal_span) {
                 let path = self.strings.get_string(module.node.path).to_string();
-                self.best_match = Some(NodeInfo {
-                    node_id: module.id,
-                    range: self.span_to_range(module.node.path_literal_span),
-                    kind: NodeKind::ImportPath(path),
-                });
+
+                // Don't create ImportPath kind for builtin modules (they don't have file paths)
+                if !qanglang_core::builtin_modules::is_builtin_import(&path) {
+                    self.best_match = Some(NodeInfo {
+                        node_id: module.id,
+                        range: self.span_to_range(module.node.path_literal_span),
+                        kind: NodeKind::ImportPath(path),
+                    });
+                } else {
+                    // For builtin modules, just show as a module reference
+                    self.best_match = Some(NodeInfo {
+                        node_id: module.id,
+                        range: self.span_to_range(module.node.path_literal_span),
+                        kind: NodeKind::Module(path),
+                    });
+                }
             }
         }
 

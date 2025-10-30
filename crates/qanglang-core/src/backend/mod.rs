@@ -1,4 +1,5 @@
 pub mod assembler;
+pub mod builtin_modules;
 pub mod chunk;
 pub mod external_context;
 pub mod module_resolver;

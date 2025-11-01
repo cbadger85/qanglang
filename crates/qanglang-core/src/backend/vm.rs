@@ -211,7 +211,7 @@ pub(crate) struct VmState {
     method_cache: [MethodCache; Self::METHOD_CACHE_SIZE],
     cache_generation: u32,
     pub(crate) arg_buffer: [Value; 256],
-    external_roots: FxHashSet<Value>,
+    additional_roots: FxHashSet<Value>,
 }
 
 impl VmState {
@@ -239,7 +239,7 @@ impl VmState {
             method_cache: [MethodCache::default(); Self::METHOD_CACHE_SIZE],
             cache_generation: 0,
             arg_buffer: [Value::default(); 256],
-            external_roots: FxHashSet::with_capacity_and_hasher(64, FxBuildHasher),
+            additional_roots: FxHashSet::with_capacity_and_hasher(64, FxBuildHasher),
         }
     }
 
@@ -478,15 +478,11 @@ impl Vm {
     }
 
     pub fn add_external_root(&mut self, value: Value) {
-        self.state.external_roots.insert(value);
+        self.state.additional_roots.insert(value);
     }
 
     pub fn remove_external_root(&mut self, value: Value) {
-        self.state.external_roots.remove(&value);
-    }
-
-    pub fn clear_external_roots(&mut self) {
-        self.state.external_roots.clear();
+        self.state.additional_roots.remove(&value);
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
@@ -1899,7 +1895,7 @@ impl Vm {
                 pop_value!(self); // pop function off the stack now that it has been called.
 
                 // Add receiver to external roots to prevent it from being GC'd during native function execution
-                self.state.external_roots.insert(receiver);
+                self.state.additional_roots.insert(receiver);
 
                 let value = function(receiver, arg_count, self)
                     .map_err(|e: NativeFunctionError| {
@@ -1909,7 +1905,7 @@ impl Vm {
                     .unwrap_or_default();
 
                 // Remove receiver from external roots after function execution
-                self.state.external_roots.remove(&receiver);
+                self.state.additional_roots.remove(&receiver);
 
                 push_value!(self, value)?;
                 self.state.arg_buffer.fill(Value::default());
@@ -2414,7 +2410,7 @@ impl Vm {
             + self.state.open_upvalues.len()
             + self.state.modules.count()
             + self.state.arg_buffer.len()
-            + self.state.external_roots.len();
+            + self.state.additional_roots.len();
         let mut roots = VecDeque::with_capacity(capacity);
         roots.extend(&self.state.stack[..self.state.stack_top]);
         roots.extend(self.globals().values());
@@ -2432,7 +2428,7 @@ impl Vm {
 
         self.state.modules.gather_roots(&mut roots);
 
-        roots.extend(self.state.external_roots.iter());
+        roots.extend(self.state.additional_roots.iter());
 
         roots
     }

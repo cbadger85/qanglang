@@ -528,23 +528,23 @@ impl Vm {
             .add_native_function("_path_is_dir", 1, qang_path_is_dir)
             .add_native_function("_path_is_absolute", 1, qang_path_is_absolute)
             .add_native_function("_path_is_relative", 1, qang_path_is_relative)
-            .add_native_function("fs_read_file", 1, qang_fs_read_file)
-            .add_native_function("fs_read_chunk", 3, qang_fs_read_chunk)
-            .add_native_function("fs_write_file", 2, qang_fs_write_file)
-            .add_native_function("fs_append_file", 2, qang_fs_append_file)
-            .add_native_function("fs_remove_file", 1, qang_fs_remove_file)
-            .add_native_function("fs_list", 1, qang_fs_list)
-            .add_native_function("fs_create_dir", 1, qang_fs_create_dir)
-            .add_native_function("fs_create_dirs", 1, qang_fs_create_dirs)
-            .add_native_function("fs_remove_dir", 1, qang_fs_remove_dir)
-            .add_native_function("fs_remove_all", 1, qang_fs_remove_all)
-            .add_native_function("fs_get_file_size", 1, qang_fs_get_file_size)
+            .add_native_function("_fs_read_file", 1, qang_fs_read_file)
+            .add_native_function("_fs_read_chunk", 3, qang_fs_read_chunk)
+            .add_native_function("_fs_write_file", 2, qang_fs_write_file)
+            .add_native_function("_fs_append_file", 2, qang_fs_append_file)
+            .add_native_function("_fs_remove_file", 1, qang_fs_remove_file)
+            .add_native_function("_fs_list", 1, qang_fs_list)
+            .add_native_function("_fs_create_dir", 1, qang_fs_create_dir)
+            .add_native_function("_fs_create_dirs", 1, qang_fs_create_dirs)
+            .add_native_function("_fs_remove_dir", 1, qang_fs_remove_dir)
+            .add_native_function("_fs_remove_all", 1, qang_fs_remove_all)
+            .add_native_function("_fs_get_file_size", 1, qang_fs_get_file_size)
             .add_native_function(
-                "fs_get_file_modified_time",
+                "_fs_get_file_modified_time",
                 1,
                 qang_fs_get_file_modified_time,
             )
-            .add_native_function("fs_move", 2, qang_fs_move)
-            .add_native_function("fs_copy_file", 2, qang_fs_copy_file)
+            .add_native_function("_fs_move", 2, qang_fs_move)
+            .add_native_function("_fs_copy_file", 2, qang_fs_copy_file)
     }
 }

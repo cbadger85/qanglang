@@ -5,7 +5,7 @@ fn read_file(path) {
   if (!(path is Path)) {
     return Err("A valid Path must be provided.");
   }
-  var contents = fs_read_file(path.to_string());
+  var contents = _fs_read_file(path.to_string());
   return Ok(contents);
 }
 
@@ -26,7 +26,7 @@ fn write_file(path, content) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_write_file(path.to_string(), content) 
+  return _fs_write_file(path.to_string(), content) 
     ? Ok()
     : Err("Unable to save file.");
 }
@@ -44,7 +44,7 @@ fn append_file(path, content) {
     return Err("A valid Path must be provided.");
   }
   
-  return fs_append_file(path.to_string(), content) 
+  return _fs_append_file(path.to_string(), content) 
     ? Ok()
     : Err("Unable to append file.");
 }
@@ -54,7 +54,7 @@ fn remove_file(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_remove_file(path.to_string())
+  return _fs_remove_file(path.to_string())
     ? Ok()
     : Err("Unable to remove file.");
 }
@@ -64,7 +64,7 @@ fn list(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_list(path.to_string())
+  return _fs_list(path.to_string())
     ?|entries -> Ok(entries)| 
     or Err("Unable to read directory.");
 }
@@ -74,7 +74,7 @@ fn create_dir(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_create_dir(path.to_string()) 
+  return _fs_create_dir(path.to_string()) 
     ? Ok()
     : Err("Unable to create directory.");
 }
@@ -84,7 +84,7 @@ fn create_dirs(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_create_dirs(path.to_string()) 
+  return _fs_create_dirs(path.to_string()) 
     ? Ok()
     : Err("Unable to create directory(s).");
 }
@@ -94,7 +94,7 @@ fn remove_dir(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_remove_dir(path.to_string()) 
+  return _fs_remove_dir(path.to_string()) 
     ? Ok()
     : Err("Unable to remove directory.");
 }
@@ -105,7 +105,7 @@ fn remove_all(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_remove_all(path.to_string()) 
+  return _fs_remove_all(path.to_string()) 
     ? Ok()
     : Err("Unable to remove directory and contents.");
 }
@@ -115,7 +115,7 @@ fn get_file_size(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_get_file_size(path.to_string())
+  return _fs_get_file_size(path.to_string())
     ?|size -> Ok(size)| 
     or Err("Unable to get file metadata.");
 }
@@ -125,7 +125,7 @@ fn get_file_modified_time(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_get_file_modified_time(path.to_string())
+  return _fs_get_file_modified_time(path.to_string())
     ?|size -> Ok(size)| 
     or Err("Unable to get file metadata.");
 }
@@ -143,7 +143,7 @@ fn copy_file(source, destination) {
     return Err("`destination` must be a valid Path.");
   }
 
-  return fs_copy_file(source.to_string(), destination.to_string())
+  return _fs_copy_file(source.to_string(), destination.to_string())
     ? Ok()
     : Err("Unable to copy file.");
 }
@@ -157,7 +157,7 @@ fn move(source, destination) {
     return Err("destination must be a valid Path.");
   }
 
-  return fs_move(source.to_string(), destination.to_string()) 
+  return _fs_move(source.to_string(), destination.to_string()) 
     ? Ok()
     : Err("Unable to move " + (source.is_file() ? "file" : "directory") + ".");
 }
@@ -200,7 +200,7 @@ class FileIterator : Iterator {
   }
 
   _load_next_chunk() {
-    var result = fs_read_chunk(this._path.to_string(), this._file_offset, this._chunk_size);
+    var result = _fs_read_chunk(this._path.to_string(), this._file_offset, this._chunk_size);
 
     if (result == nil) {
       this._eof = true;

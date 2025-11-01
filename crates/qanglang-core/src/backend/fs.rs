@@ -311,17 +311,13 @@ pub fn qang_fs_list(args_count: usize, vm: &mut Vm) -> Result<Option<Value>, Nat
             match fs::read_dir(path) {
                 Ok(entries) => {
                     let array_handle = vm.alloc.arrays.create_array(0);
-                    let mut index = 0;
                     for entry in entries {
                         if let Ok(entry) = entry {
                             if let Some(file_name) = entry.file_name().to_str() {
                                 let string_handle = vm.alloc.strings.intern(file_name);
-                                vm.alloc.arrays.insert(
-                                    array_handle,
-                                    index,
-                                    Value::string(string_handle),
-                                );
-                                index += 1;
+                                vm.alloc
+                                    .arrays
+                                    .push(array_handle, Value::string(string_handle));
                             }
                         }
                     }
@@ -549,6 +545,6 @@ impl Vm {
                 qang_fs_get_file_modified_time,
             )
             .add_native_function("fs_move", 2, qang_fs_move)
-            .add_native_function("fs_copy", 2, qang_fs_copy_file)
+            .add_native_function("fs_copy_file", 2, qang_fs_copy_file)
     }
 }

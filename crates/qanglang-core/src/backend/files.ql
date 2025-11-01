@@ -54,7 +54,7 @@ fn remove_file(path) {
     return Err("A valid Path must be provided.");
   }
 
-  return fs_remove_file(path.to_string(), content) 
+  return fs_remove_file(path.to_string())
     ? Ok()
     : Err("Unable to remove file.");
 }
@@ -134,7 +134,7 @@ fn copy_file(source, destination) {
   if (!(source is Path)) {
     return Err("`source` must be a valid Path.");
   }
-  
+
   if (!source.is_file()) {
     return Err("`source` must be a file.");
   }
@@ -143,11 +143,7 @@ fn copy_file(source, destination) {
     return Err("`destination` must be a valid Path.");
   }
 
-  if (!destination.is_file()) {
-    return Err("`destination` be a file.");
-  }
-
-  return fs_copy_file(source.to_string(), destination.to_string()) 
+  return fs_copy_file(source.to_string(), destination.to_string())
     ? Ok()
     : Err("Unable to copy file.");
 }
@@ -197,7 +193,8 @@ class FileIterator : Iterator {
       return nil;
     }
 
-    var char = this._buffer.char_at(this._buffer_index);
+    var chars = this._buffer.split("");
+    var char = chars[this._buffer_index];
     this._buffer_index += 1;
     return char;
   }

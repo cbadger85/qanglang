@@ -40,7 +40,7 @@ fn test_hashset_clear() {
 }
 
 fn test_hashset_clear() {
-  var values = HashSet(["value"]).values().collect();
+  var values = HashSet(["value"]).values().to_array();
   assert_eq(values.length(), 1);
   assert_eq(values[0], "value");
 }

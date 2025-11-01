@@ -60,7 +60,7 @@ fn test_hashmap_clear() {
 fn test_hashmap_entries() {
   var map = HashMap();
   map.set(1, "value");
-  var entries = map.entries().collect();
+  var entries = map.entries().to_array();
   assert_eq(entries.length(), 1);
   assert_eq(entries[0].key, 1);
   assert_eq(entries[0].value, "value");
@@ -69,7 +69,7 @@ fn test_hashmap_entries() {
 fn test_hashmap_keys() {
   var map = HashMap();
   map.set(1, "value");
-  var keys = map.keys().collect();
+  var keys = map.keys().to_array();
   assert_eq(keys.length(), 1);
   assert_eq(keys[0], 1);
 }
@@ -77,7 +77,7 @@ fn test_hashmap_keys() {
 fn test_hashmap_values() {
   var map = HashMap();
   map.set(1, "value");
-  var values = map.values().collect();
+  var values = map.values().to_array();
   assert_eq(values.length(), 1);
   assert_eq(values[0], "value");
 }

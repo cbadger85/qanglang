@@ -45,6 +45,16 @@ class Iterator {
     return arr;
   }
 
+  to_array() {
+    var arr = [];
+
+    while (this.has_next()) {
+      arr.push(this.next());
+    }
+
+    return arr;
+  }
+
   for_each(cb) {
     while (this.has_next()) {
       cb(this.next());
@@ -146,7 +156,7 @@ class Iterator {
   }
 
   reverse() {
-    var arr = this.collect();
+    var arr = this.to_array();
     arr.reverse();
     return arr.iter();
   }

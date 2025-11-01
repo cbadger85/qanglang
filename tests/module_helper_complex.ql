@@ -50,4 +50,4 @@ fn increment() {
 
 var create_array = (length, init) -> Range(0, length)
   .map(init)
-  .collect();
+  .to_array();

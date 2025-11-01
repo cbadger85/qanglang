@@ -1,7 +1,7 @@
 var test_description = "Testing Iterators.";
 
 fn test_array_iterator() {
-  var collected_arr = [1, 2, 3,].iter().collect();
+  var collected_arr = [1, 2, 3,].iter().to_array();
 
   assert_eq(collected_arr[0], 1);
   assert_eq(collected_arr[1], 2);
@@ -9,14 +9,14 @@ fn test_array_iterator() {
 }
 
 fn test_range_iterator() {
-  var range_arr = Range(0, 10).collect();
+  var range_arr = Range(0, 10).to_array();
 
   assert_eq(range_arr[0], 0);
   assert_eq(range_arr[-1], 9);
 }
 
 fn test_range_iterator_inclusive() {
-  var range_arr = RangeInclusive(0, 10).collect();
+  var range_arr = RangeInclusive(0, 10).to_array();
 
   assert_eq(range_arr[0], 0);
   assert_eq(range_arr[-1], 10);
@@ -25,7 +25,7 @@ fn test_range_iterator_inclusive() {
 fn test_map_iterator() {
   var range = Range(0, 3);
 
-  var doubled_range = range.map((value) -> value * 2).collect();
+  var doubled_range = range.map((value) -> value * 2).to_array();
 
   assert_eq(doubled_range[0], 0);
   assert_eq(doubled_range[1], 2);
@@ -34,7 +34,7 @@ fn test_map_iterator() {
 
 fn test_map_indexed_iterator() {
   var range = Range(0, 3);
-  var modified_range = range.map_indexed((i, value) -> i + value).collect();
+  var modified_range = range.map_indexed((i, value) -> i + value).to_array();
 
   assert_eq(modified_range[0], 0);
   assert_eq(modified_range[1], 2);
@@ -47,7 +47,7 @@ fn is_even(value) {
 
 fn test_filter_iterator() {
   var range = Range(1, 5);
-  var filtered_range = range.filter(is_even).collect();
+  var filtered_range = range.filter(is_even).to_array();
 
   assert_eq(filtered_range[0], 2);
   assert_eq(filtered_range[1], 4);
@@ -57,7 +57,7 @@ fn test_filter_indexed_iterator() {
   var range = Range(1, 5);
   var filtered_range = range
     .filter_indexed((i, value) -> is_even(i))
-    .collect();
+    .to_array();
 
   assert_eq(filtered_range[0], 1);
   assert_eq(filtered_range[1], 3);
@@ -68,7 +68,7 @@ fn test_flat_map_iterator() {
 
   var flattened_arr = arrs.iter()
     .flat_map((arr) -> arr.iter())
-    .collect();
+    .to_array();
   
   assert_eq(flattened_arr[0], 1);
   assert_eq(flattened_arr[1], 2);
@@ -105,7 +105,7 @@ fn test_reduce() {
 }
 
 fn test_take() {
-  var arr = Range(1, 5).take(2).collect();
+  var arr = Range(1, 5).take(2).to_array();
 
   assert_eq(arr.length(), 2);
   assert_eq(arr[0], 1);
@@ -113,7 +113,7 @@ fn test_take() {
 }
 
 fn test_skip() {
-  var arr = Range(1, 5).skip(2).collect();
+  var arr = Range(1, 5).skip(2).to_array();
 
   assert_eq(arr.length(), 2);
   assert_eq(arr[0], 3);
@@ -163,7 +163,7 @@ fn test_chain() {
   var range1 = Range(0, 5);
   var range2 = Range(5, 10);
 
-  var range = range1.chain(range2).collect();
+  var range = range1.chain(range2).to_array();
   assert_eq(range.length(), 10);
   assert_eq(range[0], 0);
   assert_eq(range[1], 1);
@@ -181,7 +181,7 @@ fn test_chain() {
   var range1 = Range(0, 5);
   var range2 = Range(5, 10);
 
-  var range = range1.zip(range2).collect();
+  var range = range1.zip(range2).to_array();
   assert_eq(range[0].left, 0);
   assert_eq(range[0].right, 5);
   assert_eq(range[1].left, 1);
@@ -197,7 +197,7 @@ fn test_chain() {
 fn test_enumerate() {
   var animals = ["sheep", "goat", "cow", "chicken", "pig"];
 
-  var enumerated_animals = animals.iter().enumerate().collect();
+  var enumerated_animals = animals.iter().enumerate().to_array();
 
   assert_eq(enumerated_animals[0].left, 0);
   assert_eq(enumerated_animals[0].right, "sheep");
@@ -220,7 +220,7 @@ fn test_array_iter_method() {
 fn test_reverse_iterator() {
   var arr = [1, 2, 3];
 
-  var reversed_arr = arr.iter().reverse().collect();
+  var reversed_arr = arr.iter().reverse().to_array();
 
   assert_eq(reversed_arr.length(), 3);
   assert_eq(reversed_arr[0], 3);

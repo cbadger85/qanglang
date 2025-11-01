@@ -1898,12 +1898,18 @@ impl Vm {
 
                 pop_value!(self); // pop function off the stack now that it has been called.
 
+                // Add receiver to external roots to prevent it from being GC'd during native function execution
+                self.state.external_roots.insert(receiver);
+
                 let value = function(receiver, arg_count, self)
                     .map_err(|e: NativeFunctionError| {
                         let loc = self.state.get_previous_loc();
                         e.into_qang_error(loc)
                     })?
                     .unwrap_or_default();
+
+                // Remove receiver from external roots after function execution
+                self.state.external_roots.remove(&receiver);
 
                 push_value!(self, value)?;
                 self.state.arg_buffer.fill(Value::default());

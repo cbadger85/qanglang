@@ -911,8 +911,3 @@ class HashSet {
     return set;
   }
 }
-
-fn env_cwd() {
-  mod path = import("qang::path");
-  return path.Path(_env_cwd());
-}

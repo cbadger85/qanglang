@@ -63,9 +63,12 @@ pub fn provide_completions(
 
     let completions = match context {
         CompletionContext::MemberAccess => {
-            // For member access after a dot, try to provide members
-            // This is a simplified implementation - a full one would track object types
-            get_all_member_completions(analysis)
+            // Without type inference, we cannot reliably determine which properties/methods
+            // are available on the object before the dot. Showing all possible members
+            // creates too much noise, so we disable completions for member access.
+            // TODO: Implement type inference to enable accurate property completions
+            debug!("Member access completions disabled (no type inference available)");
+            return None;
         }
         CompletionContext::Identifier => {
             // Combine visible symbols and keywords with scope-aware filtering
@@ -770,82 +773,6 @@ fn get_keyword_completions() -> Vec<CompletionItem> {
         .collect()
 }
 
-/// Gets all possible member completions (simplified - collects all methods and fields from all classes)
-/// In a full implementation, this would track the actual type of the object before the dot
-fn get_all_member_completions(analysis: &AnalysisResult) -> Vec<CompletionItem> {
-    let mut completions = Vec::new();
-    let mut seen_names = HashSet::new();
-
-    // Traverse all declarations to find classes
-    let module = analysis.nodes.get_program_node(analysis.root_module_id);
-    let length = analysis.nodes.array.size(module.node.decls);
-
-    for i in 0..length {
-        if let Some(node_id) = analysis.nodes.array.get_node_id_at(module.node.decls, i) {
-            let node = analysis.nodes.get_node(node_id);
-
-            if let AstNode::Class(class_decl) = node {
-                // Collect members from this class
-                collect_class_members(analysis, class_decl, &mut completions, &mut seen_names);
-            }
-        }
-    }
-
-    // Add intrinsic methods (String, Array, Number, Function methods)
-    add_intrinsic_method_completions(&mut completions, &mut seen_names);
-
-    // Add stdlib methods
-    add_stdlib_method_completions(&mut completions, &mut seen_names);
-
-    completions
-}
-
-/// Collects member completions from a class
-fn collect_class_members(
-    analysis: &AnalysisResult,
-    class_decl: &ClassDeclNode,
-    completions: &mut Vec<CompletionItem>,
-    seen_names: &mut HashSet<String>,
-) {
-    let members_size = analysis.nodes.array.size(class_decl.members);
-
-    for i in 0..members_size {
-        if let Some(member_id) = analysis.nodes.array.get_node_id_at(class_decl.members, i) {
-            let member_node = analysis.nodes.get_node(member_id);
-
-            match member_node {
-                AstNode::FunctionExpr(method) => {
-                    let name_node = analysis.nodes.get_identifier_node(method.name);
-                    let name = analysis.strings.get(name_node.node.name);
-
-                    if seen_names.insert(name.to_string()) {
-                        completions.push(CompletionItem {
-                            label: name.to_string(),
-                            kind: Some(CompletionItemKind::METHOD),
-                            detail: Some("method".to_string()),
-                            ..Default::default()
-                        });
-                    }
-                }
-                AstNode::FieldDecl(field) => {
-                    let name_node = analysis.nodes.get_identifier_node(field.name);
-                    let name = analysis.strings.get(name_node.node.name);
-
-                    if seen_names.insert(name.to_string()) {
-                        completions.push(CompletionItem {
-                            label: name.to_string(),
-                            kind: Some(CompletionItemKind::FIELD),
-                            detail: Some("field".to_string()),
-                            ..Default::default()
-                        });
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
 /// Adds native function completions to the completion list
 fn add_native_function_completions(
     completions: &mut Vec<CompletionItem>,
@@ -857,60 +784,6 @@ fn add_native_function_completions(
                 label: func_info.name.to_string(),
                 kind: Some(CompletionItemKind::FUNCTION),
                 detail: Some("function".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-}
-
-/// Adds intrinsic method completions (String, Array, Number, Function methods)
-fn add_intrinsic_method_completions(
-    completions: &mut Vec<CompletionItem>,
-    seen_names: &mut HashSet<String>,
-) {
-    // String methods
-    for method_info in builtins::get_all_string_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-
-    // Array methods
-    for method_info in builtins::get_all_array_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-
-    // Number methods
-    for method_info in builtins::get_all_number_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-
-    // Function methods
-    for method_info in builtins::get_all_function_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
                 ..Default::default()
             });
         }
@@ -942,27 +815,6 @@ fn add_stdlib_completions(completions: &mut Vec<CompletionItem>, seen_names: &mu
                 detail: Some("function".to_string()),
                 ..Default::default()
             });
-        }
-    }
-}
-
-/// Adds stdlib method completions
-fn add_stdlib_method_completions(
-    completions: &mut Vec<CompletionItem>,
-    seen_names: &mut HashSet<String>,
-) {
-    let stdlib = stdlib_analyzer::get_stdlib_cache();
-
-    for method_symbol in stdlib.get_all_methods() {
-        if let stdlib_analyzer::StdlibSymbol::Method { method_name, .. } = method_symbol {
-            if seen_names.insert(method_name.clone()) {
-                completions.push(CompletionItem {
-                    label: method_name.clone(),
-                    kind: Some(CompletionItemKind::METHOD),
-                    detail: Some("method".to_string()),
-                    ..Default::default()
-                });
-            }
         }
     }
 }

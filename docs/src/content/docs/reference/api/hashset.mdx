@@ -63,7 +63,7 @@ Removes the values of the provided set.
 ```ql
 var set1 = HashSet([1, 2]);
 var set2 = HashSet([1]);
-var difference = set1.difference(set2).values().collect(); // [2]
+var difference = set1.difference(set2).values().to_array(); // [2]
 ```
 
 #### Parameters
@@ -117,7 +117,7 @@ Returns a hash set of values that exist in both sets.
 ```ql
 var set1 = HashSet([1, 2]);
 var set2 = HashSet([1]);
-var intersection = set1.intersection(set2).values().collect(); // [1]
+var intersection = set1.intersection(set2).values().to_array(); // [1]
 ```
 
 #### Parameters
@@ -157,7 +157,7 @@ Returns a hash set of all values that exist in both sets.
 ```ql
 var set1 = HashSet([1, 2]);
 var set2 = HashSet([1, 3]);
-var union = set1.union(set2).values().collect(); // [1, 2, 3]
+var union = set1.union(set2).values().to_array(); // [1, 2, 3]
 ```
 
 #### Parameters

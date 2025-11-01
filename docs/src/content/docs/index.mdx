@@ -320,7 +320,7 @@ var numbers = [1, 2, 3, 4, 5];
 var even_numbers_times_two = numbers.iter() // Convert the array to an iterator
 	.filter((n) -> n % 2 == 0) // keep only the even numbers
 	.map((n) -> n * 2) // mulitply them by 2
-	.collect(); // collect them back into an array
+	.to_array(); // collect them back into an array
 ```
 
 ## Map Expressions

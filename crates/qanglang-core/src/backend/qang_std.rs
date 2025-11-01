@@ -265,6 +265,34 @@ pub fn qang_string_concat(
     }
 }
 
+pub fn qang_string_char_at(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    match (receiver.kind(), args.first().copied().map(|a| a.kind())) {
+        (ValueKind::String(handle), Some(ValueKind::Number(index))) => {
+            if index < 0.0 {
+                return Ok(Some(Value::nil()));
+            }
+
+            vm.alloc
+                .strings
+                .char_at(handle, index.trunc() as usize)
+                .map(|char| Ok(Some(Value::string(char))))
+                .unwrap_or_else(|| Ok(Some(Value::nil())))
+        }
+        (ValueKind::String(_), _) => Err(NativeFunctionError::new(
+            "A string can only be indexed by a number.",
+        )),
+        _ => Err(NativeFunctionError(format!(
+            "Expected string but recieved {}.",
+            receiver.to_type_string()
+        ))),
+    }
+}
+
 pub fn qang_string_starts_with(
     receiver: Value,
     arg_count: usize,
@@ -836,6 +864,14 @@ impl Vm {
                 arity: 1,
             },
         );
+        let char_at_handle = alloc.strings.intern("char_at");
+        intrinsics.insert(
+            IntrinsicKind::String(char_at_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_char_at,
+                arity: 1,
+            },
+        );
         let starts_with_handle = alloc.strings.intern("starts_with");
         intrinsics.insert(
             IntrinsicKind::String(starts_with_handle),
@@ -938,9 +974,8 @@ impl Vm {
                 arity: 1,
             },
         );
-        let array_contains_handle = alloc.strings.intern("contains");
         intrinsics.insert(
-            IntrinsicKind::Array(array_contains_handle),
+            IntrinsicKind::Array(contains_handle),
             IntrinsicMethod::Native {
                 function: qang_array_contains,
                 arity: 1,

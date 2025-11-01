@@ -164,6 +164,15 @@ impl StringInterner {
         self.get(handle).chars()
     }
 
+    pub fn char_at(&mut self, handle: StringHandle, index: usize) -> Option<StringHandle> {
+        let char_opt = self.get(handle).chars().nth(index);
+        char_opt.map(|c| {
+            let mut buf = [0u8; 4];
+            let s = c.encode_utf8(&mut buf);
+            self.intern(s)
+        })
+    }
+
     pub fn get_allocated_bytes(&self) -> usize {
         self.storage.len() + self.offsets.len() * std::mem::size_of::<(u32, u32)>()
     }
@@ -456,5 +465,71 @@ mod tests {
         assert_eq!(interner.get(upper), "");
         assert_eq!(interner.get(lower), "");
         assert_eq!(interner.length(empty), 0);
+    }
+
+    #[test]
+    fn test_char_at() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("hello");
+
+        let h = interner.char_at(hello, 0);
+        assert_eq!(h.map(|handle| interner.get(handle)), Some("h"));
+
+        let e = interner.char_at(hello, 1);
+        assert_eq!(e.map(|handle| interner.get(handle)), Some("e"));
+
+        let o = interner.char_at(hello, 4);
+        assert_eq!(o.map(|handle| interner.get(handle)), Some("o"));
+
+        assert_eq!(interner.char_at(hello, 5), None); // out of bounds
+        assert_eq!(interner.char_at(hello, 100), None); // way out of bounds
+    }
+
+    #[test]
+    fn test_char_at_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("Hello, 世界!");
+        assert_eq!(
+            interner.char_at(text, 0).map(|h| interner.get(h)),
+            Some("H")
+        );
+        assert_eq!(
+            interner.char_at(text, 7).map(|h| interner.get(h)),
+            Some("世")
+        );
+        assert_eq!(
+            interner.char_at(text, 8).map(|h| interner.get(h)),
+            Some("界")
+        );
+        assert_eq!(
+            interner.char_at(text, 9).map(|h| interner.get(h)),
+            Some("!")
+        );
+        assert_eq!(interner.char_at(text, 10), None);
+
+        let emoji = interner.intern("🦀🦀🦀");
+        assert_eq!(
+            interner.char_at(emoji, 0).map(|h| interner.get(h)),
+            Some("🦀")
+        );
+        assert_eq!(
+            interner.char_at(emoji, 1).map(|h| interner.get(h)),
+            Some("🦀")
+        );
+        assert_eq!(
+            interner.char_at(emoji, 2).map(|h| interner.get(h)),
+            Some("🦀")
+        );
+        assert_eq!(interner.char_at(emoji, 3), None);
+    }
+
+    #[test]
+    fn test_char_at_empty_string() {
+        let mut interner = StringInterner::new();
+
+        let empty = interner.intern("");
+        assert_eq!(interner.char_at(empty, 0), None);
     }
 }

@@ -193,8 +193,7 @@ class FileIterator : Iterator {
       return nil;
     }
 
-    var chars = this._buffer.split("");
-    var char = chars[this._buffer_index];
+    var char = this._buffer.char_at(this._buffer_index);
     this._buffer_index += 1;
     return char;
   }

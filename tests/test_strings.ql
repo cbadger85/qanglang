@@ -106,3 +106,27 @@ fn test_array_length() {
 
   assert_eq(string.length(), 28);
 }
+
+fn test_char_at() {
+  var string = "the string";
+
+  assert_eq(string.char_at(2), "e");
+}
+
+fn test_char_at_negative_index() {
+  var string = "the string";
+
+  assert_eq(string.char_at(-1), nil);
+}
+
+fn test_char_at_out_of_bounds_index() {
+  var string = "the string";
+
+  assert_eq(string.char_at(100), nil);
+}
+
+fn test_char_at_irrational_index() {
+  var string = "the string";
+
+  assert_eq(string.char_at(2.5), "e");
+}

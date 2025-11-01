@@ -290,22 +290,55 @@ impl<'a> SymbolCollector<'a> {
         full_span: SourceSpan,
         selection_span: SourceSpan,
     ) -> (Range, Range) {
+        use log::debug;
+
         let full_range = self.span_to_range(full_span);
         let mut selection_range = self.span_to_range(selection_span);
 
+        debug!(
+            "Creating symbol ranges - Full span: {:?}, Selection span: {:?}",
+            full_span, selection_span
+        );
+        debug!("Full range: {:?}, Selection range: {:?}", full_range, selection_range);
+
+        // First, ensure the selection range itself is valid (start <= end)
+        if selection_range.start.line > selection_range.end.line
+            || (selection_range.start.line == selection_range.end.line
+                && selection_range.start.character > selection_range.end.character)
+        {
+            debug!("Selection range start is after end, using full range");
+            selection_range = full_range;
+        }
+
+        // Clamp selection range start to be within full range
         if selection_range.start.line < full_range.start.line
             || (selection_range.start.line == full_range.start.line
                 && selection_range.start.character < full_range.start.character)
         {
+            debug!("Selection range start is before full range start, clamping to full range start");
             selection_range.start = full_range.start;
         }
 
+        // Clamp selection range end to be within full range
         if selection_range.end.line > full_range.end.line
             || (selection_range.end.line == full_range.end.line
                 && selection_range.end.character > full_range.end.character)
         {
+            debug!("Selection range end is after full range end, clamping to full range end");
             selection_range.end = full_range.end;
         }
+
+        // Final sanity check: if after all adjustments the selection range is still invalid,
+        // just use the full range
+        if selection_range.start.line > selection_range.end.line
+            || (selection_range.start.line == selection_range.end.line
+                && selection_range.start.character > selection_range.end.character)
+        {
+            debug!("Selection range is still invalid after adjustments, falling back to full range");
+            selection_range = full_range;
+        }
+
+        debug!("Final ranges - Full: {:?}, Selection: {:?}", full_range, selection_range);
 
         (full_range, selection_range)
     }

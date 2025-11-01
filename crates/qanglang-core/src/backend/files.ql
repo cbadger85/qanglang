@@ -1,20 +1,20 @@
+mod path = import("qang::path");
+var Path = path.Path;
+
 fn read_file(path) {
   if (!(path is Path)) {
     return Err("A valid Path must be provided.");
   }
-  
-  // TODO return the file as a single string
-  return Ok("");
+  var contents = fs_read_file(path.to_string());
+  return Ok(contents);
 }
 
-fn read_lines(path) {
+fn read_chars(path) {
   if (!(path is Path)) {
     return Err("A valid Path must be provided.");
   }
-  
-  // TODO return the file as an array of strings
 
-  return Ok([]);
+  return Ok(FileIterator(path));
 }
 
 fn write_file(path, content) {
@@ -26,8 +26,9 @@ fn write_file(path, content) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO save the file to disk
-  return Ok();
+  return fs_write_file(path.to_string(), content) 
+    ? Ok()
+    : Err("Unable to save file.");
 }
 
 fn append_file(path, content) {
@@ -35,14 +36,17 @@ fn append_file(path, content) {
     return Err("A valid Path must be provided.");
   }
   
-  // TODO verify file exists
+  if (!path.exists()) {
+    return Err("File not found.");
+  }
   
   if (!(content is STRING)) {
     return Err("A valid Path must be provided.");
   }
   
-  // TODO append data to end of existing file
-  return Ok();
+  return fs_append_file(path.to_string(), content) 
+    ? Ok()
+    : Err("Unable to append file.");
 }
 
 fn remove_file(path) {
@@ -50,11 +54,12 @@ fn remove_file(path) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO removes a file at a given directory
-  return Ok();
+  return fs_remove_file(path.to_string(), content) 
+    ? Ok()
+    : Err("Unable to remove file.");
 }
 
-fn list_dir(path) {
+fn list(path) {
   if (!(path is Path)) {
     return Err("A valid Path must be provided.");
   }
@@ -144,74 +149,70 @@ fn move(source, destination) {
 }
 
 fn current_dir() {
-  // TODO return the current working directory as a Path
-  return Path("");
-}
-
-fn change_dir(path) {
-  if (!(path is Path)) {
-    return Err("A valid Path must be provided.");
+  var cwd = _get_common_working_dir();
+  if (cwd == nil) {
+    return nil;
   }
-  
-  // TODO change the working directory
-  return Ok();
+  return Path(cwd);
 }
 
-class Path {
+class FileIterator : Iterator {
   init(path) {
-    assert(path is STRING, "Expected path to be a string.");
+    assert(path is Path, "`path` must be an instance of Path.");
     this._path = path;
+    this._buffer = "";
+    this._buffer_index = 0;
+    this._file_offset = 0;
+    this._chunk_size = 4096;  // Read 4KB at a time
+    this._eof = false;
   }
 
-  join(other) {
-    // should this also allow strings?
-    assert(other is Path, "A valid Path must be provided.");
-    // TODO join the paths and return a new Path
-    /*
-      - Concatenate the paths with the OS-appropriate separator (/ or \)
-      - Handle edge cases like empty paths, trailing slashes, absolute paths being joined
-      - You'll need one native function to get the OS path separator
-    */
+  has_next() {
+    // If we have characters left in the buffer, we have next
+    if (this._buffer_index < this._buffer.length()) {
+      return true;
+    }
+
+    // If we've reached EOF, no more data
+    if (this._eof) {
+      return false;
+    }
+
+    // Try to load next chunk
+    return this._load_next_chunk();
   }
 
-  normalize() {
-    // TODO resolve `.` and `..`, fix slashes and return a new Path
-    /*
-    - Check if already absolute (starts with / or drive letter on Windows)st
-      - If not, prepend current_dir() and then call normalize()
-    */
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    var char = this._buffer.char_at(this._buffer_index);
+    this._buffer_index += 1;
+    return char;
   }
 
-  absolute() {
-    // TODO convert path to absolute path and return new Path
-  }
+  _load_next_chunk() {
+    var result = fs_read_chunk(this._path.to_string(), this._file_offset, this._chunk_size);
 
-  dirname() {
-    // TODO return the directory portion of the path as a new Path
-  }
+    if (result == nil) {
+      this._eof = true;
+      return false;
+    }
 
-  basename() {
-    // TODO return the filename portion of the path as a string. `nil` if not a filemane.
-  }
+    var chunk = result.content;
+    var bytes_read = result.bytes_read;
 
-  extension() {
-    // TODO return the extension of the filename as a string. `nil` if no filename or extension.
-  }
+    if (chunk.length() == 0) {
+      this._eof = true;
+      return false;
+    }
 
-  exists() {
-    // TODO returns true if the path exists, false otherwise.
-  }
+    // Update state - use actual bytes read, not chunk length
+    this._buffer = chunk;
+    this._buffer_index = 0;
+    this._file_offset += bytes_read;
 
-  is_file() {
-    // TODO return true if the path points toa file, false otherwise
-  }
-
-  is_dir() {
-    // TODO return true if th epath is a dir, false otherwise
-  }
-
-  to_string() {
-    return this._path;
+    return true;
   }
 }
-

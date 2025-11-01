@@ -5,6 +5,9 @@
 /// The source code of the files builtin module
 pub const FILES_SOURCE: &str = include_str!("files.ql");
 
+/// The source code of the path builtin module
+pub const PATH_SOURCE: &str = include_str!("path.ql");
+
 /// The namespace prefix for built-in modules
 pub const BUILTIN_NAMESPACE: &str = "qang::";
 
@@ -27,6 +30,7 @@ pub fn extract_builtin_name(path: &str) -> Option<&str> {
 pub fn get_builtin_source(module_name: &str) -> Option<&'static str> {
     match module_name {
         "files" => Some(FILES_SOURCE),
+        "path" => Some(PATH_SOURCE),
         _ => None,
     }
 }

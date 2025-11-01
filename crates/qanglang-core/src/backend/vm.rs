@@ -15,8 +15,8 @@ use crate::{
         module_resolver::ModuleResolver,
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
-            qang_array_create, qang_assert, qang_assert_eq, qang_assert_throws, qang_hash,
-            qang_print, qang_println, qang_system_time, qang_to_string, qang_typeof,
+            qang_array_create, qang_assert, qang_assert_eq, qang_assert_throws, qang_env_cwd,
+            qang_hash, qang_print, qang_println, qang_system_time, qang_to_string, qang_typeof,
         },
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -421,7 +421,7 @@ impl Vm {
         let err_result_handle = alloc.strings.intern("Err");
         keywords.insert(Keyword::ErrResult, err_result_handle);
 
-        let vm = Self {
+        let mut vm = Self {
             is_debug: false,
             is_gc_enabled: true,
             state: VmState::new(globals, Self::load_intrinsics(&mut alloc), keywords),
@@ -439,7 +439,11 @@ impl Vm {
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("hash", 1, qang_hash)
             .add_native_function("array_of_length", 1, qang_array_create)
+            .add_native_function("env_cwd", 0, qang_env_cwd)
             .with_stdlib()
+            .with_native_filesystem();
+
+        vm
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -452,7 +456,12 @@ impl Vm {
         self
     }
 
-    pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
+    pub fn add_native_function(
+        &mut self,
+        name: &str,
+        arity: usize,
+        function: NativeFn,
+    ) -> &mut Self {
         let identifier_handle = self.alloc.strings.intern(name);
         let native_function = NativeFunctionObject {
             name_handle: identifier_handle,

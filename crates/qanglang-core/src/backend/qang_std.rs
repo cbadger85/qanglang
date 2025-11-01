@@ -153,6 +153,16 @@ pub fn qang_to_string(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, Na
     Ok(Some(Value::string(value_handle)))
 }
 
+pub fn qang_env_cwd(_arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
+    match std::env::current_dir() {
+        Ok(path) => {
+            let handle = vm.alloc.strings.intern(&path.as_os_str().to_string_lossy());
+            Ok(Some(Value::string(handle)))
+        }
+        _ => Ok(Some(Value::nil())),
+    }
+}
+
 pub fn qang_string_to_uppercase(
     receiver: Value,
     _arg_count: usize,
@@ -719,7 +729,7 @@ pub fn qang_number_max(
 }
 
 impl Vm {
-    pub(crate) fn with_stdlib(mut self) -> Self {
+    pub(crate) fn with_stdlib(&mut self) -> &mut Self {
         if let Err(err) = self.load_stdlib() {
             panic!("Failed to load standard library: {}", err);
         }

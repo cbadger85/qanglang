@@ -662,22 +662,30 @@ impl Backend {
 
         let errors = match analyze(source_map.clone()) {
             Ok(result) => {
-                debug!("✅ Analysis succeeded - no errors found");
+                let error_count = result.errors.len();
+                if error_count > 0 {
+                    debug!("⚠️  Analysis completed with {} error(s)", error_count);
+                } else {
+                    debug!("✅ Analysis succeeded - no errors found");
+                }
 
-                // Cache the successful analysis
+                // Cache the analysis result even if there are errors
+                // This allows LSP features to work with partial analysis
+                let errors = result.errors.clone();
                 let result = Arc::new(result);
                 self.analysis_cache
                     .write()
                     .await
                     .insert(document.uri.clone(), result.clone());
 
-                Vec::new() // no diagnostics
+                errors
             }
             Err(error) => {
-                debug!("❌ Analysis failed");
+                debug!("❌ Analysis failed completely");
                 debug!("Error count: {}", error.all().len());
 
-                // Remove cached analysis on error
+                // Only remove cache if analysis completely failed
+                // (e.g., file is completely unparseable)
                 self.analysis_cache.write().await.remove(&document.uri);
 
                 error.into_errors()

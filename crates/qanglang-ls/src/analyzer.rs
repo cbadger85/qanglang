@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
 use qanglang_core::{
-    AnalysisPipeline, AstNodeArena, NodeId, Parser, ParserConfig, QangPipelineError, SourceMap,
-    StringInterner,
+    AnalysisPipeline, AnalysisPipelineConfig, AstNodeArena, NodeId, Parser, ParserConfig,
+    QangPipelineError, SourceMap, StringInterner,
     symbol_resolver::{SymbolResolver, SymbolTable},
 };
 
-/// Holds the results of successful analysis for use in LSP features
+/// Holds the results of analysis for use in LSP features.
+/// Even with errors present, partial analysis results can still be used
+/// for semantic highlighting, autocomplete, and other LSP features.
 #[derive(Debug)]
 pub struct AnalysisResult {
     pub nodes: AstNodeArena,
@@ -14,6 +16,7 @@ pub struct AnalysisResult {
     pub root_module_id: NodeId,
     pub source_map: Arc<SourceMap>,
     pub symbol_table: SymbolTable,
+    pub errors: Vec<qanglang_core::QangCompilerError>,
 }
 
 pub fn analyze(source_map: Arc<SourceMap>) -> Result<AnalysisResult, QangPipelineError> {
@@ -25,7 +28,13 @@ pub fn analyze(source_map: Arc<SourceMap>) -> Result<AnalysisResult, QangPipelin
 
     let mut errors = parser.into_errors();
 
-    AnalysisPipeline::new(&mut strings).analyze(&mut modules, &mut nodes, &mut errors)?;
+    // Use non-strict mode to allow partial analysis even with errors
+    // This enables LSP features like semantic highlighting and autocomplete
+    // to continue working when there are syntax or semantic errors
+    let analysis_config = AnalysisPipelineConfig { strict_mode: false };
+    AnalysisPipeline::new(&mut strings)
+        .with_config(analysis_config)
+        .analyze(&mut modules, &mut nodes, &mut errors)?;
 
     // Get the root module ID - get main module from ModuleMap
     let root_module_id = modules
@@ -38,11 +47,15 @@ pub fn analyze(source_map: Arc<SourceMap>) -> Result<AnalysisResult, QangPipelin
     let resolver = SymbolResolver::new(&nodes, &strings);
     let symbol_table = resolver.resolve_module(module_node);
 
+    // Collect all errors (both parse and semantic analysis errors)
+    let collected_errors = errors.take_errors();
+
     Ok(AnalysisResult {
         nodes,
         strings,
         root_module_id,
         source_map,
         symbol_table,
+        errors: collected_errors,
     })
 }

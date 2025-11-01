@@ -139,6 +139,23 @@ message: `String?` <Badge text="optional" /> - An optional message if the assert
 
 Throws an error if the provided function does not throw an error.
 
+### `env_cwd`
+
+Returns the current working directory.
+
+```ql
+var cwd = env_cwd();
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Path` - The current working directory as a [`Path`](/reference/api/modules/path/).
+
 ### `identity`
 
 An identity function.

@@ -5,6 +5,23 @@ description: A reference for the intrinsic methods on strings.
 
 import { Badge } from "@astrojs/starlight/components";
 
+### `char_at`
+
+Returns the string character at the given index.
+
+```ql
+var string = "Hello World!";
+var second_letter = string.char_at(1); // "e"
+```
+
+#### Parameters
+
+index: `Number` - The index of the character. if a negative number or out-of-bounds number is supplied, `nil` will be returned.
+
+### Returns
+
+`String` - The character as a string at the given index.
+
 ### `concat`
 
 Returns a string of both values concatenated together.

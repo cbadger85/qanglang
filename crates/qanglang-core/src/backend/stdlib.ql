@@ -911,3 +911,7 @@ class HashSet {
     return set;
   }
 }
+
+fn env_cwd() {
+  return Path(_env_cwd());
+}

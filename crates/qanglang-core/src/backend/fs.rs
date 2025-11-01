@@ -1,8 +1,9 @@
 use crate::{NativeFunctionError, Value, ValueKind, Vm};
 use std::{
-    fs,
-    io::{Read, Seek, SeekFrom},
+    fs::{self, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
     path::Path,
+    time::UNIX_EPOCH,
 };
 
 pub fn qang_path_get_os_seperator(
@@ -247,29 +248,6 @@ pub fn qang_fs_write_file(
     }
 }
 
-pub fn qang_fs_append_file(
-    args_count: usize,
-    vm: &mut Vm,
-) -> Result<Option<Value>, NativeFunctionError> {
-    let args = vm.get_function_args(args_count);
-    let path = args.first().copied().unwrap_or_else(|| Value::nil()).kind();
-    let data = args.get(1).copied().unwrap_or_else(|| Value::nil()).kind();
-
-    match (path, data) {
-        (ValueKind::String(path_handle), ValueKind::String(data_handle)) => {
-            let path = vm.alloc.strings.get(path_handle);
-            let path = Path::new(path);
-            let data: &str = vm.alloc.strings.get(data_handle);
-
-            todo!("Read the file, append the data to the end of it, save the modified file");
-        }
-        (ValueKind::String(_), _) => Err(NativeFunctionError::new(
-            "Can only write strings to file system.",
-        )),
-        _ => Err(NativeFunctionError::new("Path must be a string.")),
-    }
-}
-
 pub fn qang_fs_remove_file(
     args_count: usize,
     vm: &mut Vm,
@@ -290,61 +268,260 @@ pub fn qang_fs_remove_file(
     }
 }
 
+pub fn qang_fs_append_file(
+    args_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(args_count);
+    let path = args.first().copied().unwrap_or_else(|| Value::nil()).kind();
+    let data = args.get(1).copied().unwrap_or_else(|| Value::nil()).kind();
+
+    match (path, data) {
+        (ValueKind::String(path_handle), ValueKind::String(data_handle)) => {
+            let path = vm.alloc.strings.get(path_handle);
+            let path = Path::new(path);
+            let data: &str = vm.alloc.strings.get(data_handle);
+
+            let result = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .and_then(|mut file| file.write_all(data.as_bytes()));
+
+            Ok(Some(Value::boolean(result.is_ok())))
+        }
+        (ValueKind::String(_), _) => Err(NativeFunctionError::new(
+            "Can only write strings to file system.",
+        )),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
+}
+
 pub fn qang_fs_list(args_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    match vm
+        .get_function_args(args_count)
+        .first()
+        .copied()
+        .map(|v| v.kind())
+    {
+        Some(ValueKind::String(handle)) => {
+            let path = vm.alloc.strings.get(handle);
+            let path = Path::new(path);
+
+            match fs::read_dir(path) {
+                Ok(entries) => {
+                    let array_handle = vm.alloc.arrays.create_array(0);
+                    let mut index = 0;
+                    for entry in entries {
+                        if let Ok(entry) = entry {
+                            if let Some(file_name) = entry.file_name().to_str() {
+                                let string_handle = vm.alloc.strings.intern(file_name);
+                                vm.alloc.arrays.insert(
+                                    array_handle,
+                                    index,
+                                    Value::string(string_handle),
+                                );
+                                index += 1;
+                            }
+                        }
+                    }
+
+                    Ok(Some(Value::array(array_handle)))
+                }
+                _ => Ok(Some(Value::nil())),
+            }
+        }
+        None => Err(NativeFunctionError::new("Missing path")),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
 }
 
 pub fn qang_fs_create_dir(
     args_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    match vm
+        .get_function_args(args_count)
+        .first()
+        .copied()
+        .map(|v| v.kind())
+    {
+        Some(ValueKind::String(handle)) => {
+            let path = vm.alloc.strings.get(handle);
+            let path = Path::new(path);
+            Ok(Some(Value::boolean(fs::create_dir(path).is_ok())))
+        }
+        None => Err(NativeFunctionError::new("Missing path")),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
 }
 
 pub fn qang_fs_create_dirs(
     args_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    match vm
+        .get_function_args(args_count)
+        .first()
+        .copied()
+        .map(|v| v.kind())
+    {
+        Some(ValueKind::String(handle)) => {
+            let path = vm.alloc.strings.get(handle);
+            let path = Path::new(path);
+            Ok(Some(Value::boolean(fs::create_dir_all(path).is_ok())))
+        }
+        None => Err(NativeFunctionError::new("Missing path")),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
 }
 
 pub fn qang_fs_remove_dir(
     args_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    match vm
+        .get_function_args(args_count)
+        .first()
+        .copied()
+        .map(|v| v.kind())
+    {
+        Some(ValueKind::String(handle)) => {
+            let path = vm.alloc.strings.get(handle);
+            let path = Path::new(path);
+            Ok(Some(Value::boolean(fs::remove_dir(path).is_ok())))
+        }
+        None => Err(NativeFunctionError::new("Missing path")),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
 }
 
 pub fn qang_fs_remove_all(
     args_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    match vm
+        .get_function_args(args_count)
+        .first()
+        .copied()
+        .map(|v| v.kind())
+    {
+        Some(ValueKind::String(handle)) => {
+            let path = vm.alloc.strings.get(handle);
+            let path = Path::new(path);
+            Ok(Some(Value::boolean(fs::remove_dir_all(path).is_ok())))
+        }
+        None => Err(NativeFunctionError::new("Missing path")),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
 }
 
 pub fn qang_fs_get_file_size(
     args_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    match vm
+        .get_function_args(args_count)
+        .first()
+        .copied()
+        .map(|v| v.kind())
+    {
+        Some(ValueKind::String(handle)) => {
+            let path = vm.alloc.strings.get(handle);
+            let path = Path::new(path);
+
+            let metadata = fs::metadata(path);
+
+            match metadata {
+                Ok(metadata) => Ok(Some(Value::number(metadata.len() as f64))),
+                Err(_) => Ok(Some(Value::nil())),
+            }
+        }
+        None => Err(NativeFunctionError::new("Missing path")),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
 }
 
 pub fn qang_fs_get_file_modified_time(
     args_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    match vm
+        .get_function_args(args_count)
+        .first()
+        .copied()
+        .map(|v| v.kind())
+    {
+        Some(ValueKind::String(handle)) => {
+            let path = vm.alloc.strings.get(handle);
+            let path = Path::new(path);
+
+            let duration = fs::metadata(path)
+                .map_err(|_| NativeFunctionError::new("Unable to get file metadata."))
+                .and_then(|metadata| {
+                    metadata
+                        .modified()
+                        .map_err(|_| NativeFunctionError::new("Unable to get modified time."))
+                })
+                .and_then(|modified| {
+                    modified
+                        .duration_since(UNIX_EPOCH)
+                        .map_err(|_| NativeFunctionError::new("Unable to calculate timestamp."))
+                });
+
+            match duration {
+                Ok(duration) => Ok(Some(Value::number(duration.as_millis() as f64))),
+                Err(_) => Ok(Some(Value::nil())),
+            }
+        }
+        None => Err(NativeFunctionError::new("Missing path")),
+        _ => Err(NativeFunctionError::new("Path must be a string.")),
+    }
 }
 
 pub fn qang_fs_copy_file(
     args_count: usize,
     vm: &mut Vm,
 ) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    let args = vm.get_function_args(args_count);
+    let from = args.first().copied().unwrap_or_else(|| Value::nil()).kind();
+    let to = args.get(1).copied().unwrap_or_else(|| Value::nil()).kind();
+
+    match (from, to) {
+        (ValueKind::String(from_handle), ValueKind::String(to_handle)) => {
+            let from_path = vm.alloc.strings.get(from_handle);
+            let from_path = Path::new(from_path);
+            let to_path = vm.alloc.strings.get(to_handle);
+            let to_path = Path::new(to_path);
+
+            Ok(Some(Value::boolean(fs::copy(from_path, to_path).is_ok())))
+        }
+        (ValueKind::String(_), _) => Err(NativeFunctionError::new(
+            "Both source and destination must be strings.",
+        )),
+        _ => Err(NativeFunctionError::new("Source path must be a string.")),
+    }
 }
 
 pub fn qang_fs_move(args_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeFunctionError> {
-    Ok(None)
+    let args = vm.get_function_args(args_count);
+    let from = args.first().copied().unwrap_or_else(|| Value::nil()).kind();
+    let to = args.get(1).copied().unwrap_or_else(|| Value::nil()).kind();
+
+    match (from, to) {
+        (ValueKind::String(from_handle), ValueKind::String(to_handle)) => {
+            let from_path = vm.alloc.strings.get(from_handle);
+            let from_path = Path::new(from_path);
+            let to_path = vm.alloc.strings.get(to_handle);
+            let to_path = Path::new(to_path);
+
+            Ok(Some(Value::boolean(fs::rename(from_path, to_path).is_ok())))
+        }
+        (ValueKind::String(_), _) => Err(NativeFunctionError::new(
+            "Both source and destination must be strings.",
+        )),
+        _ => Err(NativeFunctionError::new("Source path must be a string.")),
+    }
 }
 
 impl Vm {
@@ -371,7 +548,7 @@ impl Vm {
                 1,
                 qang_fs_get_file_modified_time,
             )
-            .add_native_function("fs_move", 1, qang_fs_move)
-            .add_native_function("fs_copy", 1, qang_fs_copy_file)
+            .add_native_function("fs_move", 2, qang_fs_move)
+            .add_native_function("fs_copy", 2, qang_fs_copy_file)
     }
 }

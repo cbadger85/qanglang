@@ -64,8 +64,9 @@ fn list(path) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO return an array of paths inside the current path
-  return Ok([]);
+  return fs_list(path.to_string())
+    ?|entries -> Ok(entries)| 
+    or Err("Unable to read directory.");
 }
 
 fn create_dir(path) {
@@ -73,16 +74,19 @@ fn create_dir(path) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO create a directory at the given path
-  return Ok();
+  return fs_create_dir(path.to_string()) 
+    ? Ok()
+    : Err("Unable to create directory.");
 }
 
 fn create_dirs(path) {
   if (!(path is Path)) {
     return Err("A valid Path must be provided.");
   }
-  // TODO create a directory at the given path, including any required parent directories.
-  return Ok();
+
+  return fs_create_dirs(path.to_string()) 
+    ? Ok()
+    : Err("Unable to create directory(s).");
 }
 
 fn remove_dir(path) {
@@ -90,8 +94,9 @@ fn remove_dir(path) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO removes an empty directory
-  return Ok();
+  return fs_remove_dir(path.to_string()) 
+    ? Ok()
+    : Err("Unable to remove directory.");
 }
 
 
@@ -100,8 +105,9 @@ fn remove_all(path) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO removes all files and directories in the path recursively
-  return Ok();
+  return fs_remove_all(path.to_string()) 
+    ? Ok()
+    : Err("Unable to remove directory and contents.");
 }
 
 fn get_file_size(path) {
@@ -109,30 +115,41 @@ fn get_file_size(path) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO return the file size in bytes.
-  return Ok(0);
+  return fs_get_file_size(path.to_string())
+    ?|size -> Ok(size)| 
+    or Err("Unable to get file metadata.");
 }
-
+  
 fn get_file_modified_time(path) {
   if (!(path is Path)) {
     return Err("A valid Path must be provided.");
   }
 
-  // TODO returns the epoch time of the last time the file was modified.
-  return Ok(0);
+  return fs_get_file_modified_time(path.to_string())
+    ?|size -> Ok(size)| 
+    or Err("Unable to get file metadata.");
 }
 
 fn copy_file(source, destination) {
   if (!(source is Path)) {
-    return Err("source must be a valid Path.");
+    return Err("`source` must be a valid Path.");
+  }
+  
+  if (!source.is_file()) {
+    return Err("`source` must be a file.");
   }
 
   if (!(destination is Path)) {
-    return Err("destination must be a valid Path.");
+    return Err("`destination` must be a valid Path.");
   }
 
-  // TODO copy the file to the new path
-  return Ok();
+  if (!destination.is_file()) {
+    return Err("`destination` be a file.");
+  }
+
+  return fs_copy_file(source.to_string(), destination.to_string()) 
+    ? Ok()
+    : Err("Unable to copy file.");
 }
 
 fn move(source, destination) {
@@ -144,16 +161,9 @@ fn move(source, destination) {
     return Err("destination must be a valid Path.");
   }
 
-  // TODO move file/directory from source to destination path
-  return Ok();
-}
-
-fn current_dir() {
-  var cwd = _get_common_working_dir();
-  if (cwd == nil) {
-    return nil;
-  }
-  return Path(cwd);
+  return fs_move(source.to_string(), destination.to_string()) 
+    ? Ok()
+    : Err("Unable to move " + (source.is_file() ? "file" : "directory") + ".");
 }
 
 class FileIterator : Iterator {

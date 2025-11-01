@@ -94,7 +94,7 @@ class Path {
     }
 
     // Get current working directory and join with this path, then normalize
-    var cwd = env_cwd();
+    var cwd = _env_cwd();
     if (cwd == nil) {
       // If we can't get cwd, just return normalized version
       return this.normalize();

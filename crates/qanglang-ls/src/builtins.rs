@@ -92,6 +92,13 @@ static NATIVE_FUNCTIONS: Lazy<HashMap<&'static str, NativeFunctionInfo>> = Lazy:
             parameters: &["length"],
         },
     );
+    map.insert(
+        "env_cwd",
+        NativeFunctionInfo {
+            name: "env_cwd",
+            parameters: &[],
+        },
+    );
 
     map
 });
@@ -133,6 +140,27 @@ static STRING_METHODS: Lazy<HashMap<&'static str, IntrinsicMethodInfo>> = Lazy::
         IntrinsicMethodInfo {
             name: "split",
             parameters: &["delimiter"],
+        },
+    );
+    map.insert(
+        "contains",
+        IntrinsicMethodInfo {
+            name: "contains",
+            parameters: &["value"],
+        },
+    );
+    map.insert(
+        "starts_with",
+        IntrinsicMethodInfo {
+            name: "starts_with",
+            parameters: &["value"],
+        },
+    );
+    map.insert(
+        "ends_with",
+        IntrinsicMethodInfo {
+            name: "ends_with",
+            parameters: &["value"],
         },
     );
 

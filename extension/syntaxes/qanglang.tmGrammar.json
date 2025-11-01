@@ -97,7 +97,7 @@
         },
         {
           "name": "support.function.builtin",
-          "match": "\\b(print|println|assert|assert_eq|assert_throws|assert_not_nil|typeof|system_time|to_string|array_of_length|hash)\\b"
+          "match": "\\b(print|println|assert|assert_eq|assert_throws|assert_not_nil|typeof|system_time|to_string|array_of_length|hash|env_cwd)\\b"
         },
         {
           "name": "support.function.builtin",

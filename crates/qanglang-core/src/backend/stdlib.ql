@@ -1,5 +1,3 @@
-
-
 fn identity(x) {
   return x;
 }

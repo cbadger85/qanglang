@@ -439,7 +439,7 @@ impl Vm {
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("hash", 1, qang_hash)
             .add_native_function("array_of_length", 1, qang_array_create)
-            .add_native_function("_env_cwd", 0, qang_env_cwd)
+            .add_native_function("env_cwd", 0, qang_env_cwd)
             .with_stdlib()
             .with_native_filesystem();
 

@@ -154,6 +154,18 @@ impl LanguageServer for Backend {
         }
     }
 
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let uri = params.text_document.uri;
+
+        debug!("Document closed: {}", uri);
+
+        // Remove from cache
+        self.analysis_cache.write().await.remove(&uri);
+
+        // Clear diagnostics for the closed file
+        self.client.publish_diagnostics(uri, vec![], None).await;
+    }
+
     async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
         match self.client.apply_edit(WorkspaceEdit::default()).await {
             Ok(res) if res.applied => self.client.log_message(MessageType::INFO, "applied").await,

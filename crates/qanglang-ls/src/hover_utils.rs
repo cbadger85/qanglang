@@ -22,12 +22,11 @@ pub enum NodeKind {
     Field(String),
     Parameter(String),
     Module(String),
-    ImportPath(String), // Absolute path to the imported module file
+    ImportPath(String),     // Absolute path to the imported module file
     NativeFunction(String), // Native function name
-    IntrinsicMethod(String), // Intrinsic method name
-    StdlibClass(String), // Stdlib class name
+    StdlibClass(String),    // Stdlib class name
     StdlibFunction(String), // Stdlib function name
-    StdlibMethod(String), // Stdlib method name
+    StdlibMethod(String),   // Stdlib method name
 }
 
 /// Find the AST node at the given byte offset
@@ -95,7 +94,11 @@ impl<'a> NodeFinder<'a> {
                 let lambda_expr = self.nodes.get_lambda_expr_node(lambda.lambda);
                 let params_length = self.nodes.array.size(lambda_expr.node.parameters);
                 for i in 0..params_length {
-                    if let Some(param_id) = self.nodes.array.get_node_id_at(lambda_expr.node.parameters, i) {
+                    if let Some(param_id) = self
+                        .nodes
+                        .array
+                        .get_node_id_at(lambda_expr.node.parameters, i)
+                    {
                         let param = self.nodes.get_identifier_node(param_id);
                         self.check_parameter(param);
                     }
@@ -324,7 +327,8 @@ impl<'a> NodeFinder<'a> {
                     CallOperationNode::Call(call_node) => {
                         let length = self.nodes.array.size(call_node.args);
                         for i in 0..length {
-                            if let Some(arg_id) = self.nodes.array.get_node_id_at(call_node.args, i) {
+                            if let Some(arg_id) = self.nodes.array.get_node_id_at(call_node.args, i)
+                            {
                                 let arg = self.nodes.get_expr_node(arg_id);
                                 self.check_expression(arg);
                             }
@@ -336,20 +340,10 @@ impl<'a> NodeFinder<'a> {
 
                         if self.span_contains(name_node.node.span) {
                             if self.is_better_match(name_node.node.span) {
-
-                                // Check if this is an intrinsic method first
-                                if builtins::get_string_method(&name).is_some()
-                                    || builtins::get_array_method(&name).is_some()
-                                    || builtins::get_number_method(&name).is_some()
-                                    || builtins::get_function_method(&name).is_some()
-                                {
-                                    self.best_match = Some(NodeInfo {
-                                        node_id: name_node.id,
-                                        range: self.span_to_range(name_node.node.span),
-                                        kind: NodeKind::IntrinsicMethod(name.clone()),
-                                    });
-                                } else if let Some(stdlib_analyzer::StdlibSymbol::Method { method_name, .. }) =
-                                    stdlib_analyzer::get_stdlib_cache().get(&name)
+                                if let Some(stdlib_analyzer::StdlibSymbol::Method {
+                                    name: method_name,
+                                    ..
+                                }) = stdlib_analyzer::get_stdlib_cache().get(&name)
                                 {
                                     // Check if this is a stdlib method
                                     self.best_match = Some(NodeInfo {
@@ -359,7 +353,10 @@ impl<'a> NodeFinder<'a> {
                                     });
                                 } else {
                                     // Check if callee is 'super' - if so, look up in superclass
-                                    let kind = if matches!(callee.node, ExprNode::Primary(PrimaryNode::Super(_))) {
+                                    let kind = if matches!(
+                                        callee.node,
+                                        ExprNode::Primary(PrimaryNode::Super(_))
+                                    ) {
                                         let kind = self.find_super_property_kind(&name);
                                         kind
                                     } else {
@@ -475,19 +472,10 @@ impl<'a> NodeFinder<'a> {
                     if self.is_better_match(property_node.node.span) {
                         let name = self.strings.get(property_node.node.name).to_string();
 
-                        // Check if this is an intrinsic method first
-                        if builtins::get_string_method(&name).is_some()
-                            || builtins::get_array_method(&name).is_some()
-                            || builtins::get_number_method(&name).is_some()
-                            || builtins::get_function_method(&name).is_some()
-                        {
-                            self.best_match = Some(NodeInfo {
-                                node_id: property_node.id,
-                                range: self.span_to_range(property_node.node.span),
-                                kind: NodeKind::IntrinsicMethod(name.clone()),
-                            });
-                        } else if let Some(stdlib_analyzer::StdlibSymbol::Method { method_name, .. }) =
-                            stdlib_analyzer::get_stdlib_cache().get(&name)
+                        if let Some(stdlib_analyzer::StdlibSymbol::Method {
+                            name: method_name,
+                            ..
+                        }) = stdlib_analyzer::get_stdlib_cache().get(&name)
                         {
                             // Check if this is a stdlib method
                             self.best_match = Some(NodeInfo {
@@ -633,9 +621,15 @@ impl<'a> NodeFinder<'a> {
         let stdlib = stdlib_analyzer::get_stdlib_cache();
         if let Some(symbol) = stdlib.get(name) {
             let kind = match symbol {
-                stdlib_analyzer::StdlibSymbol::Class { name } => NodeKind::StdlibClass(name.clone()),
-                stdlib_analyzer::StdlibSymbol::Function { name, .. } => NodeKind::StdlibFunction(name.clone()),
-                stdlib_analyzer::StdlibSymbol::Method { method_name, .. } => NodeKind::StdlibMethod(method_name.clone()),
+                stdlib_analyzer::StdlibSymbol::Class { name } => {
+                    NodeKind::StdlibClass(name.clone())
+                }
+                stdlib_analyzer::StdlibSymbol::Function { name, .. } => {
+                    NodeKind::StdlibFunction(name.clone())
+                }
+                stdlib_analyzer::StdlibSymbol::Method {
+                    name: method_name, ..
+                } => NodeKind::StdlibMethod(method_name.clone()),
             };
             self.best_match = Some(NodeInfo {
                 node_id: identifier.id,
@@ -665,11 +659,7 @@ impl<'a> NodeFinder<'a> {
     }
 
     /// Determine if a property access is a method or field by finding the class definition
-    fn find_property_kind(
-        &self,
-        callee: TypedNodeRef<ExprNode>,
-        property_name: &str,
-    ) -> NodeKind {
+    fn find_property_kind(&self, callee: TypedNodeRef<ExprNode>, property_name: &str) -> NodeKind {
         // Try to find the class definition by resolving the callee
         if let Some(class_node_id) = self.find_class_of_expression(callee) {
             let decl = self.nodes.get_decl_node(class_node_id);
@@ -679,24 +669,21 @@ impl<'a> NodeFinder<'a> {
                 // Search through class members for this property
                 let members_length = self.nodes.array.size(class_decl.members);
                 for i in 0..members_length {
-                    if let Some(member_id) =
-                        self.nodes.array.get_node_id_at(class_decl.members, i)
+                    if let Some(member_id) = self.nodes.array.get_node_id_at(class_decl.members, i)
                     {
                         let member = self.nodes.get_class_member_node(member_id);
 
                         match member.node {
                             ClassMemberNode::Method(method) => {
                                 let name_node = self.nodes.get_identifier_node(method.name);
-                                let member_name =
-                                    self.strings.get(name_node.node.name);
+                                let member_name = self.strings.get(name_node.node.name);
                                 if member_name == property_name {
                                     return NodeKind::Function(property_name.to_string());
                                 }
                             }
                             ClassMemberNode::Field(field) => {
                                 let name_node = self.nodes.get_identifier_node(field.name);
-                                let member_name =
-                                    self.strings.get(name_node.node.name);
+                                let member_name = self.strings.get(name_node.node.name);
                                 if member_name == property_name {
                                     return NodeKind::Field(property_name.to_string());
                                 }
@@ -766,7 +753,6 @@ impl<'a> NodeFinder<'a> {
 
     /// Find a property in the superclass of the current class (for super.property)
     fn find_super_property_kind(&self, property_name: &str) -> NodeKind {
-
         // Get the current class we're in
         if let Some(current_class_id) = self.current_class {
             let decl = self.nodes.get_decl_node(current_class_id);
@@ -779,28 +765,39 @@ impl<'a> NodeFinder<'a> {
                     // Resolve the superclass identifier to its declaration
                     if let Some(symbol_info) = self.symbol_table.resolve(superclass_ident.id) {
                         if matches!(symbol_info.kind, SymbolKind::Class) {
-                            let superclass_decl = self.nodes.get_decl_node(symbol_info.decl_node_id);
+                            let superclass_decl =
+                                self.nodes.get_decl_node(symbol_info.decl_node_id);
 
                             if let DeclNode::Class(superclass) = superclass_decl.node {
                                 // Search for the property in the superclass members
                                 let members_length = self.nodes.array.size(superclass.members);
                                 for i in 0..members_length {
-                                    if let Some(member_id) = self.nodes.array.get_node_id_at(superclass.members, i) {
+                                    if let Some(member_id) =
+                                        self.nodes.array.get_node_id_at(superclass.members, i)
+                                    {
                                         let member = self.nodes.get_class_member_node(member_id);
 
                                         match member.node {
                                             ClassMemberNode::Method(method) => {
-                                                let name_node = self.nodes.get_identifier_node(method.name);
-                                                let member_name = self.strings.get(name_node.node.name);
+                                                let name_node =
+                                                    self.nodes.get_identifier_node(method.name);
+                                                let member_name =
+                                                    self.strings.get(name_node.node.name);
                                                 if member_name == property_name {
-                                                    return NodeKind::Function(property_name.to_string());
+                                                    return NodeKind::Function(
+                                                        property_name.to_string(),
+                                                    );
                                                 }
                                             }
                                             ClassMemberNode::Field(field) => {
-                                                let name_node = self.nodes.get_identifier_node(field.name);
-                                                let member_name = self.strings.get(name_node.node.name);
+                                                let name_node =
+                                                    self.nodes.get_identifier_node(field.name);
+                                                let member_name =
+                                                    self.strings.get(name_node.node.name);
                                                 if member_name == property_name {
-                                                    return NodeKind::Field(property_name.to_string());
+                                                    return NodeKind::Field(
+                                                        property_name.to_string(),
+                                                    );
                                                 }
                                             }
                                         }
@@ -906,10 +903,7 @@ impl<'a> NodeFinder<'a> {
 
 /// Get the identifier span (range) for a declaration node
 /// This is used by "Go to Definition" to get the declaration's actual location
-pub fn get_declaration_range(
-    analysis: &AnalysisResult,
-    decl_node_id: NodeId,
-) -> Option<Range> {
+pub fn get_declaration_range(analysis: &AnalysisResult, decl_node_id: NodeId) -> Option<Range> {
     let node = analysis.nodes.get_node(decl_node_id);
 
     let identifier_id = match node {
@@ -956,7 +950,6 @@ pub fn format_hover_info(_analysis: &AnalysisResult, info: &NodeInfo) -> String 
         NodeKind::Module(name) => format!("```qanglang\nmod {}\n```", name),
         NodeKind::ImportPath(path) => format!("```qanglang\nimport(\"{}\")\n```", path),
         NodeKind::NativeFunction(name) => format!("```qanglang\nfn {}\n```", name),
-        NodeKind::IntrinsicMethod(name) => format!("```qanglang\nfn {}\n```", name),
         NodeKind::StdlibClass(name) => format!("```qanglang\nclass {}\n```", name),
         NodeKind::StdlibFunction(name) => format!("```qanglang\nfn {}\n```", name),
         NodeKind::StdlibMethod(name) => format!("```qanglang\nfn {}\n```", name),

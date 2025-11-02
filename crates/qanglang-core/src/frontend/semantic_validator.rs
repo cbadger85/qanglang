@@ -241,6 +241,14 @@ impl<'a> SemanticValidator<'a> {
         self.in_loop
     }
 
+    fn is_inside_method_or_initializer(&self) -> bool {
+        // Check if any function in the stack is a method or initializer
+        self.functions.iter().any(|f| matches!(
+            f.kind,
+            FunctionKind::Method | FunctionKind::Initializer
+        ))
+    }
+
     fn is_constant_expression(&self, expr_node_id: NodeId, nodes: &AstNodeArena) -> bool {
         let expr = nodes.get_expr_node(expr_node_id);
         match expr.node {
@@ -651,23 +659,30 @@ impl<'a> NodeVisitor for SemanticValidator<'a> {
         super_expr: super::ast_node_arena::TypedNodeRef<super::nodes::SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if let Some(current_function) = &self.functions.last() {
-            if !matches!(
-                current_function.kind,
-                FunctionKind::Method | FunctionKind::Initializer
-            ) {
-                ctx.errors
-                    .report_error(QangCompilerError::new_analysis_error(
-                        "Cannot use 'super' outside of a class method.".to_string(),
-                        super_expr.node.span,
-                        self.source_map.clone(),
-                    ));
-            }
-        } else {
+        // Allow super if we're anywhere inside a method or initializer (including nested functions)
+        if !self.is_inside_method_or_initializer() {
             ctx.errors
                 .report_error(QangCompilerError::new_analysis_error(
                     "Cannot use 'super' outside of a class method.".to_string(),
                     super_expr.node.span,
+                    self.source_map.clone(),
+                ));
+        }
+
+        Ok(())
+    }
+
+    fn visit_this_expression(
+        &mut self,
+        this_expr: super::ast_node_arena::TypedNodeRef<super::nodes::ThisExprNode>,
+        ctx: &mut VisitorContext,
+    ) -> Result<(), Self::Error> {
+        // Allow this if we're anywhere inside a method or initializer (including nested functions)
+        if !self.is_inside_method_or_initializer() {
+            ctx.errors
+                .report_error(QangCompilerError::new_analysis_error(
+                    "Cannot use 'this' outside of a class method.".to_string(),
+                    this_expr.node.span,
                     self.source_map.clone(),
                 ));
         }

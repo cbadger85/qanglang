@@ -122,22 +122,29 @@ fn test_object_set_with_class_instance() {
   assert_eq(instance.key, "value");
 }
 
-fn test_object_get_with_class_instance() {
-  class MyClass { 
+fn test_object_get_with_class_instance_and_lambda_field() {
+  class MyParent {
+    parent_key = "VALUE";
+  }
+
+  class MyClass : MyParent { 
     key = "value"; 
-    
+
     init() {
       this.get_key = () -> {
         return this.key;
       };
+
+      this.get_other_key = () -> super.parent_key;
     }
   }
 
   var instance = MyClass();
   assert_eq(instance.get_key(), "value");
   var get_key = object_get(instance, "get_key");
-  println(typeof(get_key));
-  assert(object_get(instance, "key") is FUNCTION);
+  assert(get_key is FUNCTION);
   assert_eq(get_key(), "value");
-
+  var get_other_key = object_get(instance, "get_other_key");
+  assert(get_other_key is FUNCTION);
+  assert_eq(get_other_key(), "VALUE");
 }

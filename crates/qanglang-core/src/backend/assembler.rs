@@ -988,16 +988,24 @@ impl<'a> NodeVisitor for Assembler<'a> {
         this_expr: TypedNodeRef<ThisExprNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if self.compiler_state.is_in_class_method() {
-            self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.node.span);
-            Ok(())
-        } else {
-            Err(QangCompilerError::new_assembler_error(
+        if !self.compiler_state.is_in_class_method() {
+            return Err(QangCompilerError::new_assembler_error(
                 "Cannot use 'this' outside of a class method.".to_string(),
                 this_expr.node.span,
                 self.source_map.clone(),
-            ))
+            ));
         }
+
+        if matches!(
+            self.compiler_state.kind,
+            FunctionKind::Method | FunctionKind::Initializer
+        ) {
+            self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.node.span);
+        } else {
+            let this_handle = self.compiler_state.this_handle;
+            self.handle_variable(this_handle, this_expr.node.span, false)?;
+        }
+        Ok(())
     }
 
     fn visit_super_expression(
@@ -1021,7 +1029,15 @@ impl<'a> NodeVisitor for Assembler<'a> {
             ));
         }
 
-        self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.node.span);
+        if matches!(
+            self.compiler_state.kind,
+            FunctionKind::Method | FunctionKind::Initializer
+        ) {
+            self.emit_opcode_and_byte(OpCode::GetLocal, 0, super_expr.node.span);
+        } else {
+            let this_handle = self.compiler_state.this_handle;
+            self.handle_variable(this_handle, super_expr.node.span, false)?;
+        }
 
         self.emit_variable_access(super_expr.id, super_expr.node.span, false, ctx)?;
 

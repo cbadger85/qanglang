@@ -669,6 +669,140 @@ pub fn qang_hash(arg_count: usize, vm: &mut Vm) -> Result<Option<Value>, NativeF
     }
 }
 
+pub fn qang_object_to_entries(
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let value = args.first().copied().unwrap_or_else(|| Value::nil());
+
+    let entry_handle = vm.alloc.strings.intern("Entry");
+    let entry_class = vm
+        .globals()
+        .get(&entry_handle)
+        .copied()
+        .ok_or_else(|| NativeFunctionError::new("Expect Entry to exist in stdlib."))
+        .and_then(|value| {
+            value.as_class().ok_or_else(|| {
+                NativeFunctionError(format!(
+                    "Expected class but found, {}",
+                    value.to_display_string(&vm.alloc)
+                ))
+            })
+        })?;
+    let key_handle = vm.alloc.strings.intern("key");
+    let value_handle = vm.alloc.strings.intern("value");
+
+    match value.kind() {
+        ValueKind::ObjectLiteral(handle) => {
+            let table_entries: Vec<(Value, Value)> = vm.alloc.tables.iter(handle).collect();
+            let length = table_entries.len();
+
+            let entries = vm.alloc.arrays.create_array(length);
+
+            for (index, (key, value)) in table_entries.into_iter().enumerate() {
+                let instance_handle = vm.alloc.allocate_instance(entry_class);
+                let table_handle = vm.alloc.get_instance(instance_handle).table;
+                vm.alloc
+                    .set_instance_field(table_handle, Value::string(key_handle), key);
+                vm.alloc
+                    .set_instance_field(table_handle, Value::string(value_handle), value);
+                vm.alloc
+                    .arrays
+                    .insert(entries, index, Value::instance(instance_handle));
+            }
+            Ok(Some(Value::array(entries)))
+        }
+        ValueKind::Instance(handle) => {
+            let table_handle = vm.alloc.get_instance(handle).table;
+            let table_entries: Vec<(Value, Value)> = vm.alloc.tables.iter(table_handle).collect();
+            let length = table_entries.len();
+
+            let entries = vm.alloc.arrays.create_array(length);
+
+            for (index, (key, value)) in table_entries.into_iter().enumerate() {
+                let instance_handle = vm.alloc.allocate_instance(entry_class);
+                let table_handle = vm.alloc.get_instance(instance_handle).table;
+                vm.alloc
+                    .set_instance_field(table_handle, Value::string(key_handle), key);
+                vm.alloc
+                    .set_instance_field(table_handle, Value::string(value_handle), value);
+                vm.alloc
+                    .arrays
+                    .insert(entries, index, Value::instance(instance_handle));
+            }
+            Ok(Some(Value::array(entries)))
+        }
+        _ => Err(NativeFunctionError(format!(
+            "Expected object literal or instance, but found {}",
+            value.to_display_string(&vm.alloc)
+        ))),
+    }
+}
+
+pub fn qang_object_get(
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let object = args.first().copied().unwrap_or_else(|| Value::nil());
+    let key = args.get(1).copied().unwrap_or_else(|| Value::nil());
+
+    match (object.kind(), key.kind()) {
+        (ValueKind::ObjectLiteral(handle), ValueKind::String(_)) => {
+            let value = vm.alloc.tables.get(handle, &key);
+            Ok(value)
+        }
+        (ValueKind::Instance(handle), ValueKind::String(_)) => {
+            let table_handle = vm.alloc.get_instance(handle).table;
+            let value = vm.alloc.tables.get(table_handle, &key);
+            Ok(value)
+        }
+        (ValueKind::ObjectLiteral(_) | ValueKind::Instance(_), _) => {
+            Err(NativeFunctionError(format!(
+                "Expected string, but found {}",
+                key.to_display_string(&vm.alloc)
+            )))
+        }
+        _ => Err(NativeFunctionError(format!(
+            "Expected object literal or instance, but found {}",
+            object.to_display_string(&vm.alloc)
+        ))),
+    }
+}
+
+pub fn qang_object_set(
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let object = args.first().copied().unwrap_or_else(|| Value::nil());
+    let key = args.get(1).copied().unwrap_or_else(|| Value::nil());
+    let value = args.get(2).copied().unwrap_or_else(|| Value::nil());
+
+    match (object.kind(), key.kind()) {
+        (ValueKind::ObjectLiteral(handle), ValueKind::String(_)) => {
+            vm.alloc.tables.insert(handle, key, value);
+            Ok(None)
+        }
+        (ValueKind::Instance(handle), ValueKind::String(_)) => {
+            let table_handle = vm.alloc.get_instance(handle).table;
+            vm.alloc.tables.insert(table_handle, key, value);
+            Ok(None)
+        }
+        (ValueKind::ObjectLiteral(_) | ValueKind::Instance(_), _) => {
+            Err(NativeFunctionError(format!(
+                "Expected string, but found {}",
+                key.to_display_string(&vm.alloc)
+            )))
+        }
+        _ => Err(NativeFunctionError(format!(
+            "Expected object literal or instance, but found {}",
+            object.to_display_string(&vm.alloc)
+        ))),
+    }
+}
+
 pub fn qang_number_ceil(
     receiver: Value,
     _arg_count: usize,
@@ -1113,14 +1247,10 @@ impl Vm {
         receiver: Value,
         _arg_count: usize,
     ) -> RuntimeResult<()> {
+        let array_iterator_handle = self.alloc.strings.intern("ArrayIterator");
         let array_iterator = *self
             .globals()
-            .get(
-                self.state
-                    .keywords
-                    .get(&super::vm::Keyword::ArrayIterator)
-                    .expect("Expected ArrayIterator to be interned."),
-            )
+            .get(&array_iterator_handle)
             .expect("Expected ArrayIterator to be loaded from stdlib.");
 
         pop_value!(self);
@@ -1145,17 +1275,14 @@ impl Vm {
                 self.state.get_previous_loc(),
             )
         })?;
+        let ok_handle = self.alloc.strings.intern("Ok");
+        let err_handle = self.alloc.strings.intern("Err");
         let value = self.alloc.strings.get(value);
         let result = match value.parse::<f64>() {
             Ok(number) => {
                 let ok = *self
                     .globals()
-                    .get(
-                        self.state
-                            .keywords
-                            .get(&super::vm::Keyword::OkResult)
-                            .expect("Expected Ok to be interned."),
-                    )
+                    .get(&ok_handle)
                     .expect("Expected Ok to be loaded from stdlib.");
 
                 push_value!(self, ok)?;
@@ -1165,12 +1292,7 @@ impl Vm {
             Err(_) => {
                 let err = *self
                     .globals()
-                    .get(
-                        self.state
-                            .keywords
-                            .get(&super::vm::Keyword::ErrResult)
-                            .expect("Expected Err to be interned."),
-                    )
+                    .get(&err_handle)
                     .expect("Expected Err to be loaded from stdlib.");
 
                 push_value!(self, err)?;

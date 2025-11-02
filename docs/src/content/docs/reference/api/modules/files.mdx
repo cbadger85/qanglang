@@ -45,7 +45,7 @@ content: `String` - The content to append to the file.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid, the file doesn't exist, or the operation fails.
+`Result` - Returns `Ok` of `nil`, if successful, or `Err` if the path is invalid, the file doesn't exist, or the operation fails.
 
 ### `copy_file`
 
@@ -68,7 +68,7 @@ destination: `Path` - The path where the file should be copied to.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if either path is invalid, source is not a file, or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if either path is invalid, source is not a file, or the operation fails.
 
 ### `create_dir`
 
@@ -88,7 +88,7 @@ path: `Path` - The path of the directory to create.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if the path is invalid or the operation fails.
 
 ### `create_dirs`
 
@@ -108,7 +108,7 @@ path: `Path` - The path of the directory (and parents) to create.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if the path is invalid or the operation fails.
 
 ### `get_file_modified_time`
 
@@ -131,7 +131,7 @@ path: `Path` - The path to the file.
 
 #### Returns
 
-`Result` - Returns `Ok(timestamp)` with the modification time in milliseconds, or `Err(message)` if the path is invalid or metadata cannot be retrieved.
+`Result` - Returns `Ok` of the number of miliseconds between the Unix epoch and when the file was modified, or `Err` if the path is invalid or metadata cannot be retrieved.
 
 ### `get_file_size`
 
@@ -154,7 +154,7 @@ path: `Path` - The path to the file.
 
 #### Returns
 
-`Result` - Returns `Ok(size)` with the file size in bytes, or `Err(message)` if the path is invalid or metadata cannot be retrieved.
+`Result` - Returns `Ok` of the file size in bytes, or `Err` if the path is invalid or metadata cannot be retrieved.
 
 ### `list`
 
@@ -178,7 +178,7 @@ path: `Path` - The path to the directory to list.
 
 #### Returns
 
-`Result` - Returns `Ok(entries)` with an array of entry names, or `Err(message)` if the path is invalid or the directory cannot be read.
+`Result` - Returns `Ok` of an array of entry names, or `Err` if the path is invalid or the directory cannot be read.
 
 ### `move`
 
@@ -201,7 +201,7 @@ destination: `Path` - The destination path.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if either path is invalid or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if either path is invalid or the operation fails.
 
 ### `read_chars`
 
@@ -228,7 +228,7 @@ path: `Path` - The path to the file to read.
 
 #### Returns
 
-`Result` - Returns `Ok(iterator)` with a `FileIterator`, or `Err(message)` if the path is invalid.
+`Result` - Returns `Ok` of a `FileIterator`, or `Err` if the path is invalid.
 
 ### `read_file`
 
@@ -252,7 +252,7 @@ path: `Path` - The path to the file to read.
 
 #### Returns
 
-`Result` - Returns `Ok(content)` with the file contents, or `Err(message)` if the path is invalid or the file cannot be read.
+`Result` - Returns `Ok` of the file contents as a string, or `Err` if the path is invalid or the file cannot be read.
 
 ### `remove_all`
 
@@ -272,7 +272,7 @@ path: `Path` - The path to the directory to remove.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if the path is invalid or the operation fails.
 
 ### `remove_dir`
 
@@ -292,7 +292,7 @@ path: `Path` - The path to the directory to remove.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid, the directory is not empty, or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if the path is invalid, the directory is not empty, or the operation fails.
 
 ### `remove_file`
 
@@ -312,7 +312,7 @@ path: `Path` - The path to the file to remove.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if the path is invalid or the operation fails.
 
 ### `write_file`
 
@@ -334,4 +334,4 @@ content: `String` - The content to write to the file.
 
 #### Returns
 
-`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid, content is not a string, or the operation fails.
+`Result` - Returns `Ok` of `nil` if successful, or `Err` if the path is invalid, content is not a string, or the operation fails.

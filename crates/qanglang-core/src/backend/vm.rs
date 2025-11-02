@@ -16,7 +16,8 @@ use crate::{
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
             qang_array_create, qang_assert, qang_assert_eq, qang_assert_throws, qang_env_cwd,
-            qang_hash, qang_print, qang_println, qang_system_time, qang_to_string, qang_typeof,
+            qang_hash, qang_object_get, qang_object_set, qang_object_to_entries, qang_print,
+            qang_println, qang_system_time, qang_to_string, qang_typeof,
         },
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -52,26 +53,6 @@ type StackSlot = usize;
 type UpvalueIndex = usize;
 use crate::memory::OpenUpvalueTracker;
 type OpenUpvalueEntry = (StackSlot, OpenUpvalueTracker);
-
-#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
-#[repr(u8)]
-pub enum Keyword {
-    Number,
-    String,
-    Nil,
-    Boolean,
-    Function,
-    Class,
-    Array,
-    Object,
-    Init,
-    Call,
-    Apply,
-    Module,
-    ArrayIterator,
-    OkResult,
-    ErrResult,
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct PropertyCache {
@@ -204,7 +185,6 @@ pub(crate) struct VmState {
     intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
     open_upvalues: Vec<OpenUpvalueEntry>,
     current_function_ptr: *const FunctionObject,
-    pub(crate) keywords: FxHashMap<Keyword, StringHandle>,
     pub modules: ModuleResolver,
     function_module_context: Option<HashMapHandle>,
     property_cache: [PropertyCache; Self::PROPERTY_CACHE_SIZE],
@@ -221,7 +201,6 @@ impl VmState {
     fn new(
         globals: FxHashMap<StringHandle, Value>,
         intrinsics: FxHashMap<IntrinsicKind, IntrinsicMethod>,
-        keywords: FxHashMap<Keyword, StringHandle>,
     ) -> Self {
         Self {
             frame_count: 0,
@@ -232,7 +211,6 @@ impl VmState {
             intrinsics,
             open_upvalues: Vec::with_capacity(8),
             current_function_ptr: std::ptr::null(),
-            keywords,
             modules: ModuleResolver::default(),
             function_module_context: None,
             property_cache: [PropertyCache::default(); Self::PROPERTY_CACHE_SIZE],
@@ -353,78 +331,57 @@ impl Vm {
     }
 
     pub fn new(mut alloc: HeapAllocator) -> Self {
-        let mut keywords = FxHashMap::with_hasher(FxBuildHasher);
-        keywords.insert(Keyword::Apply, alloc.strings.intern("apply"));
-        keywords.insert(Keyword::Call, alloc.strings.intern("call"));
-        let init_handle = alloc.strings.intern("init");
-        keywords.insert(Keyword::Init, init_handle);
         let mut globals = FxHashMap::with_capacity_and_hasher(64, FxBuildHasher);
 
         let nil_type_value_handle = alloc.strings.intern(NIL_TYPE_STRING);
-        keywords.insert(Keyword::Nil, nil_type_value_handle);
         globals.insert(
             alloc.strings.intern("NIL"),
             Value::string(nil_type_value_handle),
         );
         let boolean_type_value_handle = alloc.strings.intern(BOOLEAN_TYPE_STRING);
-        keywords.insert(Keyword::Boolean, boolean_type_value_handle);
         globals.insert(
             alloc.strings.intern("BOOLEAN"),
             Value::string(boolean_type_value_handle),
         );
         let number_type_value_handle = alloc.strings.intern(NUMBER_TYPE_STRING);
-        keywords.insert(Keyword::Number, number_type_value_handle);
         globals.insert(
             alloc.strings.intern("NUMBER"),
             Value::string(number_type_value_handle),
         );
         let string_type_value_handle = alloc.strings.intern(STRING_TYPE_STRING);
-        keywords.insert(Keyword::String, string_type_value_handle);
         globals.insert(
             alloc.strings.intern("STRING"),
             Value::string(string_type_value_handle),
         );
         let function_type_value_handle = alloc.strings.intern(FUNCTION_TYPE_STRING);
-        keywords.insert(Keyword::Function, function_type_value_handle);
         globals.insert(
             alloc.strings.intern("FUNCTION"),
             Value::string(function_type_value_handle),
         );
         let class_type_value_handle = alloc.strings.intern(CLASS_TYPE_STRING);
-        keywords.insert(Keyword::Class, class_type_value_handle);
         globals.insert(
             alloc.strings.intern("CLASS"),
             Value::string(class_type_value_handle),
         );
         let object_type_value_handle = alloc.strings.intern(OBJECT_TYPE_STRING);
-        keywords.insert(Keyword::Object, object_type_value_handle);
         globals.insert(
             alloc.strings.intern("OBJECT"),
             Value::string(object_type_value_handle),
         );
         let array_type_value_handle = alloc.strings.intern(ARRAY_TYPE_STRING);
-        keywords.insert(Keyword::Array, array_type_value_handle);
         globals.insert(
             alloc.strings.intern("ARRAY"),
             Value::string(array_type_value_handle),
         );
         let module_type_value_handle = alloc.strings.intern(MODULE_TYPE_STRING);
-        keywords.insert(Keyword::Module, module_type_value_handle);
         globals.insert(
             alloc.strings.intern("MODULE"),
             Value::string(module_type_value_handle),
         );
-        let array_iterator_handle = alloc.strings.intern("ArrayIterator");
-        keywords.insert(Keyword::ArrayIterator, array_iterator_handle);
-        let ok_result_handle = alloc.strings.intern("Ok");
-        keywords.insert(Keyword::OkResult, ok_result_handle);
-        let err_result_handle = alloc.strings.intern("Err");
-        keywords.insert(Keyword::ErrResult, err_result_handle);
-
         let mut vm = Self {
             is_debug: false,
             is_gc_enabled: true,
-            state: VmState::new(globals, Self::load_intrinsics(&mut alloc), keywords),
+            state: VmState::new(globals, Self::load_intrinsics(&mut alloc)),
             alloc,
             external_context: ExternalContext::new(),
         };
@@ -440,6 +397,9 @@ impl Vm {
             .add_native_function("hash", 1, qang_hash)
             .add_native_function("array_of_length", 1, qang_array_create)
             .add_native_function("env_cwd", 0, qang_env_cwd)
+            .add_native_function("object_to_entries", 1, qang_object_to_entries)
+            .add_native_function("object_get", 2, qang_object_get)
+            .add_native_function("object_set", 3, qang_object_set)
             .with_stdlib()
             .with_native_filesystem();
 
@@ -670,60 +630,35 @@ impl Vm {
 
                     let result = match (a.kind(), b.kind()) {
                         (ValueKind::Array(_), ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Array)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                            let array_handle = self.alloc.strings.intern("array");
+                            array_handle == string_handle
                         }
                         (ValueKind::Number(_), ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Number)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                            let number_handle = self.alloc.strings.intern("number");
+                            number_handle == string_handle
                         }
                         (ValueKind::String(_), ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::String)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                            let other_string_handle = self.alloc.strings.intern("string");
+                            other_string_handle == string_handle
                         }
                         (ValueKind::Nil, ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Nil)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                            let nil_handle = self.alloc.strings.intern("nil");
+                            nil_handle == string_handle
                         }
                         (ValueKind::True | ValueKind::False, ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Boolean)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                            let boolean_handle = self.alloc.strings.intern("boolean");
+                            boolean_handle == string_handle
                         }
                         (ValueKind::Class(_), ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Class)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                            let class_handle = self.alloc.strings.intern("class");
+                            class_handle == string_handle
                         }
-                        (ValueKind::ObjectLiteral(_), ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Object)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                        (
+                            ValueKind::ObjectLiteral(_) | ValueKind::Instance(_),
+                            ValueKind::String(string_handle),
+                        ) => {
+                            let object_handle = self.alloc.strings.intern("object");
+                            object_handle == string_handle
                         }
                         (
                             ValueKind::FunctionDecl(_)
@@ -733,20 +668,8 @@ impl Vm {
                             | ValueKind::BoundIntrinsic(_),
                             ValueKind::String(string_handle),
                         ) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Function)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
-                        }
-                        (ValueKind::Instance(_), ValueKind::String(string_handle)) => {
-                            let keyword_handle = *self
-                                .state
-                                .keywords
-                                .get(&Keyword::Object)
-                                .expect("expected keyword");
-                            keyword_handle == string_handle
+                            let function_handle = self.alloc.strings.intern("function");
+                            function_handle == string_handle
                         }
                         (ValueKind::Instance(instance_handle), ValueKind::Class(clazz_handle)) => {
                             let instance_of_handle = self.alloc.get_instance(instance_handle).clazz;
@@ -1326,11 +1249,7 @@ impl Vm {
 
     fn bind_method(&mut self, clazz_handle: ClassHandle, method_name: Value) -> RuntimeResult<()> {
         if let Some(method_handle) = method_name.as_string() {
-            let init_handle = *self
-                .state
-                .keywords
-                .get(&Keyword::Init)
-                .expect("Expected keyword.");
+            let init_handle = self.alloc.strings.intern("init");
             if method_handle == init_handle {
                 pop_value!(self);
                 push_value!(self, Value::nil())?;
@@ -1506,11 +1425,7 @@ impl Vm {
                     .tables
                     .copy_into(clazz_value_table, instance_table);
 
-                let constructor_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Init)
-                    .expect("Expected keyword.");
+                let constructor_handle = self.alloc.strings.intern("init");
                 if let Some(constructor) = self
                     .alloc
                     .get_class_method(clazz_method_table, Value::string(constructor_handle))
@@ -1554,21 +1469,21 @@ impl Vm {
 
         match receiver.kind() {
             ValueKind::Instance(instance_handle) => {
-                let instance = self.alloc.get_instance(instance_handle);
+                let clazz = {
+                    let instance = self.alloc.get_instance(instance_handle);
 
-                if let Some(value) = self
-                    .alloc
-                    .get_instance_field(instance.table, Value::string(method_handle))
-                {
-                    self.state.stack[self.state.stack_top - arg_count - 1] = value;
-                    return self.call_value(value, arg_count);
-                }
+                    if let Some(value) = self
+                        .alloc
+                        .get_instance_field(instance.table, Value::string(method_handle))
+                    {
+                        self.state.stack[self.state.stack_top - arg_count - 1] = value;
+                        return self.call_value(value, arg_count);
+                    }
 
-                let init_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Init)
-                    .expect("Expected keyword.");
+                    instance.clazz
+                };
+
+                let init_handle = self.alloc.strings.intern("init");
                 if method_handle == init_handle {
                     return Err(QangRuntimeError::new(
                         "Cannot call constructor 'init' on an instance.".to_string(),
@@ -1576,7 +1491,7 @@ impl Vm {
                     ));
                 }
 
-                self.invoke_from_class_cached(instance.clazz, method_handle, arg_count)
+                self.invoke_from_class_cached(clazz, method_handle, arg_count)
             }
 
             ValueKind::ObjectLiteral(handle) => {
@@ -1945,11 +1860,7 @@ impl Vm {
             self.call(method, arg_count)
         } else {
             // If method is `init` and it does not exist, do nothing (return nil)
-            let init_handle = *self
-                .state
-                .keywords
-                .get(&Keyword::Init)
-                .expect("Expected keyword.");
+            let init_handle = self.alloc.strings.intern("init");
             if method_handle == init_handle {
                 // Pop arguments but leave receiver on stack
                 for _ in 0..arg_count {
@@ -1996,11 +1907,7 @@ impl Vm {
                 ))
             }
         } else {
-            let init_handle = *self
-                .state
-                .keywords
-                .get(&Keyword::Init)
-                .expect("Expected keyword.");
+            let init_handle = self.alloc.strings.intern("init");
             if method_handle == init_handle {
                 for _ in 0..arg_count {
                     pop_value!(self);
@@ -2147,16 +2054,8 @@ impl Vm {
             }
 
             ValueKind::Nil => {
-                let call_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Call)
-                    .expect("Expected identifier.");
-                let apply_handle = *self
-                    .state
-                    .keywords
-                    .get(&Keyword::Apply)
-                    .expect("Expected identifier.");
+                let call_handle = self.alloc.strings.intern("call");
+                let apply_handle = self.alloc.strings.intern("apply");
 
                 if identifier == call_handle || identifier == apply_handle {
                     let method = if identifier == call_handle {

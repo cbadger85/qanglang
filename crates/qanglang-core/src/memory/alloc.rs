@@ -7,7 +7,7 @@ use crate::memory::array_arena::ArrayArena;
 use crate::memory::closure_arena::ClosureArena;
 use crate::memory::hashmap_arena::HashMapArena;
 use crate::memory::string_interner::StringInterner;
-use crate::{FunctionObject, Upvalue, Value, debug_log};
+use crate::{FunctionObject, HashMapHandle, Upvalue, Value, debug_log};
 use crate::{StringHandle, ValueKind};
 use std::collections::VecDeque;
 
@@ -241,11 +241,11 @@ impl HeapAllocator {
         &mut self.instances[handle]
     }
 
-    pub fn get_instance_field(&self, handle: InstanceHandle, key: Value) -> Option<Value> {
+    pub fn get_instance_field(&self, handle: HashMapHandle, key: Value) -> Option<Value> {
         self.tables.get(handle, &key)
     }
 
-    pub fn set_instance_field(&mut self, handle: InstanceHandle, key: Value, value: Value) {
+    pub fn set_instance_field(&mut self, handle: HashMapHandle, key: Value, value: Value) {
         self.tables.insert(handle, key, value);
     }
 

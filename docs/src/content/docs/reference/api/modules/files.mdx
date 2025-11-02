@@ -13,6 +13,16 @@ Creates an iterator to read a file incrementally.
 
 #### Constructor
 
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./big_file.txt");
+
+// Print the contents of the file to the console
+FileIterator(file_path).for_each(print);
+```
+
 ##### Parameters
 
 path: `Path` - The path to the file.

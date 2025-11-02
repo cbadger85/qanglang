@@ -1,6 +1,6 @@
 [package]
 name = "qanglang-cli"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 license = "MPL-2.0"
 description = "CLI tool for Qanglang"
@@ -11,7 +11,7 @@ name = "qang"
 path = "src/main.rs"
 
 [dependencies]
-qanglang-core = { version = "0.3.1", path = "../qanglang-core" }
-qanglang-ls = { version = "0.3.1", path = "../qanglang-ls" }
-qanglang-test = { version = "0.3.1", path = "../qanglang-test" }
+qanglang-core = { version = "0.4.0", path = "../qanglang-core" }
+qanglang-ls = { version = "0.4.0", path = "../qanglang-ls" }
+qanglang-test = { version = "0.4.0", path = "../qanglang-test" }
 clap = { version = "4.5.43", features = ["derive"] }

@@ -31,13 +31,21 @@ static NATIVE_FUNCTIONS: Lazy<HashMap<&'static str, NativeFunctionInfo>> = Lazy:
         },
     );
     map.insert("hash", NativeFunctionInfo { name: "hash" });
+    map.insert("env_cwd", NativeFunctionInfo { name: "env_cwd" });
+    map.insert("object_get", NativeFunctionInfo { name: "object_get" });
     map.insert(
-        "array_of_length",
+        "object_assign",
         NativeFunctionInfo {
-            name: "array_of_length",
+            name: "object_assign",
         },
     );
-    map.insert("env_cwd", NativeFunctionInfo { name: "env_cwd" });
+    map.insert("object_set", NativeFunctionInfo { name: "object_set" });
+    map.insert(
+        "object_to_entries",
+        NativeFunctionInfo {
+            name: "object_to_entries",
+        },
+    );
 
     map
 });

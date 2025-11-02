@@ -122,6 +122,17 @@ fn test_object_set_with_class_instance() {
   assert_eq(instance.key, "value");
 }
 
+fn test_object_set_with_class_instance_in_init() {
+  class MyClass { 
+    init() {
+      object_set(this, "key", "value");
+    }
+  }
+  var instance = MyClass();
+
+  assert_eq(instance.key, "value");
+}
+
 fn test_object_get_with_class_instance_and_lambda_field() {
   class MyParent {
     parent_key = "VALUE";
@@ -147,4 +158,64 @@ fn test_object_get_with_class_instance_and_lambda_field() {
   var get_other_key = object_get(instance, "get_other_key");
   assert(get_other_key is FUNCTION);
   assert_eq(get_other_key(), "VALUE");
+}
+
+fn test_object_assign_with_object_literals() {
+  var obj1 = {{
+    a = 0,
+  }};
+  var obj2 = {{
+    b = 1,
+  }};
+
+  var result = object_assign(obj1, obj2);
+  assert_eq(obj1.a, 0);
+  assert_eq(obj1.b, 1);
+  assert(result is OBJECT);
+  assert_eq(result.a, 0);
+  assert_eq(result.b, 1);
+}
+
+fn test_object_assign_with_class_instances() {
+  class MyClass1 { a = 0; }
+  class MyClass2 { b = 1; }
+  var my_class1 = MyClass1();
+  var my_class2 = MyClass2();
+
+  var result = object_assign(my_class1, my_class2);
+  assert_eq(my_class1.a, 0);
+  assert_eq(my_class1.b, 1);
+  assert(result is MyClass1);
+  assert_eq(result.a, 0);
+  assert_eq(result.b, 1);
+}
+
+fn test_object_assign_with_object_literal_and_instance() {
+  var obj = {{
+    a = 0,
+  }};
+  class MyClass { b = 1; }
+  var my_class = MyClass();
+  
+  var result = object_assign(obj, my_class);
+  assert_eq(obj.a, 0);
+  assert_eq(obj.b, 1);
+  assert(result is OBJECT);
+  assert_eq(result.a, 0);
+  assert_eq(result.b, 1);
+}
+
+fn test_object_assign_with_instance_and_object_literal() {
+  var obj = {{
+    a = 0,
+  }};
+  class MyClass { b = 1; }
+  var my_class = MyClass();
+  
+  var result = object_assign(my_class, obj);
+  assert_eq(my_class.a, 0);
+  assert_eq(my_class.b, 1);
+  assert(result is MyClass);
+  assert_eq(result.a, 0);
+  assert_eq(result.b, 1);
 }

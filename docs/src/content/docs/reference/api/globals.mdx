@@ -113,22 +113,6 @@ initializer: `(Number) -> dyn!` <Badge text="optional" /> - An optional function
 
 `[dyn!]` - An array of the specified length where each element is either its index or the result of the initializer function.
 
-### `array_of_length`
-
-Creates an array of the provided length.
-
-```ql
-var arr = array_of_length(3); // [nil, nil, nil]
-```
-
-#### Parameters
-
-length: `Number` - The length of the array.
-
-#### Returns
-
-`[dyn?]` - An array of the specified length filled with `nil` values.
-
 ### `assert`
 
 Asserts the value is truthy. Ends the program if not.
@@ -259,6 +243,103 @@ value: `dyn!` - Any value.
 #### Returns
 
 `dyn!` - The value provided in the argument.
+
+### `object_assign`
+
+Used to set the fields of one class or instance to the fields of another, useful for creating a shallow copy.
+
+```ql
+var obj = {{
+  a = 0,
+  b = 1,
+}};
+
+var copy = object_assign({{ }}, obj);
+assert_eq(copy.a, 0);
+assert_eq(copy.b, 1);
+```
+
+#### Parameters
+
+destination_object: `Object` - The object or class instance that the fields will be copied into.
+
+source_object: `Object` - The object or clas instance.
+
+value: `dyn!` - The value to be set.
+
+#### Returns
+
+`Object` - The destination object or class instance with the fields copied into it.
+
+### `object_get`
+
+Used to get the field of an object literal or class instance dynamically. Class methods can not be accessed using this function, though lambdas assigned to fields can be.
+
+```ql
+var obj = {{
+  field = "value",
+}};
+
+assert_eq(object_get(obj, "field"), "value");
+```
+
+#### Parameters
+
+object: `Object` - The object or class instance of the field to be accessed.
+
+key: `String` - The key of the field to be accessed.
+
+#### Returns
+
+`dyn!` - The value of the field, or `nil` if the field does not exist.
+
+### `object_set`
+
+Used to set the field of an object literal or class instance dynamically.
+
+```ql
+var obj = {{ }};
+
+object_set(obj, "field", "value")
+assert_eq(obj.field, "value");
+```
+
+#### Parameters
+
+object: `Object` - The object or class instance of the field to be added or modified.
+
+key: `String` - The key of the field to be added or modified.
+
+value: `dyn!` - The value to be set.
+
+#### Returns
+
+`nil`
+
+### `object_to_entries`
+
+Used to get the keys and values as an array of entries.
+
+```ql
+var obj = {{
+  a = 0,
+  b = 1,
+}};
+
+object_to_entries(obj).iter().for_each((entry) -> {
+  println("key: " + entry.key + ", value: " + to_string(entry.value));
+});
+// "key: a, value: 0"
+// "key: b, value: 1"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`[Entry]` - Returns an array of where each element is an instance of [`Entry`](/reference/api/entry/)
 
 ### `print`
 

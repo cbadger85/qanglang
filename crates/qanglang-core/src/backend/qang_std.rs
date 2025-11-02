@@ -803,6 +803,48 @@ pub fn qang_object_set(
     }
 }
 
+pub fn qang_object_assign(
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let object = args.first().copied().unwrap_or_else(|| Value::nil());
+    let other = args.get(1).copied().unwrap_or_else(|| Value::nil());
+
+    match (object.kind(), other.kind()) {
+        (ValueKind::ObjectLiteral(handle), ValueKind::ObjectLiteral(other_handle)) => {
+            vm.alloc.tables.copy_into(other_handle, handle);
+            Ok(Some(Value::object_literal(handle)))
+        }
+        (ValueKind::ObjectLiteral(handle), ValueKind::Instance(other_handle)) => {
+            let other_table_handle = vm.alloc.get_instance(other_handle).table;
+            vm.alloc.tables.copy_into(other_table_handle, handle);
+            Ok(Some(Value::object_literal(handle)))
+        }
+        (ValueKind::Instance(handle), ValueKind::ObjectLiteral(other_handle)) => {
+            let table_handle = vm.alloc.get_instance(handle).table;
+            vm.alloc.tables.copy_into(other_handle, table_handle);
+            Ok(Some(Value::instance(handle)))
+        }
+        (ValueKind::Instance(handle), ValueKind::Instance(other_handle)) => {
+            let table_handle = vm.alloc.get_instance(handle).table;
+            let other_table_handle = vm.alloc.get_instance(other_handle).table;
+            vm.alloc.tables.copy_into(other_table_handle, table_handle);
+            Ok(Some(Value::instance(handle)))
+        }
+        (ValueKind::ObjectLiteral(_) | ValueKind::Instance(_), _) => {
+            Err(NativeFunctionError(format!(
+                "Expected object literal or instance for source, but found {}",
+                object.to_display_string(&vm.alloc)
+            )))
+        }
+        _ => Err(NativeFunctionError(format!(
+            "Expected object literal or instance for destination, but found {}",
+            object.to_display_string(&vm.alloc)
+        ))),
+    }
+}
+
 pub fn qang_number_ceil(
     receiver: Value,
     _arg_count: usize,

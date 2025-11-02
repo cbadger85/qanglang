@@ -16,8 +16,9 @@ use crate::{
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
             qang_array_create, qang_assert, qang_assert_eq, qang_assert_throws, qang_env_cwd,
-            qang_hash, qang_object_get, qang_object_set, qang_object_to_entries, qang_print,
-            qang_println, qang_system_time, qang_to_string, qang_typeof,
+            qang_hash, qang_object_assign, qang_object_get, qang_object_set,
+            qang_object_to_entries, qang_print, qang_println, qang_system_time, qang_to_string,
+            qang_typeof,
         },
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -400,6 +401,7 @@ impl Vm {
             .add_native_function("object_to_entries", 1, qang_object_to_entries)
             .add_native_function("object_get", 2, qang_object_get)
             .add_native_function("object_set", 3, qang_object_set)
+            .add_native_function("object_assign", 2, qang_object_assign)
             .with_stdlib()
             .with_native_filesystem();
 

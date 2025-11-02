@@ -55,6 +55,29 @@ class Iterator {
     return arr;
   }
 
+  to_set() {
+    var set = HashSet();
+
+    while (this.has_next()) {
+      set.add(this.next());
+    }
+
+    return set;
+  }
+
+  to_map() {
+    var map = HashMap();
+
+    while(this.has_next()) {
+      var entry = this.next();
+      assert(entry is Entry, "Values must be instances of `Entry` to be collected into a `HashMap`.");
+
+      map.set(entry.key, entry.value);
+    }
+
+    return map;
+  }
+
   for_each(cb) {
     while (this.has_next()) {
       cb(this.next());

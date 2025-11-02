@@ -227,3 +227,25 @@ fn test_reverse_iterator() {
   assert_eq(reversed_arr[1], 2);
   assert_eq(reversed_arr[2], 1);
 }
+
+fn test_to_set() {
+  var arr = [1, 1, 2, 2, 3];
+
+  var set = arr.iter().to_set();
+  assert(set is HashSet);
+  assert_eq(set.size(), 3);
+  assert_eq([1, 2, 3].iter().to_set().difference(set).size(), 0);
+  assert(set.has(1));
+  assert(set.has(2));
+  assert(set.has(3));
+}
+
+fn test_to_map() {
+  var arr = [Entry("a", 0), Entry("b", 1)];
+
+  var map = arr.iter().to_map();
+  assert(map is HashMap);
+  assert_eq(map.size(), 2);
+  assert_eq(map.get("a"), 0);
+  assert_eq(map.get("b"), 1);
+}

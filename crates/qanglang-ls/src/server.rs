@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use log::debug;
+use log::{debug, info};
 use qanglang_core::SourceMap;
 use serde_json::Value;
 use tokio::sync::RwLock;
@@ -280,7 +280,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
 
-        debug!(
+        info!(
             "References request at {}:{}",
             position.line, position.character
         );
@@ -290,7 +290,7 @@ impl LanguageServer for Backend {
         let analysis = match cache.get(&uri) {
             Some(analysis) => analysis.clone(),
             None => {
-                debug!("No analysis available for references");
+                info!("No analysis available for references");
                 return Ok(None);
             }
         };
@@ -303,18 +303,18 @@ impl LanguageServer for Backend {
         {
             Some(offset) => offset,
             None => {
-                debug!("Invalid position for references");
+                info!("Invalid position for references - line: {}, char: {}", position.line, position.character);
                 return Ok(None);
             }
         };
 
-        debug!("Looking for references at offset {}", offset);
+        info!("Looking for references at offset {}", offset);
 
         // Find the declaration node at the cursor position
         let node_info = find_node_at_offset(&analysis, offset);
 
         if let Some(info) = node_info {
-            debug!(
+            info!(
                 "Found declaration node: {:?}, node_id: {:?}",
                 info.kind, info.node_id
             );
@@ -374,12 +374,12 @@ impl LanguageServer for Backend {
                 }
             }
 
-            debug!("Found {} reference(s) total", ref_count);
-            debug!("Total locations (including decl if requested): {}", locations.len());
+            info!("Found {} reference(s) total", ref_count);
+            info!("Total locations (including decl if requested): {}", locations.len());
             return Ok(Some(locations));
         }
 
-        debug!("No references found at position");
+        info!("No references found at position");
         Ok(None)
     }
 
@@ -388,7 +388,7 @@ impl LanguageServer for Backend {
         let position = params.text_document_position.position;
         let new_name = params.new_name;
 
-        debug!(
+        info!(
             "Rename request at {}:{} to '{}'",
             position.line, position.character, new_name
         );
@@ -398,7 +398,7 @@ impl LanguageServer for Backend {
         let analysis = match cache.get(&uri) {
             Some(analysis) => analysis.clone(),
             None => {
-                debug!("No analysis available for rename");
+                info!("No analysis available for rename");
                 return Ok(None);
             }
         };
@@ -411,18 +411,18 @@ impl LanguageServer for Backend {
         {
             Some(offset) => offset,
             None => {
-                debug!("Invalid position for rename");
+                info!("Invalid position for rename - line: {}, char: {}", position.line, position.character);
                 return Ok(None);
             }
         };
 
-        debug!("Looking for symbol to rename at offset {}", offset);
+        info!("Looking for symbol to rename at offset {}", offset);
 
         // Find the declaration node at the cursor position
         let node_info = find_node_at_offset(&analysis, offset);
 
         if let Some(info) = node_info {
-            debug!("Found symbol to rename: {:?}", info.kind);
+            info!("Found symbol to rename: {:?}, node_id: {:?}", info.kind, info.node_id);
 
             let decl_node_id = info.node_id;
             let mut text_edits = Vec::new();
@@ -473,7 +473,7 @@ impl LanguageServer for Backend {
                 }
             }
 
-            debug!("Created {} text edit(s) for rename", text_edits.len());
+            info!("Created {} text edit(s) for rename", text_edits.len());
 
             // Create workspace edit
             let mut changes = HashMap::new();
@@ -486,7 +486,7 @@ impl LanguageServer for Backend {
             }));
         }
 
-        debug!("No symbol found to rename at position");
+        info!("No symbol found to rename at position");
         Ok(None)
     }
 

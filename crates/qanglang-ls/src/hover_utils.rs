@@ -872,7 +872,9 @@ impl<'a> NodeFinder<'a> {
     }
 
     fn span_contains(&self, span: SourceSpan) -> bool {
-        self.offset >= span.start && self.offset < span.end
+        // Include the end position to handle cursor positioned right after an identifier
+        // This is important for rename/references when clicking at the boundary
+        self.offset >= span.start && self.offset <= span.end
     }
 
     fn is_better_match(&self, span: SourceSpan) -> bool {

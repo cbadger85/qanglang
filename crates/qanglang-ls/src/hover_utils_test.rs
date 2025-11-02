@@ -826,4 +826,129 @@ fn test_class_inheritance() {
             _ => panic!("Expected Class, got {:?}", info.kind),
         }
     }
+
+    #[test]
+    fn test_rename_variable_in_function() {
+        // This test simulates the exact scenario: renaming a variable
+        let source = r#"
+fn test_array_literal_with_multiple_elements() {
+  var arr = [1, 2, 3,];
+
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], 1);
+  assert_eq(arr[1], 2);
+  assert_eq(arr[2], 3);
+}
+"#;
+        let source_map = Arc::new(SourceMap::new(source.to_string(), PathBuf::from("test.ql")));
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        eprintln!("\n=== Testing Rename Functionality ===\n");
+
+        // Position of "arr" in the declaration "var arr = ..." (line 2, around column 6)
+        let lines: Vec<&str> = source.lines().collect();
+        let line_2 = lines[2];
+        eprintln!("Line 2: '{}'", line_2);
+
+        let arr_pos = line_2.find("arr").expect("Should find arr");
+        eprintln!("arr starts at column {} in line 2", arr_pos);
+
+        let offset = source_map.position_to_offset(2, arr_pos as u32).expect("Valid position");
+        eprintln!("Byte offset for 'arr' in declaration: {}", offset);
+
+        // Step 1: Find the node at the declaration position
+        let node_info = find_node_at_offset(&analysis, offset);
+        eprintln!("\nStep 1: find_node_at_offset result:");
+        eprintln!("  {:?}", node_info);
+
+        assert!(node_info.is_some(), "Should find a node at 'arr' declaration position");
+        let info = node_info.unwrap();
+
+        eprintln!("\nNode info details:");
+        eprintln!("  node_id: {:?}", info.node_id);
+        eprintln!("  kind: {:?}", info.kind);
+        eprintln!("  range: {:?}", info.range);
+
+        match &info.kind {
+            NodeKind::Variable(name) => {
+                assert_eq!(name, "arr", "Should find variable named arr");
+            }
+            _ => panic!("Expected Variable node, got {:?}", info.kind),
+        }
+
+        let decl_node_id = info.node_id;
+        eprintln!("\nDecl node ID to search for: {:?}", decl_node_id);
+
+        // Step 2: Check the symbol table
+        eprintln!("\nStep 2: Checking symbol table:");
+        eprintln!("  Total resolutions in symbol table: {}", analysis.symbol_table.all_resolutions().len());
+
+        let mut found_references = Vec::new();
+        for (ref_id, symbol_info) in analysis.symbol_table.all_resolutions() {
+            eprintln!("  ref_id {:?} -> decl_node_id {:?} (kind: {:?})",
+                     ref_id, symbol_info.decl_node_id, symbol_info.kind);
+
+            if symbol_info.decl_node_id == decl_node_id {
+                eprintln!("    ✓ MATCH! This reference points to our declaration");
+                found_references.push(*ref_id);
+            }
+        }
+
+        eprintln!("\nStep 3: Found {} references to the declaration", found_references.len());
+        for ref_id in &found_references {
+            let ref_node = analysis.nodes.get_identifier_node(*ref_id);
+            let ref_span = ref_node.node.span;
+            eprintln!("  Reference at span {:?}", ref_span);
+
+            let ref_line = analysis.source_map.get_line_number(ref_span.start);
+            let ref_col = analysis.source_map.get_column_number(ref_span.start);
+            eprintln!("    Line {}, Column {}", ref_line, ref_col);
+        }
+
+        // We expect to find 3 references: arr[0], arr[1], arr[2]
+        // Plus arr.length() - so 4 total
+        assert!(found_references.len() >= 3,
+                "Should find at least 3 references to 'arr', found {}",
+                found_references.len());
+    }
+
+    #[test]
+    fn test_find_node_at_exact_offset() {
+        // Reproduce the exact scenario from the logs: offset 36 in test_rename.ql
+        // IMPORTANT: Use CRLF line endings like the actual file
+        let source = "fn test_rename() {\r\n  var myVariable = 42;\r\n\r\n  print(myVariable);\r\n\r\n  myVariable = myVariable + 1;\r\n\r\n  return myVariable;\r\n}\r\n";
+        let source_map = Arc::new(SourceMap::new(source.to_string(), PathBuf::from("test_rename.ql")));
+        let analysis = analyze(source_map.clone()).expect("Analysis should succeed");
+
+        eprintln!("\n=== Testing Offset 36 (from VS Code log) ===\n");
+        eprintln!("Source:\n{}", source);
+        eprintln!("\nLooking at characters around offset 36:");
+        for i in 30..45 {
+            if i < source.len() {
+                let ch = &source[i..i+1];
+                eprintln!("  Offset {}: '{}'", i, ch.escape_default());
+            }
+        }
+
+        // VS Code reported position 1:16 which converts to offset 36
+        let offset_from_vscode = source_map.position_to_offset(1, 16);
+        eprintln!("\nPosition 1:16 converts to offset: {:?}", offset_from_vscode);
+
+        let offset = 36;
+        eprintln!("\nTrying to find node at offset {}", offset);
+
+        let node_info = find_node_at_offset(&analysis, offset);
+        eprintln!("Result: {:?}", node_info);
+
+        // Also try nearby offsets to see the span coverage
+        eprintln!("\nTrying nearby offsets:");
+        for test_offset in 18..45 {
+            let result = find_node_at_offset(&analysis, test_offset);
+            if result.is_some() {
+                eprintln!("  Offset {}: {:?}", test_offset, result);
+            }
+        }
+
+        assert!(node_info.is_some(), "Should find a node at offset 36 (position 1:16 in 'myVariable')");
+    }
 }

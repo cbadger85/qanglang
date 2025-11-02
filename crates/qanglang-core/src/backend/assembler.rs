@@ -221,6 +221,30 @@ impl State {
 
         Ok(upvalue_count)
     }
+
+    fn is_in_class_method(&self) -> bool {
+        if matches!(self.kind, FunctionKind::Method | FunctionKind::Initializer) {
+            return true;
+        }
+
+        if let Some(ref enclosing) = self.enclosing {
+            return enclosing.is_in_class_method();
+        }
+
+        false
+    }
+
+    fn has_superclass_in_scope(&self) -> bool {
+        if matches!(self.kind, FunctionKind::Method | FunctionKind::Initializer) {
+            return self.has_superclass;
+        }
+
+        if let Some(ref enclosing) = self.enclosing {
+            return enclosing.has_superclass_in_scope();
+        }
+
+        false
+    }
 }
 
 pub struct Assembler<'a> {
@@ -964,10 +988,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         this_expr: TypedNodeRef<ThisExprNode>,
         _ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if matches!(
-            self.compiler_state.kind,
-            FunctionKind::Method | FunctionKind::Initializer
-        ) {
+        if self.compiler_state.is_in_class_method() {
             self.emit_opcode_and_byte(OpCode::GetLocal, 0, this_expr.node.span);
             Ok(())
         } else {
@@ -984,10 +1005,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
         super_expr: TypedNodeRef<SuperExprNode>,
         ctx: &mut VisitorContext,
     ) -> Result<(), Self::Error> {
-        if !matches!(
-            self.compiler_state.kind,
-            FunctionKind::Method | FunctionKind::Initializer
-        ) {
+        if !self.compiler_state.is_in_class_method() {
             return Err(QangCompilerError::new_assembler_error(
                 "Cannot use 'super' outside of a class method.".to_string(),
                 super_expr.node.span,
@@ -995,7 +1013,7 @@ impl<'a> NodeVisitor for Assembler<'a> {
             ));
         }
 
-        if !self.compiler_state.has_superclass {
+        if !self.compiler_state.has_superclass_in_scope() {
             return Err(QangCompilerError::new_assembler_error(
                 "Can't use 'super' in a class with no superclass.".to_string(),
                 super_expr.node.span,

@@ -1,0 +1,249 @@
+---
+title: Path Module Reference
+description: A reference for the path module.
+---
+
+The path module handles and simplifies path handling for the [file system](/reference/api/module/files/).
+
+## Constants
+
+### `OS_PATH_SEPARATOR`
+
+The constant for the separator used in the OS the runtime is executing in.
+
+## Classes
+
+### `Path`
+
+Represents a file system path with methods for path manipulation and querying.
+
+#### Constructor
+
+Creates a new `Path` instance.
+
+```ql
+var path = Path("./src/file.txt");
+```
+
+##### Parameters
+
+path: `String` - The path string to wrap.
+
+#### Methods
+
+##### `absolute`
+
+Returns the absolute version of the path. If the path is already absolute, it is normalized and returned. If relative, it is joined with the current working directory and normalized.
+
+```ql
+var path = Path("./src/file.txt");
+var abs = path.absolute(); // Returns normalized absolute path
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Path` - The absolute path.
+
+##### `basename`
+
+Returns the final component of the path (the filename or directory name).
+
+```ql
+var path = Path("foo/bar/file.txt");
+var name = path.basename(); // "file.txt"
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`String?` - The basename of the path, or `nil` if the path is empty, just separators, or ends with `.` or `..`.
+
+##### `dirname`
+
+Returns the directory portion of the path (everything except the final component).
+
+```ql
+var path = Path("foo/bar/file.txt");
+var dir = path.dirname(); // Path("foo/bar")
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Path` - The directory path. Returns `Path(".")` if there's only one component.
+
+##### `exists`
+
+Checks whether the path exists in the file system.
+
+```ql
+var path = Path("./myfile.txt");
+if (path.exists()) {
+  println("File exists!");
+}
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Boolean` - `true` if the path exists, `false` otherwise.
+
+##### `extension`
+
+Returns the file extension (the portion after the last dot in the basename).
+
+```ql
+var path1 = Path("file.txt");
+var ext1 = path1.extension(); // "txt"
+
+var path2 = Path("file.tar.gz");
+var ext2 = path2.extension(); // "gz"
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`String?` - The extension without the dot, or `nil` if there's no basename.
+
+##### `is_absolute`
+
+Checks whether the path is absolute.
+
+```ql
+var path = Path("/usr/local/bin");
+println(path.is_absolute()); // true on Unix
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Boolean` - `true` if the path is absolute, `false` otherwise.
+
+##### `is_dir`
+
+Checks whether the path points to a directory.
+
+```ql
+var path = Path("./src");
+if (path.is_dir()) {
+  println("It's a directory!");
+}
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Boolean` - `true` if the path is a directory, `false` otherwise.
+
+##### `is_file`
+
+Checks whether the path points to a file.
+
+```ql
+var path = Path("./file.txt");
+if (path.is_file()) {
+  println("It's a file!");
+}
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Boolean` - `true` if the path is a file, `false` otherwise.
+
+##### `is_relative`
+
+Checks whether the path is relative.
+
+```ql
+var path = Path("./src/file.txt");
+println(path.is_relative()); // true
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Boolean` - `true` if the path is relative, `false` otherwise.
+
+##### `join`
+
+Joins this path with another path, handling separators and absolute paths correctly.
+
+```ql
+var base = Path("foo");
+var joined = base.join(Path("bar")); // Path("foo/bar")
+
+// If other is absolute, it returns other
+var abs = Path("/absolute");
+var result = base.join(abs); // Path("/absolute")
+```
+
+###### Parameters
+
+other: `Path` - The path to join with this path.
+
+###### Returns
+
+`Path` - The joined path. If `other` is absolute, returns `other`. If either path is empty, returns the non-empty one.
+
+##### `normalize`
+
+Normalizes the path by resolving `.` and `..` components and removing redundant separators.
+
+```ql
+var path = Path("foo/./bar/../baz");
+var normalized = path.normalize(); // Path("foo/baz")
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`Path` - The normalized path. Returns `Path(".")` if the result is empty.
+
+##### `to_string`
+
+Returns the string representation of the path.
+
+```ql
+var path = Path("foo/bar");
+var str = path.to_string(); // "foo/bar"
+```
+
+###### Parameters
+
+None
+
+###### Returns
+
+`String` - The path as a string.

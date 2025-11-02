@@ -62,23 +62,6 @@ other: `Iterator` - The other iterator to add.
 
 `ChainIterator` - A [`ChainIterator`](/reference/api/iterators/chain-iterator/) combining the two iterators.
 
-### `collect`
-
-Collects an iterator to an array.
-
-```ql
-var arr = Range(0, 3).collect(); // [0, 1, 2]
-
-```
-
-#### Parameters
-
-None
-
-#### Returns
-
-`[dyn!]` - An array of each item in the iterator.
-
 ### `count`
 
 Counts the items in an iterator.
@@ -361,6 +344,65 @@ limit: `Number` - How many items to take.
 
 `TakeIterator` - A [`TakeIterator`](/reference/api/iterators/take-iterator/) for taking the provided number of items.
 
+### `to_array`
+
+Collects an iterator to an array.
+
+```ql
+var arr = Range(0, 3).to_array(); // [0, 1, 2]
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`[dyn!]` - An array of each item in the iterator.
+
+### `to_map`
+
+Collects an array of [entries](/reference/api/entry/) to a map.
+
+```ql
+var arr = [Entry("a", 0), Entry("b", 1)];
+var map = arr.iter().to_map();
+assert_eq(map.get("a"), 0);
+assert_eq(map.get("b"), 1);
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`HashMap` - An [`HashMap`](/reference/api/hashmap/) of the entries.
+
+### `to_set`
+
+Collects an array values into a set.
+
+```ql
+var arr = [1, 1, 2, 2, 3];
+var map = arr.iter().to_set();
+assert_eq(set.size(), 3);
+assert(set.has(1));
+assert(set.has(2));
+assert(set.has(3));
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`HashSet` - An [`HashSet`](/reference/api/hashset/) of the values.
+
 ### `zip`
 
 Zips two iterators together into an iterator of `Pair`s.
@@ -383,5 +425,5 @@ other: `Iterator` - The other iterator to zip with.
 var even_numbers = Range(0, 10).iter()
   .filter((value) -> value % 2 == 0)
   .map((value) -> to_string(value))
-  .collect(); // ["0", "2", "4", "6", "8"]
+  .to_array(); // ["0", "2", "4", "6", "8"]
 ```

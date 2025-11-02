@@ -110,21 +110,43 @@ impl GlobalCompilerPipeline {
             return Ok(self.modules.get(&canonical_path).unwrap().node);
         }
 
-        let source_map = match SourceMap::from_path(&canonical_path) {
-            Ok(source_map) => Arc::new(source_map),
-            Err(_) => {
-                return Err(QangPipelineError::new(vec![
-                    QangCompilerError::new_analysis_error(
-                        format!(
-                            "Unable to load module from path '{}'",
-                            canonical_path.display()
+        let path_str = canonical_path.to_string_lossy();
+        let source_map = if path_str.starts_with("<builtin:") && path_str.ends_with('>') {
+            let builtin_import_path = &path_str[9..path_str.len() - 1];
+
+            match crate::backend::builtin_modules::resolve_builtin_import(builtin_import_path) {
+                Some(builtin_source) => Arc::new(SourceMap::new(
+                    builtin_source.to_string(),
+                    canonical_path.clone(),
+                )),
+                None => {
+                    return Err(QangPipelineError::new(vec![
+                        QangCompilerError::new_analysis_error(
+                            format!("Built-in module '{}' not found", builtin_import_path),
+                            SourceSpan::default(),
+                            Arc::new(SourceMap::default()),
                         ),
-                        SourceSpan::default(),
-                        Arc::new(SourceMap::default()),
-                    ),
-                ]));
+                    ]));
+                }
+            }
+        } else {
+            match SourceMap::from_path(&canonical_path) {
+                Ok(source_map) => Arc::new(source_map),
+                Err(_) => {
+                    return Err(QangPipelineError::new(vec![
+                        QangCompilerError::new_analysis_error(
+                            format!(
+                                "Unable to load module from path '{}'",
+                                canonical_path.display()
+                            ),
+                            SourceSpan::default(),
+                            Arc::new(SourceMap::default()),
+                        ),
+                    ]));
+                }
             }
         };
+
         let mut parser = Parser::new(source_map.clone(), &mut self.nodes, &mut allocator.strings);
         let node_id = parser.parse_file();
 
@@ -221,7 +243,11 @@ impl GlobalCompilerPipeline {
             )])
         })?;
 
-        let assembler = Assembler::new(module_source.source_map.clone(), alloc, &module_source.symbol_table);
+        let assembler = Assembler::new(
+            module_source.source_map.clone(),
+            alloc,
+            &module_source.symbol_table,
+        );
         let mut errors = ErrorReporter::new();
         let mut main_function =
             assembler.assemble(module_source.node, &mut self.nodes, &mut errors)?;
@@ -234,7 +260,14 @@ impl GlobalCompilerPipeline {
         let mut module_map = FxHashMap::with_hasher(FxBuildHasher);
         for (path, module) in self.modules.iter() {
             let path_str = path.to_string_lossy();
-            let path_handle = alloc.strings.intern(&path_str);
+
+            let module_id_str = if path_str.starts_with("<builtin:") && path_str.ends_with('>') {
+                &path_str[9..path_str.len() - 1]
+            } else {
+                &*path_str
+            };
+
+            let path_handle = alloc.strings.intern(module_id_str);
             let assembler = Assembler::new(module.source_map.clone(), alloc, &module.symbol_table);
             let mut compiled_module =
                 assembler.assemble(module.node, &mut self.nodes, &mut errors)?;
@@ -273,16 +306,21 @@ impl GlobalCompilerPipeline {
                 >,
                 _ctx: &mut VisitorContext,
             ) -> Result<(), Self::Error> {
-                let import_path_str = self.allocator.strings.get_string(import_decl.node.path);
+                let import_path_str = self.allocator.strings.get(import_decl.node.path);
 
-                let resolved_path = if let Some(parent_dir) = self.module_path.parent() {
-                    parent_dir.join(import_path_str)
-                } else {
-                    PathBuf::from(import_path_str)
-                };
+                let resolved_path =
+                    if crate::backend::builtin_modules::is_builtin_import(import_path_str) {
+                        PathBuf::from(format!("<builtin:{}>", import_path_str))
+                    } else {
+                        let resolved_path = if let Some(parent_dir) = self.module_path.parent() {
+                            parent_dir.join(import_path_str)
+                        } else {
+                            PathBuf::from(import_path_str)
+                        };
+                        resolved_path.canonicalize().unwrap_or(resolved_path)
+                    };
 
-                let final_path = resolved_path.canonicalize().unwrap_or(resolved_path);
-                self.import_paths.push(final_path);
+                self.import_paths.push(resolved_path);
                 Ok(())
             }
         }

@@ -253,7 +253,7 @@ fn test_calling_functions_from_native() {
                 .map(|v| v.as_string())
             {
                 Ok(Some(handle)) => {
-                    let string = vm.alloc.strings.get_string(handle);
+                    let string = vm.alloc.strings.get(handle);
                     assert_eq!("foo".to_string(), string.to_string());
                 }
                 Err(error) => {

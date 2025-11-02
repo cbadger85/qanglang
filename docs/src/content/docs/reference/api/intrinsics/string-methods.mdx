@@ -5,6 +5,23 @@ description: A reference for the intrinsic methods on strings.
 
 import { Badge } from "@astrojs/starlight/components";
 
+### `char_at`
+
+Returns the string character at the given index.
+
+```ql
+var string = "Hello World!";
+var second_letter = string.char_at(1); // "e"
+```
+
+#### Parameters
+
+index: `Number` - The index of the character. if a negative number or out-of-bounds number is supplied, `nil` will be returned.
+
+### Returns
+
+`String` - The character as a string at the given index.
+
 ### `concat`
 
 Returns a string of both values concatenated together.
@@ -23,6 +40,42 @@ other: `String` - The other string to combine with.
 
 `String` - The combined string.
 
+### `contains`
+
+Checks if a string contains a value.
+
+```ql
+var string1 = "Hello World!";
+var string2 = "llo W";
+assert(string1.contains(string2));
+```
+
+#### Parameters
+
+term: `String` - The string to search for.
+
+### Returns
+
+`Boolean` - `true` if the string contains the term, `false` otherwise.
+
+### `ends_with`
+
+Checks if a string ends with a value.
+
+```ql
+var string1 = "Hello World!";
+var string2 = "World!";
+assert(string1.ends_with(string2));
+```
+
+#### Parameters
+
+term: `String` - The string to search for.
+
+### Returns
+
+`Boolean` - `true` if the end of the string matches the term, `false` otherwise.
+
 ### `split`
 
 Returns an array of strings split at the provided delimeter.
@@ -40,6 +93,41 @@ delimter: `String?` <Badge text="optional" /> - The delimeter to use when splitt
 #### Returns
 
 `String` - An array of strings split by the delimeter.
+
+### `length`
+
+Returns the length of the string.
+
+```ql
+var string = "Hello World!";
+assert_eq(string.length(), 12);
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`Number` - The length of the string.
+
+### `starts_with`
+
+Checks if a string starts with a value.
+
+```ql
+var string1 = "Hello World!";
+var string2 = "Hello";
+assert(string1.starts_with(string2));
+```
+
+#### Parameters
+
+term: `String` - The string to search for.
+
+### Returns
+
+`Boolean` - `true` if the start of the string matches the term, `false` otherwise.
 
 ### `to_lowercase`
 

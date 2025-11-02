@@ -5,6 +5,93 @@ description: A reference for the global declarations available in QangLang.
 
 import { Badge } from "@astrojs/starlight/components";
 
+## Constants
+
+### `ARRAY`
+
+a constant containing the string `"array"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+assert([] is ARRAY);
+assert_eq(typeof([]), ARRAY);
+```
+
+### `BOOLEAN`
+
+a constant containing the string `"boolean"`, used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+assert(true is BOOLEAN);
+assert_eq(typeof(false), BOOLEAN);
+```
+
+### `CLASS`
+
+a constant containing the string `"class"`, used with the `is` operator or [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+class MyClass { }
+assert(MyClass is CLASS);
+assert_eq(typeof(MyClass), CLASS);
+```
+
+### `FUNCTION`
+
+a constant containing the string `"function"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+assert(() -> nil is FUNCTION);
+assert_eq(typeof(() -> nil), FUNCTION);
+```
+
+### `MODULE`
+
+a constant containing the string `"module"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+mod utils = import("./utils.ql");
+assert(utils is MODULE);
+assert_eq(typeof(utils), MODULE);
+```
+
+### `NIL`
+
+a constant containing the string `"nil"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+assert(nil is NIL);
+assert_eq(typeof(nil), NIL);
+```
+
+### `NUMBER`
+
+a constant containing the string `"number"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+assert(0 is NUMBER);
+assert_eq(typeof(1), NUMBER);
+```
+
+### `OBJECT`
+
+a constant containing the string `"object"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+assert({{ }} is OBJECT);
+class MyClass { }
+assert(MyClass() is OBJECT);
+assert_eq(typeof(MyClass()), OBJECT);
+```
+
+### `STRING`
+
+a constant containing the string `"string"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
+
+```ql
+assert("" is STRING);
+assert_eq(typeof(""), STRING);
+```
+
 ## Functions
 
 ### `array_of`
@@ -139,6 +226,23 @@ message: `String?` <Badge text="optional" /> - An optional message if the assert
 
 Throws an error if the provided function does not throw an error.
 
+### `env_cwd`
+
+Returns the current working directory as a string.
+
+```ql
+var cwd = env_cwd();
+
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`String` - The current working directory as a string.
+
 ### `identity`
 
 An identity function.
@@ -243,90 +347,3 @@ None
 #### Returns
 
 `Number` - The time in milliseconds since the start of the Unix epoch.
-
-## Constants
-
-### `ARRAY`
-
-a constant containing the string `"array"`, used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-assert([] is ARRAY);
-assert_eq(typeof([]), ARRAY);
-```
-
-### `BOOLEAN`
-
-a constant containing the string `"boolean"`, used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-assert(true is BOOLEAN);
-assert_eq(typeof(false), BOOLEAN);
-```
-
-### `CLASS`
-
-a constant containing the string `"class"`, used with the `is` operator or [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-class MyClass { }
-assert(MyClass is CLASS);
-assert_eq(typeof(MyClass), CLASS);
-```
-
-### `FUNCTION`
-
-a constant containing the string `"function"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-assert(() -> nil is FUNCTION);
-assert_eq(typeof(() -> nil), FUNCTION);
-```
-
-### `MODULE`
-
-a constant containing the string `"module"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-mod utils = import("./utils.ql");
-assert(utils is MODULE);
-assert_eq(typeof(utils), MODULE);
-```
-
-### `NIL`
-
-a constant containing the string `"nil"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-assert(nil is NIL);
-assert_eq(typeof(nil), NIL);
-```
-
-### `NUMBER`
-
-a constant containing the string `"number"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-assert(0 is NUMBER);
-assert_eq(typeof(1), NUMBER);
-```
-
-### `OBJECT`
-
-a constant containing the string `"object"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-assert({{ }} is OBJECT);
-class MyClass { }
-assert(MyClass() is OBJECT);
-assert_eq(typeof(MyClass()), OBJECT);
-```
-
-### `STRING`
-
-a constant containing the string `"string"`, used with the `is` operator or used with the [`typeof`](#typeof) function can return the runtime type.
-
-```ql
-assert("" is STRING);
-assert_eq(typeof(""), STRING);
-```

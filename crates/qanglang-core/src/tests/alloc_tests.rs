@@ -655,8 +655,8 @@ mod tests {
         assert_eq!(retrieved_function2.name, 0);
 
         // Strings should still be accessible
-        assert_eq!(allocator.strings.get_string(string1), "immortal_string_1");
-        assert_eq!(allocator.strings.get_string(string2), "immortal_string_2");
+        assert_eq!(allocator.strings.get(string1), "immortal_string_1");
+        assert_eq!(allocator.strings.get(string2), "immortal_string_2");
     }
 
     #[test]

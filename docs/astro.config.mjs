@@ -201,6 +201,19 @@ export default defineConfig({
               label: "Result",
               slug: "reference/api/result",
             },
+            {
+              label: "Modules",
+              items: [
+                {
+                  label: "Files",
+                  slug: "reference/api/modules/files",
+                },
+                {
+                  label: "Path",
+                  slug: "reference/api/modules/path",
+                },
+              ],
+            },
           ],
         },
         {

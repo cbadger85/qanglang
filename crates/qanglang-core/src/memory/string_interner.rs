@@ -40,7 +40,7 @@ impl StringInterner {
                     return offset_index;
                 }
                 Some(&index) => {
-                    if self.get_string(index) == s {
+                    if self.get(index) == s {
                         return index;
                     }
                     hash = hash.wrapping_add(1);
@@ -49,7 +49,7 @@ impl StringInterner {
         }
     }
 
-    pub fn get_string(&self, handle: StringHandle) -> &str {
+    pub fn get(&self, handle: StringHandle) -> &str {
         let offset = &self.offsets[handle as usize];
         let begin = offset.0 as usize;
         let end = begin + offset.1 as usize;
@@ -57,7 +57,7 @@ impl StringInterner {
         unsafe { str::from_utf8_unchecked(&self.storage[begin..end]) }
     }
 
-    pub fn concat_strings(&mut self, handle1: StringHandle, handle2: StringHandle) -> StringHandle {
+    pub fn concat(&mut self, handle1: StringHandle, handle2: StringHandle) -> StringHandle {
         let (str1_idx, str1_length) = self.offsets[handle1 as usize];
         let (str2_idx, str2_length) = self.offsets[handle2 as usize];
         let capacity = str1_length + str2_length;
@@ -74,8 +74,103 @@ impl StringInterner {
         self.intern(concat_string)
     }
 
+    pub fn starts_with(
+        &self,
+        string_handle: StringHandle,
+        starts_with_handle: StringHandle,
+    ) -> bool {
+        let (str_idx, str_len) = self.offsets[string_handle as usize];
+        let (prefix_idx, prefix_len) = self.offsets[starts_with_handle as usize];
+
+        if prefix_len > str_len {
+            return false;
+        }
+
+        let str_begin = str_idx as usize;
+        let prefix_begin = prefix_idx as usize;
+        let prefix_end = prefix_begin + prefix_len as usize;
+
+        &self.storage[str_begin..str_begin + prefix_len as usize]
+            == &self.storage[prefix_begin..prefix_end]
+    }
+
+    pub fn ends_with(&self, string_handle: StringHandle, suffix_handle: StringHandle) -> bool {
+        let (str_idx, str_len) = self.offsets[string_handle as usize];
+        let (suffix_idx, suffix_len) = self.offsets[suffix_handle as usize];
+
+        if suffix_len > str_len {
+            return false;
+        }
+
+        let str_end = str_idx as usize + str_len as usize;
+        let str_suffix_start = str_end - suffix_len as usize;
+        let suffix_begin = suffix_idx as usize;
+        let suffix_end = suffix_begin + suffix_len as usize;
+
+        &self.storage[str_suffix_start..str_end] == &self.storage[suffix_begin..suffix_end]
+    }
+
+    pub fn contains(&self, string_handle: StringHandle, needle_handle: StringHandle) -> bool {
+        let (str_idx, str_len) = self.offsets[string_handle as usize];
+        let (needle_idx, needle_len) = self.offsets[needle_handle as usize];
+
+        if needle_len > str_len {
+            return false;
+        }
+
+        if needle_len == 0 {
+            return true;
+        }
+
+        let str_begin = str_idx as usize;
+        let str_end = str_begin + str_len as usize;
+        let needle_begin = needle_idx as usize;
+        let needle_end = needle_begin + needle_len as usize;
+
+        let haystack = &self.storage[str_begin..str_end];
+        let needle = &self.storage[needle_begin..needle_end];
+
+        // Use a simple sliding window search without allocation
+        if needle_len as usize > haystack.len() {
+            return false;
+        }
+
+        for i in 0..=(haystack.len() - needle.len()) {
+            if &haystack[i..i + needle.len()] == needle {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn to_uppercase(&mut self, handle: StringHandle) -> StringHandle {
+        let s = self.get(handle);
+        let uppercase = s.to_uppercase();
+        self.intern(&uppercase)
+    }
+
+    pub fn to_lowercase(&mut self, handle: StringHandle) -> StringHandle {
+        let s = self.get(handle);
+        let lowercase = s.to_lowercase();
+        self.intern(&lowercase)
+    }
+
+    pub fn length(&self, handle: StringHandle) -> usize {
+        self.get(handle).chars().count()
+    }
+
     pub fn chars(&self, handle: StringHandle) -> impl Iterator<Item = char> + '_ {
-        self.get_string(handle).chars()
+        self.get(handle).chars()
+    }
+
+    pub fn char_at(&mut self, handle: StringHandle, index: usize) -> Option<StringHandle> {
+        let char_opt = self.get(handle).chars().nth(index);
+        char_opt.map(|c| {
+            let mut buf = [0u8; 4];
+            let s = c.encode_utf8(&mut buf);
+            self.intern(s)
+        })
     }
 
     pub fn get_allocated_bytes(&self) -> usize {
@@ -97,8 +192,8 @@ mod tests {
 
         assert_eq!(handle1, handle3);
         assert_ne!(handle1, handle2);
-        assert_eq!(interner.get_string(handle1), "hello");
-        assert_eq!(interner.get_string(handle2), "world");
+        assert_eq!(interner.get(handle1), "hello");
+        assert_eq!(interner.get(handle2), "world");
     }
 
     #[test]
@@ -106,7 +201,7 @@ mod tests {
         let mut interner = StringInterner::new();
 
         let handle = interner.intern("");
-        assert_eq!(interner.get_string(handle), "");
+        assert_eq!(interner.get(handle), "");
     }
 
     #[test]
@@ -116,8 +211,8 @@ mod tests {
         let handle1 = interner.intern("🦀");
         let handle2 = interner.intern("Hello, 世界");
 
-        assert_eq!(interner.get_string(handle1), "🦀");
-        assert_eq!(interner.get_string(handle2), "Hello, 世界");
+        assert_eq!(interner.get(handle1), "🦀");
+        assert_eq!(interner.get(handle2), "Hello, 世界");
     }
 
     #[test]
@@ -142,7 +237,7 @@ mod tests {
         }
 
         for (handle, expected) in handles {
-            assert_eq!(interner.get_string(handle), expected);
+            assert_eq!(interner.get(handle), expected);
         }
     }
 
@@ -158,5 +253,283 @@ mod tests {
         assert_eq!(handle2, handle3);
 
         assert_eq!(interner.offsets.len(), 1);
+    }
+
+    #[test]
+    fn test_starts_with() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("hello world");
+        let prefix1 = interner.intern("hello");
+        let prefix2 = interner.intern("world");
+        let prefix3 = interner.intern("");
+        let prefix4 = interner.intern("hello world");
+        let prefix5 = interner.intern("hello world!");
+
+        assert!(interner.starts_with(hello, prefix1));
+        assert!(!interner.starts_with(hello, prefix2));
+        assert!(interner.starts_with(hello, prefix3)); // empty string
+        assert!(interner.starts_with(hello, prefix4)); // exact match
+        assert!(!interner.starts_with(hello, prefix5)); // longer than string
+    }
+
+    #[test]
+    fn test_starts_with_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("🦀 Rust");
+        let prefix1 = interner.intern("🦀");
+        let prefix2 = interner.intern("Rust");
+
+        assert!(interner.starts_with(text, prefix1));
+        assert!(!interner.starts_with(text, prefix2));
+    }
+
+    #[test]
+    fn test_ends_with() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("hello world");
+        let suffix1 = interner.intern("world");
+        let suffix2 = interner.intern("hello");
+        let suffix3 = interner.intern("");
+        let suffix4 = interner.intern("hello world");
+        let suffix5 = interner.intern("!hello world");
+
+        assert!(interner.ends_with(hello, suffix1));
+        assert!(!interner.ends_with(hello, suffix2));
+        assert!(interner.ends_with(hello, suffix3)); // empty string
+        assert!(interner.ends_with(hello, suffix4)); // exact match
+        assert!(!interner.ends_with(hello, suffix5)); // longer than string
+    }
+
+    #[test]
+    fn test_ends_with_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("Rust 🦀");
+        let suffix1 = interner.intern("🦀");
+        let suffix2 = interner.intern("Rust");
+
+        assert!(interner.ends_with(text, suffix1));
+        assert!(!interner.ends_with(text, suffix2));
+    }
+
+    #[test]
+    fn test_contains() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("hello world");
+        let needle1 = interner.intern("lo wo");
+        let needle2 = interner.intern("hello");
+        let needle3 = interner.intern("world");
+        let needle4 = interner.intern("xyz");
+        let needle5 = interner.intern("");
+        let needle6 = interner.intern("hello world");
+        let needle7 = interner.intern("hello world!");
+
+        assert!(interner.contains(text, needle1));
+        assert!(interner.contains(text, needle2));
+        assert!(interner.contains(text, needle3));
+        assert!(!interner.contains(text, needle4));
+        assert!(interner.contains(text, needle5)); // empty string
+        assert!(interner.contains(text, needle6)); // exact match
+        assert!(!interner.contains(text, needle7)); // longer than string
+    }
+
+    #[test]
+    fn test_contains_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("Hello, 世界!");
+        let needle1 = interner.intern("世界");
+        let needle2 = interner.intern("世");
+        let needle3 = interner.intern("界");
+        let needle4 = interner.intern("🦀");
+
+        assert!(interner.contains(text, needle1));
+        assert!(interner.contains(text, needle2));
+        assert!(interner.contains(text, needle3));
+        assert!(!interner.contains(text, needle4));
+    }
+
+    #[test]
+    fn test_to_uppercase() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("hello");
+        let upper = interner.to_uppercase(hello);
+
+        assert_eq!(interner.get(upper), "HELLO");
+        assert_eq!(interner.get(hello), "hello"); // original unchanged
+    }
+
+    #[test]
+    fn test_to_uppercase_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("straße");
+        let upper = interner.to_uppercase(text);
+
+        assert_eq!(interner.get(upper), "STRASSE");
+    }
+
+    #[test]
+    fn test_to_uppercase_already_upper() {
+        let mut interner = StringInterner::new();
+
+        let upper = interner.intern("HELLO");
+        let result = interner.to_uppercase(upper);
+
+        // Should return the same handle due to interning
+        assert_eq!(result, upper);
+        assert_eq!(interner.get(result), "HELLO");
+    }
+
+    #[test]
+    fn test_to_lowercase() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("HELLO");
+        let lower = interner.to_lowercase(hello);
+
+        assert_eq!(interner.get(lower), "hello");
+        assert_eq!(interner.get(hello), "HELLO"); // original unchanged
+    }
+
+    #[test]
+    fn test_to_lowercase_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("ΑΒΓΔ");
+        let lower = interner.to_lowercase(text);
+
+        assert_eq!(interner.get(lower), "αβγδ");
+    }
+
+    #[test]
+    fn test_to_lowercase_already_lower() {
+        let mut interner = StringInterner::new();
+
+        let lower = interner.intern("hello");
+        let result = interner.to_lowercase(lower);
+
+        // Should return the same handle due to interning
+        assert_eq!(result, lower);
+        assert_eq!(interner.get(result), "hello");
+    }
+
+    #[test]
+    fn test_length() {
+        let mut interner = StringInterner::new();
+
+        let empty = interner.intern("");
+        let hello = interner.intern("hello");
+        let emoji = interner.intern("🦀");
+        let multi = interner.intern("Hello, 世界");
+
+        assert_eq!(interner.length(empty), 0);
+        assert_eq!(interner.length(hello), 5);
+        assert_eq!(interner.length(emoji), 1); // one character, not bytes
+        assert_eq!(interner.length(multi), 9); // counts chars not bytes
+    }
+
+    #[test]
+    fn test_length_multi_byte_chars() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("🦀🦀🦀");
+        assert_eq!(interner.length(text), 3);
+
+        let text2 = interner.intern("世界");
+        assert_eq!(interner.length(text2), 2);
+    }
+
+    #[test]
+    fn test_operations_with_empty_strings() {
+        let mut interner = StringInterner::new();
+
+        let empty = interner.intern("");
+        let text = interner.intern("test");
+
+        assert!(interner.starts_with(empty, empty));
+        assert!(interner.ends_with(empty, empty));
+        assert!(interner.contains(empty, empty));
+        assert!(interner.starts_with(text, empty));
+        assert!(interner.ends_with(text, empty));
+        assert!(interner.contains(text, empty));
+
+        let upper = interner.to_uppercase(empty);
+        let lower = interner.to_lowercase(empty);
+
+        assert_eq!(interner.get(upper), "");
+        assert_eq!(interner.get(lower), "");
+        assert_eq!(interner.length(empty), 0);
+    }
+
+    #[test]
+    fn test_char_at() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("hello");
+
+        let h = interner.char_at(hello, 0);
+        assert_eq!(h.map(|handle| interner.get(handle)), Some("h"));
+
+        let e = interner.char_at(hello, 1);
+        assert_eq!(e.map(|handle| interner.get(handle)), Some("e"));
+
+        let o = interner.char_at(hello, 4);
+        assert_eq!(o.map(|handle| interner.get(handle)), Some("o"));
+
+        assert_eq!(interner.char_at(hello, 5), None); // out of bounds
+        assert_eq!(interner.char_at(hello, 100), None); // way out of bounds
+    }
+
+    #[test]
+    fn test_char_at_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("Hello, 世界!");
+        assert_eq!(
+            interner.char_at(text, 0).map(|h| interner.get(h)),
+            Some("H")
+        );
+        assert_eq!(
+            interner.char_at(text, 7).map(|h| interner.get(h)),
+            Some("世")
+        );
+        assert_eq!(
+            interner.char_at(text, 8).map(|h| interner.get(h)),
+            Some("界")
+        );
+        assert_eq!(
+            interner.char_at(text, 9).map(|h| interner.get(h)),
+            Some("!")
+        );
+        assert_eq!(interner.char_at(text, 10), None);
+
+        let emoji = interner.intern("🦀🦀🦀");
+        assert_eq!(
+            interner.char_at(emoji, 0).map(|h| interner.get(h)),
+            Some("🦀")
+        );
+        assert_eq!(
+            interner.char_at(emoji, 1).map(|h| interner.get(h)),
+            Some("🦀")
+        );
+        assert_eq!(
+            interner.char_at(emoji, 2).map(|h| interner.get(h)),
+            Some("🦀")
+        );
+        assert_eq!(interner.char_at(emoji, 3), None);
+    }
+
+    #[test]
+    fn test_char_at_empty_string() {
+        let mut interner = StringInterner::new();
+
+        let empty = interner.intern("");
+        assert_eq!(interner.char_at(empty, 0), None);
     }
 }

@@ -352,7 +352,7 @@ impl Vm {
 
             // this will clean the canonical path if it has a matching prefix,otherwise return the input value.
             // Because functions syntatically cannot start with a `/` or `.`, this will not modify declared function names.
-            let name = &clean_canonicalized_path(self.alloc.strings.get_string(function.name));
+            let name = &clean_canonicalized_path(self.alloc.strings.get(function.name));
 
             let loc = if frame.ip > 0 {
                 function
@@ -368,7 +368,7 @@ impl Vm {
             // Get current module name if closure has module context
             let current_module = closure.module_context.map(|module_handle| {
                 let module_string_handle = self.state.modules.get_module_id(module_handle);
-                let raw_path = self.alloc.strings.get_string(module_string_handle);
+                let raw_path = self.alloc.strings.get(module_string_handle);
                 clean_canonicalized_path(raw_path)
             });
 

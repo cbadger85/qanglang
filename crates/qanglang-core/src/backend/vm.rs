@@ -15,8 +15,8 @@ use crate::{
         module_resolver::ModuleResolver,
         object::{ClosureObject, FunctionObject, IntrinsicKind, IntrinsicMethod, UpvalueSlot},
         qang_std::{
-            qang_array_create, qang_assert, qang_assert_eq, qang_assert_throws, qang_hash,
-            qang_print, qang_println, qang_system_time, qang_to_string, qang_typeof,
+            qang_array_create, qang_assert, qang_assert_eq, qang_assert_throws, qang_env_cwd,
+            qang_hash, qang_print, qang_println, qang_system_time, qang_to_string, qang_typeof,
         },
         value::{
             ARRAY_TYPE_STRING, BOOLEAN_TYPE_STRING, CLASS_TYPE_STRING, FUNCTION_TYPE_STRING,
@@ -211,7 +211,7 @@ pub(crate) struct VmState {
     method_cache: [MethodCache; Self::METHOD_CACHE_SIZE],
     cache_generation: u32,
     pub(crate) arg_buffer: [Value; 256],
-    external_roots: FxHashSet<Value>,
+    additional_roots: FxHashSet<Value>,
 }
 
 impl VmState {
@@ -239,7 +239,7 @@ impl VmState {
             method_cache: [MethodCache::default(); Self::METHOD_CACHE_SIZE],
             cache_generation: 0,
             arg_buffer: [Value::default(); 256],
-            external_roots: FxHashSet::with_capacity_and_hasher(64, FxBuildHasher),
+            additional_roots: FxHashSet::with_capacity_and_hasher(64, FxBuildHasher),
         }
     }
 
@@ -421,7 +421,7 @@ impl Vm {
         let err_result_handle = alloc.strings.intern("Err");
         keywords.insert(Keyword::ErrResult, err_result_handle);
 
-        let vm = Self {
+        let mut vm = Self {
             is_debug: false,
             is_gc_enabled: true,
             state: VmState::new(globals, Self::load_intrinsics(&mut alloc), keywords),
@@ -439,7 +439,11 @@ impl Vm {
             .add_native_function("to_string", 1, qang_to_string)
             .add_native_function("hash", 1, qang_hash)
             .add_native_function("array_of_length", 1, qang_array_create)
+            .add_native_function("env_cwd", 0, qang_env_cwd)
             .with_stdlib()
+            .with_native_filesystem();
+
+        vm
     }
 
     pub fn set_debug(mut self, is_debug: bool) -> Self {
@@ -452,7 +456,12 @@ impl Vm {
         self
     }
 
-    pub fn add_native_function(mut self, name: &str, arity: usize, function: NativeFn) -> Self {
+    pub fn add_native_function(
+        &mut self,
+        name: &str,
+        arity: usize,
+        function: NativeFn,
+    ) -> &mut Self {
         let identifier_handle = self.alloc.strings.intern(name);
         let native_function = NativeFunctionObject {
             name_handle: identifier_handle,
@@ -469,15 +478,11 @@ impl Vm {
     }
 
     pub fn add_external_root(&mut self, value: Value) {
-        self.state.external_roots.insert(value);
+        self.state.additional_roots.insert(value);
     }
 
     pub fn remove_external_root(&mut self, value: Value) {
-        self.state.external_roots.remove(&value);
-    }
-
-    pub fn clear_external_roots(&mut self) {
-        self.state.external_roots.clear();
+        self.state.additional_roots.remove(&value);
     }
 
     pub fn interpret(&mut self, program: QangProgram) -> RuntimeResult<()> {
@@ -566,9 +571,7 @@ impl Vm {
                         (ValueKind::String(handle1), ValueKind::String(handle2)) => {
                             #[cfg(feature = "profiler")]
                             coz::scope!("string_concatenation");
-                            Ok(Value::string(
-                                alloc.strings.concat_strings(handle1, handle2),
-                            ))
+                            Ok(Value::string(alloc.strings.concat(handle1, handle2)))
                         }
                         (ValueKind::Array(handle1), ValueKind::Array(handle2)) => {
                             Ok(Value::array(alloc.arrays.concat(handle1, handle2)))
@@ -1588,7 +1591,7 @@ impl Vm {
                     Err(QangRuntimeError::new(
                         format!(
                             "Property '{}' does not exist on object.",
-                            self.alloc.strings.get_string(method_handle)
+                            self.alloc.strings.get(method_handle)
                         ),
                         self.state.get_previous_loc(),
                     ))
@@ -1607,7 +1610,7 @@ impl Vm {
                     Err(QangRuntimeError::new(
                         format!(
                             "Property '{}' does not exist on module.",
-                            self.alloc.strings.get_string(method_handle)
+                            self.alloc.strings.get(method_handle)
                         ),
                         self.state.get_previous_loc(),
                     ))
@@ -1891,12 +1894,18 @@ impl Vm {
 
                 pop_value!(self); // pop function off the stack now that it has been called.
 
+                // Add receiver to external roots to prevent it from being GC'd during native function execution
+                self.state.additional_roots.insert(receiver);
+
                 let value = function(receiver, arg_count, self)
                     .map_err(|e: NativeFunctionError| {
                         let loc = self.state.get_previous_loc();
                         e.into_qang_error(loc)
                     })?
                     .unwrap_or_default();
+
+                // Remove receiver from external roots after function execution
+                self.state.additional_roots.remove(&receiver);
 
                 push_value!(self, value)?;
                 self.state.arg_buffer.fill(Value::default());
@@ -2128,7 +2137,7 @@ impl Vm {
                             return Err(QangRuntimeError::new(
                                 format!(
                                     "Property '{}' does not exist on module.",
-                                    self.alloc.strings.get_string(identifier)
+                                    self.alloc.strings.get(identifier)
                                 ),
                                 self.state.get_previous_loc(),
                             ));
@@ -2296,7 +2305,7 @@ impl Vm {
             .copied()
             .ok_or_else(|| {
                 let loc = self.state.get_previous_loc();
-                let identifier_name = self.alloc.strings.get_string(identifier_handle);
+                let identifier_name = self.alloc.strings.get(identifier_handle);
                 QangRuntimeError::new(format!("Undefined variable: {}.", identifier_name), loc)
             })
     }
@@ -2347,7 +2356,7 @@ impl Vm {
     }
 
     fn undefined_variable_error(&self, identifier_handle: StringHandle) -> RuntimeResult<()> {
-        let identifier_name = self.alloc.strings.get_string(identifier_handle);
+        let identifier_name = self.alloc.strings.get(identifier_handle);
         let loc = self.state.get_previous_loc();
         Err(QangRuntimeError::new(
             format!("Undefined variable: {}.", identifier_name),
@@ -2401,7 +2410,7 @@ impl Vm {
             + self.state.open_upvalues.len()
             + self.state.modules.count()
             + self.state.arg_buffer.len()
-            + self.state.external_roots.len();
+            + self.state.additional_roots.len();
         let mut roots = VecDeque::with_capacity(capacity);
         roots.extend(&self.state.stack[..self.state.stack_top]);
         roots.extend(self.globals().values());
@@ -2419,7 +2428,7 @@ impl Vm {
 
         self.state.modules.gather_roots(&mut roots);
 
-        roots.extend(self.state.external_roots.iter());
+        roots.extend(self.state.additional_roots.iter());
 
         roots
     }

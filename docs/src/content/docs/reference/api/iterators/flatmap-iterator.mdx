@@ -31,7 +31,7 @@ All methods are inherited from the `Iterator` class. See the [Iterator reference
 ```ql
 var iterator = ArrayIterator([0, 1, 2]);
 FlatMapIterator(iterator, (value) -> Range(0, value)).for_each((value) -> {
-  println(value.collect());
+  println(value.to_array());
 });
 // [0,]
 // [0]

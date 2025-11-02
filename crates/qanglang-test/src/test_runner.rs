@@ -164,7 +164,7 @@ fn extract_test_info(
     let mut test_functions = Vec::new();
 
     for (handle, value) in globals.iter() {
-        let identifier = allocator.strings.get_string(*handle);
+        let identifier = allocator.strings.get(*handle);
 
         match value.kind() {
             ValueKind::Closure(func_handle) => {
@@ -174,7 +174,7 @@ fn extract_test_info(
             }
             ValueKind::String(string_handle) => {
                 if identifier == "test_description" {
-                    description = Some(allocator.strings.get_string(string_handle).to_string());
+                    description = Some(allocator.strings.get(string_handle).to_string());
                 }
             }
             _ => {}

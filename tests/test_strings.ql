@@ -77,3 +77,56 @@ fn test_concat_strings() {
   assert_eq(str1 + str2, "foobar");
   assert_eq(str1.concat(str2), "foobar");
 }
+
+fn test_string_contants() {
+  var phrase = "the quick brown fox jumped over the lazy hound.";
+
+  assert(phrase.contains("the"));
+  assert(phrase.contains("quick brown"));
+  assert(phrase.contains("lazy hound."));
+  assert(phrase.contains("the quick brown fox jumped over the lazy hound."));
+}
+
+fn test_string_starts_with() { 
+  var phrase = "the quick brown fox jumped over the lazy hound.";
+
+  assert(phrase.starts_with("the"));
+  assert(phrase.starts_with("the quick brown fox jumped over the lazy hound."));
+}
+
+fn test_string_ends_with() { 
+  var phrase = "the quick brown fox jumped over the lazy hound.";
+
+  assert(phrase.ends_with("."));
+  assert(phrase.ends_with("the quick brown fox jumped over the lazy hound.")); 
+}
+
+fn test_array_length() { 
+  var string = "this string is 28 chars long";
+
+  assert_eq(string.length(), 28);
+}
+
+fn test_char_at() {
+  var string = "the string";
+
+  assert_eq(string.char_at(2), "e");
+}
+
+fn test_char_at_negative_index() {
+  var string = "the string";
+
+  assert_eq(string.char_at(-1), nil);
+}
+
+fn test_char_at_out_of_bounds_index() {
+  var string = "the string";
+
+  assert_eq(string.char_at(100), nil);
+}
+
+fn test_char_at_irrational_index() {
+  var string = "the string";
+
+  assert_eq(string.char_at(2.5), "e");
+}

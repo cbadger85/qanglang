@@ -1,5 +1,3 @@
-
-
 fn identity(x) {
   return x;
 }
@@ -45,6 +43,39 @@ class Iterator {
     }
 
     return arr;
+  }
+
+  to_array() {
+    var arr = [];
+
+    while (this.has_next()) {
+      arr.push(this.next());
+    }
+
+    return arr;
+  }
+
+  to_set() {
+    var set = HashSet();
+
+    while (this.has_next()) {
+      set.add(this.next());
+    }
+
+    return set;
+  }
+
+  to_map() {
+    var map = HashMap();
+
+    while(this.has_next()) {
+      var entry = this.next();
+      assert(entry is Entry, "Values must be instances of `Entry` to be collected into a `HashMap`.");
+
+      map.set(entry.key, entry.value);
+    }
+
+    return map;
   }
 
   for_each(cb) {
@@ -148,7 +179,7 @@ class Iterator {
   }
 
   reverse() {
-    var arr = this.collect();
+    var arr = this.to_array();
     arr.reverse();
     return arr.iter();
   }

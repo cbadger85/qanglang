@@ -11,8 +11,8 @@ use crate::stdlib_analyzer;
 
 /// Keywords in the QangLang language
 const KEYWORDS: &[&str] = &[
-    "fn", "var", "class", "if", "else", "for", "while", "return", "import", "mod", "init",
-    "this", "super", "break", "continue", "true", "false", "nil", "when", "is",
+    "fn", "var", "class", "if", "else", "for", "while", "return", "import", "mod", "init", "this",
+    "super", "break", "continue", "true", "false", "nil", "when", "is",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,14 +43,16 @@ pub fn provide_completions(
         .source_map
         .position_to_offset(position.line, position.character)?;
 
-    debug!("Providing completions at line={}, char={}, offset={}", position.line, position.character, offset);
+    debug!(
+        "Providing completions at line={}, char={}, offset={}",
+        position.line, position.character, offset
+    );
 
     // Find the scope context at the cursor position
     let scope_context = find_scope_at_offset(analysis, offset);
     debug!(
         "Scope context: depth={}, blocks={:?}",
-        scope_context.scope_depth,
-        scope_context.containing_blocks
+        scope_context.scope_depth, scope_context.containing_blocks
     );
 
     // Determine the completion context
@@ -61,9 +63,12 @@ pub fn provide_completions(
 
     let completions = match context {
         CompletionContext::MemberAccess => {
-            // For member access after a dot, try to provide members
-            // This is a simplified implementation - a full one would track object types
-            get_all_member_completions(analysis)
+            // Without type inference, we cannot reliably determine which properties/methods
+            // are available on the object before the dot. Showing all possible members
+            // creates too much noise, so we disable completions for member access.
+            // TODO: Implement type inference to enable accurate property completions
+            debug!("Member access completions disabled (no type inference available)");
+            return None;
         }
         CompletionContext::Identifier => {
             // Combine visible symbols and keywords with scope-aware filtering
@@ -74,7 +79,13 @@ pub fn provide_completions(
             for item in &completions {
                 seen_names.insert(item.label.clone());
             }
-            collect_nested_declarations(analysis, &scope_context, &mut completions, &mut seen_names, offset);
+            collect_nested_declarations(
+                analysis,
+                &scope_context,
+                &mut completions,
+                &mut seen_names,
+                offset,
+            );
 
             // Add native functions
             add_native_function_completions(&mut completions, &mut seen_names);
@@ -355,7 +366,10 @@ impl<'a> ScopeFinder<'a> {
                             return true;
                         }
                     } else if let AstNode::IfStmt(nested_if) = else_node {
-                        if self.check_statement(TypedNodeRef::new(else_branch, StmtNode::If(*nested_if))) {
+                        if self.check_statement(TypedNodeRef::new(
+                            else_branch,
+                            StmtNode::If(*nested_if),
+                        )) {
                             return true;
                         }
                     }
@@ -402,7 +416,12 @@ fn collect_visible_symbols(
     // First, collect top-level declarations using two-pass approach:
     // Pass 1: hoisted declarations (functions, classes)
     // Pass 2: non-hoisted declarations (modules, variables, lambdas) declared before cursor
-    collect_top_level_declarations(analysis, &mut completions, &mut seen_names, scope_context.cursor_offset);
+    collect_top_level_declarations(
+        analysis,
+        &mut completions,
+        &mut seen_names,
+        scope_context.cursor_offset,
+    );
 
     // Then, iterate through symbol table to get additional symbols (parameters, local vars, etc.)
     // Only include symbols that are visible from the current scope
@@ -420,7 +439,7 @@ fn collect_visible_symbols(
             AstNode::Function(func_decl) => {
                 let func_expr = analysis.nodes.get_func_expr_node(func_decl.function);
                 let name_node = analysis.nodes.get_identifier_node(func_expr.node.name);
-                let name = analysis.strings.get_string(name_node.node.name);
+                let name = analysis.strings.get(name_node.node.name);
 
                 if seen_names.insert(name.to_string()) {
                     completions.push(CompletionItem {
@@ -433,7 +452,7 @@ fn collect_visible_symbols(
             }
             AstNode::Class(class_decl) => {
                 let name_node = analysis.nodes.get_identifier_node(class_decl.name);
-                let name = analysis.strings.get_string(name_node.node.name);
+                let name = analysis.strings.get(name_node.node.name);
 
                 if seen_names.insert(name.to_string()) {
                     completions.push(CompletionItem {
@@ -446,7 +465,7 @@ fn collect_visible_symbols(
             }
             AstNode::VariableDecl(var_decl) => {
                 let name_node = analysis.nodes.get_identifier_node(var_decl.target);
-                let name = analysis.strings.get_string(name_node.node.name);
+                let name = analysis.strings.get(name_node.node.name);
 
                 if seen_names.insert(name.to_string()) {
                     completions.push(CompletionItem {
@@ -459,7 +478,7 @@ fn collect_visible_symbols(
             }
             AstNode::LambdaDecl(lambda_decl) => {
                 let name_node = analysis.nodes.get_identifier_node(lambda_decl.name);
-                let name = analysis.strings.get_string(name_node.node.name);
+                let name = analysis.strings.get(name_node.node.name);
 
                 if seen_names.insert(name.to_string()) {
                     completions.push(CompletionItem {
@@ -472,7 +491,7 @@ fn collect_visible_symbols(
             }
             AstNode::ImportModuleDecl(module_decl) => {
                 let name_node = analysis.nodes.get_identifier_node(module_decl.name);
-                let name = analysis.strings.get_string(name_node.node.name);
+                let name = analysis.strings.get(name_node.node.name);
 
                 if seen_names.insert(name.to_string()) {
                     completions.push(CompletionItem {
@@ -485,7 +504,7 @@ fn collect_visible_symbols(
             }
             AstNode::Identifier(ident_node) => {
                 // This handles parameters and other identifiers
-                let name = analysis.strings.get_string(ident_node.name);
+                let name = analysis.strings.get(ident_node.name);
 
                 if seen_names.insert(name.to_string()) {
                     let kind = match symbol_info.kind {
@@ -532,7 +551,7 @@ fn collect_top_level_declarations(
                 DeclNode::Function(func_decl) => {
                     let func_expr = analysis.nodes.get_func_expr_node(func_decl.function);
                     let name_node = analysis.nodes.get_identifier_node(func_expr.node.name);
-                    let name = analysis.strings.get_string(name_node.node.name);
+                    let name = analysis.strings.get(name_node.node.name);
 
                     if seen_names.insert(name.to_string()) {
                         completions.push(CompletionItem {
@@ -545,7 +564,7 @@ fn collect_top_level_declarations(
                 }
                 DeclNode::Class(class_decl) => {
                     let name_node = analysis.nodes.get_identifier_node(class_decl.name);
-                    let name = analysis.strings.get_string(name_node.node.name);
+                    let name = analysis.strings.get(name_node.node.name);
 
                     if seen_names.insert(name.to_string()) {
                         completions.push(CompletionItem {
@@ -572,7 +591,7 @@ fn collect_top_level_declarations(
                 DeclNode::Module(module_decl) => {
                     if module_decl.span.start < cursor_offset {
                         let name_node = analysis.nodes.get_identifier_node(module_decl.name);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -587,7 +606,7 @@ fn collect_top_level_declarations(
                 DeclNode::Lambda(lambda_decl) => {
                     if lambda_decl.span.start < cursor_offset {
                         let name_node = analysis.nodes.get_identifier_node(lambda_decl.name);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -602,7 +621,7 @@ fn collect_top_level_declarations(
                 DeclNode::Variable(var_decl) => {
                     if var_decl.span.start < cursor_offset {
                         let name_node = analysis.nodes.get_identifier_node(var_decl.target);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -659,7 +678,7 @@ fn collect_declarations_in_block(
                     if func_decl.span.start < cursor_offset {
                         let func_expr = analysis.nodes.get_func_expr_node(func_decl.function);
                         let name_node = analysis.nodes.get_identifier_node(func_expr.node.name);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -675,7 +694,7 @@ fn collect_declarations_in_block(
                     // Classes in nested scopes are NOT hoisted
                     if class_decl.span.start < cursor_offset {
                         let name_node = analysis.nodes.get_identifier_node(class_decl.name);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -691,7 +710,7 @@ fn collect_declarations_in_block(
                     // Modules in nested scopes are NOT hoisted
                     if module_decl.span.start < cursor_offset {
                         let name_node = analysis.nodes.get_identifier_node(module_decl.name);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -707,7 +726,7 @@ fn collect_declarations_in_block(
                     // Variables are NOT hoisted
                     if var_decl.span.start < cursor_offset {
                         let name_node = analysis.nodes.get_identifier_node(var_decl.target);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -723,7 +742,7 @@ fn collect_declarations_in_block(
                     // Lambdas are NOT hoisted
                     if lambda_decl.span.start < cursor_offset {
                         let name_node = analysis.nodes.get_identifier_node(lambda_decl.name);
-                        let name = analysis.strings.get_string(name_node.node.name);
+                        let name = analysis.strings.get(name_node.node.name);
 
                         if seen_names.insert(name.to_string()) {
                             completions.push(CompletionItem {
@@ -754,82 +773,6 @@ fn get_keyword_completions() -> Vec<CompletionItem> {
         .collect()
 }
 
-/// Gets all possible member completions (simplified - collects all methods and fields from all classes)
-/// In a full implementation, this would track the actual type of the object before the dot
-fn get_all_member_completions(analysis: &AnalysisResult) -> Vec<CompletionItem> {
-    let mut completions = Vec::new();
-    let mut seen_names = HashSet::new();
-
-    // Traverse all declarations to find classes
-    let module = analysis.nodes.get_program_node(analysis.root_module_id);
-    let length = analysis.nodes.array.size(module.node.decls);
-
-    for i in 0..length {
-        if let Some(node_id) = analysis.nodes.array.get_node_id_at(module.node.decls, i) {
-            let node = analysis.nodes.get_node(node_id);
-
-            if let AstNode::Class(class_decl) = node {
-                // Collect members from this class
-                collect_class_members(analysis, class_decl, &mut completions, &mut seen_names);
-            }
-        }
-    }
-
-    // Add intrinsic methods (String, Array, Number, Function methods)
-    add_intrinsic_method_completions(&mut completions, &mut seen_names);
-
-    // Add stdlib methods
-    add_stdlib_method_completions(&mut completions, &mut seen_names);
-
-    completions
-}
-
-/// Collects member completions from a class
-fn collect_class_members(
-    analysis: &AnalysisResult,
-    class_decl: &ClassDeclNode,
-    completions: &mut Vec<CompletionItem>,
-    seen_names: &mut HashSet<String>,
-) {
-    let members_size = analysis.nodes.array.size(class_decl.members);
-
-    for i in 0..members_size {
-        if let Some(member_id) = analysis.nodes.array.get_node_id_at(class_decl.members, i) {
-            let member_node = analysis.nodes.get_node(member_id);
-
-            match member_node {
-                AstNode::FunctionExpr(method) => {
-                    let name_node = analysis.nodes.get_identifier_node(method.name);
-                    let name = analysis.strings.get_string(name_node.node.name);
-
-                    if seen_names.insert(name.to_string()) {
-                        completions.push(CompletionItem {
-                            label: name.to_string(),
-                            kind: Some(CompletionItemKind::METHOD),
-                            detail: Some("method".to_string()),
-                            ..Default::default()
-                        });
-                    }
-                }
-                AstNode::FieldDecl(field) => {
-                    let name_node = analysis.nodes.get_identifier_node(field.name);
-                    let name = analysis.strings.get_string(name_node.node.name);
-
-                    if seen_names.insert(name.to_string()) {
-                        completions.push(CompletionItem {
-                            label: name.to_string(),
-                            kind: Some(CompletionItemKind::FIELD),
-                            detail: Some("field".to_string()),
-                            ..Default::default()
-                        });
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
 /// Adds native function completions to the completion list
 fn add_native_function_completions(
     completions: &mut Vec<CompletionItem>,
@@ -847,65 +790,8 @@ fn add_native_function_completions(
     }
 }
 
-/// Adds intrinsic method completions (String, Array, Number, Function methods)
-fn add_intrinsic_method_completions(
-    completions: &mut Vec<CompletionItem>,
-    seen_names: &mut HashSet<String>,
-) {
-    // String methods
-    for method_info in builtins::get_all_string_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-
-    // Array methods
-    for method_info in builtins::get_all_array_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-
-    // Number methods
-    for method_info in builtins::get_all_number_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-
-    // Function methods
-    for method_info in builtins::get_all_function_methods() {
-        if seen_names.insert(method_info.name.to_string()) {
-            completions.push(CompletionItem {
-                label: method_info.name.to_string(),
-                kind: Some(CompletionItemKind::METHOD),
-                detail: Some("method".to_string()),
-                ..Default::default()
-            });
-        }
-    }
-}
-
 /// Adds stdlib class and function completions
-fn add_stdlib_completions(
-    completions: &mut Vec<CompletionItem>,
-    seen_names: &mut HashSet<String>,
-) {
+fn add_stdlib_completions(completions: &mut Vec<CompletionItem>, seen_names: &mut HashSet<String>) {
     let stdlib = stdlib_analyzer::get_stdlib_cache();
 
     // Add stdlib classes
@@ -929,27 +815,6 @@ fn add_stdlib_completions(
                 detail: Some("function".to_string()),
                 ..Default::default()
             });
-        }
-    }
-}
-
-/// Adds stdlib method completions
-fn add_stdlib_method_completions(
-    completions: &mut Vec<CompletionItem>,
-    seen_names: &mut HashSet<String>,
-) {
-    let stdlib = stdlib_analyzer::get_stdlib_cache();
-
-    for method_symbol in stdlib.get_all_methods() {
-        if let stdlib_analyzer::StdlibSymbol::Method { method_name, .. } = method_symbol {
-            if seen_names.insert(method_name.clone()) {
-                completions.push(CompletionItem {
-                    label: method_name.clone(),
-                    kind: Some(CompletionItemKind::METHOD),
-                    detail: Some("method".to_string()),
-                    ..Default::default()
-                });
-            }
         }
     }
 }

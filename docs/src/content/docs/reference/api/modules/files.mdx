@@ -1,0 +1,337 @@
+---
+title: Files Module Reference
+description: A reference for the files module.
+---
+
+The file module provides an API for the filesystem.
+
+## Classes
+
+### `FileIterator`
+
+Creates an iterator to read a file incrementally.
+
+#### Constructor
+
+##### Parameters
+
+path: `Path` - The path to the file.
+
+#### Methods
+
+##### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Functions
+
+### `append_file`
+
+Appends content to an existing file.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./log.txt");
+files.append_file(file_path, "New log entry\n");
+```
+
+#### Parameters
+
+path: `Path` - The path to the file to append to.
+
+content: `String` - The content to append to the file.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid, the file doesn't exist, or the operation fails.
+
+### `copy_file`
+
+Copies a file from one location to another.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var source = path.Path("./source.txt");
+var dest = path.Path("./destination.txt");
+files.copy_file(source, dest);
+```
+
+#### Parameters
+
+source: `Path` - The path to the source file. Must be a file.
+
+destination: `Path` - The path where the file should be copied to.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if either path is invalid, source is not a file, or the operation fails.
+
+### `create_dir`
+
+Creates a single directory. The parent directory must already exist.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var dir_path = path.Path("./new_directory");
+files.create_dir(dir_path);
+```
+
+#### Parameters
+
+path: `Path` - The path of the directory to create.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+
+### `create_dirs`
+
+Creates a directory and all necessary parent directories.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var nested_path = path.Path("./parent/child/grandchild");
+files.create_dirs(nested_path); // Creates all directories in the path
+```
+
+#### Parameters
+
+path: `Path` - The path of the directory (and parents) to create.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+
+### `get_file_modified_time`
+
+Gets the last modification time of a file as a Unix timestamp (milliseconds since epoch).
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./myfile.txt");
+var time_result = files.get_file_modified_time(file_path);
+if (time_result.is_ok()) {
+  println("Last modified: " + to_string(time_result.unwrap()));
+}
+```
+
+#### Parameters
+
+path: `Path` - The path to the file.
+
+#### Returns
+
+`Result` - Returns `Ok(timestamp)` with the modification time in milliseconds, or `Err(message)` if the path is invalid or metadata cannot be retrieved.
+
+### `get_file_size`
+
+Gets the size of a file in bytes.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./myfile.txt");
+var size_result = files.get_file_size(file_path);
+if (size_result.is_ok()) {
+  println("File size: " + to_string(size_result.unwrap()) + " bytes");
+}
+```
+
+#### Parameters
+
+path: `Path` - The path to the file.
+
+#### Returns
+
+`Result` - Returns `Ok(size)` with the file size in bytes, or `Err(message)` if the path is invalid or metadata cannot be retrieved.
+
+### `list`
+
+Lists the entries (files and directories) in a directory.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var dir_path = path.Path("./src");
+var entries_result = files.list(dir_path);
+if (entries_result.is_ok()) {
+  var entries = entries_result.unwrap();
+  entries.iter().for_each(println);
+}
+```
+
+#### Parameters
+
+path: `Path` - The path to the directory to list.
+
+#### Returns
+
+`Result` - Returns `Ok(entries)` with an array of entry names, or `Err(message)` if the path is invalid or the directory cannot be read.
+
+### `move`
+
+Moves a file or directory from one location to another.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var source = path.Path("./old_location.txt");
+var dest = path.Path("./new_location.txt");
+files.move(source, dest); // File is moved, not copied
+```
+
+#### Parameters
+
+source: `Path` - The path to the file or directory to move.
+
+destination: `Path` - The destination path.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if either path is invalid or the operation fails.
+
+### `read_chars`
+
+Creates an iterator to read a file character by character. This is useful for reading large files without loading the entire content into memory.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./large_file.txt");
+var result = files.read_chars(file_path);
+if (result.is_ok()) {
+  var iterator = result.unwrap();
+  while (iterator.has_next()) {
+    var char = iterator.next();
+    print(char);
+  }
+}
+```
+
+#### Parameters
+
+path: `Path` - The path to the file to read.
+
+#### Returns
+
+`Result` - Returns `Ok(iterator)` with a `FileIterator`, or `Err(message)` if the path is invalid.
+
+### `read_file`
+
+Reads the entire contents of a file as a string.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./myfile.txt");
+var content_result = files.read_file(file_path);
+if (content_result.is_ok()) {
+  var content = content_result.unwrap();
+  println(content);
+}
+```
+
+#### Parameters
+
+path: `Path` - The path to the file to read.
+
+#### Returns
+
+`Result` - Returns `Ok(content)` with the file contents, or `Err(message)` if the path is invalid or the file cannot be read.
+
+### `remove_all`
+
+Removes a directory and all of its contents recursively.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var dir_path = path.Path("./directory_to_delete");
+files.remove_all(dir_path); // Removes directory and all contents
+```
+
+#### Parameters
+
+path: `Path` - The path to the directory to remove.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+
+### `remove_dir`
+
+Removes an empty directory. The directory must be empty for this to succeed.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var dir_path = path.Path("./empty_directory");
+files.remove_dir(dir_path);
+```
+
+#### Parameters
+
+path: `Path` - The path to the directory to remove.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid, the directory is not empty, or the operation fails.
+
+### `remove_file`
+
+Removes a file.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./file_to_delete.txt");
+files.remove_file(file_path);
+```
+
+#### Parameters
+
+path: `Path` - The path to the file to remove.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid or the operation fails.
+
+### `write_file`
+
+Writes content to a file, creating it if it doesn't exist or overwriting it if it does.
+
+```ql
+mod path = import("qang::path");
+mod files = import("qang::files");
+
+var file_path = path.Path("./output.txt");
+files.write_file(file_path, "Hello, World!");
+```
+
+#### Parameters
+
+path: `Path` - The path to the file to write.
+
+content: `String` - The content to write to the file.
+
+#### Returns
+
+`Result` - Returns `Ok()` if successful, or `Err(message)` if the path is invalid, content is not a string, or the operation fails.

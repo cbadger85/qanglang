@@ -15,6 +15,11 @@ const KEYWORDS: &[&str] = &[
     "super", "break", "continue", "true", "false", "nil", "when", "is",
 ];
 
+/// Global constants in the QangLang runtime
+const GLOBAL_CONSTANTS: &[&str] = &[
+    "ARRAY", "BOOLEAN", "CLASS", "FUNCTION", "MODULE", "NIL", "NUMBER", "OBJECT", "STRING",
+];
+
 #[derive(Debug, Clone, PartialEq)]
 enum CompletionContext {
     /// Completing after a dot (member access): `obj.`
@@ -92,6 +97,9 @@ pub fn provide_completions(
 
             // Add stdlib classes and functions
             add_stdlib_completions(&mut completions, &mut seen_names);
+
+            // Add global constants
+            add_global_constant_completions(&mut completions, &mut seen_names);
 
             completions.extend(get_keyword_completions());
             completions
@@ -813,6 +821,23 @@ fn add_stdlib_completions(completions: &mut Vec<CompletionItem>, seen_names: &mu
                 label: func_name.clone(),
                 kind: Some(CompletionItemKind::FUNCTION),
                 detail: Some("function".to_string()),
+                ..Default::default()
+            });
+        }
+    }
+}
+
+/// Adds global constant completions (ARRAY, BOOLEAN, CLASS, etc.)
+fn add_global_constant_completions(
+    completions: &mut Vec<CompletionItem>,
+    seen_names: &mut HashSet<String>,
+) {
+    for constant in GLOBAL_CONSTANTS {
+        if seen_names.insert(constant.to_string()) {
+            completions.push(CompletionItem {
+                label: constant.to_string(),
+                kind: Some(CompletionItemKind::CONSTANT),
+                detail: Some("constant".to_string()),
                 ..Default::default()
             });
         }

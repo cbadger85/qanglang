@@ -8,7 +8,7 @@
     "url": "https://github.com/cbadger85/qanglang"
   },
   "license": "MPL-2.0",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.66.0"
   },
@@ -45,6 +45,12 @@
         "language": "qanglang",
         "scopeName": "source.qanglang",
         "path": "./syntaxes/qanglang.tmGrammar.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "qanglang",
+        "path": "./snippets/qanglang.json"
       }
     ],
     "configuration": {

@@ -1,0 +1,260 @@
+{
+  "Variable Declaration": {
+    "prefix": "var",
+    "body": ["var ${1:name} = ${2:value};"],
+    "description": "Declare a variable"
+  },
+  "Variable Declaration (no init)": {
+    "prefix": "varn",
+    "body": ["var ${1:name};"],
+    "description": "Declare a variable without initialization"
+  },
+  "Function Declaration": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) {",
+      "\t${3:// function body}",
+      "\treturn ${4:value};",
+      "}"
+    ],
+    "description": "Declare a function"
+  },
+  "Function Declaration (no params)": {
+    "prefix": "fnn",
+    "body": ["fn ${1:name}() {", "\t${2:// function body}", "}"],
+    "description": "Declare a function with no parameters"
+  },
+  "Lambda Expression": {
+    "prefix": "lambda",
+    "body": ["var ${1:name} = (${2:params}) -> ${3:expression};"],
+    "description": "Lambda expression with expression body"
+  },
+  "Lambda Expression (block)": {
+    "prefix": "lambdab",
+    "body": [
+      "var ${1:name} = (${2:params}) -> {",
+      "\t${3:// function body}",
+      "\treturn ${4:value};",
+      "};"
+    ],
+    "description": "Lambda expression with block body"
+  },
+  "Lambda Expression (inline)": {
+    "prefix": "lam",
+    "body": ["(${1:params}) -> ${2:expression}"],
+    "description": "Inline lambda expression"
+  },
+  "Class Declaration": {
+    "prefix": "class",
+    "body": [
+      "class ${1:ClassName} {",
+      "\t${2:field} = ${3:value};",
+      "",
+      "\tinit(${4:params}) {",
+      "\t\tthis.${2:field} = ${4:params};",
+      "\t}",
+      "}"
+    ],
+    "description": "Declare a class with init and methods"
+  },
+  "Class with Inheritance": {
+    "prefix": "classi",
+    "body": [
+      "class ${1:ClassName} : ${2:ParentClass} {",
+      "\tinit(${3:params}) {",
+      "\t\tsuper.init(${3:params});",
+      "\t\t${4:// additional initialization}",
+      "\t}",
+      "}"
+    ],
+    "description": "Declare a class with inheritance"
+  },
+  "Empty Class": {
+    "prefix": "classe",
+    "body": ["class ${1:ClassName} { }"],
+    "description": "Declare an empty class"
+  },
+  "Object Literal": {
+    "prefix": "obj",
+    "body": ["var ${1:name} = {{", "\t${2:key} = ${3:value},", "}};"],
+    "description": "Create an object literal"
+  },
+  "Empty Object Literal": {
+    "prefix": "obje",
+    "body": ["var ${1:name} = {{ }};"],
+    "description": "Create an empty object literal"
+  },
+  "Array Literal": {
+    "prefix": "arr",
+    "body": ["var ${1:name} = [${2:elements}];"],
+    "description": "Create an array literal"
+  },
+  "Empty Array Literal": {
+    "prefix": "arre",
+    "body": ["var ${1:name} = [];"],
+    "description": "Create an empty array literal"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": ["if (${1:condition}) {", "\t${2:// code}", "}"],
+    "description": "If statement"
+  },
+  "If-Else Statement": {
+    "prefix": "ife",
+    "body": [
+      "if (${1:condition}) {",
+      "\t${2:// if true}",
+      "} else {",
+      "\t${3:// if false}",
+      "}"
+    ],
+    "description": "If-else statement"
+  },
+  "If-Else If Statement": {
+    "prefix": "ifei",
+    "body": [
+      "if (${1:condition1}) {",
+      "\t${2:// if condition1}",
+      "} else if (${3:condition2}) {",
+      "\t${4:// if condition2}",
+      "} else {",
+      "\t${5:// otherwise}",
+      "}"
+    ],
+    "description": "If-else if-else statement"
+  },
+  "Ternary Expression": {
+    "prefix": "tern",
+    "body": ["${1:condition} ? ${2:ifTrue} : ${3:ifFalse}"],
+    "description": "Ternary expression"
+  },
+  "When Expression (match)": {
+    "prefix": "when",
+    "body": [
+      "var ${1:result} = when (${2:expr}) {",
+      "\t${3:value} => ${4:result},",
+      "\telse => ${5:otherwise}",
+      "};"
+    ],
+    "description": "When expression with value matching"
+  },
+  "When Expression (conditional)": {
+    "prefix": "whenc",
+    "body": [
+      "var ${1:result} = when {",
+      "\t${2:condition} => ${3:result},",
+      "\telse => ${4:otherwise}",
+      "};"
+    ],
+    "description": "When expression with conditional matching"
+  },
+  "When Expression (type check)": {
+    "prefix": "whent",
+    "body": [
+      "var ${1:result} = when (${2:expr}) {",
+      "\tis ${3:type} => ${4:result},",
+      "\telse => ${5:otherwise}",
+      "};"
+    ],
+    "description": "When expression with type matching"
+  },
+  "For Loop": {
+    "prefix": "for",
+    "body": [
+      "for (var ${1:i} = ${2:0}; ${1:i} < ${3:length}; ${1:i} += 1) {",
+      "\t${4:// loop body}",
+      "}"
+    ],
+    "description": "For loop"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": ["while (${1:condition}) {", "\t${2:// loop body}", "}"],
+    "description": "While loop"
+  },
+  "Module Import": {
+    "prefix": "mod",
+    "body": ["mod ${1:name} = import(\"${2:./path/to/module.ql}\");"],
+    "description": "Import a module"
+  },
+  "Map Expression": {
+    "prefix": "map",
+    "body": ["||${1:v} -> ${2:expression}|"],
+    "description": "Map expression (pipe operator)"
+  },
+  "Optional Map Expression": {
+    "prefix": "mapo",
+    "body": ["?|${1:v} -> ${2:expression}|"],
+    "description": "Optional map expression"
+  },
+  "Ok Result": {
+    "prefix": "ok",
+    "body": ["Ok(${1:value})"],
+    "description": "Create an Ok result"
+  },
+  "Err Result": {
+    "prefix": "err",
+    "body": ["Err(\"${1:error message}\")"],
+    "description": "Create an Err result"
+  },
+  "Print": {
+    "prefix": "print",
+    "body": ["print(${1:value});"],
+    "description": "Print to console"
+  },
+  "Print Line": {
+    "prefix": "println",
+    "body": ["println(${1:value});"],
+    "description": "Print to console with newline"
+  },
+  "Return Statement": {
+    "prefix": "ret",
+    "body": ["return ${1:value};"],
+    "description": "Return statement"
+  },
+  "Break Statement": {
+    "prefix": "break",
+    "body": ["break;"],
+    "description": "Break statement"
+  },
+  "Continue Statement": {
+    "prefix": "continue",
+    "body": ["continue;"],
+    "description": "Continue statement"
+  },
+  "This": {
+    "prefix": "this",
+    "body": ["this.${1:property}"],
+    "description": "Access this property"
+  },
+  "Super": {
+    "prefix": "super",
+    "body": ["super.${1:property}"],
+    "description": "Access super property"
+  },
+  "To String": {
+    "prefix": "tostr",
+    "body": ["to_string(${1:value})"],
+    "description": "Convert value to string"
+  },
+  "Assert": {
+    "prefix": "assert",
+    "body": ["assert(${1:condition});"],
+    "description": "Assert statement"
+  },
+  "AssertType": {
+    "prefix": "assertt",
+    "body": ["assert(${1:value} is ${2:type}, ${3:message});"],
+    "description": "Assert statement"
+  },
+  "AssertEq": {
+    "prefix": "asserte",
+    "body": ["assert_eq(${1:value1}, ${2:value2}, ${3:message});"],
+    "description": "AssertEq statement"
+  },
+  "AssertNotNil": {
+    "prefix": "assertn",
+    "body": ["assert_not_nil(${1:condition}, ${2:message});"],
+    "description": "AssertNotNil statement"
+  }
+}

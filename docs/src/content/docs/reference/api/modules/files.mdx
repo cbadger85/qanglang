@@ -20,7 +20,7 @@ mod files = import("qang::files");
 var file_path = path.Path("./big_file.txt");
 
 // Print the contents of the file to the console
-FileIterator(file_path).for_each(print);
+files.FileIterator(file_path).for_each(print);
 ```
 
 ##### Parameters

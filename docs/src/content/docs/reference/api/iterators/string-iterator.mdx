@@ -1,0 +1,33 @@
+---
+title: StringIterator Reference
+description: A reference for the StringIterator implementation
+---
+
+An `StringIterator` created from a string. It inherits from [`Iterator`](/reference/api/iterators/iterator/).
+
+## Constructor
+
+Creates an iterator from the provided string.
+
+```ql
+var iterator = StringIterator("abc");
+```
+
+#### Parameters
+
+value: `String` - The string to iterate over.
+
+## Methods
+
+### Inherited
+
+All methods are inherited from the `Iterator` class. See the [Iterator reference](/reference/api/iterators/iterator#methods) for documentation.
+
+## Example
+
+```ql
+var seq = ArrayIterator("abc").for_each(print_ln);
+// "a"
+// "b"
+// "c"
+```

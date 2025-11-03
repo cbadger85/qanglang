@@ -184,6 +184,10 @@ export default defineConfig({
                   slug: "reference/api/iterators/skip-until-iterator",
                 },
                 {
+                  label: "StringIterator",
+                  slug: "reference/api/iterators/string-iterator",
+                },
+                {
                   label: "TakeIterator",
                   slug: "reference/api/iterators/take-iterator",
                 },

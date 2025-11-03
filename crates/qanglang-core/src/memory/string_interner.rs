@@ -173,6 +173,67 @@ impl StringInterner {
         })
     }
 
+    pub fn pad_start(
+        &mut self,
+        handle: StringHandle,
+        width: usize,
+        pad_char: char,
+    ) -> StringHandle {
+        let s = self.get(handle);
+        let current_len = s.chars().count();
+
+        if current_len >= width {
+            return handle;
+        }
+
+        let pad_count = width - current_len;
+        let mut padded = String::with_capacity(pad_count * pad_char.len_utf8() + s.len());
+
+        for _ in 0..pad_count {
+            padded.push(pad_char);
+        }
+        padded.push_str(s);
+
+        self.intern(&padded)
+    }
+
+    pub fn pad_end(&mut self, handle: StringHandle, width: usize, pad_char: char) -> StringHandle {
+        let s = self.get(handle);
+        let current_len = s.chars().count();
+
+        if current_len >= width {
+            return handle;
+        }
+
+        let pad_count = width - current_len;
+        let mut padded = String::with_capacity(s.len() + pad_count * pad_char.len_utf8());
+        padded.push_str(s);
+
+        for _ in 0..pad_count {
+            padded.push(pad_char);
+        }
+
+        self.intern(&padded)
+    }
+
+    pub fn trim(&mut self, handle: StringHandle) -> StringHandle {
+        let s = self.get(handle);
+        let trimmed = s.trim().to_string();
+        self.intern(&trimmed)
+    }
+
+    pub fn trim_start(&mut self, handle: StringHandle) -> StringHandle {
+        let s = self.get(handle);
+        let trimmed = s.trim_start().to_string();
+        self.intern(&trimmed)
+    }
+
+    pub fn trim_end(&mut self, handle: StringHandle) -> StringHandle {
+        let s = self.get(handle);
+        let trimmed = s.trim_end().to_string();
+        self.intern(&trimmed)
+    }
+
     pub fn get_allocated_bytes(&self) -> usize {
         self.storage.len() + self.offsets.len() * std::mem::size_of::<(u32, u32)>()
     }
@@ -531,5 +592,180 @@ mod tests {
 
         let empty = interner.intern("");
         assert_eq!(interner.char_at(empty, 0), None);
+    }
+
+    #[test]
+    fn test_pad_start() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("hello");
+        let padded = interner.pad_start(hello, 10, ' ');
+        assert_eq!(interner.get(padded), "     hello");
+
+        let padded_stars = interner.pad_start(hello, 8, '*');
+        assert_eq!(interner.get(padded_stars), "***hello");
+
+        // Test when string is already at target width
+        let no_pad = interner.pad_start(hello, 5, ' ');
+        assert_eq!(no_pad, hello);
+        assert_eq!(interner.get(no_pad), "hello");
+
+        // Test when string is longer than target width
+        let no_pad_long = interner.pad_start(hello, 3, ' ');
+        assert_eq!(no_pad_long, hello);
+        assert_eq!(interner.get(no_pad_long), "hello");
+    }
+
+    #[test]
+    fn test_pad_start_unicode() {
+        let mut interner = StringInterner::new();
+
+        let emoji = interner.intern("🦀");
+        let padded = interner.pad_start(emoji, 5, '-');
+        assert_eq!(interner.get(padded), "----🦀");
+
+        let text = interner.intern("世界");
+        let padded_text = interner.pad_start(text, 5, '0');
+        assert_eq!(interner.get(padded_text), "000世界");
+    }
+
+    #[test]
+    fn test_pad_end() {
+        let mut interner = StringInterner::new();
+
+        let hello = interner.intern("hello");
+        let padded = interner.pad_end(hello, 10, ' ');
+        assert_eq!(interner.get(padded), "hello     ");
+
+        let padded_stars = interner.pad_end(hello, 8, '*');
+        assert_eq!(interner.get(padded_stars), "hello***");
+
+        // Test when string is already at target width
+        let no_pad = interner.pad_end(hello, 5, ' ');
+        assert_eq!(no_pad, hello);
+        assert_eq!(interner.get(no_pad), "hello");
+
+        // Test when string is longer than target width
+        let no_pad_long = interner.pad_end(hello, 3, ' ');
+        assert_eq!(no_pad_long, hello);
+        assert_eq!(interner.get(no_pad_long), "hello");
+    }
+
+    #[test]
+    fn test_pad_end_unicode() {
+        let mut interner = StringInterner::new();
+
+        let emoji = interner.intern("🦀");
+        let padded = interner.pad_end(emoji, 5, '-');
+        assert_eq!(interner.get(padded), "🦀----");
+
+        let text = interner.intern("世界");
+        let padded_text = interner.pad_end(text, 5, '0');
+        assert_eq!(interner.get(padded_text), "世界000");
+    }
+
+    #[test]
+    fn test_trim() {
+        let mut interner = StringInterner::new();
+
+        let spaced = interner.intern("  hello  ");
+        let trimmed = interner.trim(spaced);
+        assert_eq!(interner.get(trimmed), "hello");
+
+        let tab_newline = interner.intern("\t\nhello\n\t");
+        let trimmed2 = interner.trim(tab_newline);
+        assert_eq!(interner.get(trimmed2), "hello");
+
+        // Test with no whitespace
+        let no_space = interner.intern("hello");
+        let trimmed3 = interner.trim(no_space);
+        assert_eq!(interner.get(trimmed3), "hello");
+
+        // Test with only whitespace
+        let only_space = interner.intern("   ");
+        let trimmed4 = interner.trim(only_space);
+        assert_eq!(interner.get(trimmed4), "");
+
+        // Test empty string
+        let empty = interner.intern("");
+        let trimmed5 = interner.trim(empty);
+        assert_eq!(interner.get(trimmed5), "");
+    }
+
+    #[test]
+    fn test_trim_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("  Hello, 世界!  ");
+        let trimmed = interner.trim(text);
+        assert_eq!(interner.get(trimmed), "Hello, 世界!");
+
+        let emoji = interner.intern("\n\t🦀🦀\t\n");
+        let trimmed_emoji = interner.trim(emoji);
+        assert_eq!(interner.get(trimmed_emoji), "🦀🦀");
+    }
+
+    #[test]
+    fn test_trim_start() {
+        let mut interner = StringInterner::new();
+
+        let spaced = interner.intern("  hello  ");
+        let trimmed = interner.trim_start(spaced);
+        assert_eq!(interner.get(trimmed), "hello  ");
+
+        let tab_newline = interner.intern("\t\nhello");
+        let trimmed2 = interner.trim_start(tab_newline);
+        assert_eq!(interner.get(trimmed2), "hello");
+
+        // Test with no leading whitespace
+        let no_space = interner.intern("hello  ");
+        let trimmed3 = interner.trim_start(no_space);
+        assert_eq!(interner.get(trimmed3), "hello  ");
+
+        // Test with only whitespace
+        let only_space = interner.intern("   ");
+        let trimmed4 = interner.trim_start(only_space);
+        assert_eq!(interner.get(trimmed4), "");
+    }
+
+    #[test]
+    fn test_trim_start_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("  🦀 Rust  ");
+        let trimmed = interner.trim_start(text);
+        assert_eq!(interner.get(trimmed), "🦀 Rust  ");
+    }
+
+    #[test]
+    fn test_trim_end() {
+        let mut interner = StringInterner::new();
+
+        let spaced = interner.intern("  hello  ");
+        let trimmed = interner.trim_end(spaced);
+        assert_eq!(interner.get(trimmed), "  hello");
+
+        let tab_newline = interner.intern("hello\n\t");
+        let trimmed2 = interner.trim_end(tab_newline);
+        assert_eq!(interner.get(trimmed2), "hello");
+
+        // Test with no trailing whitespace
+        let no_space = interner.intern("  hello");
+        let trimmed3 = interner.trim_end(no_space);
+        assert_eq!(interner.get(trimmed3), "  hello");
+
+        // Test with only whitespace
+        let only_space = interner.intern("   ");
+        let trimmed4 = interner.trim_end(only_space);
+        assert_eq!(interner.get(trimmed4), "");
+    }
+
+    #[test]
+    fn test_trim_end_unicode() {
+        let mut interner = StringInterner::new();
+
+        let text = interner.intern("  Rust 🦀  ");
+        let trimmed = interner.trim_end(text);
+        assert_eq!(interner.get(trimmed), "  Rust 🦀");
     }
 }

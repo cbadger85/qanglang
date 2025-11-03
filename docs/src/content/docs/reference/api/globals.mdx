@@ -92,6 +92,77 @@ assert("" is STRING);
 assert_eq(typeof(""), STRING);
 ```
 
+## Classes
+
+### `StringBuilder`
+
+Creates a builder that can efficiently construct strings without interning intermediate values.
+
+#### Constructor
+
+```ql
+var hello_world = StringBuilder("Hello")
+  .append(" ")
+  .append("World")
+  .append("!")
+  .to_string();
+println(hello_world); // "Hello World!"
+```
+
+##### Parameters
+
+initial_value: `String` <Badge text="optional" /> - An optional initial value for the string builder.
+
+#### Methods
+
+##### `append`
+
+Appends a string to the end of the builder.
+
+###### Parameters
+
+value: `String` - The string to append.
+
+###### Returns
+
+value: `StringBuilder` - The instance of the string builder.
+
+##### `combine`
+
+Combines two string builders into a new string builder.
+
+###### Parameters
+
+builder: `StringBuilder` - The string to combine.
+
+###### Returns
+
+value: `StringBuilder` - A new instance of `StringBuilder` with strings from both builders.
+
+##### `prepend`
+
+Prepends a string to the start of the builder.
+
+###### Parameters
+
+value: `String` - The string to prepend.
+
+###### Returns
+
+value: `StringBuilder` - The instance of the string builder.
+
+##### `to_string`
+
+Builds the string from the components provided to the builder.
+
+###### Parameters
+
+None
+
+###### Returns
+
+value: `String` - The built string.
+
 ## Functions
 
 ### `array_of`

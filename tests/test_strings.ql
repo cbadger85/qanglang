@@ -130,3 +130,44 @@ fn test_char_at_irrational_index() {
 
   assert_eq(string.char_at(2.5), "e");
 }
+
+fn test_empty_string_builder() {
+  var string = StringBuilder().to_string();
+  assert_eq(string, "");
+}
+
+fn test_string_builder_with_initial_value() {
+  assert_eq(StringBuilder("abc").to_string(), "abc");
+}
+
+fn test_string_builder_append() {
+  assert_eq(StringBuilder("abc").append("def").to_string(), "abcdef");
+}
+
+fn test_string_builder_prepend() {
+  assert_eq(StringBuilder("def").prepend("abc").to_string(), "abcdef");
+}
+
+fn test_string_builder_combine() {
+  assert_eq(StringBuilder("abc").combine(StringBuilder("def")).to_string(), "abcdef");
+}
+
+fn test_pad_start() {
+  assert_eq("foo".pad_start(5, " "), "  foo");
+}
+
+fn test_pad_end() {
+  assert_eq("foo".pad_end(5, " "), "foo  ");
+}
+
+fn test_trim_start() {
+  assert_eq("  foo".trim_start(), "foo");
+}
+
+fn test_trim_end() {
+  assert_eq("foo  ".trim_end(), "foo");
+}
+
+fn test_trim() {
+  assert_eq("  foo  ".trim(), "foo");
+}

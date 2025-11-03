@@ -120,6 +120,10 @@ class Iterator {
     return TakeIterator(this, n);
   }
 
+  take_until(predicate) {
+    return TakeUntilIterator(this, predicate);
+  }
+
   skip(n) {
     var count = 0;
     while (count < n and this.has_next()) {
@@ -127,6 +131,10 @@ class Iterator {
       count += 1;
     }
     return this;
+  }
+
+  skip_until(predicate) {
+    return SkipUntilIterator(this, predicate);
   }
 
   find(predicate) {
@@ -388,6 +396,98 @@ class TakeIterator : Iterator {
   }
 }
 
+class TakeUntilIterator : Iterator {
+  _next_value = nil;
+  _has_cached_value = false;
+  _skipping_done = false;
+
+  init(iterator, predicate) {
+    this._iterator = iterator;
+    this._predicate = predicate;
+  }
+
+  has_next() {
+    if (this._has_cached_value) {
+      return true;
+    }
+
+    if (!this._iterator.has_next()) {
+      return false;
+    }
+    
+    if (this._iterator.has_next() and this._skipping_done) {
+      return true;
+    }
+
+    var value = this._iterator.next();
+
+    if (this._predicate(value)) {
+      this._next_value = value;
+      this._has_cached_value = true;
+      return true;
+    }
+
+    this._skipping_done = true;
+    return false;
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    var value = this._next_value;
+    this._has_cached_value = false;
+    this._next_value = nil;
+    return value;
+  }
+}
+
+class SkipUntilIterator : Iterator {
+  _next_value = nil;
+  _has_cached_value = false;
+  _skipping_done = false;
+
+  init(iterator, predicate) {
+    this._iterator = iterator;
+    this._predicate = predicate;
+  }
+
+  has_next() {
+    if (this._skipping_done) {
+      return this._has_cached_value or this._iterator.has_next();
+    }
+
+    while (this._iterator.has_next()) {
+      var value = this._iterator.next();
+      if (this._predicate(value)) {
+        this._next_value = value;
+        this._has_cached_value = true;
+        this._skipping_done = true;
+        return true;
+      }
+    }
+
+    this._skipping_done = true;
+    return false;
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    if (this._has_cached_value) {
+      var value = this._next_value;
+      this._has_cached_value = false;
+      this._next_value = nil;
+      return value;
+    }
+
+    return this._iterator.next();
+  }
+}
+
 class ChainIterator : Iterator {
   _first_exhausted = false;
 
@@ -513,6 +613,62 @@ fn array_of(length, init) {
   }
 
   return arr;
+}
+
+class StringIterator : Iterator {
+  init(string) {
+    this._string = string;
+    this._index = 0;
+  }
+
+  has_next() {
+    return this._index < this._string.length();
+  }
+
+  next() {
+    if (!this.has_next()) {
+      return nil;
+    }
+
+    var value = this._string.char_at(this._index);
+    this._index += 1;
+    
+    return value;
+  }
+}
+
+class StringBuilder {
+  init(initial_value) {
+    this._strings = when (initial_value) {
+      is NIL => [],
+      else => [initial_value],
+    };
+  }
+
+  append(string) {
+    this._strings.push(string);
+
+    return this;
+  }
+
+  prepend(string) {
+    this._strings.push_front(string);
+
+    return this;
+  }
+
+  combine(builder) {
+    assert(builder is StringBuilder, "Expected builder to be StringBuilder.");
+
+    var combined_builder = StringBuilder();
+    combined_builder._strings = this._strings.concat(builder._strings);
+
+    return combined_builder;
+  }
+
+  to_string() {
+    return this._strings.join();
+  }
 }
 
 class Pair {

@@ -340,6 +340,132 @@ impl ArrayArena {
         header.length += 1;
     }
 
+    pub fn push_front(&mut self, handle: ArrayHandle, value: Value) {
+        let length = self.heads[handle].length;
+
+        if length == 0 {
+            // Empty array, just push normally
+            self.push(handle, value);
+            return;
+        }
+
+        // Shift all elements to the right by one position
+        // Start from the end and work backwards
+        for i in (0..length).rev() {
+            let existing_value = self.get(handle, i as isize);
+            let target_index = i + 1;
+
+            // Check if we need to allocate a new chunk for the expanded array
+            let chunks_needed = (target_index / CHUNK_SIZE) + 1;
+            if chunks_needed > self.heads[handle].chunks_count {
+                let new_chunk = ArrayChunk {
+                    data: [None; CHUNK_SIZE],
+                    next_chunk: None,
+                    used_slots: 0,
+                    is_marked: false,
+                };
+                let new_chunk_handle = self.chunks.insert(new_chunk);
+
+                // Find the last chunk and link it
+                let mut current = self.heads[handle].first_chunk.unwrap();
+                while let Some(next) = self.chunks[current].next_chunk {
+                    current = next;
+                }
+                self.chunks[current].next_chunk = Some(new_chunk_handle);
+                self.heads[handle].chunks_count += 1;
+            }
+
+            // Place the value at target position
+            let chunk_index = target_index / CHUNK_SIZE;
+            let slot_index = target_index % CHUNK_SIZE;
+
+            let mut current_chunk = self.heads[handle].first_chunk;
+            for _ in 0..chunk_index {
+                if let Some(chunk_handle) = current_chunk {
+                    current_chunk = self.chunks[chunk_handle].next_chunk;
+                }
+            }
+
+            if let Some(chunk_handle) = current_chunk {
+                let old_value = self.chunks[chunk_handle].data[slot_index].replace(existing_value);
+                if old_value.is_none() && !existing_value.is_nil() {
+                    self.chunks[chunk_handle].used_slots += 1;
+                }
+            }
+        }
+
+        // Insert the new value at the front
+        if let Some(first_chunk) = self.heads[handle].first_chunk {
+            self.chunks[first_chunk].data[0] = Some(value);
+            self.chunks[first_chunk].used_slots += 1;
+        }
+
+        self.heads[handle].length += 1;
+    }
+
+    pub fn pop_front(&mut self, handle: ArrayHandle) -> Option<Value> {
+        let length = self.heads[handle].length;
+
+        if length == 0 {
+            return None;
+        }
+
+        // Get the first element
+        let first_value = self.get(handle, 0);
+
+        // Shift all elements to the left by one position
+        for i in 0..(length - 1) {
+            let next_value = self.get(handle, (i + 1) as isize);
+
+            let chunk_index = i / CHUNK_SIZE;
+            let slot_index = i % CHUNK_SIZE;
+
+            let mut current_chunk = self.heads[handle].first_chunk;
+            for _ in 0..chunk_index {
+                if let Some(chunk_handle) = current_chunk {
+                    current_chunk = self.chunks[chunk_handle].next_chunk;
+                }
+            }
+
+            if let Some(chunk_handle) = current_chunk {
+                let old_value = self.chunks[chunk_handle].data[slot_index].replace(next_value);
+
+                // Adjust used count
+                if old_value.is_some() && next_value.is_nil() {
+                    if self.chunks[chunk_handle].used_slots > 0 {
+                        self.chunks[chunk_handle].used_slots -= 1;
+                    }
+                } else if old_value.is_none() && !next_value.is_nil() {
+                    self.chunks[chunk_handle].used_slots += 1;
+                }
+            }
+        }
+
+        // Clear the last element
+        let last_index = length - 1;
+        let chunk_index = last_index / CHUNK_SIZE;
+        let slot_index = last_index % CHUNK_SIZE;
+
+        let mut current_chunk = self.heads[handle].first_chunk;
+        for _ in 0..chunk_index {
+            if let Some(chunk_handle) = current_chunk {
+                current_chunk = self.chunks[chunk_handle].next_chunk;
+            }
+        }
+
+        if let Some(chunk_handle) = current_chunk {
+            if self.chunks[chunk_handle].data[slot_index].is_some() {
+                self.chunks[chunk_handle].data[slot_index] = None;
+                if self.chunks[chunk_handle].used_slots > 0 {
+                    self.chunks[chunk_handle].used_slots -= 1;
+                }
+            }
+        }
+
+        self.heads[handle].length -= 1;
+        Some(first_value)
+    }
+
     pub fn reverse(&mut self, handle: ArrayHandle) {
         let header = &self.heads[handle];
         let length = header.length;
@@ -1651,5 +1777,207 @@ mod tests {
         assert_eq!(arena.get(handle, 39), Value::number(39.0));
         assert_eq!(arena.get(handle, 40), Value::number(41.0));
         assert_eq!(arena.get(handle, 48), Value::number(49.0));
+    }
+
+    #[test]
+    fn test_push_front_empty_array() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        arena.push_front(handle, Value::number(1.0));
+        assert_eq!(arena.length(handle), 1);
+        assert_eq!(arena.get(handle, 0), Value::number(1.0));
+    }
+
+    #[test]
+    fn test_push_front_basic() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Build array [1, 2, 3]
+        arena.push(handle, Value::number(1.0));
+        arena.push(handle, Value::number(2.0));
+        arena.push(handle, Value::number(3.0));
+
+        // Push 0 to front -> [0, 1, 2, 3]
+        arena.push_front(handle, Value::number(0.0));
+        assert_eq!(arena.length(handle), 4);
+        assert_eq!(arena.get(handle, 0), Value::number(0.0));
+        assert_eq!(arena.get(handle, 1), Value::number(1.0));
+        assert_eq!(arena.get(handle, 2), Value::number(2.0));
+        assert_eq!(arena.get(handle, 3), Value::number(3.0));
+    }
+
+    #[test]
+    fn test_push_front_multiple() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push multiple values to front
+        arena.push_front(handle, Value::number(3.0));
+        arena.push_front(handle, Value::number(2.0));
+        arena.push_front(handle, Value::number(1.0));
+        arena.push_front(handle, Value::number(0.0));
+
+        // Should result in [0, 1, 2, 3]
+        assert_eq!(arena.length(handle), 4);
+        assert_eq!(arena.get(handle, 0), Value::number(0.0));
+        assert_eq!(arena.get(handle, 1), Value::number(1.0));
+        assert_eq!(arena.get(handle, 2), Value::number(2.0));
+        assert_eq!(arena.get(handle, 3), Value::number(3.0));
+    }
+
+    #[test]
+    fn test_push_front_cross_chunks() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push values across multiple chunks
+        for i in 0..40 {
+            arena.push(handle, Value::number(i as f64));
+        }
+
+        // Push to front
+        arena.push_front(handle, Value::number(-1.0));
+        assert_eq!(arena.length(handle), 41);
+        assert_eq!(arena.get(handle, 0), Value::number(-1.0));
+        assert_eq!(arena.get(handle, 1), Value::number(0.0));
+        assert_eq!(arena.get(handle, 40), Value::number(39.0));
+    }
+
+    #[test]
+    fn test_pop_front_empty_array() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        assert_eq!(arena.pop_front(handle), None);
+        assert_eq!(arena.length(handle), 0);
+    }
+
+    #[test]
+    fn test_pop_front_basic() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Build array [1, 2, 3]
+        arena.push(handle, Value::number(1.0));
+        arena.push(handle, Value::number(2.0));
+        arena.push(handle, Value::number(3.0));
+
+        // Pop front -> should get 1, array becomes [2, 3]
+        let popped = arena.pop_front(handle);
+        assert_eq!(popped, Some(Value::number(1.0)));
+        assert_eq!(arena.length(handle), 2);
+        assert_eq!(arena.get(handle, 0), Value::number(2.0));
+        assert_eq!(arena.get(handle, 1), Value::number(3.0));
+    }
+
+    #[test]
+    fn test_pop_front_multiple() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Build array [1, 2, 3, 4, 5]
+        for i in 1..=5 {
+            arena.push(handle, Value::number(i as f64));
+        }
+
+        // Pop front multiple times
+        assert_eq!(arena.pop_front(handle), Some(Value::number(1.0)));
+        assert_eq!(arena.length(handle), 4);
+
+        assert_eq!(arena.pop_front(handle), Some(Value::number(2.0)));
+        assert_eq!(arena.length(handle), 3);
+
+        assert_eq!(arena.pop_front(handle), Some(Value::number(3.0)));
+        assert_eq!(arena.length(handle), 2);
+
+        // Remaining should be [4, 5]
+        assert_eq!(arena.get(handle, 0), Value::number(4.0));
+        assert_eq!(arena.get(handle, 1), Value::number(5.0));
+    }
+
+    #[test]
+    fn test_pop_front_until_empty() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        arena.push(handle, Value::number(1.0));
+        arena.push(handle, Value::number(2.0));
+        arena.push(handle, Value::number(3.0));
+
+        assert_eq!(arena.pop_front(handle), Some(Value::number(1.0)));
+        assert_eq!(arena.pop_front(handle), Some(Value::number(2.0)));
+        assert_eq!(arena.pop_front(handle), Some(Value::number(3.0)));
+        assert_eq!(arena.length(handle), 0);
+
+        // Try to pop from empty
+        assert_eq!(arena.pop_front(handle), None);
+    }
+
+    #[test]
+    fn test_pop_front_cross_chunks() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Push values across multiple chunks
+        for i in 0..50 {
+            arena.push(handle, Value::number(i as f64));
+        }
+
+        // Pop front
+        let popped = arena.pop_front(handle);
+        assert_eq!(popped, Some(Value::number(0.0)));
+        assert_eq!(arena.length(handle), 49);
+
+        // Verify elements shifted correctly
+        assert_eq!(arena.get(handle, 0), Value::number(1.0));
+        assert_eq!(arena.get(handle, 48), Value::number(49.0));
+    }
+
+    #[test]
+    fn test_push_front_and_pop_front_combined() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Build array with push
+        arena.push(handle, Value::number(2.0));
+        arena.push(handle, Value::number(3.0));
+
+        // Add to front
+        arena.push_front(handle, Value::number(1.0));
+        arena.push_front(handle, Value::number(0.0));
+
+        // Should be [0, 1, 2, 3]
+        assert_eq!(arena.length(handle), 4);
+
+        // Pop from front
+        assert_eq!(arena.pop_front(handle), Some(Value::number(0.0)));
+        assert_eq!(arena.pop_front(handle), Some(Value::number(1.0)));
+
+        // Should be [2, 3]
+        assert_eq!(arena.length(handle), 2);
+        assert_eq!(arena.get(handle, 0), Value::number(2.0));
+        assert_eq!(arena.get(handle, 1), Value::number(3.0));
+    }
+
+    #[test]
+    fn test_push_front_pop_front_as_deque() {
+        let mut arena = ArrayArena::new();
+        let handle = arena.create_array(0);
+
+        // Use as a deque
+        arena.push(handle, Value::number(1.0)); // [1]
+        arena.push_front(handle, Value::number(0.0)); // [0, 1]
+        arena.push(handle, Value::number(2.0)); // [0, 1, 2]
+        arena.push_front(handle, Value::number(-1.0)); // [-1, 0, 1, 2]
+
+        assert_eq!(arena.length(handle), 4);
+        assert_eq!(arena.pop_front(handle), Some(Value::number(-1.0))); // [0, 1, 2]
+        assert_eq!(arena.pop(handle), Some(Value::number(2.0))); // [0, 1]
+        assert_eq!(arena.pop_front(handle), Some(Value::number(0.0))); // [1]
+        assert_eq!(arena.pop_front(handle), Some(Value::number(1.0))); // []
+
+        assert_eq!(arena.length(handle), 0);
     }
 }

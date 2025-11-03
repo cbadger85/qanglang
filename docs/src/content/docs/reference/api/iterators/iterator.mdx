@@ -328,6 +328,22 @@ limit: `Number` - How many items to skip.
 
 An Iterator with first provided number of items skipped.
 
+### `skip_until`
+
+Skips a number of items from the beginning of the iterator until the predicate returns true.
+
+```ql
+var iter = Range(0, 10).skip_until((n) -> n <= 5);
+```
+
+#### Parameters
+
+predicate: `(dyn?) -> Boolean` - The predicate to stop skipping at.
+
+#### Returns
+
+`SkipUntilIterator` - A [`SkipUntilIterator`](/reference/api/iterators/skip-until-iterator/) for skipping the items matching the predicate.
+
 ### `take`
 
 Takes a number of items from the beginning of the iterator.
@@ -343,6 +359,22 @@ limit: `Number` - How many items to take.
 #### Returns
 
 `TakeIterator` - A [`TakeIterator`](/reference/api/iterators/take-iterator/) for taking the provided number of items.
+
+### `take_until`
+
+Takes a number of items from the beginning of the iterator until the predicate returns true.
+
+```ql
+var iter = Range(0, 10).take_until((n) -> n > 5);
+```
+
+#### Parameters
+
+predicate: `(dyn?) -> Boolean` - The predicate to stop taking at.
+
+#### Returns
+
+`TakeUntilIterator` - A [`TakeUntilIterator`](/reference/api/iterators/take-until-iterator/) for taking the items matching the predicate.
 
 ### `to_array`
 

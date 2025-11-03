@@ -249,3 +249,37 @@ fn test_to_map() {
   assert_eq(map.get("a"), 0);
   assert_eq(map.get("b"), 1);
 }
+
+fn test_take_until() {
+  var arr = [0, 1, 2, 3, 4, 5]
+    .iter()
+    .take_until((n) -> n <= 2)
+    .to_array();
+    
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], 0);
+  assert_eq(arr[1], 1);
+  assert_eq(arr[2], 2);
+}
+
+fn test_skip_until() {
+  var arr = [0, 1, 2, 3, 4, 5]
+    .iter()
+    .skip_until((n) -> n > 2)
+    .to_array();
+
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], 3);
+  assert_eq(arr[1], 4);
+  assert_eq(arr[2], 5);
+}
+
+fn test_string_iterator() {
+  var string = "abc";
+  var arr = StringIterator(string).to_array();
+  
+  assert_eq(arr.length(), 3);
+  assert_eq(arr[0], "a");
+  assert_eq(arr[1], "b");
+  assert_eq(arr[2], "c");
+}

@@ -90,7 +90,7 @@ map.get("key"); // "value"
 
 #### Parameters
 
-key: `dyn?' - The key associated with the value.
+key: `dyn?` - The key associated with the value.
 
 #### Returns
 
@@ -109,7 +109,7 @@ map.get_or_default("other_key", "default"); // "default"
 
 #### Parameters
 
-key: `dyn?'` - The key associated with the value.
+key: `dyn?`` - The key associated with the value.
 
 default: `dyn?` - The default to use if the key is not present.
 
@@ -130,7 +130,7 @@ map.get_or_insert("other_key", () -> "default"); // "default"
 
 #### Parameters
 
-key: `dyn?'` - The key associated with the value.
+key: `dyn?`` - The key associated with the value.
 
 factory: `() -> dyn?` - If the key is not present, the factory function will be called and the return will be inserted into the hash map.
 
@@ -150,7 +150,7 @@ map.has("key"); // true
 
 #### Parameters
 
-key: `dyn?'` - The key to search for.
+key: `dyn?`` - The key to search for.
 
 #### Returns
 
@@ -176,6 +176,25 @@ None
 #### Returns
 
 `Iterator` - An iterator of keys.
+
+### `set`
+
+Sets a value in the HashMap.
+
+```ql
+var map = HashMap();
+map.set("key", "value");
+assert_eq(map.get("key"), "value")
+```
+
+#### Parameters
+
+key: `dyn?` - The key associated with the value.
+value: `dyn?` - The value to set.
+
+#### Returns
+
+`nil`
 
 ### `size`
 

@@ -180,8 +180,16 @@ export default defineConfig({
                   slug: "reference/api/iterators/sequence",
                 },
                 {
+                  label: "SkipUntilIterator",
+                  slug: "reference/api/iterators/skip-until-iterator",
+                },
+                {
                   label: "TakeIterator",
                   slug: "reference/api/iterators/take-iterator",
+                },
+                {
+                  label: "TakeUntilIterator",
+                  slug: "reference/api/iterators/take-until-iterator",
                 },
                 {
                   label: "ZipIterator",

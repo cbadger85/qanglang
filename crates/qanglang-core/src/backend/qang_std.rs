@@ -373,6 +373,126 @@ pub fn qang_string_length(
     }
 }
 
+pub fn qang_string_pad_start(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let width = args.first().copied().unwrap_or_else(|| Value::nil());
+    let pad_char = args.get(1).copied().unwrap_or_else(|| Value::nil());
+
+    match (receiver.kind(), width.kind(), pad_char.kind()) {
+        (ValueKind::String(handle), ValueKind::Number(width), ValueKind::String(pad_handle)) => {
+            let pad_str = vm.alloc.strings.get(pad_handle);
+            let mut chars = pad_str.chars();
+            let pad_char = match (chars.next(), chars.next()) {
+                (Some(c), None) => c, // exactly one char
+                _ => {
+                    return Err(NativeFunctionError::new(
+                        "Expected pad_char to be a single character.",
+                    ));
+                }
+            };
+
+            let padded_string =
+                vm.alloc
+                    .strings
+                    .pad_start(handle, width.trunc() as usize, pad_char);
+            Ok(Some(Value::string(padded_string)))
+        }
+        (ValueKind::String(_), ValueKind::Number(_), _) => Err(NativeFunctionError(format!(
+            "Expected string but found {}",
+            pad_char.to_display_string(&vm.alloc)
+        ))),
+        _ => Err(NativeFunctionError(format!(
+            "Expected number but found {}",
+            width.to_display_string(&vm.alloc)
+        ))),
+    }
+}
+
+pub fn qang_string_pad_end(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    let width = args.first().copied().unwrap_or_else(|| Value::nil());
+    let pad_char = args.get(1).copied().unwrap_or_else(|| Value::nil());
+
+    match (receiver.kind(), width.kind(), pad_char.kind()) {
+        (ValueKind::String(handle), ValueKind::Number(width), ValueKind::String(pad_handle)) => {
+            let pad_str = vm.alloc.strings.get(pad_handle);
+            let mut chars = pad_str.chars();
+            let pad_char = match (chars.next(), chars.next()) {
+                (Some(c), None) => c, // exactly one char
+                _ => {
+                    return Err(NativeFunctionError::new(
+                        "Expected pad_char to be a single character.",
+                    ));
+                }
+            };
+
+            let padded_string = vm
+                .alloc
+                .strings
+                .pad_end(handle, width.trunc() as usize, pad_char);
+            Ok(Some(Value::string(padded_string)))
+        }
+        (ValueKind::String(_), ValueKind::Number(_), _) => Err(NativeFunctionError(format!(
+            "Expected string but found {}",
+            pad_char.to_display_string(&vm.alloc)
+        ))),
+        _ => Err(NativeFunctionError(format!(
+            "Expected number but found {}",
+            width.to_display_string(&vm.alloc)
+        ))),
+    }
+}
+
+pub fn qang_string_trim(
+    receiver: Value,
+    _arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    match receiver.kind() {
+        ValueKind::String(handle) => {
+            let trimmed_string = vm.alloc.strings.trim(handle);
+            Ok(Some(Value::string(trimmed_string)))
+        }
+        _ => Ok(None),
+    }
+}
+
+pub fn qang_string_trim_start(
+    receiver: Value,
+    _arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    match receiver.kind() {
+        ValueKind::String(handle) => {
+            let trimmed_string = vm.alloc.strings.trim_start(handle);
+            Ok(Some(Value::string(trimmed_string)))
+        }
+        _ => Ok(None),
+    }
+}
+
+pub fn qang_string_trim_end(
+    receiver: Value,
+    _arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    match receiver.kind() {
+        ValueKind::String(handle) => {
+            let trimmed_string = vm.alloc.strings.trim_end(handle);
+            Ok(Some(Value::string(trimmed_string)))
+        }
+        _ => Ok(None),
+    }
+}
+
 pub fn qang_array_length(
     receiver: Value,
     _arg_count: usize,
@@ -640,6 +760,43 @@ pub fn qang_array_join(
     } else {
         Err(NativeFunctionError(format!(
             "Expected string but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_array_push_front(
+    receiver: Value,
+    arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    let args = vm.get_function_args(arg_count);
+    if let Some(handle) = receiver.as_array() {
+        let element = args.first().copied().unwrap_or_default();
+        vm.with_gc_check(|alloc| alloc.arrays.push_front(handle, element));
+        Ok(None)
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
+            receiver.to_type_string()
+        )))
+    }
+}
+
+pub fn qang_array_pop_front(
+    receiver: Value,
+    _arg_count: usize,
+    vm: &mut Vm,
+) -> Result<Option<Value>, NativeFunctionError> {
+    if let Some(handle) = receiver.as_array() {
+        let element = vm.alloc.arrays.pop_front(handle);
+        if element.is_none() {
+            return Err(NativeFunctionError::new("Array is empty."));
+        }
+        Ok(element)
+    } else {
+        Err(NativeFunctionError(format!(
+            "Expected array but recieved {}.",
             receiver.to_type_string()
         )))
     }
@@ -1079,6 +1236,46 @@ impl Vm {
                 arity: 0,
             },
         );
+        let string_trim_handle = alloc.strings.intern("trim");
+        intrinsics.insert(
+            IntrinsicKind::String(string_trim_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_trim,
+                arity: 0,
+            },
+        );
+        let string_trim_start_handle = alloc.strings.intern("trim_start");
+        intrinsics.insert(
+            IntrinsicKind::String(string_trim_start_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_trim_start,
+                arity: 0,
+            },
+        );
+        let string_trim_end_handle = alloc.strings.intern("trim_end");
+        intrinsics.insert(
+            IntrinsicKind::String(string_trim_end_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_trim_end,
+                arity: 0,
+            },
+        );
+        let string_pad_start_handle = alloc.strings.intern("pad_start");
+        intrinsics.insert(
+            IntrinsicKind::String(string_pad_start_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_pad_start,
+                arity: 2,
+            },
+        );
+        let string_pad_end_handle = alloc.strings.intern("pad_end");
+        intrinsics.insert(
+            IntrinsicKind::String(string_pad_end_handle),
+            IntrinsicMethod::Native {
+                function: qang_string_pad_end,
+                arity: 2,
+            },
+        );
         let array_push_handle = alloc.strings.intern("push");
         intrinsics.insert(
             IntrinsicKind::Array(array_push_handle),
@@ -1161,6 +1358,22 @@ impl Vm {
         intrinsics.insert(
             IntrinsicKind::Array(array_iter_handle),
             IntrinsicMethod::Iter,
+        );
+        let pop_front_handle = alloc.strings.intern("pop_front");
+        intrinsics.insert(
+            IntrinsicKind::Array(pop_front_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_pop_front,
+                arity: 1,
+            },
+        );
+        let push_front_handle = alloc.strings.intern("push_front");
+        intrinsics.insert(
+            IntrinsicKind::Array(push_front_handle),
+            IntrinsicMethod::Native {
+                function: qang_array_push_front,
+                arity: 1,
+            },
         );
         let number_ceil_handle = alloc.strings.intern("ceil");
         intrinsics.insert(

@@ -111,6 +111,42 @@ None
 
 `Number` - The length of the string.
 
+### `pad_end`
+
+Adds the provided character to the end of the string until it is the length of the provided width. If the string length is less than or equal to the width, the string is returned unchanged.
+
+```ql
+var string = "abc";
+assert_eq(string.pad_end(5, "_"), "abc__");
+```
+
+#### Parameters
+
+width: `Number` - The number of characters the string should be in length.
+pad_char: `String` - The character to pad the string with. This string must be a single character.
+
+#### Returns
+
+`String` - The padded string.
+
+### `pad_start`
+
+Adds the provided character to the start of the string until it is the length of the provided width. If the string length is less than or equal to the width, the string is returned unchanged.
+
+```ql
+var string = "abc";
+assert_eq(string.pad_start(5, "_"), "__abc");
+```
+
+#### Parameters
+
+width: `Number` - The number of characters the string should be in length.
+pad_char: `String` - The character to pad the string with. This string must be a single character.
+
+#### Returns
+
+`String` - The padded string.
+
 ### `starts_with`
 
 Checks if a string starts with a value.
@@ -182,3 +218,54 @@ None
 #### Returns
 
 `String` - The uppercased string.
+
+### `trim`
+
+Removes whitespace from the beginning and end of the string.
+
+```ql
+var string = "  Hello World!  ";
+var uppercase_string = string.trim(); // "Hello World!"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`String` - The trimmed string.
+
+### `trim_end`
+
+Removes whitespace from the end of the string.
+
+```ql
+var string = "Hello World!  ";
+var uppercase_string = string.trim(); // "Hello World!"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`String` - The trimmed string.
+
+### `trim_start`
+
+Removes whitespace from the beginning of the string.
+
+```ql
+var string = "  Hello World!";
+var uppercase_string = string.trim(); // "Hello World!"
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`String` - The trimmed string.

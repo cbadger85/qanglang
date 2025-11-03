@@ -140,7 +140,7 @@ None
 Removes the last item of the array, mutating it and returns it.
 
 ```ql
-var last = [1].pop(); // 1
+var last = [0, 1].pop(); // 1
 ```
 
 #### Parameters
@@ -150,6 +150,22 @@ None
 #### Returns
 
 `dyn!` - The last element of the array. `nil` if the array is empty.
+
+### `pop_front`
+
+Removes the first item of the array, mutating it and returns it.
+
+```ql
+var first = [1, 2].pop_front(); // 1
+```
+
+#### Parameters
+
+None
+
+#### Returns
+
+`dyn!` - The first element of the array. `nil` if the array is empty.
 
 ### `push`
 
@@ -166,7 +182,24 @@ item: `dyn!` - The item to add to the array.
 
 #### Returns
 
-`dyn!` - The last element of the array.
+`nil`
+
+### `push_front`
+
+Adds a new item to the front of the array, mutating it.
+
+```ql
+var arr = [1];
+arr.push_front(0); // [0, 1]
+```
+
+#### Parameters
+
+item: `dyn!` - The item to add to the array.
+
+#### Returns
+
+`nil`
 
 ### `remove_at`
 
